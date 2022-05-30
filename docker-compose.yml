@@ -1,0 +1,347 @@
+version: '3.3'
+
+volumes:
+  db:
+  wordpress_db:
+  ombi:
+  nextcloud:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /mpool/nextcloud
+  influxdb-storage:
+  grafana-storage:
+
+networks:
+  main:
+  lab:
+
+services:
+  plex:
+    container_name: plex
+    image: plexinc/pms-docker
+    networks:
+      - main
+    restart: unless-stopped
+    ports:
+      - 32400:32400
+    environment:
+      - TZ=America/New_York
+    volumes:
+      - /mpool/plex/config:/config
+      - /mpool/plex/transcode:/transcode
+      - /mpool/plex:/data
+  pihole:
+    container_name: pihole
+    image: pihole/pihole:latest
+    networks:
+      - lab
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+    cap_add:
+      - NET_ADMIN
+    environment:
+      TZ: America/New_York
+      WEBPASSWORD: kMd9WvYT
+    volumes:
+      - ${PERSISTENT_DATA_PATH}/pihole/conf:/etc/pihole
+    restart: unless-stopped
+
+  iperf3:
+    container_name: iperf3
+    image: networkstatic/iperf3
+    command:
+      - "-s"
+    ports:
+      - 5201:5201
+    restart: unless-stopped
+
+  iperf3-secondary:
+    container_name: iperf3-secondary
+    image: networkstatic/iperf3
+    command:
+      - "-s"
+    ports:
+      - 5202:5201
+    restart: unless-stopped
+
+  nginx: 
+    image: nginx:latest
+    container_name: nginx
+    networks:
+    - main
+    restart: unless-stopped
+    volumes:
+      - ${PERSISTENT_DATA_PATH}/nginx/conf:/etc/nginx
+      - ${PERSISTENT_DATA_PATH}/nginx/webroot:/data/webroot
+      - /var/log/nginx:/data/log
+      - ${PERSISTENT_DATA_PATH}/certs:/data/certs
+    ports:
+      - "192.168.2.60:80:80"
+      - "192.168.2.60:443:443"
+
+  lab_nginx: 
+    image: nginx:latest
+    container_name: lab_nginx
+    networks:
+      - lab
+    restart: unless-stopped
+    volumes:
+      - ${PERSISTENT_DATA_PATH}/lab_nginx/conf:/etc/nginx
+      - /var/log/lab_nginx:/data/log
+      - ${PERSISTENT_DATA_PATH}/certs:/data/certs
+    ports:
+      - "192.168.3.251:80:80"
+      - "192.168.3.251:443:443"
+
+  db:
+    image: mariadb
+    container_name: nextcloud_database
+    command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
+    restart: always
+    networks:
+      - main
+    volumes:
+      - db:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=ardent_firefox_of_the_golden_night
+      - MYSQL_PASSWORD=actuarial_sciencefox_of_the_bluebazoo
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+
+  app:
+    image: nextcloud:latest
+    container_name: nextcloud
+    networks:
+      - main
+    hostname: nkontur.com
+    volumes:
+      - nextcloud:/data
+      - ${PERSISTENT_DATA_PATH}/nextcloud/config:/var/www/html/config
+      - ${PERSISTENT_DATA_PATH}/nextcloud/mpm_prefork.conf:/etc/apache2/mods-available/mpm_prefork.conf
+      - ${PERSISTENT_DATA_PATH}/nextcloud/config/php.ini:/usr/local/etc/php/php.ini
+      - /etc/localtime:/etc/localtime:ro
+    restart: always
+  code:
+    image: collabora/code
+    container_name: collabora
+    hostname: nkontur.com
+    environment:
+      - extra_params=--o:ssl.enable=false --o:ssl.termination=true
+      - NEXTCLOUD_HOSTNAME=nkontur.com
+    ports: 
+      - 9980:9980
+  ombi:
+    image: linuxserver/ombi
+    container_name: ombi
+    networks:
+      - main
+      - lab
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+      - BASE_URL=/plex-requests
+    volumes:
+      - ombi:/config
+      - /etc/ssl/certs:/etc/ssl/certs
+      - /etc/ssl/private:/etc/ssl/private
+    restart: unless-stopped
+  
+  radarr:
+    image: linuxserver/radarr
+    container_name: radarr
+    networks:
+      - lab
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+    volumes:
+      - ${PERSISTENT_DATA_PATH}/radarr:/config
+      - /mpool/plex/Movies:/movies
+      - /mpool/samba_share/nfs:/remote
+    restart: unless-stopped
+
+  jackett:
+    image: linuxserver/jackett
+    container_name: jackett
+    networks:
+      - lab
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+    volumes:
+      - ${PERSISTENT_DATA_PATH}/jackett:/config
+    restart: unless-stopped
+
+  sonarr:
+    image: linuxserver/sonarr
+    container_name: sonarr
+    networks:
+    - lab
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+    volumes:
+      - ${PERSISTENT_DATA_PATH}/sonarr:/config
+      - /mpool/plex/TV:/tv
+      - /mpool/samba_share/nfs:/remote
+    restart: unless-stopped
+
+  booksonic:
+    image: izderadicka/audioserve
+    container_name: audioserve
+    networks:
+      - main
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+      - AUDIOSERVE_SHARED_SECRET=audiobooks_bepis123
+      - VIRTUAL_HOST=audioserve.nkontur.com
+      - LETSENCRYPT_HOST=audioserve.nkontur.com
+    command: /audiobooks
+    volumes:
+      - /mpool/audioserve/audiobooks:/audiobooks
+      - /mpool/audioserve/data:/data
+    restart: unless-stopped
+
+  grafana:
+    container_name: grafana
+    networks:
+      - lab
+    image: grafana/grafana
+    volumes:
+        - grafana-storage:/var/lib/grafana
+        - ${PERSISTENT_DATA_PATH}/grafana/grafana.ini:/etc/grafana/grafana.ini
+
+  influxdb:
+    container_name: influxdb
+    networks:
+      - lab
+    image: influxdb:latest
+    volumes:
+        - influxdb-storage:/var/lib/influxdb
+        - ${PERSISTENT_DATA_PATH}/influxdb/influxdb.conf:/etc/influxdb/influxdb.conf
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=telegraf
+      - DOCKER_INFLUXDB_INIT_PASSWORD=bazoobloofaceofthebloobazoo
+      - DOCKER_INFLUXDB_INIT_ORG=homelab
+      - DOCKER_INFLUXDB_INIT_BUCKET=metrics
+    ports:
+      - "127.0.0.1:8086:8086"
+
+  gitlab:
+    container_name: gitlab
+    networks:
+      - lab
+    image: 'gitlab/gitlab-ee:latest'
+    restart: always
+    hostname: 'gitlab.lab.nkontur.com'
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://gitlab.lab.nkontur.com'
+        gitlab_rails['gitlab_shell_ssh_port'] = 2222
+    ports:
+      - '2222:22'
+    volumes:
+      - '${PERSISTENT_DATA_PATH}/gitlab/config:/etc/gitlab'
+      - '${PERSISTENT_DATA_PATH}/gitlab/logs:/var/log/gitlab'
+      - '${PERSISTENT_DATA_PATH}/gitlab/data:/var/opt/gitlab'
+
+  bitwarden:
+    container_name: bitwarden
+    image: 'vaultwarden/server:latest'
+    restart: always
+    networks:
+      - main
+    volumes:
+      - '${PERSISTENT_DATA_PATH}/bitwarden/data/:/data/'
+
+  osrm_backend:
+    restart: unless-stopped
+    container_name: osrm
+    image: osrm/osrm-backend
+    command: osrm-routed --algorithm mld /data/us-midwest-latest.osrm
+    volumes:
+      - "${PERSISTENT_DATA_PATH}/osrm:/data"
+    ports:
+      - 5000:5000
+
+  tileserver:
+    restart: unless-stopped
+    container_name: tileserver
+    image: maptiler/tileserver-gl
+    volumes:
+      - "${PERSISTENT_DATA_PATH}/tileserver/data:/data"
+      - "${PERSISTENT_DATA_PATH}/tileserver/styles:/app/node_modules/tileserver-gl-styles/styles"
+    ports:
+      - 8080:80
+
+  wordpress:
+    image: wordpress
+    container_name: wordpress
+    networks:
+      - main
+    environment:
+      WORDPRESS_DB_HOST: wordpress_db
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: bazoobloofaceofthebloobazoo
+      WORDPRESS_DB_NAME: wordpress
+    volumes:
+      - ${PERSISTENT_DATA_PATH}/wordpress/html:/var/www/html
+      - ${PERSISTENT_DATA_PATH}/wordpress/config:/etc/wordpress
+    restart: always
+
+  wordpress_db:
+    image: mysql
+    container_name: wordpress_db
+    networks:
+      - main
+    restart: always
+    cap_add:
+      - SYS_NICE  # CAP_SYS_NICE
+    environment:
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: bazoobloofaceofthebloobazoo
+      MYSQL_ROOT_PASSWORD: Non_serviam1
+    volumes:
+      - wordpress_db:/var/lib/mysql
+
+  minecraft_danny:
+    container_name: minecraft_danny
+    networks:
+      - main
+    image: itzg/minecraft-server
+    ports:
+      - 25564:25565
+    environment:
+      EULA: "TRUE"
+      MEMORY: "4G"
+    tty: true
+    stdin_open: true
+    volumes:
+      - "${PERSISTENT_DATA_PATH}/minecraft/danny:/data"
+    restart: unless-stopped
+  minecraft:
+    container_name: minecraft
+    networks:
+      - main
+    image: itzg/minecraft-server
+    ports:
+      - 25565:25565
+    environment:
+      EULA: "TRUE"
+      MEMORY: "4G"
+    tty: true
+    stdin_open: true
+    volumes:
+      - "${PERSISTENT_DATA_PATH}/minecraft/main:/data"
+    restart: unless-stopped
