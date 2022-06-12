@@ -14,18 +14,29 @@ volumes:
   grafana-storage:
 
 networks:
-  main:
-  lab:
+  host:
+  external:
+    driver: ipvlan
+    ipam:
+      config:
+          - subnet: 10.2.0.0/18
+    driver_opts:
+      parent: bond0.2
+  internal:
+    driver: ipvlan
+    ipam:
+      config:
+          - subnet: 10.3.0.0/18
+    driver_opts:
+      parent: bond0.3
 
 services:
   plex:
     container_name: plex
     image: plexinc/pms-docker
     networks:
-      - main
+      - external
     restart: unless-stopped
-    ports:
-      - 32400:32400
     environment:
       - TZ=America/New_York
     volumes:
@@ -36,12 +47,8 @@ services:
     container_name: pihole
     image: pihole/pihole:latest
     networks:
-      - lab
-    ports:
-      - "53:53/udp"
-      - "53:53/tcp"
-    cap_add:
-      - NET_ADMIN
+      internal:
+        ipv4_address: 10.3.32.2
     environment:
       TZ: America/New_York
       WEBPASSWORD: kMd9WvYT
@@ -52,6 +59,8 @@ services:
   iperf3:
     container_name: iperf3
     image: networkstatic/iperf3
+    networks:
+      - host
     command:
       - "-s"
     ports:
@@ -61,6 +70,8 @@ services:
   iperf3-secondary:
     container_name: iperf3-secondary
     image: networkstatic/iperf3
+    networks:
+      - host
     command:
       - "-s"
     ports:
@@ -71,30 +82,26 @@ services:
     image: nginx:latest
     container_name: nginx
     networks:
-    - main
+      external:
+        ipv4_address: 10.2.32.1
     restart: unless-stopped
     volumes:
       - ${PERSISTENT_DATA_PATH}/nginx/conf:/etc/nginx
       - ${PERSISTENT_DATA_PATH}/nginx/webroot:/data/webroot
       - /var/log/nginx:/data/log
       - ${PERSISTENT_DATA_PATH}/certs:/data/certs
-    ports:
-      - "192.168.2.60:80:80"
-      - "192.168.2.60:443:443"
 
   lab_nginx: 
     image: nginx:latest
     container_name: lab_nginx
     networks:
-      - lab
+      internal:
+        ipv4_address: 10.3.32.1
     restart: unless-stopped
     volumes:
       - ${PERSISTENT_DATA_PATH}/lab_nginx/conf:/etc/nginx
       - /var/log/lab_nginx:/data/log
       - ${PERSISTENT_DATA_PATH}/certs:/data/certs
-    ports:
-      - "192.168.3.251:80:80"
-      - "192.168.3.251:443:443"
 
   db:
     image: mariadb
@@ -102,7 +109,7 @@ services:
     command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
     restart: always
     networks:
-      - main
+      - external
     volumes:
       - db:/var/lib/mysql
     environment:
@@ -115,7 +122,7 @@ services:
     image: nextcloud:latest
     container_name: nextcloud
     networks:
-      - main
+      - external
     hostname: nkontur.com
     volumes:
       - nextcloud:/data
@@ -124,21 +131,21 @@ services:
       - ${PERSISTENT_DATA_PATH}/nextcloud/config/php.ini:/usr/local/etc/php/php.ini
       - /etc/localtime:/etc/localtime:ro
     restart: always
-  code:
-    image: collabora/code
-    container_name: collabora
-    hostname: nkontur.com
-    environment:
-      - extra_params=--o:ssl.enable=false --o:ssl.termination=true
-      - NEXTCLOUD_HOSTNAME=nkontur.com
-    ports: 
-      - 9980:9980
+#  code:
+#    image: collabora/code
+#    container_name: collabora
+#    hostname: nkontur.com
+#    environment:
+#      - extra_params=--o:ssl.enable=false --o:ssl.termination=true
+#      - NEXTCLOUD_HOSTNAME=nkontur.com
+#    ports: 
+#      - 9980:9980
   ombi:
     image: linuxserver/ombi
     container_name: ombi
     networks:
-      - main
-      - lab
+      - external
+      - internal
     environment:
       - PUID=1000
       - PGID=1000
@@ -154,7 +161,7 @@ services:
     image: linuxserver/radarr
     container_name: radarr
     networks:
-      - lab
+      - internal
     environment:
       - PUID=1000
       - PGID=1000
@@ -169,7 +176,7 @@ services:
     image: linuxserver/jackett
     container_name: jackett
     networks:
-      - lab
+      - internal
     environment:
       - PUID=1000
       - PGID=1000
@@ -182,7 +189,7 @@ services:
     image: linuxserver/sonarr
     container_name: sonarr
     networks:
-    - lab
+    - internal
     environment:
       - PUID=1000
       - PGID=1000
@@ -197,7 +204,7 @@ services:
     image: izderadicka/audioserve
     container_name: audioserve
     networks:
-      - main
+      - external
     environment:
       - PUID=1000
       - PGID=1000
@@ -214,7 +221,7 @@ services:
   grafana:
     container_name: grafana
     networks:
-      - lab
+      - internal
     image: grafana/grafana
     volumes:
         - grafana-storage:/var/lib/grafana
@@ -223,7 +230,7 @@ services:
   influxdb:
     container_name: influxdb
     networks:
-      - lab
+      - internal
     image: influxdb:latest
     volumes:
         - influxdb-storage:/var/lib/influxdb
@@ -234,22 +241,17 @@ services:
       - DOCKER_INFLUXDB_INIT_PASSWORD=bazoobloofaceofthebloobazoo
       - DOCKER_INFLUXDB_INIT_ORG=homelab
       - DOCKER_INFLUXDB_INIT_BUCKET=metrics
-    ports:
-      - "127.0.0.1:8086:8086"
 
   gitlab:
     container_name: gitlab
     networks:
-      - lab
+      - internal
     image: 'gitlab/gitlab-ee:latest'
     restart: always
     hostname: 'gitlab.lab.nkontur.com'
     environment:
       GITLAB_OMNIBUS_CONFIG: |
         external_url 'http://gitlab.lab.nkontur.com'
-        gitlab_rails['gitlab_shell_ssh_port'] = 2222
-    ports:
-      - '2222:22'
     volumes:
       - '${PERSISTENT_DATA_PATH}/gitlab/config:/etc/gitlab'
       - '${PERSISTENT_DATA_PATH}/gitlab/logs:/var/log/gitlab'
@@ -260,35 +262,15 @@ services:
     image: 'vaultwarden/server:latest'
     restart: always
     networks:
-      - main
+      - external
     volumes:
       - '${PERSISTENT_DATA_PATH}/bitwarden/data/:/data/'
-
-  osrm_backend:
-    restart: unless-stopped
-    container_name: osrm
-    image: osrm/osrm-backend
-    command: osrm-routed --algorithm mld /data/us-midwest-latest.osrm
-    volumes:
-      - "${PERSISTENT_DATA_PATH}/osrm:/data"
-    ports:
-      - 5000:5000
-
-  tileserver:
-    restart: unless-stopped
-    container_name: tileserver
-    image: maptiler/tileserver-gl
-    volumes:
-      - "${PERSISTENT_DATA_PATH}/tileserver/data:/data"
-      - "${PERSISTENT_DATA_PATH}/tileserver/styles:/app/node_modules/tileserver-gl-styles/styles"
-    ports:
-      - 8080:80
 
   wordpress:
     image: wordpress
     container_name: wordpress
     networks:
-      - main
+      - external
     environment:
       WORDPRESS_DB_HOST: wordpress_db
       WORDPRESS_DB_USER: wordpress
@@ -303,7 +285,7 @@ services:
     image: mysql
     container_name: wordpress_db
     networks:
-      - main
+      - external
     restart: always
     cap_add:
       - SYS_NICE  # CAP_SYS_NICE
@@ -318,10 +300,9 @@ services:
   minecraft_danny:
     container_name: minecraft_danny
     networks:
-      - main
+      external:
+        ipv4_address: 10.2.32.3
     image: itzg/minecraft-server
-    ports:
-      - 25564:25565
     environment:
       EULA: "TRUE"
       MEMORY: "4G"
@@ -333,10 +314,9 @@ services:
   minecraft:
     container_name: minecraft
     networks:
-      - main
+      external:
+        ipv4_address: 10.2.32.2
     image: itzg/minecraft-server
-    ports:
-      - 25565:25565
     environment:
       EULA: "TRUE"
       MEMORY: "4G"
