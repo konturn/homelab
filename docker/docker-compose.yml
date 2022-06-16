@@ -14,7 +14,6 @@ volumes:
   grafana-storage:
 
 networks:
-  host:
   external:
     driver: ipvlan
     ipam:
@@ -60,22 +59,18 @@ services:
     container_name: iperf3
     image: networkstatic/iperf3
     networks:
-      - host
+      - internal
     command:
       - "-s"
-    ports:
-      - 5201:5201
     restart: unless-stopped
 
   iperf3-secondary:
     container_name: iperf3-secondary
     image: networkstatic/iperf3
     networks:
-      - host
+      - internal
     command:
       - "-s"
-    ports:
-      - 5202:5201
     restart: unless-stopped
 
   nginx: 
