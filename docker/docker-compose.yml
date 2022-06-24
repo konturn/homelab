@@ -280,15 +280,6 @@ services:
       - '${PERSISTENT_DATA_PATH}/gitlab/logs:/var/log/gitlab'
       - '${PERSISTENT_DATA_PATH}/gitlab/data:/var/opt/gitlab'
 
-  gitlab-runner:
-    container_name: gitlab-runner
-    networks:
-      - internal
-    image: gitlab/gitlab-runner:latest
-    volumes:
-      - '${PERSISTENT_DATA_PATH}/gitlab-runner:/etc/gitlab-runner'
-    restart: always
-
   bitwarden:
     container_name: bitwarden
     image: 'vaultwarden/server:latest'
