@@ -1,0 +1,6 @@
+stages:
+  - test
+build:
+  stage: test
+  script:
+    - docker-compose --file docker/docker-compose.yml --project-directory docker up -d

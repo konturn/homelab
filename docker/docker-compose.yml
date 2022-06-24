@@ -1,4 +1,4 @@
-version: '3.3'
+version: '3.8'
 
 volumes:
   db:
@@ -14,18 +14,34 @@ volumes:
   grafana-storage:
 
 networks:
-  external:
-    driver: ipvlan
+  test:
+    driver: macvlan
     ipam:
       config:
-          - subnet: 10.2.0.0/18
+          - subnet: 10.4.0.0/16
+            ip_range: 10.4.0.0/18
+            aux_addresses:
+              shim4: 10.4.0.2
+    driver_opts:
+      parent: bond0.4
+  external:
+    driver: macvlan
+    ipam:
+      config:
+          - subnet: 10.2.0.0/16
+            ip_range: 10.2.0.0/18
+            aux_addresses:
+              shim3: 10.2.0.2
     driver_opts:
       parent: bond0.2
   internal:
-    driver: ipvlan
+    driver: macvlan
     ipam:
       config:
-          - subnet: 10.3.0.0/18
+          - subnet: 10.3.0.0/16
+            ip_range: 10.3.0.0/18
+            aux_addresses:
+              shim2: 10.3.0.2
     driver_opts:
       parent: bond0.3
 
@@ -53,6 +69,19 @@ services:
       WEBPASSWORD: kMd9WvYT
     volumes:
       - ${PERSISTENT_DATA_PATH}/pihole/conf:/etc/pihole
+    restart: unless-stopped
+
+  pihole2:
+    container_name: pihole2
+    image: pihole/pihole:latest
+    networks:
+      test:
+    restart: unless-stopped
+  pihole3:
+    container_name: pihole3
+    image: pihole/pihole:latest
+    networks:
+      external:
     restart: unless-stopped
 
   iperf3:
@@ -243,7 +272,6 @@ services:
       - internal
     image: 'gitlab/gitlab-ee:latest'
     restart: always
-    hostname: 'gitlab.lab.nkontur.com'
     environment:
       GITLAB_OMNIBUS_CONFIG: |
         external_url 'http://gitlab.lab.nkontur.com'
@@ -251,6 +279,15 @@ services:
       - '${PERSISTENT_DATA_PATH}/gitlab/config:/etc/gitlab'
       - '${PERSISTENT_DATA_PATH}/gitlab/logs:/var/log/gitlab'
       - '${PERSISTENT_DATA_PATH}/gitlab/data:/var/opt/gitlab'
+
+  gitlab-runner:
+    container_name: gitlab-runner
+    networks:
+      - internal
+    image: gitlab/gitlab-runner:latest
+    volumes:
+      - '${PERSISTENT_DATA_PATH}/gitlab-runner:/etc/gitlab-runner'
+    restart: always
 
   bitwarden:
     container_name: bitwarden
