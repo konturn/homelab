@@ -1,0 +1,26 @@
+### Configure monthly zpool scrub
+- name: Zpool systemd timer
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/systemd/zpool-scrub.timer' }}"
+    dest: '/etc/systemd/system/zpool-scrub.timer'
+    owner: root
+    group: root
+    mode: 0600
+
+- name: Zpool systemd service
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/systemd/zpool-scrub.service' }}"
+    dest: '/etc/systemd/system/zpool-scrub.service'
+    owner: root
+    group: root
+    mode: 0600
+
+
+- name: Make sure timer enabled
+  ansible.builtin.systemd:
+    name: zpool-scrub.timer
+    state: started
+    enabled: yes
+    daemon_reload: yes
+
+

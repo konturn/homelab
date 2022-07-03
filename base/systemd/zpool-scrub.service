@@ -1,0 +1,13 @@
+[Unit]
+Description=Periodic scrub of ZFS pool
+Wants=zfs.target
+After=zfs.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/sbin/zpool scrub mpool
+
+[Install]
+WantedBy=multi-user.target
+

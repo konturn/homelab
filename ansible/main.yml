@@ -1,5 +1,6 @@
 - hosts: router.lab.nkontur.com
   roles:
+  - configure-base
   - configure-docker
   - configure-router-network
   become: yes

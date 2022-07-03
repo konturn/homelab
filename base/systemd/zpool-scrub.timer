@@ -1,0 +1,12 @@
+[Unit]
+Description=Periodic scrub of ZFS pool
+Wants=zfs.target
+After=zfs.target
+
+[Timer]
+OnCalendar=monthly
+Persistent=true
+AccuracySec=12h
+
+[Install]
+WantedBy=multi-user.target
