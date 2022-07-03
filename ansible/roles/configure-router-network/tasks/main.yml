@@ -14,8 +14,23 @@
     owner: root
     group: root
     mode: '0640'
+  register: iptables
 
 - name: Restore iptables rules
   ansible.builtin.shell: /sbin/iptables-restore < /etc/iptables/rules.v4
   become: yes
+  when: iptables.changed
+
+- name: Sync systemd-networkd drop-in files
+  ansible.posix.synchronize:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/networkd' }}"
+    dest: /etc/systemd/network
+  register: networkd
+
+- name: Restart systemd-networkd when the drop-in files change
+  service:
+    name: systemd-networkd
+    state: restarted
+    enabled: yes
+  when: networkd.changed
 

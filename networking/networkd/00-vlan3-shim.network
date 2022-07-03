@@ -1,0 +1,10 @@
+[Match]
+Name=vlan3-shim
+
+[Network]
+Address=10.3.0.2/32
+IPForward=yes
+ConfigureWithoutCarrier=yes
+
+[Route]
+Destination=10.3.0.0/18

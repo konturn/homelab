@@ -1,0 +1,6 @@
+[NetDev]
+Name=vlan2-shim
+Kind=macvlan
+
+[MACVLAN]
+Mode=bridge

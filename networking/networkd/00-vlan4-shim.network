@@ -1,0 +1,10 @@
+[Match]
+Name=vlan4-shim
+
+[Network]
+Address=10.4.0.2/32
+IPForward=yes
+ConfigureWithoutCarrier=yes
+
+[Route]
+Destination=10.4.0.0/18
