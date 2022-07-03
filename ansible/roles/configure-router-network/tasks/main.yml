@@ -1,8 +1,3 @@
-- debug:
-    var: rendered_template
-  vars:
-    rendered_template: "{{ lookup('template', lookup('env', 'CI_PROJECT_DIR') + '/networking/iptables/ip_update.sh') }}"
-
 - name: Template the iptables rules file
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/netplan/config.yaml' }}"
@@ -67,7 +62,21 @@
   ansible.builtin.cron:
     name: "Update wan ipset"
     minute: "*/5"
-    job: "{{ 'bash ' + lookup('env', 'CI_PROJECT_DIR') + '/root/cron/ip_update.sh' }}"
+    job: "{{ 'bash ' + '/root/cron/ip_update.sh' }}"
+
+- name: Template out cron script for DDNS
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/dns/ddns.py' }}"
+    dest: /root/cron/ddns.py
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Sets up cronjob for DDNS
+  ansible.builtin.cron:
+    name: "Update public DNS records"
+    minute: "*/5"
+    job: "{{ 'bash ' + '/root/cron/ddns.py -k ' + lookup('env', 'NAMESILO_API_KEY') + ' -d nkontur.com' }}"
 
 - name: Sync systemd-networkd drop-in files
   ansible.posix.synchronize:
