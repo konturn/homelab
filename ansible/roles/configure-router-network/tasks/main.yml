@@ -9,13 +9,13 @@
 
 - name: Template the iptables rules file
   ansible.builtin.template:
-    src: "{{ lookup('file', lookup('env', 'CI_PROJECT_DIR') + '/networking/iptables/rules.v4') }}"
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/iptables/rules.v4' }}"
     dest: /etc/iptables/rules.v4
     owner: root
     group: root
     mode: '0640'
 
 - name: Restore iptables rules
-  ansible.builtin.command: /sbin/iptables-restore < /etc/iptables/rules.v4
+  ansible.builtin.shell: /sbin/iptables-restore < /etc/iptables/rules.v4
   become: yes
 

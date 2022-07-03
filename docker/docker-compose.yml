@@ -234,6 +234,7 @@ services:
     networks:
       - internal
     image: grafana/grafana
+    restart: always
     volumes:
         - grafana-storage:/var/lib/grafana
         - ${PERSISTENT_DATA_PATH}/grafana/grafana.ini:/etc/grafana/grafana.ini
@@ -243,6 +244,7 @@ services:
     networks:
       - internal
     image: influxdb:latest
+    restart: always
     volumes:
         - influxdb-storage:/var/lib/influxdb
         - ${PERSISTENT_DATA_PATH}/influxdb/influxdb.conf:/etc/influxdb/influxdb.conf
