@@ -1,11 +1,21 @@
+- debug:
+    var: rendered_template
+  vars:
+    rendered_template: "{{ lookup('template', lookup('env', 'CI_PROJECT_DIR') + '/networking/iptables/ip_update.sh') }}"
+
+- name: Template the iptables rules file
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/netplan/config.yaml' }}"
+    dest: /etc/netplan/config.yaml
+    owner: root
+    group: root
+    mode: '0640'
+  register: netplan
+
 - name: Run Netplan config
-  ansible.builtin.include_role:
-    name: mrlesmithjr.netplan
-  vars: 
-    netplan_enabled: true
-    netplan_config_file: /etc/netplan/config.yaml
-    netplan_renderer: networkd
-    netplan_configuration: "{{ lookup('ansible.builtin.template', lookup('env', 'CI_PROJECT_DIR') + '/networking/netplan/config.yaml') }}"
+  ansible.builtin.command: netplan apply
+  become: yes
+  when: netplan.changed
 
 - name: Template the iptables rules file
   ansible.builtin.template:
@@ -35,15 +45,29 @@
   register: netfilter
 
 - name: Restore netfilter rules
-  ansible.builtin.command: netfilter-persistent restore
+  ansible.builtin.command: netfilter-persistent reload
   become: yes
   when: iptables.changed or ipset.changed or netfilter.changed
+
+- name: Setup cron script directry
+  ansible.builtin.file:
+    path: /root/cron
+    state: directory
+    mode: '0700'
+  
+- name: Template out cron script to populate wan ipset
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/iptables/ip_update.sh' }}"
+    dest: /root/cron/ip_update.sh
+    owner: root
+    group: root
+    mode: '0700'
 
 - name: Sets up cronjob to populate wan ipset
   ansible.builtin.cron:
     name: "Update wan ipset"
-    minute: "0"
-    job: "{{ lookup('ansible.builtin.template', lookup('env', 'CI_PROJECT_DIR') + '/networking/iptables/ip_update.sh') }}"
+    minute: "*/5"
+    job: "{{ 'bash ' + lookup('env', 'CI_PROJECT_DIR') + '/root/cron/ip_update.sh' }}"
 
 - name: Sync systemd-networkd drop-in files
   ansible.posix.synchronize:
