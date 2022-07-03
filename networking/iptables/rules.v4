@@ -24,14 +24,14 @@ COMMIT
 :INPUT ACCEPT [5:180]
 :OUTPUT ACCEPT [89:6299]
 :POSTROUTING ACCEPT [100:7607]
--A PREROUTING -i enp2s0f0 -p tcp -m tcp --dport 25565 -j DNAT --to-destination {{ lookup('env', 'NGINX_IP') }}:25565
--A PREROUTING -i enp2s0f0 -p tcp -m tcp --dport 443 -j DNAT --to-destination {{ lookup('env', 'NGINX_IP') }}:443
--A PREROUTING -i enp2s0f0 -p tcp -m tcp --dport 32400 -j DNAT --to-destination {{ lookup('env', 'NGINX_IP') }}:32400
+-A PREROUTING -i {{ lookup('env', 'INET_IF') }} -p tcp -m tcp --dport 25565 -j DNAT --to-destination {{ lookup('env', 'NGINX_IP') }}:25565
+-A PREROUTING -i {{ lookup('env', 'INET_IF') }} -p tcp -m tcp --dport 443 -j DNAT --to-destination {{ lookup('env', 'NGINX_IP') }}:443
+-A PREROUTING -i {{ lookup('env', 'INET_IF') }} -p tcp -m tcp --dport 32400 -j DNAT --to-destination {{ lookup('env', 'NGINX_IP') }}:32400
 -A PREROUTING -s 10.6.0.0/16 -p tcp -m set --match-set wan_ip dst -m tcp -j DNAT --to-destination {{ lookup('env', 'NGINX_IP') }}
--A PREROUTING -i enp2s0f0 -p udp -m udp --dport 51871 -j ACCEPT
--A PREROUTING -i enp2s0f0 -p tcp -m tcp --dport 25564 -j DNAT --to-destination {{ lookup('env', 'NGINX_IP') }}:25564
+-A PREROUTING -i {{ lookup('env', 'INET_IF') }} -p udp -m udp --dport 51871 -j ACCEPT
+-A PREROUTING -i {{ lookup('env', 'INET_IF') }} -p tcp -m tcp --dport 25564 -j DNAT --to-destination {{ lookup('env', 'NGINX_IP') }}:25564
 -A POSTROUTING -o mullvad-us79 -j MASQUERADE
--A POSTROUTING -o enp2s0f0 -j MASQUERADE
+-A POSTROUTING -o {{ lookup('env', 'INET_IF') }} -j MASQUERADE
 -A POSTROUTING -s 10.5.0.0/16 -d {{ lookup('env', 'NGINX_IP') }}/32 -o bond0 -p tcp -m tcp -j SNAT --to-source 10.5.0.1
 -A POSTROUTING -s 10.6.0.0/16 -d {{ lookup('env', 'NGINX_IP') }}/32 -o bond0 -p tcp -m tcp -j SNAT --to-source 10.6.0.1
 COMMIT
@@ -47,19 +47,19 @@ COMMIT
 -A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
 -A INPUT -p udp -m udp --dport 51871 -j ACCEPT
 -A FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
--A FORWARD -i enp2s0f0 -o vlan2-shim -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -m multiport --dports 22,32400,25564,25565,25566,443 -m conntrack --ctstate NEW -j ACCEPT
+-A FORWARD -i {{ lookup('env', 'INET_IF') }} -o vlan2-shim -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -m multiport --dports 22,32400,25564,25565,25566,443 -m conntrack --ctstate NEW -j ACCEPT
 -A FORWARD -i wg0 -o bond0 -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -m multiport --dports 111,443,5201,2049,2342,33333 -m conntrack --ctstate NEW -j ACCEPT
 -A FORWARD -i wg0 -o bond0 -p udp -m multiport --dports 53 -j ACCEPT
 -A FORWARD -i wg0 -o wg0 -p tcp -m tcp --dport 22 -j ACCEPT
 -A FORWARD -i vlan3-shim -o wg0 -j ACCEPT
 -A FORWARD -i wg0 -o vlan3-shim -p tcp -m tcp --dport 5201 -j ACCEPT
--A FORWARD -i vlan2-shim -o enp2s0f0 -j ACCEPT
--A FORWARD -i vlan3-shim -o enp2s0f0 -j ACCEPT
--A FORWARD -i vlan4-shim -o enp2s0f0 -j ACCEPT
+-A FORWARD -i vlan2-shim -o {{ lookup('env', 'INET_IF') }} -j ACCEPT
+-A FORWARD -i vlan3-shim -o {{ lookup('env', 'INET_IF') }} -j ACCEPT
+-A FORWARD -i vlan4-shim -o {{ lookup('env', 'INET_IF') }} -j ACCEPT
 -A FORWARD -i vlan2-shim -o mullvad-us79 -j ACCEPT
 -A FORWARD -i vlan3-shim -o mullvad-us79 -j ACCEPT
 -A FORWARD -i vlan4-shim -o mullvad-us79 -j ACCEPT
--A FORWARD -i bond0+ -o enp2s0f0 -j ACCEPT
+-A FORWARD -i bond0+ -o {{ lookup('env', 'INET_IF') }} -j ACCEPT
 -A FORWARD -i bond0+ -o mullvad-us79 -j ACCEPT
 -A FORWARD -i bond0.6 -j ACCEPT
 COMMIT

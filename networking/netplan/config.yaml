@@ -4,7 +4,7 @@ network:
   ethernets:
     enp2s0f1:
       dhcp4: no
-    enp2s0f0:
+    {{ lookup('env', 'INET_IF') }}:
       dhcp4: yes
     enp136s0f0:
       dhcp4: no

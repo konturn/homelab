@@ -5,7 +5,7 @@
     netplan_enabled: true
     netplan_config_file: /etc/netplan/config.yaml
     netplan_renderer: networkd
-    netplan_configuration: "{{ lookup('file', lookup('env', 'CI_PROJECT_DIR') + '/networking/netplan/config.yaml') }}"
+    netplan_configuration: "{{ lookup('ansible.builtin.template', lookup('env', 'CI_PROJECT_DIR') + '/networking/netplan/config.yaml') }}"
 
 - name: Template the iptables rules file
   ansible.builtin.template:
