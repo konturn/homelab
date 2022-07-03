@@ -333,6 +333,7 @@ services:
     volumes:
       - "${PERSISTENT_DATA_PATH}/minecraft/danny:/data"
     restart: unless-stopped
+
   minecraft:
     container_name: minecraft
     networks:
@@ -347,3 +348,10 @@ services:
     volumes:
       - "${PERSISTENT_DATA_PATH}/minecraft/main:/data"
     restart: unless-stopped
+
+  watchtower:
+    container_name: watchtower
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 3600
