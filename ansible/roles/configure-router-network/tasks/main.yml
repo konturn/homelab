@@ -25,10 +25,19 @@
     mode: '0640'
   register: ipset
 
-- name: Restore iptables rules
+- name: Copy the ipset netfilter plugin
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/iptables/10-ipset' }}"
+    dest: /usr/share/netfilter-persistent/plugins.d/10-ipset
+    owner: root
+    group: root
+    mode: '0640'
+  register: netfilter
+
+- name: Restore netfilter rules
   ansible.builtin.command: netfilter-persistent restore
   become: yes
-  when: iptables.changed or ipset.changed
+  when: iptables.changed or ipset.changed or netfilter.changed
 
 - name: Sync systemd-networkd drop-in files
   ansible.posix.synchronize:
