@@ -1,7 +1,14 @@
+.ansible:
+  stage: ansible
+  image: python:3.8
+  before_script:
+    - pip install ansible
+
 stages:
-  - test
-build:
-  stage: test
+  - ansible
+
+bootstrap-config:
+  extends: .ansible
   script:
     - echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp
     - ansible-playbook -i ansible/inventory.txt -u root --private-key={tmp} ansible/playbooks/main.yml

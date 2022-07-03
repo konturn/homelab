@@ -1,6 +1,5 @@
 - hosts: router.lab.nkontur.com
   roles:
-  - ansible/roles/setup_jenkins_head
-  - ansible/roles/run_jjb
+  - ansible/roles/configure_docker
   become: yes
 
