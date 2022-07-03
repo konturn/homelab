@@ -39,6 +39,12 @@
   become: yes
   when: iptables.changed or ipset.changed or netfilter.changed
 
+- name: Sets up cronjob to populate wan ipset
+  ansible.builtin.cron:
+    name: "Update wan ipset"
+    minute: "0"
+    job: "{{ lookup('ansible.builtin.template', lookup('env', 'CI_PROJECT_DIR') + '/networking/iptables/ip_update.sh') }}"
+
 - name: Sync systemd-networkd drop-in files
   ansible.posix.synchronize:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/networkd' }}"
