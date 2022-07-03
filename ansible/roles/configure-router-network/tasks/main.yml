@@ -1,0 +1,8 @@
+- name: Run Netplan config
+  ansible.builtin.include_role:
+    name: mrlesmithjr.netplan
+  vars: 
+    netplan_enabled: true
+    netplan_config_file: /etc/netplan/config.yaml
+    netplan_renderer: networkd
+    netplan_configuration: "{{ lookup('file', lookup('env', 'CI_PROJECT_DIR') + '/networking/netplan/config.yaml') }}"

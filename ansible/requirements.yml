@@ -1,0 +1,7 @@
+---
+roles:
+  - name: mrlesmithjr.netplan
+    src: https://github.com/mrlesmithjr/ansible-netplan.git
+    version: master
+    scm: git
+

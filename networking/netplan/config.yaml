@@ -1,0 +1,70 @@
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    enp2s0f1:
+      dhcp4: no
+    enp2s0f0:
+      dhcp4: yes
+    enp136s0f0:
+      dhcp4: no
+    enp136s0f1:
+      dhcp4: no
+  bonds:
+    bond0:
+      interfaces: [enp136s0f0,enp136s0f1]
+      parameters:
+        mode: 802.3ad
+      routing-policy:
+      - from: 0.0.0.0/0
+        table: 252
+        priority: 30000
+        mark: 1
+      routes:
+      -  to: 0.0.0.0/0
+         table: 252
+         metric: 1
+         type: prohibit
+  vlans:
+    bond0.2:
+      id: 2
+      link: bond0
+      addresses: [10.2.0.1/32]
+      routes:
+      - to: 10.2.0.0/16
+        scope: link
+    bond0.3:
+      id: 3
+      link: bond0
+      addresses: [10.3.0.1/32]
+      routes:
+      - to: 10.3.0.0/16
+        scope: link
+    bond0.4:
+      id: 4
+      link: bond0
+      addresses: [10.4.0.1/32]
+      routes:
+      - to: 10.4.0.0/16
+        scope: link
+    bond0.5:
+      id: 5
+      link: bond0
+      addresses: [10.5.0.1/32]
+      routes:
+      - to: 10.5.0.0/16
+        scope: link
+    bond0.6:
+      id: 6
+      link: bond0
+      addresses: [10.6.0.1/32]
+      routes:
+      - to: 10.6.0.0/16
+        scope: link
+    bond0.7:
+      id: 7
+      link: bond0
+      addresses: [10.7.0.1/32]
+      routes:
+      - to: 10.7.0.0/16
+        scope: link
