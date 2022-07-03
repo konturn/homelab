@@ -1,3 +1,0 @@
-FROM ubuntu 
-RUN apt-get update && apt-get install -y tcpdump iputils-ping iproute2
-CMD tcpdump -i eth0 
