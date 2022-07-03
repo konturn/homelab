@@ -1,5 +1,5 @@
 - hosts: router.lab.nkontur.com
   roles:
-  - ansible/roles/configure_docker
+  - configure-docker
   become: yes
 

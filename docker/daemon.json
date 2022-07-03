@@ -1,0 +1,6 @@
+{
+    "data-root": "/persistent_data/docker",
+    "storage-driver": "overlay2",
+    "iptables": false,
+    "dns": ["10.3.32.2", "8.8.8.8"]
+}

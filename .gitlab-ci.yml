@@ -3,6 +3,10 @@
   image: python:3.8
   before_script:
     - pip install ansible
+    - echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp
+    - chmod 600 tmp
+    - mkdir ~/.ssh
+    - cp ansible/known_hosts ~/.ssh/known_hosts
 
 stages:
   - ansible
@@ -10,5 +14,4 @@ stages:
 bootstrap-config:
   extends: .ansible
   script:
-    - echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp
-    - ansible-playbook -i ansible/inventory.txt -u root --private-key={tmp} ansible/playbooks/main.yml
+    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/main.yml

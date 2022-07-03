@@ -1,3 +1,4 @@
 all:
   hosts:
     router.lab.nkontur.com:
+      ansible_ssh_common_args: '-o StrictHostKeyChecking=no'

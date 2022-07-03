@@ -1,0 +1,9 @@
+[RoutingPolicyRule] 
+FirewallMark=1
+Table=252
+Priority=32764
+[RoutingPolicyRule] 
+FirewallMark=1
+Type=prohibit
+Priority=32765
+

@@ -14,7 +14,7 @@ volumes:
   grafana-storage:
 
 networks:
-  test:
+  mgmt:
     driver: macvlan
     ipam:
       config:
@@ -69,19 +69,6 @@ services:
       WEBPASSWORD: kMd9WvYT
     volumes:
       - ${PERSISTENT_DATA_PATH}/pihole/conf:/etc/pihole
-    restart: unless-stopped
-
-  pihole2:
-    container_name: pihole2
-    image: pihole/pihole:latest
-    networks:
-      test:
-    restart: unless-stopped
-  pihole3:
-    container_name: pihole3
-    image: pihole/pihole:latest
-    networks:
-      external:
     restart: unless-stopped
 
   iperf3:
@@ -279,6 +266,16 @@ services:
       - '${PERSISTENT_DATA_PATH}/gitlab/config:/etc/gitlab'
       - '${PERSISTENT_DATA_PATH}/gitlab/logs:/var/log/gitlab'
       - '${PERSISTENT_DATA_PATH}/gitlab/data:/var/opt/gitlab'
+
+  deluge:
+    container_name: deluge
+    image: 'lscr.io/linuxserver/deluge:latest'
+    restart: always
+    networks:
+      - internal
+    volumes:
+      - '${PERSISTENT_DATA_PATH}/deluge:/config'
+      - '/mpool/samba_share/nfs:/downloads'
 
   bitwarden:
     container_name: bitwarden

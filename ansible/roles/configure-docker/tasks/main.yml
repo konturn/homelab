@@ -1,0 +1,15 @@
+### Configure docker daemon on host
+- name: Docker daemon config file
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/daemon.json' }}"
+    dest: '/etc/docker/daemon.json'
+    owner: root
+    group: root
+    create: yes
+    mode: 0600
+
+- name: Reload Docker to pick up changes
+  ansible.builtin.systemd:
+    state: reloaded
+    name: docker
+
