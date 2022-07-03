@@ -3,4 +3,5 @@ stages:
 build:
   stage: test
   script:
-    - docker-compose --file docker/docker-compose.yml --project-directory docker up -d
+    - echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp
+    - ansible-playbook -i ansible/inventory.txt -u root --private-key={tmp} ansible/playbooks/main.yml
