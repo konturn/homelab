@@ -85,9 +85,15 @@
   become: yes
   when: iptables.changed or ipset.changed or netfilter.changed
 
-- name: Setup cron script directry
+- name: Setup cron script directory
   ansible.builtin.file:
     path: /root/cron
+    state: directory
+    mode: '0700'
+
+- name: Setup cron script log directory
+  ansible.builtin.file:
+    path: /root/cron/logs
     state: directory
     mode: '0700'
   
@@ -103,7 +109,7 @@
   ansible.builtin.cron:
     name: "Update wan ipset"
     minute: "*/5"
-    job: "{{ '/bin/bash ' + '/root/cron/ip_update.sh' }}"
+    job: "{{ '/bin/bash ' + '/root/cron/ip_update.sh &> /root/cron/logs/ip_update.log' }}"
 
 - name: Template out cron script for DDNS
   ansible.builtin.template:
@@ -117,7 +123,7 @@
   ansible.builtin.cron:
     name: "Update public DNS records"
     minute: "*/5"
-    job: "{{ '/bin/bash ' + '/root/cron/ddns.py -k ' + lookup('env', 'NAMESILO_API_KEY') + ' -d nkontur.com' }}"
+    job: "{{ '/bin/bash ' + '/root/cron/ddns.py -k ' + lookup('env', 'NAMESILO_API_KEY') + ' -d nkontur.com &> /root/cron/logs/ddns.log' }}"
 
 - name: Sync systemd-networkd drop-in files
   ansible.posix.synchronize:
