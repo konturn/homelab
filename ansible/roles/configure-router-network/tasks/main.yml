@@ -33,6 +33,12 @@
   ansible.builtin.script: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/mullvad-wg.sh ' + lookup('env', 'MULLVAD_ACCOUNT_NUMBER') }}"
   become: yes
 
+- name: Kick Mullvad wireguard interface
+  service:
+    name: "wg-quick@{{ mullvad_interface_name }}"
+    state: restarted
+    enabled: yes
+
 - name: Template the netplan config file
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/netplan/config.yaml' }}"

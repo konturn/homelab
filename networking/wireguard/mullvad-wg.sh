@@ -58,7 +58,6 @@ echo "[+] Contacting Mullvad API."
 RESPONSE="$(curl -sSL https://api.mullvad.net/wg/ -d account="$ACCOUNT" --data-urlencode pubkey="$(wg pubkey <<<"$PRIVATE_KEY")")" || die "Could not talk to Mullvad API."
 [[ $RESPONSE =~ ^[0-9a-f:/.,]+$ ]] || die "$RESPONSE"
 ADDRESS="$RESPONSE"
-DNS="193.138.218.74"
 
 echo "[+] Writing WriteGuard configuration files."
 for CODE in "${SERVER_CODES[@]}"; do
@@ -70,7 +69,6 @@ for CODE in "${SERVER_CODES[@]}"; do
 		[Interface]
 		PrivateKey = $PRIVATE_KEY
 		Address = $ADDRESS
-		DNS = $DNS
 		Table = off
 		PostUp = ip route add default dev mullvad-$CODE table mullvad
 		PreDown = ip route del default dev mullvad-$CODE table mullvad

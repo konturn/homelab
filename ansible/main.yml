@@ -1,4 +1,6 @@
 - hosts: router.lab.nkontur.com
+  vars:
+    mullvad_interface_name: mullvad-us79
   roles:
   - configure-base
   - configure-docker
