@@ -132,3 +132,18 @@
     enabled: yes
   when: networkd.changed
 
+- name: Populate DHCP conf file
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/dhcp/dhcpd.conf' }}"
+    dest: /etc/dhcp/dhcpd.conf
+    owner: root
+    group: root
+    mode: '0640'
+  register: dhcp
+
+- name: Restart isc-dhcp-server when the drop-in files change
+  service:
+    name: isc-dhcp-server
+    state: restarted
+    enabled: yes
+  when: dhcp.changed
