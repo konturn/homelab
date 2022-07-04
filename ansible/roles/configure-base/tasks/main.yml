@@ -1,3 +1,28 @@
+### Configure mounts and cryptodisks
+- name: fstab
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/disk/fstab' }}"
+    dest: '/etc/fstab'
+    owner: root
+    group: root
+    mode: 0600
+
+- name: crypttab
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/disk/crypttab' }}"
+    dest: '/etc/crypttab'
+    owner: root
+    group: root
+    mode: 0600
+
+- name: write to LUKS password file
+  ansible.builtin.copy:
+    content: "{{ lookup('env', 'LUKS_PASSWORD_BASE64') | b64decode }}"
+    dest: '/etc/password_file.txt'
+    owner: root
+    group: root
+    mode: 0600
+
 ### Configure monthly zpool scrub
 - name: Zpool systemd timer
   ansible.builtin.copy:
