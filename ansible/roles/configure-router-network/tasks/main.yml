@@ -1,4 +1,12 @@
-- name: Template the iptables rules file
+- name: Populate route table list
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/iproute2/rt_tables' }}"
+    dest: /etc/iproute2/rt_tables
+    owner: root
+    group: root
+    mode: '0640'
+
+- name: Template the netplan config file
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/netplan/config.yaml' }}"
     dest: /etc/netplan/config.yaml
