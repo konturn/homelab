@@ -21,8 +21,7 @@ type curl >/dev/null || die "Please install curl and then try again."
 type jq >/dev/null || die "Please install jq and then try again."
 set -e
 
-read -p "[?] Please enter your Mullvad account number: " -r ACCOUNT
-
+ACCOUNT=$1
 echo "[+] Contacting Mullvad API for server locations."
 declare -A SERVER_ENDPOINTS
 declare -A SERVER_PUBLIC_KEYS
@@ -72,9 +71,9 @@ for CODE in "${SERVER_CODES[@]}"; do
 		PrivateKey = $PRIVATE_KEY
 		Address = $ADDRESS
 		DNS = $DNS
-                Table = off
-                PostUp = ip route add default dev mullvad-$CODE table mullvad
-                PreDown = ip route del default dev mullvad-$CODE table mullvad
+		Table = off
+		PostUp = ip route add default dev mullvad-$CODE table mullvad
+		PreDown = ip route del default dev mullvad-$CODE table mullvad
 
 		[Peer]
 		PublicKey = ${SERVER_PUBLIC_KEYS["$CODE"]}

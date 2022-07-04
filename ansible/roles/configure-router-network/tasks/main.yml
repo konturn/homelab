@@ -29,6 +29,10 @@
     enabled: yes
   when: wireguard.changed
 
+- name: Generate Mullvad config
+  ansible.builtin.script: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/mullvad-wg.sh ' + lookup('env', 'MULLVAD_ACCOUNT_NUMBER') }}"
+  become: yes
+
 - name: Template the netplan config file
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/netplan/config.yaml' }}"
