@@ -72,6 +72,9 @@ for CODE in "${SERVER_CODES[@]}"; do
 		PrivateKey = $PRIVATE_KEY
 		Address = $ADDRESS
 		DNS = $DNS
+                Table = off
+                PostUp = ip route add default dev mullvad-$CODE table mullvad
+                PreDown = ip route del default dev mullvad-$CODE table mullvad
 
 		[Peer]
 		PublicKey = ${SERVER_PUBLIC_KEYS["$CODE"]}
