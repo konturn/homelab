@@ -14,7 +14,7 @@
     update_cache: yes
 
 - name: Add wireguard config
-  ansible.builtin.copy:
+  ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/wg0.conf' }}"
     dest: /etc/wireguard/wg0.conf
     owner: root

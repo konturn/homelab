@@ -4,7 +4,6 @@
   before_script:
     - apt update && apt install -y rsync
     - pip install ansible
-    - ansible-galaxy install -r ansible/requirements.yml
     - echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp
     - chmod 600 tmp
     - mkdir ~/.ssh
