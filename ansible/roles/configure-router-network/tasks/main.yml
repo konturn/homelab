@@ -103,7 +103,7 @@
   ansible.builtin.cron:
     name: "Update wan ipset"
     minute: "*/5"
-    job: "{{ 'bash ' + '/root/cron/ip_update.sh' }}"
+    job: "{{ '/bin/bash ' + '/root/cron/ip_update.sh' }}"
 
 - name: Template out cron script for DDNS
   ansible.builtin.template:
@@ -117,7 +117,7 @@
   ansible.builtin.cron:
     name: "Update public DNS records"
     minute: "*/5"
-    job: "{{ 'bash ' + '/root/cron/ddns.py -k ' + lookup('env', 'NAMESILO_API_KEY') + ' -d nkontur.com' }}"
+    job: "{{ '/bin/bash ' + '/root/cron/ddns.py -k ' + lookup('env', 'NAMESILO_API_KEY') + ' -d nkontur.com' }}"
 
 - name: Sync systemd-networkd drop-in files
   ansible.posix.synchronize:
