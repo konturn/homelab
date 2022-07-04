@@ -1,6 +1,8 @@
 - hosts: router.lab.nkontur.com
   vars:
     mullvad_interface_name: mullvad-us79
+    inet_interface_name: enp2s0f0
+    nginx_ip: 10.2.32.1
   roles:
   - configure-base
   - configure-docker
