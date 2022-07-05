@@ -26,7 +26,7 @@ $CONFIG = array (
   ),
   'datadirectory' => '/data',
   'dbtype' => 'mysql',
-  'version' => '24.0.1.1',
+  'version' => '24.0.2.1',
   'overwritehost' => 'nkontur.com',
   'overwrite.cli.url' => 'https://nkontur.com/nextcloud',
   'overwriteprotocol' => 'https',
