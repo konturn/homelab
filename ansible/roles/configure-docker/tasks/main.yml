@@ -26,3 +26,10 @@
     owner: www-data
     group: www-data
     mode: '0644'
+  register: nextcloud
+
+- name: Restart nextcloud if config change
+  community.docker.docker_container:
+    name: nextcloud
+    restart: yes
+  when: nextcloud.changed
