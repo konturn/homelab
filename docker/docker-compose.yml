@@ -63,7 +63,7 @@ services:
         ipv4_address: 10.3.32.2
     environment:
       TZ: America/New_York
-      WEBPASSWORD: kMd9WvYT
+      WEBPASSWORD: {{ lookup('env', 'PIHOLE_PASSWORD') }}
     volumes:
       - {{ docker_persistent_data_path }}/pihole/conf:/etc/pihole
     restart: unless-stopped
@@ -227,7 +227,7 @@ services:
     environment:
       - DOCKER_INFLUXDB_INIT_MODE=setup
       - DOCKER_INFLUXDB_INIT_USERNAME=telegraf
-      - DOCKER_INFLUXDB_INIT_PASSWORD=bazoobloofaceofthebloobazoo
+      - DOCKER_INFLUXDB_INIT_PASSWORD={{ lookup('env', 'INFLUXDB_PASSWORD') }}
       - DOCKER_INFLUXDB_INIT_ORG=homelab
       - DOCKER_INFLUXDB_INIT_BUCKET=metrics
   gitlab:
@@ -268,7 +268,7 @@ services:
     environment:
       WORDPRESS_DB_HOST: wordpress_db
       WORDPRESS_DB_USER: wordpress
-      WORDPRESS_DB_PASSWORD: bazoobloofaceofthebloobazoo
+      WORDPRESS_DB_PASSWORD: {{ lookup('env', 'WORDPRESS_DB_PASSWORD') }}
       WORDPRESS_DB_NAME: wordpress
     volumes:
       - {{ docker_persistent_data_path }}/wordpress/html:/var/www/html
@@ -285,8 +285,8 @@ services:
     environment:
       MYSQL_DATABASE: wordpress
       MYSQL_USER: wordpress
-      MYSQL_PASSWORD: bazoobloofaceofthebloobazoo
-      MYSQL_ROOT_PASSWORD: Non_serviam1
+      MYSQL_PASSWORD: {{ lookup('env', 'WORDPRESS_DB_PASSWORD') }}
+      MYSQL_ROOT_PASSWORD: {{ lookup('env', 'WORDPRESS_DB_PASSWORD') }}
     volumes:
       - wordpress_db:/var/lib/mysql
   minecraft_danny:
