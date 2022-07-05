@@ -88,7 +88,7 @@ services:
     container_name: nginx
     networks:
       external:
-        ipv4_address: 10.2.32.1
+        ipv4_address: {{ nginx_ip }}
     restart: unless-stopped
     volumes:
       - {{ docker_persistent_data_path }}/nginx/conf:/etc/nginx
@@ -100,7 +100,7 @@ services:
     container_name: lab_nginx
     networks:
       internal:
-        ipv4_address: 10.3.32.1
+        ipv4_address: {{ lab_nginx_ip }}
     restart: unless-stopped
     volumes:
       - {{ docker_persistent_data_path }}/lab_nginx/conf:/etc/nginx
@@ -248,7 +248,8 @@ services:
     image: 'lscr.io/linuxserver/deluge:latest'
     restart: always
     networks:
-      - internal
+      internal:
+        ipv4_address: {{ deluge_ip }}
     volumes:
       - '{{ docker_persistent_data_path }}/deluge:/config'
       - '/mpool/samba_share/nfs:/downloads'
