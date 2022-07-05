@@ -292,6 +292,8 @@ services:
       - wordpress_db:/var/lib/mysql
   minecraft_danny:
     container_name: minecraft_danny
+    ports:
+      - "25564:25565/tcp"
     networks:
       external:
         ipv4_address: 10.2.32.3
@@ -306,6 +308,8 @@ services:
     restart: unless-stopped
   minecraft:
     container_name: minecraft
+    ports:
+      - "25565:25565/tcp"
     networks:
       external:
         ipv4_address: 10.2.32.2
