@@ -1,0 +1,149 @@
+server {
+    listen 80 default_server;
+    listen 443 ssl default_server;
+    include ssl_config;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    server_name www.nkontur.com nkontur.com;
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    include ssl_config;
+
+    location /plex/ {
+		proxy_pass          http://plex:32400/;
+		client_max_body_size 10m;
+		client_body_buffer_size 128k;
+		proxy_bind $server_addr;
+		proxy_buffers 32 4k;
+		proxy_cache_bypass $cookie_session;
+		proxy_connect_timeout 240;
+		proxy_hide_header X-Frame-Options;
+		proxy_http_version 1.1;
+		proxy_no_cache $cookie_session;
+		proxy_read_timeout 240;
+		proxy_redirect  http://  $scheme://;
+		proxy_send_timeout 240;
+		proxy_set_header	Connection		"upgrade";
+		proxy_set_header	Host			$host;
+		proxy_set_header	X-Real-IP		$remote_addr;
+		proxy_set_header	X-Forwarded-For		$proxy_add_x_forwarded_for;
+		proxy_set_header	X-Forwarded-Host	$server_name;
+		proxy_set_header	X-Forwarded-Proto	https;
+		proxy_set_header	X-Forwarded-Ssl		on;
+		proxy_set_header	Upgrade			$http_upgrade;
+		send_timeout 5m;
+	}
+	if ($http_referer ~ /plex/) {
+		rewrite ^/media/(.*) /plex/media/$1? redirect;
+	}
+rewrite ^/web/(.*) /plex/web/$1? redirect;
+rewrite ^/media/(.*) /plex/media/$1? redirect;
+
+    
+    location /nextcloud/ {
+                proxy_headers_hash_max_size 512;
+                add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+		proxy_headers_hash_bucket_size 64;
+		proxy_set_header Host $host;
+		proxy_set_header X-Forwarded-Proto $scheme;
+		proxy_set_header X-Real-IP $remote_addr;
+		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+		add_header Front-End-Https on;
+		proxy_pass http://nextcloud/;
+	}
+     location /publications {
+ 		alias /data/webroot/publications;
+ 	}
+     location /poetry {
+ 		alias /data/webroot/poetry;
+ 	}
+     location /downloads {
+		alias /data/webroot/downloads;
+		auth_basic "Admin Login";
+		auth_basic_user_file /etc/nginx/.htpasswd;
+	}
+     location /net-map {
+		alias /data/webroot/net;
+	}
+     location /contact {
+		alias /data/webroot/contact;
+	}
+ 	if ($http_referer ~* /plex-requests/) {
+ 		rewrite ^/dist/(.*) $scheme://$host/plex-requests/dist/$1 permanent;
+ 	}
+ 	if ($http_referer ~* /minecraft_map/) {
+ 		rewrite ^/js/(.*) $scheme://$host/minecraft_map/js/$1 permanent;
+ 	}
+
+ 	if ($http_referer ~* /minecraft_guest_map/) {
+ 		rewrite ^/js/(.*) $scheme://$host/minecraft_guest_map/js/$1 permanent;
+ 	}
+
+	location /plex-requests/ {
+	    proxy_pass http://ombi:3579/plex-requests/;
+	}
+
+root /data/webroot/html;
+}
+
+server {
+    listen 443;
+    server_name bitwarden.nkontur.com;
+    include ssl_config;
+    location /{
+        proxy_pass http://bitwarden;
+        proxy_set_header        Connection              "upgrade";
+        proxy_set_header        Host                    $host;
+        proxy_set_header        X-Real-IP               $remote_addr;
+        proxy_set_header        X-Forwarded-For         $proxy_add_x_forwarded_for;
+        proxy_set_header        X-Forwarded-Host        $server_name;
+        proxy_set_header        Upgrade                 $http_upgrade;
+        proxy_set_header        X-Forwarded-Proto       https;
+        proxy_set_header        X-Forwarded-Ssl         on;
+    }
+}
+
+server {
+    listen 443 ssl; 
+    include ssl_config;
+    server_name audioserve.nkontur.com;
+    location /{
+        proxy_pass http://audioserve:3000;
+        proxy_set_header        Connection              "upgrade";
+        proxy_set_header        Host                    $host;
+        proxy_set_header        X-Real-IP               $remote_addr;
+        proxy_set_header        X-Forwarded-For         $proxy_add_x_forwarded_for;
+        proxy_set_header        X-Forwarded-Host        $server_name;
+        proxy_set_header        Upgrade                 $http_upgrade;
+	proxy_set_header	X-Forwarded-Proto	https;
+	proxy_set_header	X-Forwarded-Ssl		on;
+    }
+}
+
+server {
+    listen 443 ssl; 
+    include ssl_config;
+    server_name blog.nkontur.com;
+    location /{
+        proxy_pass http://wordpress;
+        proxy_set_header        Connection              "upgrade";
+        proxy_set_header        Host                    $host;
+        proxy_set_header        X-Real-IP               $remote_addr;
+        proxy_set_header        X-Forwarded-For         $proxy_add_x_forwarded_for;
+        proxy_set_header        X-Forwarded-Host        $server_name;
+        proxy_set_header        Upgrade                 $http_upgrade;
+	proxy_set_header	X-Forwarded-Proto	https;
+	proxy_set_header	X-Forwarded-Ssl		on;
+    }
+#    location / {
+#        proxy_pass http://wordpress;
+#        proxy_set_header      X-Real-IP $remote_addr;
+#        proxy_set_header      X-Forwarded-For $proxy_add_x_forwarded_for;
+#        proxy_set_header      Host $host;
+#	proxy_set_header	X-Forwarded-Proto	https;
+#	proxy_set_header	X-Forwarded-Port	443;
+#	proxy_set_header	X-Forwarded-Ssl		on;
+#    }
+}
