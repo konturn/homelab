@@ -4,8 +4,16 @@
       - docker
       - PyYAML
       - docker-compose
+- name: Template out compose file to docker directory on host
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/docker-compose.yml' }}"
+    dest: "{{ docker_persistent_data_path + '/docker-compose.yml' }}"
+    owner: root
+    group: root
+    mode: '0755'
 
 - name: Create and start Docker services
   community.docker.docker_compose:
     project_name: docker
-    project_src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker' }}"
+    project_src: "{{ docker_persistent_data_path }}"
+    state: present

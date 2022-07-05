@@ -1,5 +1,4 @@
 version: '3.8'
-
 volumes:
   db:
   wordpress_db:
@@ -12,7 +11,6 @@ volumes:
       device: /mpool/nextcloud
   influxdb-storage:
   grafana-storage:
-
 networks:
   mgmt:
     driver: macvlan
@@ -44,7 +42,6 @@ networks:
               shim2: 10.3.0.2
     driver_opts:
       parent: bond0.3
-
 services:
   plex:
     container_name: plex
@@ -68,9 +65,8 @@ services:
       TZ: America/New_York
       WEBPASSWORD: kMd9WvYT
     volumes:
-      - ${PERSISTENT_DATA_PATH}/pihole/conf:/etc/pihole
+      - {{ docker_persistent_data_path }}/pihole/conf:/etc/pihole
     restart: unless-stopped
-
   iperf3:
     container_name: iperf3
     image: networkstatic/iperf3
@@ -79,7 +75,6 @@ services:
     command:
       - "-s"
     restart: unless-stopped
-
   iperf3-secondary:
     container_name: iperf3-secondary
     image: networkstatic/iperf3
@@ -88,7 +83,6 @@ services:
     command:
       - "-s"
     restart: unless-stopped
-
   nginx: 
     image: nginx:latest
     container_name: nginx
@@ -97,11 +91,10 @@ services:
         ipv4_address: 10.2.32.1
     restart: unless-stopped
     volumes:
-      - ${PERSISTENT_DATA_PATH}/nginx/conf:/etc/nginx
-      - ${PERSISTENT_DATA_PATH}/nginx/webroot:/data/webroot
+      - {{ docker_persistent_data_path }}/nginx/conf:/etc/nginx
+      - {{ docker_persistent_data_path }}/nginx/webroot:/data/webroot
       - /var/log/nginx:/data/log
-      - ${PERSISTENT_DATA_PATH}/certs:/data/certs
-
+      - {{ docker_persistent_data_path }}/certs:/data/certs
   lab_nginx: 
     image: nginx:latest
     container_name: lab_nginx
@@ -110,10 +103,9 @@ services:
         ipv4_address: 10.3.32.1
     restart: unless-stopped
     volumes:
-      - ${PERSISTENT_DATA_PATH}/lab_nginx/conf:/etc/nginx
+      - {{ docker_persistent_data_path }}/lab_nginx/conf:/etc/nginx
       - /var/log/lab_nginx:/data/log
-      - ${PERSISTENT_DATA_PATH}/certs:/data/certs
-
+      - {{ docker_persistent_data_path }}/certs:/data/certs
   db:
     image: mariadb
     container_name: nextcloud_database
@@ -128,7 +120,6 @@ services:
       - MYSQL_PASSWORD=actuarial_sciencefox_of_the_bluebazoo
       - MYSQL_DATABASE=nextcloud
       - MYSQL_USER=nextcloud
-
   app:
     image: nextcloud:latest
     container_name: nextcloud
@@ -137,20 +128,11 @@ services:
     hostname: nkontur.com
     volumes:
       - nextcloud:/data
-      - ${PERSISTENT_DATA_PATH}/nextcloud/config:/var/www/html/config
-      - ${PERSISTENT_DATA_PATH}/nextcloud/mpm_prefork.conf:/etc/apache2/mods-available/mpm_prefork.conf
-      - ${PERSISTENT_DATA_PATH}/nextcloud/config/php.ini:/usr/local/etc/php/php.ini
+      - {{ docker_persistent_data_path }}/nextcloud/config:/var/www/html/config
+      - {{ docker_persistent_data_path }}/nextcloud/mpm_prefork.conf:/etc/apache2/mods-available/mpm_prefork.conf
+      - {{ docker_persistent_data_path }}/nextcloud/config/php.ini:/usr/local/etc/php/php.ini
       - /etc/localtime:/etc/localtime:ro
     restart: always
-#  code:
-#    image: collabora/code
-#    container_name: collabora
-#    hostname: nkontur.com
-#    environment:
-#      - extra_params=--o:ssl.enable=false --o:ssl.termination=true
-#      - NEXTCLOUD_HOSTNAME=nkontur.com
-#    ports: 
-#      - 9980:9980
   ombi:
     image: linuxserver/ombi
     container_name: ombi
@@ -167,7 +149,6 @@ services:
       - /etc/ssl/certs:/etc/ssl/certs
       - /etc/ssl/private:/etc/ssl/private
     restart: unless-stopped
-  
   radarr:
     image: linuxserver/radarr
     container_name: radarr
@@ -178,11 +159,10 @@ services:
       - PGID=1000
       - TZ=America/New_York
     volumes:
-      - ${PERSISTENT_DATA_PATH}/radarr:/config
+      - {{ docker_persistent_data_path }}/radarr:/config
       - /mpool/plex/Movies:/movies
       - /mpool/samba_share/nfs:/remote
     restart: unless-stopped
-
   jackett:
     image: linuxserver/jackett
     container_name: jackett
@@ -193,9 +173,8 @@ services:
       - PGID=1000
       - TZ=America/New_York
     volumes:
-      - ${PERSISTENT_DATA_PATH}/jackett:/config
+      - {{ docker_persistent_data_path }}/jackett:/config
     restart: unless-stopped
-
   sonarr:
     image: linuxserver/sonarr
     container_name: sonarr
@@ -206,11 +185,10 @@ services:
       - PGID=1000
       - TZ=America/New_York
     volumes:
-      - ${PERSISTENT_DATA_PATH}/sonarr:/config
+      - {{ docker_persistent_data_path }}/sonarr:/config
       - /mpool/plex/TV:/tv
       - /mpool/samba_share/nfs:/remote
     restart: unless-stopped
-
   booksonic:
     image: izderadicka/audioserve
     container_name: audioserve
@@ -228,7 +206,6 @@ services:
       - /mpool/audioserve/audiobooks:/audiobooks
       - /mpool/audioserve/data:/data
     restart: unless-stopped
-
   grafana:
     container_name: grafana
     networks:
@@ -237,8 +214,7 @@ services:
     restart: always
     volumes:
         - grafana-storage:/var/lib/grafana
-        - ${PERSISTENT_DATA_PATH}/grafana/grafana.ini:/etc/grafana/grafana.ini
-
+        - {{ docker_persistent_data_path }}/grafana/grafana.ini:/etc/grafana/grafana.ini
   influxdb:
     container_name: influxdb
     networks:
@@ -247,14 +223,13 @@ services:
     restart: always
     volumes:
         - influxdb-storage:/var/lib/influxdb
-        - ${PERSISTENT_DATA_PATH}/influxdb/influxdb.conf:/etc/influxdb/influxdb.conf
+        - {{ docker_persistent_data_path }}/influxdb/influxdb.conf:/etc/influxdb/influxdb.conf
     environment:
       - DOCKER_INFLUXDB_INIT_MODE=setup
       - DOCKER_INFLUXDB_INIT_USERNAME=telegraf
       - DOCKER_INFLUXDB_INIT_PASSWORD=bazoobloofaceofthebloobazoo
       - DOCKER_INFLUXDB_INIT_ORG=homelab
       - DOCKER_INFLUXDB_INIT_BUCKET=metrics
-
   gitlab:
     container_name: gitlab
     networks:
@@ -265,10 +240,9 @@ services:
       GITLAB_OMNIBUS_CONFIG: |
         external_url 'http://gitlab.lab.nkontur.com'
     volumes:
-      - '${PERSISTENT_DATA_PATH}/gitlab/config:/etc/gitlab'
-      - '${PERSISTENT_DATA_PATH}/gitlab/logs:/var/log/gitlab'
-      - '${PERSISTENT_DATA_PATH}/gitlab/data:/var/opt/gitlab'
-
+      - '{{ docker_persistent_data_path }}/gitlab/config:/etc/gitlab'
+      - '{{ docker_persistent_data_path }}/gitlab/logs:/var/log/gitlab'
+      - '{{ docker_persistent_data_path }}/gitlab/data:/var/opt/gitlab'
   deluge:
     container_name: deluge
     image: 'lscr.io/linuxserver/deluge:latest'
@@ -276,9 +250,8 @@ services:
     networks:
       - internal
     volumes:
-      - '${PERSISTENT_DATA_PATH}/deluge:/config'
+      - '{{ docker_persistent_data_path }}/deluge:/config'
       - '/mpool/samba_share/nfs:/downloads'
-
   bitwarden:
     container_name: bitwarden
     image: 'vaultwarden/server:latest'
@@ -286,8 +259,7 @@ services:
     networks:
       - external
     volumes:
-      - '${PERSISTENT_DATA_PATH}/bitwarden/data/:/data/'
-
+      - '{{ docker_persistent_data_path }}/bitwarden/data/:/data/'
   wordpress:
     image: wordpress
     container_name: wordpress
@@ -299,10 +271,9 @@ services:
       WORDPRESS_DB_PASSWORD: bazoobloofaceofthebloobazoo
       WORDPRESS_DB_NAME: wordpress
     volumes:
-      - ${PERSISTENT_DATA_PATH}/wordpress/html:/var/www/html
-      - ${PERSISTENT_DATA_PATH}/wordpress/config:/etc/wordpress
+      - {{ docker_persistent_data_path }}/wordpress/html:/var/www/html
+      - {{ docker_persistent_data_path }}/wordpress/config:/etc/wordpress
     restart: always
-
   wordpress_db:
     image: mysql
     container_name: wordpress_db
@@ -318,7 +289,6 @@ services:
       MYSQL_ROOT_PASSWORD: Non_serviam1
     volumes:
       - wordpress_db:/var/lib/mysql
-
   minecraft_danny:
     container_name: minecraft_danny
     networks:
@@ -331,9 +301,8 @@ services:
     tty: true
     stdin_open: true
     volumes:
-      - "${PERSISTENT_DATA_PATH}/minecraft/danny:/data"
+      - "{{ docker_persistent_data_path }}/minecraft/danny:/data"
     restart: unless-stopped
-
   minecraft:
     container_name: minecraft
     networks:
@@ -346,9 +315,8 @@ services:
     tty: true
     stdin_open: true
     volumes:
-      - "${PERSISTENT_DATA_PATH}/minecraft/main:/data"
+      - "{{ docker_persistent_data_path }}/minecraft/main:/data"
     restart: unless-stopped
-
   watchtower:
     container_name: watchtower
     networks:

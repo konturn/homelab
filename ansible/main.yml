@@ -4,6 +4,7 @@
     inet_interface_name: enp2s0f0
     nginx_ip: 10.2.32.1
     pihole_ip: 10.3.32.2
+    docker_persistent_data_path: /persistent_data/application
   roles:
   - configure-base
   - configure-router-network
