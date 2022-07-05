@@ -1,3 +1,10 @@
+- name: ensure required pip-packages are installed
+  pip:
+    name:
+      - docker
+      - PyYAML
+      - docker-compose
+
 - name: Create and start Docker services
   community.docker.docker_compose:
     project_name: docker

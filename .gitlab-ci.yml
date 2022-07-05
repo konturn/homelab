@@ -3,7 +3,7 @@
   image: python:3.8
   before_script:
     - apt update && apt install -y rsync
-    - pip install ansible
+    - pip install -r requirements.txt 
     - echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp
     - chmod 600 tmp
     - mkdir ~/.ssh
