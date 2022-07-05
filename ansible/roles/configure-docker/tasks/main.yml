@@ -5,10 +5,10 @@
       - PyYAML
       - docker-compose
 
-- name: Template out compose file to docker directory on host
+- name: Template out compose file to ansible state directory on host
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/docker-compose.yml' }}"
-    dest: "{{ docker_persistent_data_path + '/docker-compose.yml' }}"
+    dest: "{{ docker_persistent_data_path + '/ansible_state/docker-compose.yml' }}"
     owner: root
     group: root
     mode: '0755'
@@ -16,7 +16,7 @@
 - name: Create and start Docker services
   community.docker.docker_compose:
     project_name: docker
-    project_src: "{{ docker_persistent_data_path }}"
+    project_src: "{{ docker_persistent_data_path }}/ansible_state"
     state: present
 
 - name: Template out compose file to docker directory on host
@@ -33,3 +33,31 @@
     name: nextcloud
     restart: yes
   when: nextcloud.changed
+
+- name: Template out pihole base custom list file to ansible state directory on host
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/pihole/base-custom.list' }}"
+    dest: "{{ docker_persistent_data_path + '/ansible_state/base-custom.list' }}"
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Template out python script to ansible state directory on host
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/generate-records.py' }}"
+    dest: "{{ docker_persistent_data_path + '/ansible_state/generate-records.py' }}"
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Execute Python script to generate pihole custom configuration
+  shell:
+    cmd: "/usr/bin/python3 {{ docker_persistent_data_path + '/ansible_state/generate-records.py' }} --nginx-ip {{ nginx_ip }} --lab-nginx-ip {{ lab_nginx_ip }} --pihole-path {{ docker_persistent_data_path }}/pihole/conf/custom.list --workspace-path {{ docker_persistent_data_path }}/ansible_state"
+  register: pihole
+  changed_when: "'Pihole config file changed' in pihole.stdout"
+
+- name: Restart pihole if config change
+  community.docker.docker_container:
+    name: pihole
+    restart: yes
+  when: "'Pihole config file changed' in pihole.stdout"
