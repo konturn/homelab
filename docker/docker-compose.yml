@@ -116,8 +116,8 @@ services:
     volumes:
       - db:/var/lib/mysql
     environment:
-      - MYSQL_ROOT_PASSWORD=ardent_firefox_of_the_golden_night
-      - MYSQL_PASSWORD=actuarial_sciencefox_of_the_bluebazoo
+      - MYSQL_ROOT_PASSWORD={{ lookup('env', 'NEXTCLOUD_DB_PASSWORD') }}
+      - MYSQL_PASSWORD={{ lookup('env', 'NEXTCLOUD_DB_PASSWORD') }}
       - MYSQL_DATABASE=nextcloud
       - MYSQL_USER=nextcloud
   app:

@@ -4,6 +4,7 @@
       - docker
       - PyYAML
       - docker-compose
+
 - name: Template out compose file to docker directory on host
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/docker-compose.yml' }}"
@@ -17,3 +18,11 @@
     project_name: docker
     project_src: "{{ docker_persistent_data_path }}"
     state: present
+
+- name: Template out compose file to docker directory on host
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/nextcloud/config.php' }}"
+    dest: "{{ docker_persistent_data_path + '/nextcloud/config/config.php' }}"
+    owner: www-data
+    group: www-data
+    mode: '0644'
