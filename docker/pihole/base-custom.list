@@ -1,0 +1,5 @@
+{{ nginx_ip }} nkontur.com
+{{ nginx_ip }} www.nkontur.com
+10.6.0.1 router.lab.nkontur.com
+10.0.0.4 vps.nkontur.com
+10.0.0.2 backups.nkontur.com
