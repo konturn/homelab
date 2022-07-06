@@ -44,6 +44,23 @@ def generate_port_mappings(services, network):
                             http_port_mappings[service_name] = port
     return stream_port_mappings, http_port_mappings
 
+def write_config(src, dest):
+    initial_stream_config_contents = ""
+    try:
+        with open(src, "r") as f:
+            initial_stream_config_contents = f.readlines()
+    except FileNotFoundError:
+        print("Nginx stream configuration file does not exist: creating")
+
+
+    shutil.move(src, dest)
+    stream_config_contents = ""
+    with open(dest, "r") as f:
+        stream_config_contents = f.readlines()
+
+    if initial_stream_config_contents != stream_config_contents:
+        print("Nginx configuration changed")
+
 
 def main():
     parser = argparse.ArgumentParser(description='Take in Ansible variables.')
@@ -51,7 +68,7 @@ def main():
                         help='The path which the script should use as a workspace',
                         required=True)
     parser.add_argument('--stream-config-path', type=str,
-                        help='The path of the directory where the stream config file resides',
+                        help='The path of the stream config file',
                         required=True)
 #    parser.add_argument('--http-config-path', type=str,
 #                        help='The path of the directory where the http config file resides',
@@ -67,21 +84,7 @@ def main():
     stream_port_mappings, http_port_mappings = generate_port_mappings(services, args.network)
     generate_stream_config(stream_port_mappings, args.workspace_path)
 
-    initial_stream_config_contents = ""
-    try:
-        with open(args.stream_config_path + "/stream.conf", "r") as f:
-            initial_stream_config_contents = f.readlines()
-    except FileNotFoundError:
-        print("Nginx stream configuration file does not exist: creating")
-
-
-    shutil.move(args.workspace_path + "/stream.conf", args.stream_config_path + "/stream.conf")
-    stream_config_contents = ""
-    with open(args.stream_config_path + "/stream.conf", "r") as f:
-        stream_config_contents = f.readlines()
-
-    if initial_stream_config_contents != stream_config_contents:
-        print("Nginx configuration changed")
+    write_config(args.workspace_path + "/stream.conf", args.stream_config_path)
 
 
 if __name__ == "__main__":

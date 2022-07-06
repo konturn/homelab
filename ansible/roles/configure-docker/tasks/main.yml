@@ -65,5 +65,5 @@
 
 - name: Execute Python script to generate lab_nginx custom config files
   shell:
-    cmd: "/usr/bin/python3 {{ docker_persistent_data_path }}/ansible_state/generate-configs.py --workspace-path {{ docker_persistent_data_path }}/ansible_state --network internal --stream-config-path {{ docker_persistent_data_path }}/lab_nginx/conf/conf.d/stream"
+    cmd: "/usr/bin/python3 {{ docker_persistent_data_path }}/ansible_state/generate-configs.py --workspace-path {{ docker_persistent_data_path }}/ansible_state --network internal --stream-config-path {{ docker_persistent_data_path }}/lab_nginx/conf/conf.d/stream/stream.conf"
   register: lab_nginx
