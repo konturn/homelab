@@ -66,6 +66,7 @@ services:
       WEBPASSWORD: {{ lookup('env', 'PIHOLE_PASSWORD') }}
     volumes:
       - {{ docker_persistent_data_path }}/pihole/conf:/etc/pihole
+      - {{ docker_persistent_data_path }}/pihole/dnsmasq:/etc/dnsmasq.d
     restart: unless-stopped
   iperf3:
     container_name: iperf3
@@ -232,6 +233,8 @@ services:
       - DOCKER_INFLUXDB_INIT_BUCKET=metrics
   gitlab:
     container_name: gitlab
+    ports:
+      - "22/tcp"
     networks:
       - internal
     image: 'gitlab/gitlab-ee:latest'
