@@ -45,6 +45,8 @@ networks:
 services:
   plex:
     container_name: plex
+    ports:
+      - "32400/tcp"
     image: plexinc/pms-docker
     networks:
       - external

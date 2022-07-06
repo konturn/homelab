@@ -5,9 +5,9 @@ import copy
 import subprocess
 import shutil
 def generate_stream_config(port_mappings, path):
-    with open(path + '/stream.conf', 'r') as stream:
+    with open(path + '/stream-master-template.conf', 'r') as stream:
         result = json.load(stream)
-    with open(path + '/stream-template.conf', 'r') as stream:
+    with open(path + '/stream-entry-template.conf', 'r') as stream:
         template = json.load(stream)
     line_counter = 2
     for service_name, port in port_mappings.items():
@@ -25,9 +25,9 @@ def generate_stream_config(port_mappings, path):
         template_instance['block'][1]['line'] = line_counter + 2
         line_counter += 4
         result['config'][0]['parsed'][0]['block'].append(template_instance)
-    with open(path + "/stream_template.conf", "w") as output:
+    with open(path + "/stream-output.conf", "w") as output:
         output.writelines(json.dumps(result))
-    cmd = "crossplane build -f -d " + path + " " + path + "/stream_template.conf"
+    cmd = "crossplane build -f -d " + path + " " + path + "/stream-output.conf"
     subprocess.call(cmd, shell=True)
 
 def generate_port_mappings(services, network):

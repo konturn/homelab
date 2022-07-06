@@ -62,6 +62,7 @@
   ansible.posix.synchronize:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/nginx/' }}"
     dest: "{{ docker_persistent_data_path + '/ansible_state' }}"
+  changed_when: false
 
 - name: Execute Python script to generate lab_nginx custom config files
   shell:
@@ -74,3 +75,15 @@
     name: lab_nginx
     restart: yes
   when: lab_nginx.changed
+
+- name: Execute Python script to generate nginx custom config files
+  shell:
+    cmd: "/usr/bin/python3 {{ docker_persistent_data_path }}/ansible_state/generate-configs.py --workspace-path {{ docker_persistent_data_path }}/ansible_state --network external --stream-config-path {{ docker_persistent_data_path }}/nginx/conf/conf.d/stream/stream.conf"
+  register: nginx
+  changed_when: "'Nginx configuration changed' in nginx.stdout"
+
+- name: Restart nginx if config change
+  community.docker.docker_container:
+    name: nginx
+    restart: yes
+  when: nginx.changed
