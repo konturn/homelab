@@ -36,7 +36,7 @@
 
 - name: Template out pihole custom list
   ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/pihole/base-custom.list' }}"
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/pihole/custom.list' }}"
     dest: "{{ docker_persistent_data_path + '/pihole/conf/custom.list' }}"
     owner: root
     group: root
@@ -57,3 +57,13 @@
     name: pihole
     restart: yes
   when: pihole_list.changed or pihole_dnsmasq.changed
+
+- name: Syncrhonize template files for nginx script generation into ansible workspace on host
+  ansible.posix.synchronize:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/nginx' }}"
+    dest: "{{ docker_persistent_data_path + '/ansible_state' }}"
+
+- name: Execute Python script to generate lab_nginx custom config files
+  shell:
+    cmd: "/usr/bin/python3 {{ docker_persistent_data_path }}/ansible_state/generate-configs.py --workspace-path {{ docker_persistent_data_path }}/ansible_state --network internal --stream-config-path {{ docker_persistent_data_path }}/lab_nginx/conf/conf.d/stream"
+  register: lab_nginx

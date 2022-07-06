@@ -3,6 +3,7 @@ import argparse
 import yaml
 import copy
 import subprocess
+import shutil
 def generate_stream_config(port_mappings, path):
     with open('stream.conf', 'r') as stream:
         result = json.load(stream)
@@ -49,16 +50,23 @@ def main():
     parser.add_argument('--workspace-path', type=str,
                         help='The path which the script should use as a workspace',
                         required=True)
+    parser.add_argument('--stream-config-path', type=str,
+                        help='The path of the directory where the stream config file resides',
+                        required=True)
+#    parser.add_argument('--http-config-path', type=str,
+#                        help='The path of the directory where the http config file resides',
+#                        required=True)
+    parser.add_argument('--network', type=str,
+                        help='The name of the docker network which the nginx instance serves for',
+                        required=True)
     args = parser.parse_args()
 
     with open(args.workspace_path + "/docker-compose.yml", "r") as stream:
         services = yaml.safe_load(stream)['services']
 
-    stream_port_mappings, http_port_mappings = generate_port_mappings(services, "internal")
+    stream_port_mappings, http_port_mappings = generate_port_mappings(services, args.network)
     generate_stream_config(stream_port_mappings, args.workspace_path)
-
-    stream_port_mappings, http_port_mappings = generate_port_mappings(services, "external")
-    generate_stream_config(stream_port_mappings, args.workspace_path)
+    shutil.move(args.workspace_path + "/stream.conf", args.stream_config_path + "/stream.conf")
 
 
 if __name__ == "__main__":
