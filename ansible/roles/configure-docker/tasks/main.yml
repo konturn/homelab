@@ -67,3 +67,10 @@
   shell:
     cmd: "/usr/bin/python3 {{ docker_persistent_data_path }}/ansible_state/generate-configs.py --workspace-path {{ docker_persistent_data_path }}/ansible_state --network internal --stream-config-path {{ docker_persistent_data_path }}/lab_nginx/conf/conf.d/stream/stream.conf"
   register: lab_nginx
+  changed_when: "'Nginx configuration changed' in lab_nginx.stdout"
+
+- name: Restart lab_nginx if config change
+  community.docker.docker_container:
+    name: lab_nginx
+    restart: yes
+  when: lab_nginx.changed
