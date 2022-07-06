@@ -8,8 +8,8 @@
     deluge_ip: 10.3.32.3
     docker_persistent_data_path: /persistent_data/application
   roles:
-#  - configure-base
-#  - configure-router-network
+  - configure-base
+  - configure-router-network
   - configure-docker
   become: yes
 
