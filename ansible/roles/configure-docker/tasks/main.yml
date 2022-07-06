@@ -34,30 +34,26 @@
     restart: yes
   when: nextcloud.changed
 
-- name: Template out pihole base custom list file to ansible state directory on host
+- name: Template out pihole custom list
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/pihole/base-custom.list' }}"
-    dest: "{{ docker_persistent_data_path + '/ansible_state/base-custom.list' }}"
+    dest: "{{ docker_persistent_data_path + '/pihole/conf/custom.list' }}"
     owner: root
     group: root
     mode: '0755'
+  register: pihole_list
 
-- name: Template out python script to ansible state directory on host
+- name: Template out pihole custom dnsmasq config
   ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/generate-records.py' }}"
-    dest: "{{ docker_persistent_data_path + '/ansible_state/generate-records.py' }}"
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/pihole/custom.conf' }}"
+    dest: "{{ docker_persistent_data_path + '/pihole/dnsmasq/custom.conf' }}"
     owner: root
     group: root
     mode: '0755'
-
-- name: Execute Python script to generate pihole custom configuration
-  shell:
-    cmd: "/usr/bin/python3 {{ docker_persistent_data_path + '/ansible_state/generate-records.py' }} --nginx-ip {{ nginx_ip }} --lab-nginx-ip {{ lab_nginx_ip }} --pihole-path {{ docker_persistent_data_path }}/pihole/conf/custom.list --workspace-path {{ docker_persistent_data_path }}/ansible_state"
-  register: pihole
-  changed_when: "'Pihole config file changed' in pihole.stdout"
+  register: pihole_dnsmasq
 
 - name: Restart pihole if config change
   community.docker.docker_container:
     name: pihole
     restart: yes
-  when: "'Pihole config file changed' in pihole.stdout"
+  when: pihole_list.changed or pihole_dnsmasq.changed
