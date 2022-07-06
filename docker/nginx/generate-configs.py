@@ -5,9 +5,9 @@ import copy
 import subprocess
 import shutil
 def generate_stream_config(port_mappings, path):
-    with open('stream.conf', 'r') as stream:
+    with open(path + '/stream.conf', 'r') as stream:
         result = json.load(stream)
-    with open('stream-template.conf', 'r') as stream:
+    with open(path + '/stream-template.conf', 'r') as stream:
         template = json.load(stream)
     line_counter = 2
     for service_name, port in port_mappings.items():

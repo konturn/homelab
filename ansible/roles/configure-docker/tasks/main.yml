@@ -58,9 +58,9 @@
     restart: yes
   when: pihole_list.changed or pihole_dnsmasq.changed
 
-- name: Syncrhonize template files for nginx script generation into ansible workspace on host
+- name: Synchronize template files for nginx script generation into ansible workspace on host
   ansible.posix.synchronize:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/nginx' }}"
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/nginx/' }}"
     dest: "{{ docker_persistent_data_path + '/ansible_state' }}"
 
 - name: Execute Python script to generate lab_nginx custom config files
