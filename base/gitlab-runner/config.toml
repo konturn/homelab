@@ -1,0 +1,14 @@
+concurrent = 1
+check_interval = 0
+
+[session_server]
+  session_timeout = 1800
+
+[[runners]]
+  name = "main.nkontur.com"
+  url = "https://gitlab.lab.nkontur.com/"
+  token = "{{ lookup('env', 'GITLAB_RUNNER_TOKEN') }}"
+  executor = "docker"
+  [runners.docker]
+    image = "ubuntu:20.04"
+    network_mode = "docker_internal"

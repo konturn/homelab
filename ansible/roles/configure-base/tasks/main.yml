@@ -40,7 +40,6 @@
     group: root
     mode: 0600
 
-
 - name: Make sure timer enabled
   ansible.builtin.systemd:
     name: zpool-scrub.timer
@@ -98,3 +97,27 @@
 
 - name: Reload Docker to pick up changes
   ansible.builtin.systemd:
+    state: restarted
+  when: docker_conf.changed
+
+- name: Install gitlab-runner
+  apt:
+    name:
+      - gitlab-runner
+    state: latest
+    update_cache: yes
+
+- name: Add gitlab-runner user to docker group
+  user:
+    name: gitlab-runner
+    append: yes
+    groups: docker
+
+### Configure gitlab-runner on host
+- name: Gitlab runner config file
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/gitlab-runner/config.toml' }}"
+    dest: '/etc/gitlab-runner/config.toml'
+    owner: root
+    group: root
+    mode: 0600
