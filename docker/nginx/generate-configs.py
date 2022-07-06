@@ -66,7 +66,22 @@ def main():
 
     stream_port_mappings, http_port_mappings = generate_port_mappings(services, args.network)
     generate_stream_config(stream_port_mappings, args.workspace_path)
+
+    initial_stream_config_contents = ""
+    try:
+        with open(args.stream_config_path + "/stream.conf", "r") as f:
+            initial_stream_config_contents = f.readlines()
+    except FileNotFoundError:
+        print("Nginx stream configuration file does not exist: creating")
+
+
     shutil.move(args.workspace_path + "/stream.conf", args.stream_config_path + "/stream.conf")
+    stream_config_contents = ""
+    with open(args.stream_config_path + "/stream.conf", "r") as f:
+        stream_config_contents = f.readlines()
+
+    if initial_stream_config_contents != stream_config_contents:
+        print("Nginx configuration changed")
 
 
 if __name__ == "__main__":
