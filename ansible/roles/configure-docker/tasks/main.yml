@@ -16,7 +16,7 @@
 - name: Create and start Docker services
   community.docker.docker_compose:
     project_name: docker
-    project_src: "{{ docker_persistent_data_path }}/ansible_state"
+    definition: "{{ lookup('template', lookup('env', 'CI_PROJECT_DIR') + '/docker/docker-compose.yml') | to_json }}"
     state: present
 
 - name: Template out compose file to docker directory on host
