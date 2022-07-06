@@ -60,6 +60,8 @@ services:
   pihole:
     container_name: pihole
     image: pihole/pihole:latest
+    ports:
+      - "443:80"
     networks:
       internal:
         ipv4_address: 10.3.32.2
@@ -159,6 +161,8 @@ services:
   radarr:
     image: linuxserver/radarr
     container_name: radarr
+    ports:
+      - "443:7878"
     networks:
       - internal
     environment:
@@ -173,6 +177,8 @@ services:
   jackett:
     image: linuxserver/jackett
     container_name: jackett
+    ports:
+      - "443:9117"
     networks:
       - internal
     environment:
@@ -185,6 +191,8 @@ services:
   sonarr:
     image: linuxserver/sonarr
     container_name: sonarr
+    ports:
+      - "443:8989"
     networks:
     - internal
     environment:
@@ -199,6 +207,8 @@ services:
   booksonic:
     image: izderadicka/audioserve
     container_name: audioserve
+    ports:
+      - "443:3000"
     networks:
       - external
     environment:
@@ -215,6 +225,8 @@ services:
     restart: unless-stopped
   grafana:
     container_name: grafana
+    ports:
+      - "443:3000"
     networks:
       - internal
     image: grafana/grafana
@@ -224,6 +236,8 @@ services:
         - {{ docker_persistent_data_path }}/grafana/grafana.ini:/etc/grafana/grafana.ini
   influxdb:
     container_name: influxdb
+    ports:
+      - "443:80"
     networks:
       - internal
     image: influxdb:latest
@@ -241,6 +255,7 @@ services:
     container_name: gitlab
     ports:
       - "22/tcp"
+      - "443:80"
     networks:
       - internal
     image: 'gitlab/gitlab-ee:latest'
@@ -254,6 +269,8 @@ services:
       - '{{ docker_persistent_data_path }}/gitlab/data:/var/opt/gitlab'
   deluge:
     container_name: deluge
+    ports:
+      - "443:8112"
     image: 'lscr.io/linuxserver/deluge:latest'
     restart: always
     networks:
@@ -264,15 +281,19 @@ services:
       - '/mpool/samba_share/nfs:/downloads'
   bitwarden:
     container_name: bitwarden
+    ports:
+      - "443:80"
     image: 'vaultwarden/server:latest'
     restart: always
     networks:
       - external
     volumes:
       - '{{ docker_persistent_data_path }}/bitwarden/data/:/data/'
-  wordpress:
+  blog:
     image: wordpress
     container_name: wordpress
+    ports:
+      - "443:80"
     networks:
       - external
     environment:

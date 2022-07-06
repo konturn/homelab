@@ -81,20 +81,38 @@
   delegate_to: localhost
   changed_when: false
 
-- name: Copy lab_nginx stream configuration file
+- name: Copy base configuration file
   ansible.builtin.copy:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/stream.conf"
-    dest: "{{ docker_persistent_data_path }}/lab_nginx/conf/conf.d/stream/stream.conf"
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/nginx.conf"
+    dest: "{{ docker_persistent_data_path }}/lab_nginx/conf/nginx.conf"
     owner: root
     group: root
     mode: '0644'
-  register: lab_nginx
+  register: lab_nginx_base
+
+- name: Copy lab_nginx stream configuration file
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/stream.conf"
+    dest: "{{ docker_persistent_data_path }}/lab_nginx/conf/conf.d/stream.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  register: lab_nginx_stream
+
+- name: Copy lab_nginx http configuration file
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/http.conf"
+    dest: "{{ docker_persistent_data_path }}/lab_nginx/conf/conf.d/http.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  register: lab_nginx_http
 
 - name: Restart lab_nginx if config change
   community.docker.docker_container:
     name: lab_nginx
     restart: yes
-  when: lab_nginx.changed
+  when: lab_nginx_base.changed or lab_nginx_stream.changed or lab_nginx_http.changed
 
 - name: Execute Python script to generate nginx custom config files
   shell:
@@ -102,17 +120,35 @@
   delegate_to: localhost
   changed_when: false
 
-- name: Copy nginx stream configuration file
+- name: Copy base configuration file
   ansible.builtin.copy:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/stream.conf"
-    dest: "{{ docker_persistent_data_path }}/nginx/conf/conf.d/stream/stream.conf"
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/nginx.conf"
+    dest: "{{ docker_persistent_data_path }}/nginx/conf/nginx.conf"
     owner: root
     group: root
     mode: '0644'
-  register: nginx
+  register: nginx_base
+
+- name: Copy nginx stream configuration file
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/stream.conf"
+    dest: "{{ docker_persistent_data_path }}/nginx/conf/conf.d/stream.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  register: nginx_stream
+
+- name: Copy nginx http configuration file
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/http.conf"
+    dest: "{{ docker_persistent_data_path }}/nginx/conf/conf.d/http.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  register: nginx_http
 
 - name: Restart nginx if config change
   community.docker.docker_container:
     name: nginx
     restart: yes
-  when: nginx.changed
+  when: nginx_base.changed or nginx_stream.changed or nginx_http.changed
