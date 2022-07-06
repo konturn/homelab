@@ -41,6 +41,26 @@
     restart: yes
   when: nextcloud.changed
 
+- name: Sets up base cronjob for nextcloud
+  ansible.builtin.cron:
+    name: "Nextcloud base cronjob"
+    minute: "*/5"
+    job: "docker exec -t -u www-data nextcloud php -f /var/www/html/cron.php"
+
+- name: Sets up periodic file scan cronjob for nextcloud
+  ansible.builtin.cron:
+    name: "Nextcloud file scan cronjob"
+    minute: "0"
+    hour: "2"
+    weekday: "0"
+    job: "docker exec -u www-data nextcloud php occ files:scan --all"
+
+- name: Sets up perodic plex chown
+  ansible.builtin.cron:
+    name: "Plex dir chown"
+    hour: 0
+    job: "chown -R konoahko:konoahko /mpool/plex"
+
 - name: Template out pihole custom list
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/pihole/custom.list' }}"
