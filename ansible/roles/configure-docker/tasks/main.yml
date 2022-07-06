@@ -1,9 +1,16 @@
-- name: ensure required pip-packages are installed
+#- name: install python-setuptools
+#  package:
+#    name: python-setuptools
+#    state: present
+#  delegate_to: localhost
+
+- name: ensure required pip-packages are installed within docker image
   pip:
     name:
       - docker
       - PyYAML
       - docker-compose
+  delegate_to: localhost
 
 - name: Template out compose file to ansible state directory on host
   ansible.builtin.template:
@@ -58,17 +65,30 @@
     restart: yes
   when: pihole_list.changed or pihole_dnsmasq.changed
 
-- name: Synchronize template files for nginx script generation into ansible workspace on host
-  ansible.posix.synchronize:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/nginx/' }}"
-    dest: "{{ docker_persistent_data_path + '/ansible_state' }}"
+- name: Template out compose file to ansible state directory within container
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/docker-compose.yml' }}"
+    dest: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx"
+    owner: root
+    group: root
+    mode: '0755'
   changed_when: false
+  delegate_to: localhost
 
 - name: Execute Python script to generate lab_nginx custom config files
   shell:
-    cmd: "/usr/bin/python3 {{ docker_persistent_data_path }}/ansible_state/generate-configs.py --workspace-path {{ docker_persistent_data_path }}/ansible_state --network internal --stream-config-path {{ docker_persistent_data_path }}/lab_nginx/conf/conf.d/stream/stream.conf"
+    cmd: "/usr/bin/python3 {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/generate-configs.py --workspace-path {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx --network internal"
+  delegate_to: localhost
+  changed_when: false
+
+- name: Copy lab_nginx stream configuration file
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/stream.conf"
+    dest: "{{ docker_persistent_data_path }}/lab_nginx/conf/conf.d/stream/stream.conf"
+    owner: root
+    group: root
+    mode: '0644'
   register: lab_nginx
-  changed_when: "'Nginx configuration changed' in lab_nginx.stdout"
 
 - name: Restart lab_nginx if config change
   community.docker.docker_container:
@@ -78,9 +98,18 @@
 
 - name: Execute Python script to generate nginx custom config files
   shell:
-    cmd: "/usr/bin/python3 {{ docker_persistent_data_path }}/ansible_state/generate-configs.py --workspace-path {{ docker_persistent_data_path }}/ansible_state --network external --stream-config-path {{ docker_persistent_data_path }}/nginx/conf/conf.d/stream/stream.conf"
+    cmd: "/usr/bin/python3 {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/generate-configs.py --workspace-path {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx --network external"
+  delegate_to: localhost
+  changed_when: false
+
+- name: Copy nginx stream configuration file
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/stream.conf"
+    dest: "{{ docker_persistent_data_path }}/nginx/conf/conf.d/stream/stream.conf"
+    owner: root
+    group: root
+    mode: '0644'
   register: nginx
-  changed_when: "'Nginx configuration changed' in nginx.stdout"
 
 - name: Restart nginx if config change
   community.docker.docker_container:

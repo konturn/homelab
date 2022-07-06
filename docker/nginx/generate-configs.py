@@ -2,8 +2,9 @@ import json
 import argparse
 import yaml
 import copy
-import subprocess
+import os
 import shutil
+import time
 def generate_stream_config(port_mappings, path):
     with open(path + '/stream-master-template.conf', 'r') as stream:
         result = json.load(stream)
@@ -28,7 +29,7 @@ def generate_stream_config(port_mappings, path):
     with open(path + "/stream-output.conf", "w") as output:
         output.writelines(json.dumps(result))
     cmd = "crossplane build -f -d " + path + " " + path + "/stream-output.conf"
-    subprocess.call(cmd, shell=True)
+    os.system(cmd)
 
 def generate_port_mappings(services, network):
     stream_port_mappings = {}
@@ -44,31 +45,10 @@ def generate_port_mappings(services, network):
                             http_port_mappings[service_name] = port
     return stream_port_mappings, http_port_mappings
 
-def write_config(src, dest):
-    initial_stream_config_contents = ""
-    try:
-        with open(src, "r") as f:
-            initial_stream_config_contents = f.readlines()
-    except FileNotFoundError:
-        print("Nginx stream configuration file does not exist: creating")
-
-
-    shutil.move(src, dest)
-    stream_config_contents = ""
-    with open(dest, "r") as f:
-        stream_config_contents = f.readlines()
-
-    if initial_stream_config_contents != stream_config_contents:
-        print("Nginx configuration changed")
-
-
 def main():
     parser = argparse.ArgumentParser(description='Take in Ansible variables.')
     parser.add_argument('--workspace-path', type=str,
                         help='The path which the script should use as a workspace',
-                        required=True)
-    parser.add_argument('--stream-config-path', type=str,
-                        help='The path of the stream config file',
                         required=True)
 #    parser.add_argument('--http-config-path', type=str,
 #                        help='The path of the directory where the http config file resides',
@@ -83,8 +63,6 @@ def main():
 
     stream_port_mappings, http_port_mappings = generate_port_mappings(services, args.network)
     generate_stream_config(stream_port_mappings, args.workspace_path)
-
-    write_config(args.workspace_path + "/stream.conf", args.stream_config_path)
 
 
 if __name__ == "__main__":
