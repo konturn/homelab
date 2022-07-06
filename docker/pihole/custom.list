@@ -1,5 +1,9 @@
 {{ nginx_ip }} nkontur.com
 {{ nginx_ip }} www.nkontur.com
+{{ movie_ap_address }} movie-ap.lab.nkontur.com
+{{ movie_switch_address }} movie-switch.lab.nkontur.com
+{{ office_ap_address }} office-ap.lab.nkontur.com
+{{ office_switch_address }} office-switch.lab.nkontur.com
 10.6.0.1 router.lab.nkontur.com
 10.0.0.4 vps.nkontur.com
 10.0.0.2 backups.nkontur.com
