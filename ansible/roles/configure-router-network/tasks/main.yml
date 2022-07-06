@@ -144,6 +144,23 @@
     minute: "*/5"
     job: "{{ '/usr/bin/python3 ' + '/root/cron/ddns.py -k ' + lookup('env', 'NAMESILO_API_KEY') + ' -d nkontur.com >> /root/cron/logs/ddns.log 2>&1' }}"
 
+- name: Template out cron script for SSL renewal
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/ssl/renew.sh' }}"
+    dest: /root/cron/renew.sh
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Sets up cronjob for SSL Certs
+  ansible.builtin.cron:
+    name: "Renew ssl certs"
+    minute: "0"
+    hour: "4"
+    weekday: "1"
+    job: "{{ '/bin/bash ' + '/root/cron/renew.sh ' + lookup('env', 'NAMESILO_API_KEY') + ' >> /root/cron/logs/ssl.log 2>&1' }}"
+
+
 - name: Sync systemd-networkd drop-in files
   ansible.posix.synchronize:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/networkd' }}"
