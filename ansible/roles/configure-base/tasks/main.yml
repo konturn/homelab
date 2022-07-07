@@ -121,3 +121,26 @@
     owner: root
     group: root
     mode: 0600
+
+- name: Install telegraf
+  apt:
+    name:
+      - telegraf
+    state: latest
+    update_cache: yes
+
+### Configure telegraf config file
+- name: Telegraf config file
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/telegraf/telegraf.conf' }}"
+    dest: '/etc/telegraf/telegraf.conf'
+    owner: root
+    group: root
+    mode: 0600
+  register: telegraf
+
+- name: Reload telegraf to pick up changes
+  ansible.builtin.systemd:
+    name: telegraf
+    state: restarted
+  when: telegraf.changed
