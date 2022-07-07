@@ -1,0 +1,8 @@
+- name: Template out aruba config
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/switches/aruba-config' }}"
+    dest: "{{ docker_persistent_data_path + 'ansible_state/aruba-config' }}"
+    owner: root
+    group: root
+    mode: '0755'
+  register: aruba
