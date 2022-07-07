@@ -17,8 +17,8 @@ bootstrap-config:
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/bootstrap.yml 
 
-general-config:
-  extends: .ansible
-  stage: ansible-main
-  script:
-    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/main.yml
+#general-config:
+#  extends: .ansible
+#  stage: ansible-main
+#  script:
+#    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/main.yml
