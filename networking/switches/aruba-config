@@ -1,0 +1,364 @@
+#
+# Configuration file for ArubaOS
+version 7.4
+enable secret {{ lookup('env', 'ARUBA_CONFIG_SECRET') }}
+hostname "ArubaS2500-48P-US"
+clock timezone EDT -4
+controller config 3
+ip access-list eth validuserethacl
+  permit any 
+!
+ip access-list standard vlan2
+  permit host 192.168.2.253 
+  permit host 192.168.1.1 
+!
+netservice svc-dhcp udp 67 68
+netservice svc-dns udp 53
+netservice svc-ftp tcp 21
+netservice svc-h323-tcp tcp 1720
+netservice svc-h323-udp udp 1718 1719
+netservice svc-http tcp 80
+netservice svc-https tcp 443
+netservice svc-icmp 1
+netservice svc-kerberos udp 88
+netservice svc-natt udp 4500
+netservice svc-ntp udp 123
+netservice svc-sip-tcp tcp 5060
+netservice svc-sip-udp udp 5060
+netservice svc-sips tcp 5061
+netservice svc-smtp tcp 25
+netservice svc-ssh tcp 22
+netservice svc-telnet tcp 23
+netservice svc-tftp udp 69
+netservice svc-vocera udp 5002
+ip access-list stateless allowall-stateless
+  any any any  permit 
+!
+ip access-list stateless cplogout-stateless
+  user   alias controller sys-svc-https  dst-nat 8081 
+!
+ip access-list stateless dhcp-acl-stateless
+  any any svc-dhcp  permit 
+!
+ip access-list stateless dns-acl-stateless
+  any any svc-dns  permit 
+!
+ip access-list stateless http-acl-stateless
+  any any svc-http  permit 
+!
+ip access-list stateless https-acl-stateless
+  any any svc-https  permit 
+!
+ip access-list stateless icmp-acl-stateless
+  any any svc-icmp  permit 
+!
+ip access-list stateless logon-control-stateless
+  any any svc-icmp  permit 
+  any any svc-dns  permit 
+  any any svc-dhcp  permit 
+  any any svc-natt  permit 
+!
+ip access-list session validuser
+  network 169.254.0.0 255.255.0.0 any any  deny 
+  any any any  permit 
+!
+user-role authenticated
+ access-list stateless allowall-stateless
+!
+user-role denyall
+!
+user-role denydhcp
+!
+user-role guest
+ access-list stateless http-acl-stateless
+ access-list stateless https-acl-stateless
+ access-list stateless dhcp-acl-stateless
+ access-list stateless icmp-acl-stateless
+ access-list stateless dns-acl-stateless
+!
+user-role logon
+ access-list stateless logon-control-stateless
+!
+user-role preauth
+!
+!
+
+crypto ipsec transform-set default-boc-bm-transform esp-aes256 esp-sha-hmac
+crypto ipsec transform-set default-rap-transform esp-aes256 esp-sha-hmac
+
+
+ssh mgmt-auth public-key
+mgmt-user admin root 7a14201e01e17c119dc119a16dff522f24c600aa87d8036513
+
+
+ntp server 206.55.191.142  
+
+firewall disable-stateful-h323-processing
+!
+ip domain lookup
+!
+ip name-server 192.168.2.2
+!
+aaa authentication mac "default"
+!
+aaa authentication dot1x "default"
+!
+aaa server-group "default"
+ auth-server Internal
+ set role condition role value-of
+!
+aaa profile "default"
+!
+aaa authentication captive-portal "default"
+!
+aaa authentication vpn "default"
+!
+aaa authentication mgmt
+!
+aaa authentication wired
+!
+web-server
+!
+papi-security
+!
+aaa password-policy mgmt
+!
+traceoptions
+!
+ip dhcp pool "pool-1"
+   vendor-class-identifier ArubaAP
+!
+ip dhcp pool "pool-vlan1"
+   vendor-class-identifier ArubaAP
+!
+ip dhcp pool "pool-vlan2"
+   network 192.168.2.0 255.255.255.0
+   lease 1 0 0 0
+   default-router 192.168.2.1
+   dns-server 192.168.3.231
+   vendor-class-identifier ArubaAP
+!
+ip dhcp pool "pool-vlan3"
+   network 192.168.3.0 255.255.255.0
+   lease 1 0 0 0
+   default-router 192.168.3.1
+   dns-server 192.168.3.231
+   vendor-class-identifier ArubaAP
+   hardware-address dc:a6:32:74:9e:bf ip-address 192.168.3.253
+   hardware-address dc:a6:32:74:9b:1b ip-address 192.168.3.252
+   hardware-address dc:a6:32:02:b4:82 ip-address 192.168.3.254
+   hardware-address 52:54:00:c5:74:db ip-address 192.168.3.250
+   hardware-address 52:54:00:db:bf:3a ip-address 192.168.3.249
+!
+ip dhcp pool "pool-vlan4"
+   network 192.168.4.0 255.255.255.0
+   lease 1 0 0 0
+   default-router 192.168.4.1
+   dns-server 192.168.3.231
+   vendor-class-identifier ArubaAP
+!
+ip dhcp pool "vlan-1"
+   vendor-class-identifier ArubaAP
+!
+service dhcp
+!
+probe-profile "default"
+   protocol icmp 
+!
+qos-profile "default"
+!
+policer-profile "default"
+!
+ip-profile
+   default-gateway 192.168.1.1
+!
+lcd-menu
+!
+interface-profile ospf-profile "default"
+   area 0.0.0.0
+!
+interface-profile pim-profile "default"
+!
+interface-profile igmp-profile "default"
+!
+stack-profile
+!
+ipv6-profile
+!
+activate-service-firmware
+!
+aruba-central
+!
+rogue-ap-containment
+!
+interface-profile switching-profile "default"
+!
+interface-profile switching-profile "trunk-main"
+   switchport-mode trunk
+   trunk allowed vlan 1-7
+!
+interface-profile switching-profile "Upstream-profile"
+   switchport-mode trunk
+!
+interface-profile switching-profile "vlan2"
+   access-vlan 2
+!
+interface-profile switching-profile "vlan3"
+   access-vlan 3
+!
+interface-profile switching-profile "vlan4"
+   access-vlan 4
+!
+interface-profile tunneled-node-profile "default"
+!
+interface-profile poe-profile "default"
+!
+interface-profile poe-profile "poe-factory-initial"
+   enable
+!
+interface-profile enet-link-profile "default"
+!
+interface-profile lacp-profile "test"
+   group-id 0
+   mode active
+!
+interface-profile lldp-profile "default"
+!
+interface-profile lldp-profile "lldp-factory-initial"
+   lldp transmit
+   lldp receive
+!
+interface-profile mstp-profile "default"
+!
+interface-profile pvst-port-profile "default"
+!
+vlan-profile dhcp-snooping-profile "default"
+!
+vlan-profile mld-snooping-profile "default"
+!
+vlan-profile igmp-snooping-profile "default"
+!
+vlan-profile igmp-snooping-profile "igmp-snooping-factory-initial"
+!
+spanning-tree
+   mode mstp
+!
+gvrp
+!
+mstp
+!
+lacp
+!
+vlan "1"
+   igmp-snooping-profile "igmp-snooping-factory-initial"
+!
+vlan "2"
+   description "For External Access"
+!
+vlan "3"
+   description "LAN-accessible only"
+!
+vlan "4"
+   description "Management and Diagnostics"
+!
+vlan "5"
+   description "Guest"
+!
+vlan "6"
+   description "Buster"
+!
+vlan "7"
+   description "Iot"
+!
+interface gigabitethernet "0/0/0"
+   switching-profile "vlan4"
+!
+interface gigabitethernet "0/0/1"
+   switching-profile "vlan4"
+!
+interface gigabitethernet "0/0/9"
+!
+interface gigabitethernet "0/0/13"
+!
+interface gigabitethernet "0/0/34"
+   switching-profile "vlan3"
+!
+interface gigabitethernet "0/0/35"
+   switching-profile "vlan3"
+!
+interface gigabitethernet "0/0/36"
+   switching-profile "vlan3"
+!
+interface gigabitethernet "0/0/37"
+   switching-profile "vlan3"
+!
+interface gigabitethernet "0/0/44"
+   switching-profile "vlan2"
+!
+interface gigabitethernet "0/0/45"
+   switching-profile "vlan2"
+!
+interface gigabitethernet "0/1/0"
+   switching-profile "trunk-main"
+!
+interface gigabitethernet "0/1/1"
+   switching-profile "trunk-main"
+!
+interface gigabitethernet "0/1/2"
+   lacp-profile "test"
+!
+interface gigabitethernet "0/1/3"
+   lacp-profile "test"
+!
+interface vlan "1"
+   shutdown
+   ip address 192.168.1.254 255.255.255.0
+   ip address 10.1.0.1 255.255.0.0 secondary
+!
+interface vlan "2"
+   shutdown
+!
+interface vlan "3"
+   shutdown
+!
+interface vlan "4"
+   shutdown
+!
+interface vlan "5"
+   shutdown
+!
+interface vlan "6"
+   shutdown
+!
+interface mgmt
+   ip address 10.100.0.1 255.255.255.0
+!
+interface port-channel "0"
+   qos-profile "default"
+   switching-profile "trunk-main"
+   enet-link-profile pc_default
+!
+device-group ap
+!
+interface-group gigabitethernet "default"
+   apply-to ALL
+   lldp-profile "lldp-factory-initial"
+   poe-profile "poe-factory-initial"
+!
+
+snmp-server community public view ALL
+snmp-server view ALL oid-tree iso included 
+snmp-server group public v1 read ALL 
+snmp-server group public v2c read ALL 
+snmp-server group ALLPRIV v1 read ALL notify ALL 
+snmp-server group ALLPRIV v2c read ALL notify ALL 
+snmp-server group ALLPRIV v3 noauth read ALL notify ALL 
+snmp-server group AUTHPRIV v3 priv read ALL notify ALL 
+snmp-server group AUTHNOPRIV v3 auth read ALL notify ALL 
+snmp-server user "konoahko" group AUTHPRIV v3 auth-prot md5 465c355ffeefcf9b296f47da1b237e89e403f8b658e63c77 priv-prot aes e3e73ad4b165b0fbab0702d5c117003927829f3b1f624c21 
+snmp-server engine-id 100039E703001a1e0ec280 
+
+snmp-server enable trap
+
+process monitor log
+end
