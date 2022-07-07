@@ -4,6 +4,7 @@ network:
   ethernets:
     enp2s0f1:
       dhcp4: no
+      addresses: [10.100.0.2/24]
     {{ inet_interface_name }}:
       dhcp4: yes
     enp136s0f0:
