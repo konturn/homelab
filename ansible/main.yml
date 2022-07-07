@@ -15,6 +15,8 @@
     movie_ap_address: 10.4.0.5
     office_ap_mac: 90:4c:81:cf:49:58
     office_ap_address: 10.4.0.6
+    ipmi_mac: 00:25:90:ec:88:92
+    ipmi_address: 10.4.0.7
   roles:
   - configure-base
   - configure-router-network
