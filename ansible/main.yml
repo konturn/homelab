@@ -17,6 +17,8 @@
     office_ap_address: 10.4.0.6
     ipmi_mac: 00:25:90:ec:88:92
     ipmi_address: 10.4.0.7
+    ups_mac: 00:c0:b7:84:80:f4
+    ups_address: 10.4.0.8
   roles:
   - configure-base
   - configure-router-network
