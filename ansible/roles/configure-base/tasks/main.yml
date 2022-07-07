@@ -135,8 +135,8 @@
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/telegraf/telegraf.conf' }}"
     dest: '/etc/telegraf/telegraf.conf'
-    owner: root
-    group: root
+    owner: telegraf
+    group: telegraf
     mode: 0600
   register: telegraf
 
