@@ -237,7 +237,7 @@ services:
   influxdb:
     container_name: influxdb
     ports:
-      - "443:80"
+      - "443:8086"
     networks:
       - internal
     image: influxdb:latest
