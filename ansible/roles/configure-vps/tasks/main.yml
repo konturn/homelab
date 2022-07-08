@@ -1,10 +1,3 @@
-- name: Ensure rsync installed
-  apt:
-    name:
-      - rsync
-    state: present
-    update_cache: yes
-
 - name: Ensure wireguard installed
   apt:
     name:
@@ -45,12 +38,15 @@
     update_cache: yes
 
 - name: Sync mail files
-  ansible.posix.synchronize:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/vps/mail/' }}"
-    dest: /etc/
-    rsync_opts:
-      - "--chmod=F644"
-  register: mail 
+  copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/vps/mail/' + item + '/' }}"
+    dest: "/etc/{{ item }}"
+    mode: preserve
+  loop:
+     - postfix
+     - opendkim
+     - dovecot
+  register: "mail-{{ item }}"
 
 - name: write dkim private key
   copy:
@@ -77,5 +73,5 @@
      - postfix
      - opendkim
      - dovecot
-  when: mail.changed or dkim.changed
+  when: "mail-{{ item }}.changed"
 
