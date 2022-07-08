@@ -41,7 +41,7 @@
   copy:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/vps/mail/' + item + '/' }}"
     dest: "/etc/{{ item }}"
-    mode: preserve
+    mode: 0755
   loop:
      - postfix
      - opendkim
@@ -52,7 +52,7 @@
   copy:
     content: "{{ lookup('env', 'DKIM_PRIVATE_KEY') | b64decode }}"
     dest: /etc/opendkim/keys/nkontur.com/default.private
-    mode: 0755
+    mode: '0700'
   register: dkim
 
 - name: Ensure mail services started and enabled
