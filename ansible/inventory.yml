@@ -19,6 +19,7 @@ all:
     ipmi_address: 10.4.0.7
     ups_mac: 00:c0:b7:84:80:f4
     ups_address: 10.4.0.8
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
   hosts:
     router.lab.nkontur.com:
-      ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    vps.nkontur.com:

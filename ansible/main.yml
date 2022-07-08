@@ -1,5 +1,5 @@
-- hosts: router.lab.nkontur.com
+- hosts: vps.nkontur.com
   roles:
-  - configure-global-network
+  - configure-vps
   become: yes
 

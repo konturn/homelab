@@ -1,0 +1,28 @@
+- name: Ensure wireguard installed
+  apt:
+    name:
+      - wireguard
+    state: present
+    update_cache: yes
+
+- name: Add wireguard config
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/vps/wg0.conf' }}"
+    dest: /etc/wireguard/wg0.conf
+    owner: root
+    group: root
+    mode: '0755'
+  register: wireguard
+
+- name: Make sure wireguard is started and enabled
+  service:
+    name: wg-quick@wg0
+    state: started
+    enabled: yes
+
+- name: Restart wireguard if config change
+  service:
+    name: wg-quick@wg0
+    state: restarted
+    enabled: yes
+  when: wireguard.changed
