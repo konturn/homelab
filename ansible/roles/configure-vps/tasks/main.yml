@@ -46,14 +46,17 @@
 
 - name: Sync mail files
   ansible.posix.synchronize:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/vps/mail' }}"
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/vps/mail/' }}"
     dest: /etc/
+    rsync_opts:
+      - "--chmod=F644"
   register: mail 
 
 - name: write dkim private key
   copy:
     content: "{{ lookup('env', 'DKIM_PRIVATE_KEY') | b64decode }}"
     dest: /etc/opendkim/keys/nkontur.com/default.private
+    mode: 600
   register: dkim
 
 - name: Ensure mail services started and enabled
