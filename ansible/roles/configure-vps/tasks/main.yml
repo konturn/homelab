@@ -38,11 +38,10 @@
     update_cache: yes
 
 - name: Sync mail files
-  synchronize:
+  copy:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/vps/mail/' + item + '/' }}"
     dest: "/etc/{{ item }}"
-    archive: yes
-    perms: yes
+    mode: preserve
   loop:
      - postfix
      - opendkim
