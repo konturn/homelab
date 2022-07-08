@@ -46,7 +46,7 @@
      - postfix
      - opendkim
      - dovecot
-  register: "mail-{{ item }}"
+  register: mail
 
 - name: write dkim private key
   copy:
@@ -73,5 +73,4 @@
      - postfix
      - opendkim
      - dovecot
-  when: "mail-{{ item }}.changed"
-
+  when: mail.changed or dkim.changed
