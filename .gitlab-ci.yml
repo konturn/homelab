@@ -1,5 +1,5 @@
 .ansible:
-  stage: ansible-bootstrap
+  stage: ansible-main
   image: willhallonline/ansible:latest
   before_script:
     - pip3 install -r requirements.txt 
@@ -9,16 +9,16 @@
     - cp ansible/known_hosts ~/.ssh/known_hosts
 
 stages:
-  - ansible-bootstrap
   - ansible-main
 
-bootstrap-config:
-  extends: .ansible
-  script:
-    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/bootstrap.yml 
-
-general-config:
+router:
   extends: .ansible
   stage: ansible-main
   script:
-    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/main.yml
+    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml 
+
+vps:
+  extends: .ansible
+  stage: ansible-main
+  script:
+    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/vps.yml
