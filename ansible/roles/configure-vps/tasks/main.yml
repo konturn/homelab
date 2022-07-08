@@ -1,3 +1,10 @@
+- name: Ensure rsync installed
+  apt:
+    name:
+      - rsync
+    state: present
+    update_cache: yes
+
 - name: Ensure wireguard installed
   apt:
     name:
@@ -26,3 +33,46 @@
     state: restarted
     enabled: yes
   when: wireguard.changed
+
+- name: Ensure mail packages installed
+  apt:
+    name:
+      - postfix
+      - dovecot-common 
+      - dovecot-imapd
+      - opendkim
+    state: present
+    update_cache: yes
+
+- name: Sync mail files
+  ansible.posix.synchronize:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/vps/mail' }}"
+    dest: /etc/
+  register: mail 
+
+- name: write dkim private key
+  copy:
+    content: "{{ lookup('env', 'DKIM_PRIVATE_KEY') | b64decode }}"
+    dest: /etc/opendkim/keys/nkontur.com/default.private
+  register: dkim
+
+- name: Ensure mail services started and enabled
+  systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: yes
+  loop:
+     - postfix
+     - opendkim
+     - dovecot
+
+- name: Restart mail services if config change
+  systemd:
+    name: "{{ item }}"
+    state: restarted
+  loop:
+     - postfix
+     - opendkim
+     - dovecot
+  when: mail.changed or dkim.changed
+
