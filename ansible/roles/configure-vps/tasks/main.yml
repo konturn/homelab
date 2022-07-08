@@ -52,7 +52,7 @@
   copy:
     content: "{{ lookup('env', 'DKIM_PRIVATE_KEY') | b64decode }}"
     dest: /etc/opendkim/keys/nkontur.com/default.private
-    mode: 600
+    mode: 0755
   register: dkim
 
 - name: Ensure mail services started and enabled
