@@ -22,4 +22,6 @@ all:
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
   hosts:
     router.lab.nkontur.com:
+      wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/wg0.conf' }}"
     vps.nkontur.com:
+      wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/vps/wg0.conf' }}"

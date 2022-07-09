@@ -1,5 +1,6 @@
 - hosts: vps.nkontur.com
   roles:
+  - configure-wireguard
   - configure-vps
   become: yes
 
