@@ -22,6 +22,16 @@ networks:
               shim4: 10.4.0.2
     driver_opts:
       parent: bond0.4
+  buster:
+    driver: macvlan
+    ipam:
+      config:
+          - subnet: 10.6.0.0/16
+            ip_range: 10.6.0.0/18
+            aux_addresses:
+              shim6: 10.6.0.2
+    driver_opts:
+      parent: bond0.6
   external:
     driver: macvlan
     ipam:
@@ -88,7 +98,7 @@ services:
     ports:
      - "5202:5201/tcp"
     networks:
-      - internal
+      - buster
     command:
       - "-s"
     restart: unless-stopped

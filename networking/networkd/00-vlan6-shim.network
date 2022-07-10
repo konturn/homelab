@@ -1,0 +1,10 @@
+[Match]
+Name=vlan6-shim
+
+[Network]
+Address=10.6.0.2/32
+IPForward=yes
+ConfigureWithoutCarrier=yes
+
+[Route]
+Destination=10.6.0.0/18

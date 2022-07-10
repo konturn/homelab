@@ -134,8 +134,10 @@
 
 - name: Sync systemd-networkd drop-in files
   ansible.posix.synchronize:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/networkd' }}"
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/networkd/' }}"
     dest: /etc/systemd/network
+    rsync_opts:
+    - "--chmod=755"
   register: networkd
 
 - name: Restart systemd-networkd when the drop-in files change
