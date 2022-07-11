@@ -81,7 +81,7 @@ def main():
 
     if args.network == "internal":
         domain_name = "lab.nkontur.com"
-    else if args.network == "external":
+    elif args.network == "external":
         domain_name = "nkontur.com"
 
     stream_port_mappings, http_port_mappings = generate_port_mappings(services, args.network)
