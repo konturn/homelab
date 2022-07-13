@@ -8,17 +8,17 @@ all:
     deluge_ip: 10.3.32.3
     docker_persistent_data_path: /persistent_data/application
     movie_switch_mac: 8c:3b:ad:6f:0e:d0
-    movie_switch_address: 10.4.0.3
+    movie_switch_address: 10.4.128.3
     office_switch_mac: 28:80:88:6e:11:88
-    office_switch_address: 10.4.0.4
+    office_switch_address: 10.4.128.4
     movie_ap_mac: 24:62:ce:cb:82:94
-    movie_ap_address: 10.4.0.5
+    movie_ap_address: 10.4.128.5
     office_ap_mac: 90:4c:81:cf:49:58
-    office_ap_address: 10.4.0.6
+    office_ap_address: 10.4.128.6
     ipmi_mac: 00:25:90:ec:88:92
-    ipmi_address: 10.4.0.7
+    ipmi_address: 10.4.128.7
     ups_mac: 00:c0:b7:84:80:f4
-    ups_address: 10.4.0.8
+    ups_address: 10.4.128.8
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
   hosts:
     router.lab.nkontur.com:
