@@ -1,3 +1,12 @@
+- name: Ensure proper packages are installed
+  apt:
+    name:
+      - dnsmasq
+      - isc-dhcp-server
+      - wireguard
+    state: latest
+    update_cache: yes
+
 - name: Populate route table list
   ansible.builtin.copy:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/iproute2/rt_tables' }}"
@@ -146,6 +155,22 @@
     state: restarted
     enabled: yes
   when: networkd.changed
+
+- name: Populate dnsmasq conf file
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/dns/dnsmasq.conf' }}"
+    dest: /etc/dnsmasq.conf
+    owner: root
+    group: root
+    mode: '0640'
+  register: dnsmasq
+
+- name: Restart dnsmasq when the drop-in files change
+  service:
+    name: dnsmasq
+    state: restarted
+    enabled: yes
+  when: dnsmasq.changed
 
 - name: Populate DHCP conf file
   ansible.builtin.template:
