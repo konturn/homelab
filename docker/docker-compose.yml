@@ -169,7 +169,7 @@ services:
       - /etc/ssl/private:/etc/ssl/private
     restart: unless-stopped
   radarr:
-    image: linuxserver/radarr
+    image: linuxserver/radarr:4.2.0-nightly
     container_name: radarr
     ports:
       - "443:7878"
