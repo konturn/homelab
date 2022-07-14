@@ -9,8 +9,8 @@
     mode: 0600
   register: interfaces
 
-#- name: Reload networking daemon to pick up changes
-#  ansible.builtin.systemd:
-#    name: networking
-#    state: restarted
-#  when: interfaces.changed
+- name: Reload networking daemon to pick up changes
+  ansible.builtin.systemd:
+    name: networking
+    state: restarted
+  when: interfaces.changed
