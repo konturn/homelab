@@ -1,0 +1,16 @@
+### Configure networking on host
+- name: Interfaces config file
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/fallback/interfaces.d/vlans' }}"
+    dest: '/etc/network/interfaces.d/vlans'
+    owner: root
+    group: root
+    create: yes
+    mode: 0600
+  register: interfaces
+
+#- name: Reload networking daemon to pick up changes
+#  ansible.builtin.systemd:
+#    name: networking
+#    state: restarted
+#  when: interfaces.changed

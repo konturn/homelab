@@ -1,0 +1,6 @@
+auto eth0.4
+iface eth0.4 inet static
+  vlan-raw-device eth0
+  address {{ fallback_address }}
+  netmask 255.255.0.0
+  gateway 10.4.0.1

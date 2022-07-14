@@ -10,15 +10,21 @@
 
 stages:
   - ansible-main
+  - ansible-fallback
 
 router:
   extends: .ansible
-  stage: ansible-main
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml 
 
 vps:
   extends: .ansible
-  stage: ansible-main
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/vps.yml
+
+fallback:
+  extends: .ansible
+  stage: ansible-fallback
+  script:
+    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/fallback.yml
+

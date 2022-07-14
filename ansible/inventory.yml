@@ -19,10 +19,10 @@ all:
     ipmi_address: 10.4.128.7
     ups_mac: 00:c0:b7:84:80:f4
     ups_address: 10.4.128.8
-    fallback_mac: dc:a6:32:02:b4:82
     fallback_address: 10.4.128.1
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
   hosts:
+    fallback.lab.nkontur.com:
     router.lab.nkontur.com:
       wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/wg0.conf' }}"
     vps.nkontur.com:

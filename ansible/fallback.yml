@@ -1,0 +1,5 @@
+- hosts: fallback.lab.nkontur.com
+  roles:
+  - configure-fallback
+  become: yes
+
