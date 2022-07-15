@@ -1,3 +1,11 @@
+- name: Ensure proper packages are installed
+  apt:
+    name:
+      - isc-dhcp-server
+      - wireguard
+    state: latest
+    update_cache: yes
+
 ### Configure networking on host
 - name: Interfaces config file
   ansible.builtin.template:
