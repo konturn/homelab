@@ -55,13 +55,6 @@ network:
       routes:
       - to: 10.5.0.0/16
         scope: link
-    bond0.6:
-      id: 6
-      link: bond0
-      addresses: [10.6.0.1/32]
-      routes:
-      - to: 10.6.0.0/16
-        scope: link
     bond0.7:
       id: 7
       link: bond0

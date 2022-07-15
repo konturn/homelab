@@ -47,9 +47,7 @@ COMMIT
 -A INPUT -p icmp -j ACCEPT
 -A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
 -A INPUT -i bond0.4 -p tcp -m tcp --dport 2049 -j ACCEPT
--A INPUT -i bond0.6 -p tcp -m tcp --dport 2049 -j ACCEPT
 -A INPUT -i bond0.4 -p udp -m udp --dport 69 -j ACCEPT
--A INPUT -i bond0.6 -p udp -m udp --dport 69 -j ACCEPT
 -A INPUT -p udp -m udp --dport 51871 -j ACCEPT
 -A FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
 -A FORWARD -i {{ inet_interface_name }} -o vlan2-shim -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -m multiport --dports 22,32400,25564,25565,25566,443 -m conntrack --ctstate NEW -j ACCEPT
@@ -67,7 +65,6 @@ COMMIT
 -A FORWARD -i vlan4-shim -o mullvad-us79 -j ACCEPT
 -A FORWARD -i bond0+ -o {{ inet_interface_name }} -j ACCEPT
 -A FORWARD -i bond0+ -o mullvad-us79 -j ACCEPT
--A FORWARD -i bond0.6 -j ACCEPT
 -A FORWARD -i bond0.4 -j ACCEPT
 -A FORWARD -i vlan4-shim -j ACCEPT
 COMMIT
