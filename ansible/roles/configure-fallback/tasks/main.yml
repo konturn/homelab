@@ -13,7 +13,6 @@
     dest: '/etc/network/interfaces.d/vlans'
     owner: root
     group: root
-    create: yes
     mode: 0600
   register: interfaces
 

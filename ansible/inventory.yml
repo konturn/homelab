@@ -21,6 +21,9 @@ all:
     ups_address: 10.4.128.8
     fallback_address: 10.4.128.1
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    dhcp_peer_type: primary
+    dhcp_address: 10.5.0.1
+    dhcp_peer_address: 10.5.128.1
   hosts:
     fallback.lab.nkontur.com:
     router.lab.nkontur.com:
