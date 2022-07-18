@@ -30,6 +30,7 @@ all:
     router.lab.nkontur.com:
       wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/wg0.conf' }}"
       is_primary_router: true
+      local_interface_name: bond0
       dhcp_address: 10.4.0.1
       dhcp_peer_address: 10.4.128.1
     vps.nkontur.com:
