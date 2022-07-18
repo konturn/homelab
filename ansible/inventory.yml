@@ -22,9 +22,11 @@ all:
     fallback_address: 10.4.128.1
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     omapi_secret: "{{ lookup('env', 'OMAPI_SECRET') }}"
+    vrrp_password: "{{ lookup('env', 'VRRP_PASSWORD') }}"
   hosts:
     fallback.lab.nkontur.com:
       is_primary_router: false
+      local_interface_name: eth0
       dhcp_address: 10.4.128.1
       dhcp_peer_address: 10.4.0.1
     router.lab.nkontur.com:

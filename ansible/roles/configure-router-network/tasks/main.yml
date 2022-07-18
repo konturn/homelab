@@ -4,6 +4,9 @@
       - dnsmasq
       - isc-dhcp-server
       - wireguard
+      - keepalived
+      - netfilter-persistent
+      - iptables-persistent
     state: latest
     update_cache: yes
 
@@ -187,3 +190,19 @@
     state: restarted
     enabled: yes
   when: dhcp.changed
+
+- name: Populate VRRP conf file
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/vrrp/keepalived.conf' }}"
+    dest: /etc/keepalived/keepalived.conf
+    owner: root
+    group: root
+    mode: '0640'
+  register: keepalived
+
+- name: Restart isc-dhcp-server when the drop-in files change
+  service:
+    name: keepalived
+    state: restarted
+    enabled: yes
+  when: keepalived.changed
