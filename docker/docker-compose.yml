@@ -22,7 +22,7 @@ networks:
               shim4: 10.4.0.2
     driver_opts:
       parent: bond0.4
-  buster:
+  iot:
     driver: macvlan
     ipam:
       config:
@@ -89,16 +89,6 @@ services:
       - "5201/tcp"
     networks:
       - internal
-    command:
-      - "-s"
-    restart: unless-stopped
-  iperf3-secondary:
-    container_name: iperf3-secondary
-    image: networkstatic/iperf3
-    ports:
-     - "5202:5201/tcp"
-    networks:
-      - buster
     command:
       - "-s"
     restart: unless-stopped
@@ -370,3 +360,15 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     command: --interval 3600
+  homeassistant:
+    container_name: homeassistant
+    networks:
+      - internal
+      - iot
+    ports:
+      - "443:8123"
+    image: "ghcr.io/home-assistant/home-assistant:stable"
+    volumes:
+      - "{{ docker_persistent_data_path }}/homeassistant:/config"
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
