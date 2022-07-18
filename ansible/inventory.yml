@@ -24,12 +24,12 @@ all:
     omapi_secret: "{{ lookup('env', 'OMAPI_SECRET') }}"
   hosts:
     fallback.lab.nkontur.com:
-      dhcp_peer_type: secondary
+      is_primary_router: false
       dhcp_address: 10.4.128.1
       dhcp_peer_address: 10.4.0.1
     router.lab.nkontur.com:
       wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/wg0.conf' }}"
-      dhcp_peer_type: primary
+      is_primary_router: true
       dhcp_address: 10.4.0.1
       dhcp_peer_address: 10.4.128.1
     vps.nkontur.com:
