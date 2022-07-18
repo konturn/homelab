@@ -21,6 +21,7 @@ all:
     ups_address: 10.4.128.8
     fallback_address: 10.4.128.1
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    omapi_secret: "{{ lookup('env', 'OMAPI_SECRET') }}"
   hosts:
     fallback.lab.nkontur.com:
       dhcp_peer_type: secondary
