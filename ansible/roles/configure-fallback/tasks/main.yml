@@ -21,3 +21,4 @@
     name: networking
     state: restarted
   when: interfaces.changed
+  ignore_errors: true
