@@ -19,6 +19,8 @@ all:
     ipmi_address: 10.4.128.7
     ups_mac: 00:c0:b7:84:80:f4
     ups_address: 10.4.128.8
+    shield_mac: 00:04:4b:b6:cf:95
+    shield_address: 10.6.128.3
     fallback_address: 10.4.128.1
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     omapi_secret: "{{ lookup('env', 'OMAPI_SECRET') }}"
