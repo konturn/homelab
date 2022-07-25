@@ -45,7 +45,7 @@ def generate_http_config(port_mappings, path, domain_name):
             container_port = port_split[1]
         template_instance['block'][0]['args'].append(host_port)
         template_instance['block'][1]['args'].append(service_name + "." + domain_name)
-        template_instance['block'][3]['block'][0]['args'].append("http://" + service_name + ":" + container_port)
+        template_instance['block'][3]['block'][1]['args'].append("http://" + service_name + ":" + container_port)
         result['config'][0]['parsed'][0]['block'].append(template_instance)
     with open(path + "/http-output.conf", "w") as output:
         output.writelines(json.dumps(result))
