@@ -19,7 +19,7 @@ def generate_stream_config(port_mappings, path):
             host_port = port_split[0]
             container_port = port_split[1]
         template_instance['block'][0]['args'].append(host_port)
-        template_instance['block'][1]['args'].append(service_name + ":" + container_port)
+        template_instance['block'][2]['args'].append(service_name + ":" + container_port)
         result['config'][0]['parsed'][0]['block'].append(template_instance)
     with open(path + "/stream-output.conf", "w") as output:
         output.writelines(json.dumps(result))
