@@ -125,7 +125,7 @@
   ansible.builtin.cron:
     name: "Update public DNS records"
     minute: "*/5"
-    job: "{{ '/usr/bin/python3 ' + '/root/cron/ddns.py -k ' + lookup('env', 'NAMESILO_API_KEY') + ' -d nkontur.com >> /root/cron/logs/ddns.log 2>&1' }}"
+    job: "{{ '/usr/bin/python3 ' + '/root/cron/ddns.py -k ' + lookup('env', 'NAMESILO_API_KEY') }} -d nkontur.com -r '' '*' >> /root/cron/logs/ddns.log 2>&1"
 
 - name: Template out cron script for SSL renewal
   ansible.builtin.template:
