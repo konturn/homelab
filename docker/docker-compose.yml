@@ -289,6 +289,8 @@ services:
       - external
     volumes:
       - '{{ docker_persistent_data_path }}/bitwarden/data/:/data/'
+    env_file:
+      - '{{ docker_persistent_data_path }}/bitwarden/global.override.env'
   blog:
     image: wordpress
     container_name: wordpress
