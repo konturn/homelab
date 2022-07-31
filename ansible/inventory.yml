@@ -21,7 +21,7 @@ all:
     ups_address: 10.4.128.8
     shield_mac: 00:04:4b:b6:cf:95
     shield_address: 10.4.128.9
-    denon_mac: 00:04:4b:b6:cf:95
+    denon_mac: 00:06:78:84:0e:d8
     denon_address: 10.6.128.3
     projector_mac: dc:cd:2f:d6:aa:0e
     projector_address: 10.6.128.4
