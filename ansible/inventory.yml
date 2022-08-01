@@ -25,6 +25,8 @@ all:
     projector_address: 10.6.128.4
     shield_mac: 00:04:4b:b6:cf:95
     shield_address: 10.6.128.5
+    zwave_mac: dc:a6:32:74:9e:bf
+    zwave_address: 10.6.128.6
     fallback_address: 10.4.128.1
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     omapi_secret: "{{ lookup('env', 'OMAPI_SECRET') }}"
