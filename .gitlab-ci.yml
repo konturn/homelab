@@ -26,3 +26,7 @@ fallback:
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/fallback.yml
 
+zwave:
+  extends: .ansible
+  script:
+    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/zwave.yml

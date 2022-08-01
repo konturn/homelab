@@ -1,0 +1,5 @@
+- hosts: zwave.lab.nkontur.com
+  roles:
+  - configure-zwave
+  become: yes
+

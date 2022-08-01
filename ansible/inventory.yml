@@ -45,3 +45,4 @@ all:
       dhcp_peer_address: 10.4.128.1
     vps.nkontur.com:
       wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/vps/wg0.conf' }}"
+    zwave.lab.nkontur.com:
