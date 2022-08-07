@@ -64,6 +64,7 @@ COMMIT
 -A FORWARD -i wg0 -o {{ local_interface_name }} -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -m multiport --dports 111,443,5201,2049,2342,33333 -m conntrack --ctstate NEW -j ACCEPT
 -A FORWARD -i wg0 -o {{ local_interface_name }} -p udp -m multiport --dports 53 -j ACCEPT
 -A FORWARD -i wg0 -o wg0 -p tcp -m tcp --dport 22 -j ACCEPT
+-A FORWARD -i wg1 -j ACCEPT
 -A FORWARD -i vlan3-shim -o wg0 -j ACCEPT
 -A FORWARD -i wg0 -o vlan3-shim -p tcp -m tcp --dport 5201 -j ACCEPT
 -A FORWARD -i vlan2-shim -o {{ inet_interface_name }} -j ACCEPT
