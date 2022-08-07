@@ -1,7 +1,10 @@
 - hosts: router.lab.nkontur.com
   roles:
   - configure-base
-  - configure-wireguard
+  - role: configure-wireguard
+    vars: 
+      wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/wg0.conf' }}"
+      wireguard_interface_name: "wg0"
   - role: configure-wireguard
     vars: 
       wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/wg1.conf' }}"
