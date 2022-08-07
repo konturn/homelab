@@ -2,6 +2,10 @@
   roles:
   - configure-base
   - configure-wireguard
+  - role: configure-wireguard
+    vars: 
+      wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/wg1.conf' }}"
+      wireguard_interface_name: "wg1"
   - configure-router-network
   - configure-docker
   become: yes

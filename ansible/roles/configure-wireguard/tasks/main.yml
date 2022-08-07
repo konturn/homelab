@@ -8,7 +8,7 @@
 - name: Add wireguard config
   ansible.builtin.template:
     src: "{{ wireguard_config_path }}"
-    dest: /etc/wireguard/wg0.conf
+    dest: /etc/wireguard/{{ wireguard_interface_name }}.conf
     owner: root
     group: root
     mode: '0755'
