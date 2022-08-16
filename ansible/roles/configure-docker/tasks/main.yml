@@ -18,7 +18,7 @@
     dest: "{{ docker_persistent_data_path + '/ansible_state/docker-compose.yml' }}"
     owner: root
     group: root
-    mode: '0755'
+    mode: '0700'
 
 - name: Create and start Docker services
   community.docker.docker_compose:
