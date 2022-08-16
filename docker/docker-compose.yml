@@ -367,6 +367,7 @@ services:
     networks:
       - internal
       - iot
+      - external
     ports:
       - "443:8123"
     image: "ghcr.io/home-assistant/home-assistant:stable"

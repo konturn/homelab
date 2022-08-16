@@ -1,0 +1,21 @@
+
+# Loads default set of integrations. Do not remove.
+default_config:
+
+media_player:
+  - platform: pjlink
+    host: projector.lab.nkontur.com
+
+# Text to speech
+tts:
+  - platform: google_translate
+
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - {{ nginx_ip }}
+    - {{ lab_nginx_ip }}
+    - 127.0.0.1

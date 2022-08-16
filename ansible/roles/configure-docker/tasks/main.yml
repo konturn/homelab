@@ -26,7 +26,22 @@
     project_src: "{{ docker_persistent_data_path }}/ansible_state"
     state: present
 
-- name: Template out compose file to docker directory on host
+- name: Template out homeassistant conf file to docker directory on host
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/homeassistant/configuration.yaml' }}"
+    dest: "{{ docker_persistent_data_path + '/homeassistant/configuration.yaml' }}"
+    owner: root
+    group: root
+    mode: '0644'
+  register: homeassistant
+
+- name: Restart homeassistant if config change
+  community.docker.docker_container:
+    name: homeassistant
+    restart: yes
+  when: homeassistant.changed
+
+- name: Template out nextcloud conf file to docker directory on host
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/nextcloud/config.php' }}"
     dest: "{{ docker_persistent_data_path + '/nextcloud/config/config.php' }}"
