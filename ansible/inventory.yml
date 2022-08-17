@@ -47,4 +47,7 @@ all:
     vps.nkontur.com:
       wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/vps/wg0.conf' }}"
       wireguard_interface_name: "wg0"
+    backups.nkontur.com:
+      wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/backups/wg0.conf' }}"
+      wireguard_interface_name: "wg0"
     zwave.lab.nkontur.com:
