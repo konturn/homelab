@@ -1,0 +1,20 @@
+- name: Ensure borg packages installed
+  apt:
+    name:
+      - borgbackup
+    state: present
+    update_cache: yes
+
+- name: Setup backups directory
+  ansible.builtin.file:
+    path: /backups
+    state: directory
+    mode: '0700'
+
+- name: fstab
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/disk/fstab_backups' }}"
+    dest: '/etc/fstab'
+    owner: root
+    group: root
+    mode: 0600
