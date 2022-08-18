@@ -354,6 +354,14 @@ services:
     volumes:
       - "{{ docker_persistent_data_path }}/minecraft/main:/data"
     restart: unless-stopped
+  diagram:
+    container_name: diagram
+    ports:
+      - "8080:8080/tcp"
+    networks:
+      internal:
+    image: jgraph/drawio
+    restart: unless-stopped
   watchtower:
     container_name: watchtower
     networks:

@@ -20,6 +20,7 @@ $CONFIG = array (
   'instanceid' => 'oc1vh3kho5hh',
   'passwordsalt' => 'SnqDGN2g/qLVmOiRG1L6Ht7kX5ttZo',
   'secret' => '{{ lookup('env', 'NEXTCLOUD_SECRET') }}',
+  'trusted_proxies' => array('10.2.32.1'),
   'trusted_domains' => 
   array (
     0 => 'nkontur.com',
