@@ -18,28 +18,11 @@
     group: root
     mode: '0640'
 
-- name: Generate Mullvad config
-  ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/mullvad-us79.conf' }}"
-    dest: /etc/wireguard/mullvad-us70.conf
-    owner: root
-    group: root
-    mode: '0755'
-  register: mullvad
-  become: yes
-
 - name: Make sure Mullvad is started and enabled
   service:
-    name: wg-quick@mullvad-us79
+    name: "wg-quick@{{ mullvad_interface_name }}"
     state: started
     enabled: yes
-
-- name: Kick Mullvad wireguard interface if changed
-  service:
-    name: "wg-quick@{{ mullvad_interface_name }}"
-    state: restarted
-    enabled: yes
-  when: mullvad.changed
 
 - name: Template the netplan config file
   ansible.builtin.template:

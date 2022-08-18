@@ -28,11 +28,11 @@ COMMIT
 -A PREROUTING -i {{ inet_interface_name }} -p tcp -m tcp --dport 25565 -j DNAT --to-destination {{ nginx_ip }}:25565
 -A PREROUTING -i {{ inet_interface_name }} -p tcp -m tcp --dport 443 -j DNAT --to-destination {{ nginx_ip }}:443
 -A PREROUTING -i {{ inet_interface_name }} -p tcp -m tcp --dport 32400 -j DNAT --to-destination {{ nginx_ip }}:32400
--A PREROUTING -i mullvad-us79 -p tcp -m tcp --dport 62941 -j DNAT --to-destination {{ deluge_ip }}
+-A PREROUTING -i {{ mullvad_interface_name }} -p tcp -m tcp --dport 62941 -j DNAT --to-destination {{ deluge_ip }}
 -A PREROUTING -s 10.6.0.0/16 -p tcp -m set --match-set wan_ip dst -m tcp -j DNAT --to-destination {{ nginx_ip }}
 -A PREROUTING -i {{ inet_interface_name }} -p udp -m udp --dport 51871 -j ACCEPT
 -A PREROUTING -i {{ inet_interface_name }} -p tcp -m tcp --dport 25564 -j DNAT --to-destination {{ nginx_ip }}:25564
--A POSTROUTING -o mullvad-us79 -j MASQUERADE
+-A POSTROUTING -o {{ mullvad_interface_name }} -j MASQUERADE
 -A POSTROUTING -o {{ inet_interface_name }} -j MASQUERADE
 -A POSTROUTING -s 10.5.0.0/16 -d {{ nginx_ip }}/32 -o {{ local_interface_name }} -p tcp -m tcp -j SNAT --to-source 10.5.0.1
 -A POSTROUTING -s 10.6.0.0/16 -d {{ nginx_ip }}/32 -o {{ local_interface_name }} -p tcp -m tcp -j SNAT --to-source 10.6.0.1
@@ -56,9 +56,9 @@ COMMIT
 -A INPUT -i wg0 -p tcp -m tcp --dport 2049 -j ACCEPT
 -A INPUT -p udp -m udp -m multiport --dports 51871,51872 -j ACCEPT
 -A FORWARD -i {{ local_interface_name }}+ -o {{ inet_interface_name }} -j ACCEPT
--A FORWARD -i {{ local_interface_name }}+ -o mullvad-us79 -j ACCEPT
+-A FORWARD -i {{ local_interface_name }}+ -o {{ mullvad_interface_name }} -j ACCEPT
 -A FORWARD -i {{ inet_interface_name }} -o vlan2-shim -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -m multiport --dports 22,32400,25564,25565,25566,443 -m conntrack --ctstate NEW -j ACCEPT
--A FORWARD -i mullvad-us79 -o vlan3-shim -p tcp -m multiport --dports 62941 -j ACCEPT
+-A FORWARD -i {{ mullvad_interface_name }} -o vlan3-shim -p tcp -m multiport --dports 62941 -j ACCEPT
 -A FORWARD -i wg0 -o {{ local_interface_name }} -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -m multiport --dports 111,443,5201,2049,2342,33333 -m conntrack --ctstate NEW -j ACCEPT
 -A FORWARD -i wg0 -o {{ local_interface_name }} -p udp -m multiport --dports 53 -j ACCEPT
 -A FORWARD -i wg0 -o wg0 -p tcp -m tcp --dport 22 -j ACCEPT
@@ -68,9 +68,9 @@ COMMIT
 -A FORWARD -i vlan2-shim -o {{ inet_interface_name }} -j ACCEPT
 -A FORWARD -i vlan3-shim -o {{ inet_interface_name }} -j ACCEPT
 -A FORWARD -i vlan4-shim -o {{ inet_interface_name }} -j ACCEPT
--A FORWARD -i vlan2-shim -o mullvad-us79 -j ACCEPT
--A FORWARD -i vlan3-shim -o mullvad-us79 -j ACCEPT
--A FORWARD -i vlan4-shim -o mullvad-us79 -j ACCEPT
+-A FORWARD -i vlan2-shim -o {{ mullvad_interface_name }} -j ACCEPT
+-A FORWARD -i vlan3-shim -o {{ mullvad_interface_name }} -j ACCEPT
+-A FORWARD -i vlan4-shim -o {{ mullvad_interface_name }} -j ACCEPT
 -A FORWARD -i vlan4-shim -j ACCEPT
 -A FORWARD -s {{ shield_address }} -j ACCEPT
 {% endif %}
