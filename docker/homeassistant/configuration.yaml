@@ -5,10 +5,8 @@ default_config:
 media_player:
   - platform: pjlink
     host: projector.lab.nkontur.com
-
-media_player:
- - platform: snapcast
-   host: zwave.lab.nkontur.com
+  - platform: snapcast
+    host: zwave.lab.nkontur.com
 
 # Text to speech
 tts:
