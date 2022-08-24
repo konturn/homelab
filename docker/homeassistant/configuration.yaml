@@ -2,6 +2,10 @@
 # Loads default set of integrations. Do not remove.
 default_config:
 
+switch:
+  - platform: wake_on_lan
+    mac: {{ pc_mac }}
+
 media_player:
   - platform: pjlink
     host: projector.lab.nkontur.com
