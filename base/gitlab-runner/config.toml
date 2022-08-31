@@ -12,3 +12,14 @@ check_interval = 0
   [runners.docker]
     image = "ubuntu:20.04"
     network_mode = "docker_mgmt"
+
+[[runners]]
+  name = "images"
+  url = "https://gitlab.lab.nkontur.com/"
+  token = "{{ lookup('env', 'IMAGES_GITLAB_RUNNER_TOKEN') }}"
+  executor = "docker"
+  [runners.docker]
+    image = "ubuntu:20.04"
+    network_mode = "docker_mgmt"
+    privileged = true
+    volumes = ["/certs/client"]
