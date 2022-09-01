@@ -23,6 +23,15 @@ services:
     ports:
       - '8091:8091' # port for web interface
       - '3000:3000' # port for Z-Wave JS websocket server
+  nginx: 
+    image: nginx:latest
+    container_name: nginx
+    networks:
+      - zwave
+    restart: unless-stopped
+    volumes:
+      - {{ docker_persistent_data_path }}/nginx_zwave/conf:/etc/nginx
+      - {{ docker_persistent_data_path }}/certs:/data/certs
 networks:
   zwave:
 volumes:
