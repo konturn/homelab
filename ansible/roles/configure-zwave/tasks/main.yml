@@ -50,3 +50,17 @@
     files:
       - "docker-compose-zwave.yml"
     state: present
+
+- name: Sync nginx configuration
+  ansible.posix.synchronize:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/nginx/nginx_zwave/' }}"
+    dest: "/root/nginx_conf"
+    rsync_opts:
+    - "--chmod=755"
+  register: nginx
+
+- name: Restart nginx if config change
+  community.docker.docker_container:
+    name: nginx
+    restart: yes
+  when: nginx.changed
