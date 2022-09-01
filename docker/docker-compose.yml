@@ -385,10 +385,12 @@ services:
       - /etc/localtime:/etc/localtime:ro
     restart: unless-stopped
   registry:
+    container_name: registry
     restart: always
     image: registry:2
     networks:
-      - mgmt
+      mgmt:
+        ipv4_address: {{ registry_address }}
     ports:
       - 5000:5000
     environment:
