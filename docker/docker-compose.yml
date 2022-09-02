@@ -391,14 +391,13 @@ services:
     networks:
       mgmt:
         ipv4_address: {{ registry_address }}
-    ports:
-      - 5000:5000
     environment:
       REGISTRY_HTTP_TLS_CERTIFICATE: /certs/nkontur.com/certificates/_.nkontur.com.crt
       REGISTRY_HTTP_TLS_KEY: /certs/nkontur.com/certificates/_.nkontur.com.key
       REGISTRY_AUTH: htpasswd
       REGISTRY_AUTH_HTPASSWD_PATH: /auth/htpasswd
       REGISTRY_AUTH_HTPASSWD_REALM: Registry Realm
+      REGISTRY_HTTP_ADDR: "0.0.0.0:443"
       VIRTUAL_HOST: registry.lab.nkontur.com
       LETSENCRYPT_HOST: registry.lab.nkontur.com
     volumes:
