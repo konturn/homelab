@@ -384,6 +384,14 @@ services:
       - "{{ docker_persistent_data_path }}/homeassistant:/config"
       - /etc/localtime:/etc/localtime:ro
     restart: unless-stopped
+  snapserver:
+    container_name: snapserver
+    networks:
+      - iot
+    image: "registry.lab.nkontur.com/snapcast"
+    volumes:
+      - "{{ docker_persistent_data_path }}/snapserver/snapserver.conf:/etc/snapserver.conf"
+    restart: unless-stopped
   registry:
     container_name: registry
     restart: always
@@ -404,4 +412,3 @@ services:
       - registry:/var/lib/registry
       - {{ docker_persistent_data_path }}/registry/auth:/auth
       - {{ docker_persistent_data_path }}/certs:/certs
-  
