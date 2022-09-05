@@ -29,6 +29,7 @@ all:
     amp_address: 10.6.128.7
     snapclient_mac: dc:a6:32:74:9b:1b
     snapclient_address: 10.6.128.8
+    snapserver_address: 10.6.32.2
     fallback_address: 10.4.128.1
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     omapi_secret: "{{ lookup('env', 'OMAPI_SECRET') }}"

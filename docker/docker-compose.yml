@@ -387,7 +387,8 @@ services:
   snapserver:
     container_name: snapserver
     networks:
-      - iot
+      iot:
+        ipv4_address: {{ snapserver_address }}
     image: "registry.lab.nkontur.com/snapcast"
     volumes:
       - "{{ docker_persistent_data_path }}/snapserver/snapserver.conf:/etc/snapserver.conf"
