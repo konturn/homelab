@@ -1,0 +1,5 @@
+- hosts: snapclient.lab.nkontur.com
+  roles:
+  - configure-snapclient
+  become: yes
+

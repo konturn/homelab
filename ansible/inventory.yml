@@ -54,3 +54,4 @@ all:
       wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/backups/wg0.conf' }}"
       wireguard_interface_name: "wg0"
     zwave.lab.nkontur.com:
+    snapclient.lab.nkontur.com:

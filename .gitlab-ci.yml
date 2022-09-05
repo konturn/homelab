@@ -22,6 +22,11 @@ vps:
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/vps.yml
 
+snapclient:
+  extends: .ansible
+  script:
+    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/snapclient.yml
+
 backups:
   extends: .ansible
   script:
