@@ -11,6 +11,7 @@
 {{ zwave_address }} zwave.lab.nkontur.com
 {{ registry_address }} registry.lab.nkontur.com
 {{ snapserver_address }} snapserver.lab.nkontur.com
+{{ snapclient_address }} snapclient.lab.nkontur.com
 10.6.0.1 router.lab.nkontur.com
 10.0.0.4 vps.nkontur.com
 10.0.0.2 backups.nkontur.com

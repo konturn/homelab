@@ -1,0 +1,33 @@
+### Install docker daemon
+- name: Install dependencies
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg-agent
+      - software-properties-common
+    state: present
+    update_cache: yes
+
+- name: Copy base configuration file
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/snapclient/config.txt"
+    dest: "/boot/config.txt"
+
+- name: Install snapclient
+  apt:
+    deb: https://github.com/badaix/snapcast/releases/download/v0.26.0/snapserver_0.26.0-1_amd64.deb 
+
+- name: Template out snapclient config file
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/snapclient/snapclient_default' }}"
+    dest: '/etc/default/snapclient'
+    mode: 0600
+  register: snapclient
+
+- name: Restart snapclient if config change
+  ansible.builtin.systemd:
+    name: snapclient
+    state: restarted
+  when: snapclient.changed
