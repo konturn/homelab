@@ -26,3 +26,6 @@ http:
     - {{ nginx_ip }}
     - {{ lab_nginx_ip }}
     - 127.0.0.1
+spotcast:
+  sp_dc: "{{ lookup('env', 'SPOTIFY_DC') }}"
+  sp_key: "{{ lookup('env', 'SPOTIFY_KEY') }}"
