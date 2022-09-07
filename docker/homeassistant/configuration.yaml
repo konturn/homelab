@@ -11,7 +11,7 @@ media_player:
   - platform: pjlink
     host: projector.lab.nkontur.com
   - platform: snapcast
-    host: zwave.lab.nkontur.com
+    host: snapserver.lab.nkontur.com
 
 # Text to speech
 tts:
