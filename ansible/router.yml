@@ -17,7 +17,7 @@
     borg_source_directories:
       - /persistent_data
       - /mpool/nextcloud
-      - ssh://root@backups.nkontur.com:/backups/zwave_backup
+      - ssh://root@zwave.lab.nkontur.com:/var/lib/docker
     borg_retention_policy:
       keep_hourly: 0
       keep_daily: 7
