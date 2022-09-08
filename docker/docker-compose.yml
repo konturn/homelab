@@ -379,7 +379,7 @@ services:
       - external
     ports:
       - "443:8123"
-    image: "ghcr.io/home-assistant/home-assistant:stable"
+    image: "ghcr.io/home-assistant/home-assistant:2022.8"
     volumes:
       - "{{ docker_persistent_data_path }}/homeassistant:/config"
       - /etc/localtime:/etc/localtime:ro
