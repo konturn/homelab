@@ -268,7 +268,6 @@ services:
       - '{{ docker_persistent_data_path }}/gitlab/config:/etc/gitlab'
       - '{{ docker_persistent_data_path }}/gitlab/logs:/var/log/gitlab'
       - '{{ docker_persistent_data_path }}/gitlab/data:/var/opt/gitlab'
-      - '/root/.ssh/mirror_rsa:/root/.ssh/id_rsa'
   deluge:
     container_name: deluge
     ports:
