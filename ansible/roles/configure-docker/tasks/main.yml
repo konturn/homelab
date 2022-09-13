@@ -47,6 +47,21 @@
     restart: yes
   when: homeassistant.changed
 
+- name: Template out homeassistant conf file to docker directory on host
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/frigate/config.yml' }}"
+    dest: "{{ docker_persistent_data_path + '/frigate/config.yml' }}"
+    owner: root
+    group: root
+    mode: '0644'
+  register: frigate
+
+- name: Restart frigate if config change
+  community.docker.docker_container:
+    name: frigate
+    restart: yes
+  when: frigate.changed
+
 - name: Template out nextcloud conf file to docker directory on host
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/nextcloud/config.php' }}"

@@ -29,3 +29,6 @@ http:
 spotcast:
   sp_dc: "{{ lookup('env', 'SPOTIFY_DC') }}"
   sp_key: "{{ lookup('env', 'SPOTIFY_KEY') }}"
+
+mqtt:
+  certificate: auto
