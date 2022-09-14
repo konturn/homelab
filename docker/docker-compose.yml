@@ -442,10 +442,16 @@ services:
     restart: unless-stopped
     networks:
       iot:
+    volumes:
+      - /persistent_data/application/certs/nkontur.com/certificates:/certs
     environment:
-      AMCREST_HOST: {{ doorbell_address }}
-      AMCREST_PASSWORD: {{ lookup('env', 'DOORBELL_PASS') }}
-      MQTT_HOST: "mqtt.lab.nkontur.com"
+      AMCREST_HOST: 10.6.128.9
+      AMCREST_PASSWORD: x9p9n70HLCqEWFE4Y7l
+      MQTT_HOST: {{ mosquitto_address }}
       MQTT_USERNAME: mosquitto
-      MQTT_PASSWORD: {{ lookup('env', 'MQTT_PASS') }}
+      MQTT_PASSWORD: q2Y2qfJ7xiUgt3pjvxdkPPgX
       HOME_ASSISTANT: "true"
+      MQTT_TLS_ENABLED: "true"
+      MQTT_TLS_CA_CERT: /certs/_.nkontur.com.issuer.crt
+      MQTT_TLS_CERT: /certs/_.nkontur.com.crt
+      MQTT_TLS_KEY: /certs/_.nkontur.com.key
