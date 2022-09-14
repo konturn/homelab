@@ -440,6 +440,8 @@ services:
     container_name: amcrest2mqtt
     image: dchesterton/amcrest2mqtt:latest
     restart: unless-stopped
+    networks:
+      iot:
     environment:
       AMCREST_HOST: {{ doorbell_address }}
       AMCREST_PASSWORD: {{ lookup('env', 'DOORBELL_PASS') }}
