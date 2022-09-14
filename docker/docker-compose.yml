@@ -438,7 +438,7 @@ services:
       - {{ docker_persistent_data_path }}/certs/nkontur.com/certificates:/mosquitto/certs
   amcrest2mqtt:
     container_name: amcrest2mqtt
-    image: dchesterton/amcrest2mqtt:latest
+    image: registry.lab.nkontur.com/amcrest2mqtt:latest
     restart: unless-stopped
     networks:
       iot:
@@ -447,7 +447,7 @@ services:
     environment:
       AMCREST_HOST: 10.6.128.9
       AMCREST_PASSWORD: {{ lookup('env', 'DOORBELL_PASS') }}
-      MQTT_HOST: {{ mosquitto_address }}
+      MQTT_HOST: "mqtt.lab.nkontur.com"
       MQTT_USERNAME: mosquitto
       MQTT_PASSWORD: {{ lookup('env', 'MQTT_PASS') }}
       HOME_ASSISTANT: "true"
