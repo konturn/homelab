@@ -458,3 +458,5 @@ services:
       MQTT_TLS_CA_CERT: "/etc/ssl/certs/ca-cert-ISRG_Root_X1.pem"
       MQTT_TLS_CERT: "/certs/_.nkontur.com.crt"
       MQTT_TLS_KEY: "/certs/_.nkontur.com.key"
+      STORAGE_POLL_INTERVAL: 0
+
