@@ -1,13 +1,29 @@
 mqtt:
-  host: {{ mosquitto_address }}
+  host: "mqtt.lab.nkontur.com"
+  user: mosquitto
+  password: {{ lookup('env', 'MQTT_PASS') }}
+  tls_ca_certs: /etc/ssl/certs/ISRG_Root_X1.pem
+  tls_client_cert: /certs/_.nkontur.com.crt
+  tls_client_key: /certs/_.nkontur.com.key
 cameras:
-  back:
+  front_door:
     ffmpeg:
       inputs:
         - path: "rtsp://admin:{{ lookup('env', 'DOORBELL_PASS') }}@{{ doorbell_address }}:554/cam/realmonitor?channel=1&subtype=0&authbasic=64"
           roles:
             - detect
             - rtmp
+            - record
     detect:
-      width: 1280
-      height: 720
+      width: 2560
+      height: 1920
+record:
+  enabled: True
+  retain:
+    days: 14
+  events:
+    retain:
+      default: 100
+detectors:
+  cpu1:
+    type: cpu

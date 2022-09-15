@@ -428,6 +428,7 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - "{{ docker_persistent_data_path }}/frigate/config.yml:/config/config.yml:ro"
       - /mpool/plex/frigate:/media/frigate
+      - "{{ docker_persistent_data_path }}/certs/nkontur.com/certificates:/certs"
   mosquitto:
     container_name: mosquitto
     image: eclipse-mosquitto
@@ -437,7 +438,7 @@ services:
     volumes:
       - "{{ docker_persistent_data_path }}/mqtt/conf:/mosquitto/config"
       - mosquitto:/mosquitto/data
-      - {{ docker_persistent_data_path }}/certs/nkontur.com/certificates:/mosquitto/certs
+      - "{{ docker_persistent_data_path }}/certs/nkontur.com/certificates:/mosquitto/certs"
   amcrest2mqtt:
     container_name: amcrest2mqtt
     image: registry.lab.nkontur.com/amcrest2mqtt:latest
@@ -445,7 +446,7 @@ services:
     networks:
       iot:
     volumes:
-      - /persistent_data/application/certs/nkontur.com/certificates:/certs
+      - "{{ docker_persistent_data_path}}/certs/nkontur.com/certificates:/certs"
     environment:
       AMCREST_HOST: 10.6.128.9
       AMCREST_PASSWORD: {{ lookup('env', 'DOORBELL_PASS') }}
