@@ -35,3 +35,8 @@ mqtt:
 
 shell_command:
   sound_doorbell: cat /config/sounds/doorbell-1.wav > /tmp/snapfifo
+
+amcrest:
+  - host: {{ doorbell_address }}
+    username: admin
+    password: "{{ lookup('env', 'DOORBELL_PASS' ) }}"
