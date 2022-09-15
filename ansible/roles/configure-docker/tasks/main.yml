@@ -208,3 +208,42 @@
     name: nginx
     restart: yes
   when: nginx_base.changed or nginx_stream.changed or nginx_http.changed
+
+- name: Execute Python script to generate iot_nginx custom config files
+  shell:
+    cmd: "/usr/bin/python3 {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/generate-configs.py --workspace-path {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx --network iot"
+  delegate_to: localhost
+  changed_when: false
+
+- name: Copy base configuration file
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/nginx.conf"
+    dest: "{{ docker_persistent_data_path }}/iot_nginx/conf/nginx.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  register: iot_nginx_base
+
+- name: Copy iot_nginx stream configuration file
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/stream.conf"
+    dest: "{{ docker_persistent_data_path }}/iot_nginx/conf/conf.d/stream.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  register: iot_nginx_stream
+
+- name: Copy iot_nginx http configuration file
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/http.conf"
+    dest: "{{ docker_persistent_data_path }}/iot_nginx/conf/conf.d/http.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  register: iot_nginx_http
+
+- name: Restart iot_nginx if config change
+  community.docker.docker_container:
+    name: nginx
+    restart: yes
+  when: iot_nginx_base.changed or iot_nginx_stream.changed or iot_nginx_http.changed

@@ -117,6 +117,17 @@ services:
       - {{ docker_persistent_data_path }}/lab_nginx/conf:/etc/nginx
       - /var/log/lab_nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
+  iot_nginx: 
+    image: nginx:latest
+    container_name: iot_nginx
+    networks:
+      iot:
+        ipv4_address: {{ iot_nginx_ip }}
+    restart: unless-stopped
+    volumes:
+      - {{ docker_persistent_data_path }}/iot_nginx/conf:/etc/nginx
+      - /var/log/iot_nginx:/data/log
+      - {{ docker_persistent_data_path }}/certs:/data/certs
   db:
     image: mariadb
     container_name: nextcloud_database
@@ -423,6 +434,8 @@ services:
     networks:
       iot:
         ipv4_address: {{ frigate_address }}
+    ports:
+      - "443:5000"
     shm_size: "64mb"
     volumes:
       - /etc/localtime:/etc/localtime:ro

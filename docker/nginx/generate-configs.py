@@ -83,6 +83,8 @@ def main():
         domain_name = "lab.nkontur.com"
     elif args.network == "external":
         domain_name = "nkontur.com"
+    elif args.network == "iot":
+        domain_name = "iot.lab.nkontur.com"
 
     stream_port_mappings, http_port_mappings = generate_port_mappings(services, args.network)
     generate_http_config(http_port_mappings, args.workspace_path, domain_name)
