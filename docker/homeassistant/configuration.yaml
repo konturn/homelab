@@ -32,3 +32,6 @@ spotcast:
 
 mqtt:
   certificate: auto
+
+shell_command:
+  sound_doorbell: cat /config/sounds/doorbell-1.wav > /tmp/snapfifo
