@@ -4,7 +4,7 @@ cameras:
   back:
     ffmpeg:
       inputs:
-        - path: "rtsp://admin:{{ lookup('env', 'DOORBELL_PASS') }}@10.6.64.10:554/cam/realmonitor?channel=1&subtype=0&authbasic=64"
+        - path: "rtsp://admin:{{ lookup('env', 'DOORBELL_PASS') }}@{{ doorbell_address }}:554/cam/realmonitor?channel=1&subtype=0&authbasic=64"
           roles:
             - detect
             - rtmp
