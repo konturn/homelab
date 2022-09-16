@@ -27,6 +27,17 @@ detect:
     min_area: 0
 detectors:
   compreface:
-    url: compreface-fe.iot.lab.nkontur.com
+    url: https://compreface-fe.iot.lab.nkontur.com
     # recognition api key
     key: {{ lookup('env', 'COMPREFACE_KEY') }}
+
+frigate:
+  url: http://frigate.lab.nkontur.com:5000
+mqtt:
+  host: mqtt.lab.nkontur.com
+  username: mosquitto
+  password: {{ lookup('env', 'MQTT_PASS') }}
+  tls:
+    enabled: true
+    cert_file: "/certs/_.nkontur.com.crt"
+    key_file: "/certs/_.nkontur.com.key"

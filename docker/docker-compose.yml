@@ -546,11 +546,12 @@ services:
       - ML_PORT=3000
   double-take:
     container_name: double-take
-    image: jakowenko/double-take
+    image: registry.lab.nkontur.com/double-take:test7
     restart: unless-stopped
     networks:
       iot:
     volumes:
       - "{{ docker_persistent_data_path }}/double-take:/.storage"
+      - "{{ docker_persistent_data_path}}/certs/nkontur.com/certificates:/certs"
     ports:
       - 443:3000
