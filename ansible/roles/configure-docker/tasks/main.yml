@@ -244,6 +244,6 @@
 
 - name: Restart iot_nginx if config change
   community.docker.docker_container:
-    name: nginx
+    name: iot_nginx
     restart: yes
   when: iot_nginx_base.changed or iot_nginx_stream.changed or iot_nginx_http.changed
