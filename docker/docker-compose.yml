@@ -144,7 +144,7 @@ services:
       - MYSQL_DATABASE=nextcloud
       - MYSQL_USER=nextcloud
   app:
-    image: nextcloud:latest
+    image: nextcloud:24.0.5
     container_name: nextcloud
     networks:
       - external
