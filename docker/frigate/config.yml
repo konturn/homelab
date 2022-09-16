@@ -27,3 +27,7 @@ record:
 detectors:
   cpu1:
     type: cpu
+objects:
+  filters:
+    person:
+      threshold: .75
