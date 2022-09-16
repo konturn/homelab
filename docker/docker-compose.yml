@@ -4,6 +4,7 @@ volumes:
   wordpress_db:
   ombi:
   registry:
+  compreface:
   mosquitto:
   nextcloud:
     driver: local
@@ -473,3 +474,73 @@ services:
       MQTT_TLS_KEY: "/certs/_.nkontur.com.key"
       STORAGE_POLL_INTERVAL: 0
 
+  compreface-postgres-db:
+    image: postgres:11.5
+    container_name: "compreface-postgres-db"
+    restart: unless-stopped
+    networks:
+      iot:
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD={{ lookup('env', 'COMPREFACE_POSTGRES_PASS') }}
+      - POSTGRES_DB=frs
+    volumes:
+      - compreface:/var/lib/postgresql/data
+  
+  compreface-admin:
+    image: exadel/compreface-admin:1.0.1
+    container_name: "compreface-admin"
+    restart: unless-stopped
+    networks:
+      iot:
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD={{ lookup('env', 'COMPREFACE_POSTGRES_PASS') }}
+      - POSTGRES_URL=jdbc:postgresql://compreface-postgres-db:5432/frs
+      - SPRING_PROFILES_ACTIVE=dev
+      - ENABLE_EMAIL_SERVER=false
+      - EMAIL_HOST=smtp.gmail.com
+      - EMAIL_USERNAME=
+      - EMAIL_FROM=
+      - EMAIL_PASSWORD=
+      - ADMIN_JAVA_OPTS=-Xmx8g
+    depends_on:
+      - compreface-postgres-db
+      - compreface-api
+  
+  compreface-api:
+    image: exadel/compreface-api:1.0.1
+    container_name: "compreface-api"
+    restart: unless-stopped
+    networks:
+      iot:
+    depends_on:
+      - compreface-postgres-db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD={{ lookup('env', 'COMPREFACE_POSTGRES_PASS') }}
+      - POSTGRES_URL=jdbc:postgresql://compreface-postgres-db:5432/frs
+      - SPRING_PROFILES_ACTIVE=dev
+      - API_JAVA_OPTS=-Xmx8g
+      - SAVE_IMAGES_TO_DB=true
+  
+  compreface-fe:
+    image: exadel/compreface-fe:1.0.1
+    container_name: "compreface-ui"
+    restart: unless-stopped
+    networks:
+      iot:
+    ports:
+      - "443:80"
+    depends_on:
+      - compreface-api
+      - compreface-admin
+  
+  compreface-core:
+    image: exadel/compreface-core:1.0.1
+    container_name: "compreface-core"
+    networks:
+      iot:
+    restart: unless-stopped
+    environment:
+      - ML_PORT=3000
