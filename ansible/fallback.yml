@@ -1,5 +1,6 @@
 - hosts: fallback.lab.nkontur.com
   roles:
   - configure-fallback
+  - configure-snapclient
   become: yes
 
