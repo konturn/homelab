@@ -6,6 +6,7 @@ networks:
       config:
           - subnet: 10.3.0.0/16
             ip_range: 10.3.128.0/18
+            gateway: 10.3.0.1
             aux_addresses:
               router: 10.3.128.1
               vrrp: 10.3.128.2
