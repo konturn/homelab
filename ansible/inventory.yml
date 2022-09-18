@@ -8,6 +8,7 @@ all:
     deluge_ip: 10.3.32.3
     docker_persistent_data_path: /persistent_data/application
     movie_switch_mac: 8c:3b:ad:6f:0e:d0
+    fallback_pihole_address: 10.3.128.3
     movie_switch_address: 10.4.128.3
     office_switch_mac: 28:80:88:6e:11:88
     office_switch_address: 10.4.128.4

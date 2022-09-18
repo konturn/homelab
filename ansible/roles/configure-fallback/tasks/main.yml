@@ -72,3 +72,75 @@
     state: restarted
     enabled: yes
   when: keepalived.changed
+
+- name: ensure required pip-packages are installed within docker image
+  pip:
+    name:
+      - docker
+      - PyYAML
+      - docker-compose
+
+- name: Add Docker GPG apt Key
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+
+- name: Add docker repository to apt
+  apt_repository:
+    repo: deb https://download.docker.com/linux/ubuntu bionic stable
+    state: present
+
+- name: Install docker
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+    state: latest
+    update_cache: yes
+
+- name: Make sure docker is started and enabled
+  service:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Template out compose file to ansible state directory on host
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/docker-compose-fallback.yml' }}"
+    dest: "/docker-compose-fallback.yml"
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Create and start Docker services
+  community.docker.docker_compose:
+    project_name: fallback
+    project_src: "/"
+    files:
+      - "docker-compose-fallback.yml"
+    state: present
+
+- name: Template out pihole custom list
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/pihole/custom.list' }}"
+    dest: "/etc/pihole/conf/custom.list"
+    owner: root
+    group: root
+    mode: '0755'
+  register: pihole_list
+
+- name: Template out pihole custom dnsmasq config
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/pihole/custom.conf' }}"
+    dest: "/etc/pihole/dnsmasq/custom.conf"
+    owner: root
+    group: root
+    mode: '0755'
+  register: pihole_dnsmasq
+
+- name: Restart pihole if config change
+  community.docker.docker_container:
+    name: pihole
+    restart: yes
+  when: pihole_list.changed or pihole_dnsmasq.changed
