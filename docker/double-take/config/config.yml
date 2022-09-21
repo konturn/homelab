@@ -39,5 +39,3 @@ mqtt:
   password: {{ lookup('env', 'MQTT_PASS') }}
   tls:
     enabled: true
-    cert_file: "/certs/_.nkontur.com.crt"
-    key_file: "/certs/_.nkontur.com.key"

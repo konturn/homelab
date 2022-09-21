@@ -546,7 +546,7 @@ services:
       - ML_PORT=3000
   double-take:
     container_name: double-take
-    image: registry.lab.nkontur.com/double-take:test7
+    image: registry.lab.nkontur.com/double-take:test9
     restart: unless-stopped
     networks:
       iot:
