@@ -563,4 +563,5 @@ services:
         ipv4_address: {{ bind_ip }}
     volumes:
       - {{ docker_persistent_data_path }}/bind/named.conf.local:/etc/bind/named.conf.local
+      - {{ docker_persistent_data_path }}/bind/db.lab.nkontur.com:/etc/bind/db.lab.nkontur.com
     restart: unless-stopped

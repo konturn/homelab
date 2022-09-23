@@ -136,6 +136,21 @@
     restart: yes
   when: pihole_list.changed or pihole_dnsmasq.changed
 
+- name: Template out bind local zone conf
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/bind/db.lab.nkontur.com' }}"
+    dest: "{{ docker_persistent_data_path + '/bind/db.lab.nkontur.com' }}"
+    owner: root
+    group: root
+    mode: '0755'
+  register: bind
+
+- name: Restart bind if config change
+  community.docker.docker_container:
+    name: bind
+    restart: yes
+  when: bind
+
 - name: Template out compose file to ansible state directory within container
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/docker-compose.yml' }}"
