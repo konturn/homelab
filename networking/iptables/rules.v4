@@ -57,6 +57,7 @@ COMMIT
 {% if is_primary_router %}
 -A INPUT -i wg0 -p tcp -m tcp --dport 2049 -j ACCEPT
 -A INPUT -p udp -m udp -m multiport --dports 51871,51872 -j ACCEPT
+-A FORWARD -p tcp -m tcp -i vlan3-shim -o bond0.4 --dport 22 -j ACCEPT
 -A FORWARD -d {{ pihole_ip }} -i {{ local_interface_name }}.6 -j ACCEPT
 -A FORWARD -d {{ pihole_ip }} -i vlan6-shim -j ACCEPT
 -A FORWARD -i {{ local_interface_name }}+ -o {{ inet_interface_name }} -j ACCEPT
