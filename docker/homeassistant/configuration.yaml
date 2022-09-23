@@ -36,6 +36,13 @@ mqtt:
 shell_command:
   sound_doorbell: cat /config/sounds/doorbell-1.wav > /tmp/snapfifo
 
+person:
+- name: Noah
+  id: noah
+  device_trackers:
+    - device_tracker.sm_g970u
+    - device_tracker.galaxy_s10e
+
 device_tracker:
 - platform: aruba
   host: movie-ap.lab.nkontur.com
