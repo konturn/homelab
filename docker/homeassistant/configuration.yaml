@@ -36,6 +36,10 @@ mqtt:
 shell_command:
   sound_doorbell: cat /config/sounds/doorbell-1.wav > /tmp/snapfifo
 
+customize:
+    device_tracker.noah_phone:
+      source_type: router
+
 device_tracker:
 - platform: aruba
   host: movie-ap.lab.nkontur.com
