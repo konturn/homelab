@@ -26,6 +26,14 @@
     group: root
     mode: '0700'
 
+- name: Populate RNDC key file for bind
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/dhcp/rndc.key' }}"
+    dest: "{{ docker_persistent_data_path + '/bind/rndc.key' }}"
+    owner: 104
+    group: 105
+    mode: '0640'
+
 - name: Create and start Docker services
   community.docker.docker_compose:
     project_name: docker
@@ -135,6 +143,15 @@
     name: pihole
     restart: yes
   when: pihole_list.changed or pihole_dnsmasq.changed
+
+- name: Template out bind conf
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/bind/named.conf.local' }}"
+    dest: "{{ docker_persistent_data_path + '/bind/named.conf.local' }}"
+    owner: root
+    group: root
+    mode: '0755'
+  register: bind
 
 - name: Template out bind local zone conf
   ansible.builtin.template:
