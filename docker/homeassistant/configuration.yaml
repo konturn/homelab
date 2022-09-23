@@ -42,9 +42,7 @@ person:
   device_trackers:
     - device_tracker.sm_g970u
     - device_tracker.galaxy_s10e
-
 device_tracker:
-- platform: aruba
-  host: movie-ap.lab.nkontur.com
-  username: admin
-  password: "{{ lookup('env', 'ARUBA_PASSWORD') }}"
+  - platform: ping
+    hosts:
+      noah_phone: Galaxy-S10e.lab.nkontur.com
