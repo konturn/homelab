@@ -1,5 +1,6 @@
 - hosts: zwave.lab.nkontur.com
   roles:
   - configure-zwave
+  - configure-snapclient
   become: yes
 
