@@ -63,6 +63,7 @@ services:
     image: plexinc/pms-docker
     networks:
       - external
+      - internal
     restart: unless-stopped
     environment:
       - TZ=America/New_York
