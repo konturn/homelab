@@ -40,6 +40,9 @@ customize:
     device_tracker.noah_phone:
       source_type: router
 
+recorder:
+  purge_keep_days: 1000
+
 device_tracker:
 - platform: aruba
   host: movie-ap.lab.nkontur.com
