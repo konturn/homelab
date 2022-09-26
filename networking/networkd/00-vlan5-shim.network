@@ -1,0 +1,10 @@
+[Match]
+Name=vlan5-shim
+
+[Network]
+Address=10.5.0.2/32
+IPForward=yes
+ConfigureWithoutCarrier=yes
+
+[Route]
+Destination=10.5.0.0/18

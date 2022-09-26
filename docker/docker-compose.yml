@@ -55,6 +55,16 @@ networks:
               shim2: 10.3.0.2
     driver_opts:
       parent: bond0.3
+  guest:
+    driver: macvlan
+    ipam:
+      config:
+          - subnet: 10.5.0.0/16
+            ip_range: 10.5.0.0/18
+            aux_addresses:
+              shim2: 10.5.0.2
+    driver_opts:
+      parent: bond0.5
 services:
   plex:
     container_name: plex
