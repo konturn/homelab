@@ -55,6 +55,21 @@
     restart: yes
   when: homeassistant.changed
 
+- name: Template out snapserver conf file to docker directory on host
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/snapserver/snapserver.conf' }}"
+    dest: "{{ docker_persistent_data_path + '/snapserver/snapserver.conf' }}"
+    owner: root
+    group: root
+    mode: '0644'
+  register: snapserver
+
+- name: Restart snapserver if config change
+  community.docker.docker_container:
+    name: snapserver
+    restart: yes
+  when: snapserver.changed
+
 - name: Template out double-take conf file to docker directory on host
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/double-take/config/config.yml' }}"

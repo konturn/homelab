@@ -397,7 +397,6 @@ services:
     volumes:
       - "{{ docker_persistent_data_path }}/homeassistant:/config"
       - /etc/localtime:/etc/localtime:ro
-      - "/tmp/snapfifo:/tmp/snapfifo"
     command: ["/bin/bash", "-c", "ip route del default; ip route add default via 10.3.0.1 dev eth1; /init"]
     cap_add:
       - NET_ADMIN # So we can override default route
@@ -410,7 +409,6 @@ services:
     image: "registry.lab.nkontur.com/snapcast"
     volumes:
       - "{{ docker_persistent_data_path }}/snapserver/snapserver.conf:/etc/snapserver.conf"
-      - "/tmp/snapfifo:/tmp/snapfifo"
     restart: unless-stopped
   registry:
     container_name: registry

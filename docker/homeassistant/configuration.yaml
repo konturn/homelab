@@ -34,7 +34,7 @@ mqtt:
   certificate: auto
 
 shell_command:
-  sound_doorbell: cat /config/sounds/doorbell-1.wav > /tmp/snapfifo
+  sound_doorbell: cat /config/sounds/doorbell-1.wav | nc {{ snapserver_address }} 80
 
 customize:
     device_tracker.noah_phone:
