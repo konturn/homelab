@@ -158,6 +158,40 @@
     enabled: yes
   when: dnsmasq.changed
 
+- name: Populate avahi conf file
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/avahi/avahi-daemon.conf' }}"
+    dest: /etc/avahi/avahi-daemon.conf
+    owner: root
+    group: root
+    mode: '0640'
+  register: avahi_conf
+
+- name: Populate avahi hosts file
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/avahi/hosts' }}"
+    dest: /etc/avahi/hosts
+    owner: root
+    group: root
+    mode: '0640'
+  register: avahi_hosts
+
+- name: Populate avahi service file
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/avahi/services/spotify.service' }}"
+    dest: /etc/avahi/services/spotify.service
+    owner: root
+    group: root
+    mode: '0640'
+  register: avahi_services
+
+- name: Restart avahi when the drop-in files change
+  service:
+    name: avahi-daemon
+    state: restarted
+    enabled: yes
+  when: avahi_conf.changed or avahi_services.changed or avahi_hosts.changed
+
 - name: Populate RNDC key file
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/dhcp/rndc.key' }}"
