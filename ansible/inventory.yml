@@ -31,7 +31,7 @@ all:
     amp_address: 10.6.128.7
     doorbell_mac: 9c:8e:cd:3c:de:33
     doorbell_address: 10.6.128.9
-    snapserver_address: 10.6.0.1
+    snapserver_address: 10.6.32.2
     mosquitto_address: 10.6.32.3
     frigate_address: 10.6.32.4
     iot_nginx_ip: 10.6.32.5

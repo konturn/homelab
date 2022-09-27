@@ -413,7 +413,9 @@ services:
     restart: unless-stopped
   snapserver:
     container_name: snapserver
-    network_mode: host
+    networks:
+      iot:
+        ipv4_address: {{ snapserver_address }}
     image: "registry.lab.nkontur.com/snapcast"
     volumes:
       - "{{ docker_persistent_data_path }}/snapserver/snapserver.conf:/etc/snapserver.conf"
