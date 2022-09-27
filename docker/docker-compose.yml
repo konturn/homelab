@@ -413,6 +413,7 @@ services:
     restart: unless-stopped
   snapserver:
     container_name: snapserver
+    hostname: snapserver
     networks:
       iot:
         ipv4_address: {{ snapserver_address }}
