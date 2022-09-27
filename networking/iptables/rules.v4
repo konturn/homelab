@@ -55,12 +55,15 @@ COMMIT
 -A FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
 -A FORWARD -i {{ local_interface_name }}.4 -j ACCEPT
 {% if is_primary_router %}
+-A INPUT -d {{ snapserver_address }} -i {{ local_interface_name }}.6 -p tcp -m tcp -m multiport --dports 1704,1705 -j ACCEPT
+-A INPUT -d {{ snapserver_address }} -i vlan6-shim -p tcp -m tcp -m multiport --dports 1704,1705 -j ACCEPT
 -A INPUT -i wg0 -p tcp -m tcp --dport 2049 -j ACCEPT
 -A INPUT -p udp -m udp -m multiport --dports 51871,51872 -j ACCEPT
 -A FORWARD -p tcp -m tcp -i vlan3-shim -o bond0.4 --dport 22 -j ACCEPT
 -A FORWARD -p icmp -i vlan3-shim -o bond0.4 -j ACCEPT
 -A FORWARD -d {{ pihole_ip }} -i {{ local_interface_name }}.6 -j ACCEPT
 -A FORWARD -d {{ pihole_ip }} -i vlan6-shim -j ACCEPT
+-A FORWARD -d {{ snapserver_address }} -p tcp -m tcp -m multiport --dports 1704,1705 -j ACCEPT
 -A FORWARD -i {{ local_interface_name }}+ -o {{ inet_interface_name }} -j ACCEPT
 -A FORWARD -i {{ local_interface_name }}+ -o {{ mullvad_interface_name }} -j ACCEPT
 -A FORWARD -i {{ inet_interface_name }} -o vlan2-shim -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -m multiport --dports 22,32400,25564,25565,25566,443 -m conntrack --ctstate NEW -j ACCEPT
