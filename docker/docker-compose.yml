@@ -579,3 +579,15 @@ services:
       - {{ docker_persistent_data_path }}/bind/db.lab.nkontur.com:/var/lib/bind/db.lab.nkontur.com
       - {{ docker_persistent_data_path }}/bind/rndc.key:/etc/bind/rndc.key
     restart: unless-stopped
+  rhasspy:
+    image: "rhasspy/rhasspy"
+    container_name: rhasspy
+    restart: unless-stopped
+    networks:
+      iot:
+    volumes:
+        - "{{ docker_persistent_data_path }}/rhasspy/profiles:/profiles"
+        - "/etc/localtime:/etc/localtime:ro"
+    ports:
+        - "443:12101"
+    command: --user-profiles /profiles --profile en
