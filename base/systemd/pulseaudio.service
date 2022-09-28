@@ -1,0 +1,14 @@
+# systemd service spec for pulseaudio running in system mode -- not recommended though!
+# on arch, put it under /etc/systemd/system/pulseaudio.service
+# start with: systemctl start pulseaudio.service
+# enable on boot: systemctl enable pulseaudio.service 
+[Unit]
+Description=Pulseaudio sound server
+After=avahi-daemon.service network.target
+
+[Service]
+ExecStart=/usr/bin/pulseaudio --system --disallow-exit --disallow-module-loading
+ExecReload=/bin/kill -HUP $MAINPID
+
+[Install]
+WantedBy=multi-user.target

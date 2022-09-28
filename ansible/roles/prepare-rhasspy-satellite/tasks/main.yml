@@ -1,0 +1,34 @@
+- name: Install dependencies
+  apt:
+    name:
+      - pulseaudio
+    state: present
+    update_cache: yes
+
+- name: Template out pulseaudio system-wide service file
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/systemd/pulseaudio.service' }}"
+    dest: "/etc/systemd/system/pulseaudio.service"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Make sure pulseaudio is started and enabled
+  service:
+    name: pulseaudio
+    state: started
+    enabled: yes
+    daemon_reload: yes
+
+- name: Replace before the expression till the begin of the file (requires Ansible >= 2.4)
+  ansible.builtin.replace:
+    path: /etc/pulse/system.pa
+    regexp: '^load-module module-native-protocol-unix$'
+    replace: 'load-module module-native-protocol-unix auth-anonymous=1'
+  register: pulseaudio
+
+- name: Restart pulseaudio if config change
+  service:
+    name: pulseaudio
+    state: restarted
+  when: pulseaudio.changed

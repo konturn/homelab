@@ -1,6 +1,7 @@
 - hosts: zwave.lab.nkontur.com
   roles:
   - configure-zwave
+  - prepare-rhasspy-satellite
   - configure-snapclient
   become: yes
 
