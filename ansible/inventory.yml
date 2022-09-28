@@ -53,6 +53,7 @@ all:
       local_interface_name: bond0
       dhcp_address: 10.4.0.1
       dhcp_peer_address: 10.4.128.1
+      rhasspy_entrypoint_dest: "{{ docker_persistent_data_path }}/rhasspy/startup.sh"
     vps.nkontur.com:
       wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/vps/wg0.conf' }}"
       wireguard_interface_name: "wg0"
@@ -61,3 +62,4 @@ all:
       wireguard_interface_name: "wg0"
     zwave.lab.nkontur.com:
       use_onboard_audio: true
+      rhasspy_entrypoint_dest: "/startup.sh"

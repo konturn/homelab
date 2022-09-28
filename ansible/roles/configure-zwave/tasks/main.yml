@@ -38,7 +38,7 @@
 - name: Template out compose file to ansible state directory on host
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/docker-compose-zwave.yml' }}"
-    dest: "/docker-compose-zwave.yml"
+    dest: "/docker-compose.yml"
     owner: root
     group: root
     mode: '0700'
@@ -48,7 +48,7 @@
     project_name: zwave
     project_src: "/"
     files:
-      - "docker-compose-zwave.yml"
+      - "docker-compose.yml"
     state: present
 
 - name: Sync nginx configuration

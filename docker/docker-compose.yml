@@ -587,7 +587,8 @@ services:
       iot:
     volumes:
         - "{{ docker_persistent_data_path }}/rhasspy/profiles:/profiles"
+        - "{{ docker_persistent_data_path }}/rhasspy/startup.sh:/startup.sh"
         - "/etc/localtime:/etc/localtime:ro"
     ports:
         - "443:12101"
-    command: --user-profiles /profiles --profile en
+    entrypoint: "/startup.sh"

@@ -45,11 +45,12 @@ services:
     volumes:
         - "$HOME/.config/rhasspy/profiles:/profiles"
         - "/etc/localtime:/etc/localtime:ro"
+        - "/startup.sh:/startup.sh"
     devices:
       - "/dev/snd"
     ports:
         - "12101:12101"
-    command: --user-profiles /profiles --profile en
+    entrypoint: "/startup.sh"
 networks:
   zwave:
 volumes:

@@ -32,3 +32,11 @@
     name: pulseaudio
     state: restarted
   when: pulseaudio.changed
+
+- name: Template out rhasspy entrypoint
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/rhasspy/startup.sh' }}"
+    dest: "{{ rhasspy_entrypoint_dest }}"
+    owner: root
+    group: root
+    mode: '0744'
