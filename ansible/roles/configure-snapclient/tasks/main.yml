@@ -10,8 +10,8 @@
     state: present
     update_cache: yes
 
-- name: Copy base configuration file
-  ansible.builtin.copy:
+- name: Template out base configuration file
+  ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/snapclient/config.txt"
     dest: "/boot/config.txt"
 

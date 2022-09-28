@@ -54,7 +54,9 @@
 
 [pi4]
 # Enable DRM VC4 V3D driver on top of the dispmanx display stack
-dtoverlay=vc4-fkms-v3d,audio=off
+dtoverlay=vc4-fkms-v3d,audio={% if use_onboard_audio %}on
+{% else %}off
+{% endif %}
 dtoverlay=hifiberry-dacplushd
 
 max_framebuffers=2

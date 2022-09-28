@@ -45,6 +45,7 @@ all:
       local_interface_name: eth0
       dhcp_address: 10.4.128.1
       dhcp_peer_address: 10.4.0.1
+      use_onboard_audio: false
     router.lab.nkontur.com:
       wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/wg0.conf' }}"
       wireguard_interface_name: "wg0"
@@ -59,3 +60,4 @@ all:
       wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/backups/wg0.conf' }}"
       wireguard_interface_name: "wg0"
     zwave.lab.nkontur.com:
+      use_onboard_audio: true
