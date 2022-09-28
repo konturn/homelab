@@ -45,10 +45,6 @@ recorder:
   purge_keep_days: 1000
 
 device_tracker:
-- platform: aruba
-  host: movie-ap.lab.nkontur.com
-  username: admin
-  password: "{{ lookup('env', 'ARUBA_PASSWORD') }}"
 - platform: ping
   hosts:
     noah_phone: Galaxy-S10e.lab.nkontur.com
