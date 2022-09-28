@@ -31,10 +31,25 @@ services:
     ports:
       - '80:80'
       - '443:443'
+      - '442:442'
     restart: unless-stopped
     volumes:
       - /root/nginx_conf:/etc/nginx
       - /certs:/data/certs
+  rhasspy:
+    image: "rhasspy/rhasspy"
+    container_name: rhasspy
+    restart: unless-stopped
+    networks:
+      - zwave
+    volumes:
+        - "$HOME/.config/rhasspy/profiles:/profiles"
+        - "/etc/localtime:/etc/localtime:ro"
+    devices:
+      - "/dev/snd"
+    ports:
+        - "12101:12101"
+    command: --user-profiles /profiles --profile en
 networks:
   zwave:
 volumes:
