@@ -28,3 +28,18 @@ services:
       - /etc/pihole/conf:/etc/pihole
       - /etc/pihole/dnsmasq:/etc/dnsmasq.d
     restart: unless-stopped
+  rhasspy:
+    image: "rhasspy/rhasspy"
+    container_name: rhasspy
+    restart: unless-stopped
+    networks:
+      - internal
+    volumes:
+        - "$HOME/.config/rhasspy/profiles:/profiles"
+        - "/etc/localtime:/etc/localtime:ro"
+        - "/startup.sh:/startup.sh"
+    devices:
+      - "/dev/snd"
+    ports:
+        - "12101:12101"
+    entrypoint: "/startup.sh"
