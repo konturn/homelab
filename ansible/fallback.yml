@@ -1,6 +1,5 @@
 - hosts: fallback.lab.nkontur.com
   roles:
-  - prepare-rhasspy
   - configure-fallback
   - configure-snapclient
   become: yes
