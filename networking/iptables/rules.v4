@@ -52,6 +52,7 @@ COMMIT
 -A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
 -A INPUT -i {{ local_interface_name }}.4 -p tcp -m tcp --dport 2049 -j ACCEPT
 -A INPUT -i {{ local_interface_name }}.4 -p udp -m udp --dport 69 -j ACCEPT
+-A FORWARD -p icmp -d {{ lab_nginx_ip }} -j DROP
 -A FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
 -A FORWARD -i {{ local_interface_name }}.4 -j ACCEPT
 {% if is_primary_router %}
