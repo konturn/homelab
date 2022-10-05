@@ -403,6 +403,8 @@ services:
       - external
     ports:
       - "443:8123"
+    devices: 
+      - "/dev/ttyUSB0:/dev/ttyUSB0"
     image: "ghcr.io/home-assistant/home-assistant:2022.8"
     volumes:
       - "{{ docker_persistent_data_path }}/homeassistant:/config"
