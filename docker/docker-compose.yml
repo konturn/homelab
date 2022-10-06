@@ -594,3 +594,15 @@ services:
     ports:
         - "443:12101"
     entrypoint: "/startup.sh"
+  octoprint:
+    image: "octoprint/octoprint"
+    container_name: octoprint
+    restart: unless-stopped
+    networks:
+      internal:
+    devices:
+      - "/dev/ttyUSB1:/dev/ttyUSB1"
+    volumes:
+        - "{{ docker_persistent_data_path }}/octoprint:/octoprint"
+    ports:
+        - "443:80"
