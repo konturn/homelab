@@ -64,3 +64,28 @@
     name: nginx
     restart: yes
   when: nginx.changed
+
+- name: Install minidsp-rs package
+  ansible.builtin.apt:
+    deb: https://github.com/mrene/minidsp-rs/releases/download/v0.1.7/minidsp_0.1.7_arm64.deb
+
+- name: Make sure minidsp is started and enabled
+  service:
+    name: minidsp
+    state: started
+    enabled: yes
+
+- name: Template out minidsp file
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/minidsp/config.toml' }}"
+    dest: "/etc/minidsp/config.toml"
+    owner: root
+    group: root
+    mode: '0644'
+  register: minidsp
+
+- name: Restart minidsp if config change
+  service:
+    name: minidsp
+    state: restarted
+  when: minidsp.changed
