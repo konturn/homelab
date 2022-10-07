@@ -40,81 +40,6 @@
     project_src: "{{ docker_persistent_data_path }}/ansible_state"
     state: present
 
-- name: Template out homeassistant conf file to docker directory on host
-  ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/homeassistant/configuration.yaml' }}"
-    dest: "{{ docker_persistent_data_path + '/homeassistant/configuration.yaml' }}"
-    owner: root
-    group: root
-    mode: '0644'
-  register: homeassistant
-
-- name: Restart homeassistant if config change
-  community.docker.docker_container:
-    name: homeassistant
-    restart: yes
-  when: homeassistant.changed
-
-- name: Template out snapserver conf file to docker directory on host
-  ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/snapserver/snapserver.conf' }}"
-    dest: "{{ docker_persistent_data_path + '/snapserver/snapserver.conf' }}"
-    owner: root
-    group: root
-    mode: '0644'
-  register: snapserver
-
-- name: Restart snapserver if config change
-  community.docker.docker_container:
-    name: snapserver
-    restart: yes
-  when: snapserver.changed
-
-- name: Template out double-take conf file to docker directory on host
-  ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/double-take/config/config.yml' }}"
-    dest: "{{ docker_persistent_data_path + '/double-take/config/config.yml' }}"
-    owner: root
-    group: root
-    mode: '0644'
-  register: double_take
-
-- name: Restart double-take if config change
-  community.docker.docker_container:
-    name: double-take
-    restart: yes
-  when: double_take.changed
-
-- name: Template out homeassistant conf file to docker directory on host
-  ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/frigate/config.yml' }}"
-    dest: "{{ docker_persistent_data_path + '/frigate/config.yml' }}"
-    owner: root
-    group: root
-    mode: '0644'
-  register: frigate
-
-- name: Restart frigate if config change
-  community.docker.docker_container:
-    name: frigate
-    restart: yes
-  when: frigate.changed
-
-- name: Template out nextcloud conf file to docker directory on host
-  ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/nextcloud/config.php' }}"
-    dest: "{{ docker_persistent_data_path + '/nextcloud/config/config.php' }}"
-    owner: www-data
-    group: www-data
-    mode: '0644'
-  register: nextcloud
-
-- name: Restart nextcloud if config change
-  community.docker.docker_container:
-    name: nextcloud
-    restart: yes
-  when: nextcloud.changed
-
 - name: Sets up base cronjob for nextcloud
   ansible.builtin.cron:
     name: "Nextcloud base cronjob"
@@ -134,54 +59,6 @@
     name: "Plex dir chown"
     hour: 0
     job: "chown -R konoahko:konoahko /mpool/plex"
-
-- name: Template out pihole custom list
-  ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/pihole/custom.list' }}"
-    dest: "{{ docker_persistent_data_path + '/pihole/conf/custom.list' }}"
-    owner: root
-    group: root
-    mode: '0755'
-  register: pihole_list
-
-- name: Template out pihole custom dnsmasq config
-  ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/pihole/custom.conf' }}"
-    dest: "{{ docker_persistent_data_path + '/pihole/dnsmasq/custom.conf' }}"
-    owner: root
-    group: root
-    mode: '0755'
-  register: pihole_dnsmasq
-
-- name: Restart pihole if config change
-  community.docker.docker_container:
-    name: pihole
-    restart: yes
-  when: pihole_list.changed or pihole_dnsmasq.changed
-
-- name: Template out bind conf
-  ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/bind/named.conf.local' }}"
-    dest: "{{ docker_persistent_data_path + '/bind/named.conf.local' }}"
-    owner: root
-    group: root
-    mode: '0755'
-  register: bind
-
-- name: Template out bind local zone conf
-  ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/bind/db.lab.nkontur.com' }}"
-    dest: "{{ docker_persistent_data_path + '/bind/db.lab.nkontur.com' }}"
-    owner: root
-    group: root
-    mode: '0755'
-  register: bind
-
-- name: Restart bind if config change
-  community.docker.docker_container:
-    name: bind
-    restart: yes
-  when: bind
 
 - name: Template out compose file to ansible state directory within container
   ansible.builtin.template:
@@ -277,35 +154,57 @@
   delegate_to: localhost
   changed_when: false
 
-- name: Copy base configuration file
+- name: Copy docker configuration files
   ansible.builtin.copy:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/nginx.conf"
-    dest: "{{ docker_persistent_data_path }}/iot_nginx/conf/nginx.conf"
-    owner: root
-    group: root
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/{{ item.src }}"
+    dest: "{{ docker_persistent_data_path }}/{{ item.dest }}"
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.owner | default('root') }}"
     mode: '0644'
-  register: iot_nginx_base
+  register: docker_config
+  loop:
+    - src: "pihole/custom.list"
+      dest: "pihole/conf/custom.list"
+      name: "pihole"
+    - src: "pihole/custom.conf"
+      dest: "pihole/dnsmasq/custom.conf"
+      name: "pihole"
+    - src: "bind/named.conf.local"
+      dest: "bind/named.conf.local"
+      name: "bind"
+    - src: "bind/db.lab.nkontur.com"
+      dest: "bind/db.lab.nkontur.com"
+      name: "bind"
+    - src: "homeassistant/configuration.yaml"
+      dest: "homeassistant/configuration.yaml"
+      name: "homeassistant"
+    - src: "snapserver/snapserver.conf"
+      dest: "snapserver/snapserver.conf"
+      name: "snapserver"
+    - src: "double-take/config/config.yml"
+      dest: "double-take/config/config.yml"
+      name: "double-take"
+    - src: "frigate/config.yml"
+      dest: "frigate/config.yml"
+      name: "frigate"
+    - src: "nextcloud/config.php"
+      dest: "nextcloud/config.php"
+      name: "nextcloud"
+      owner: "www-data"
+      group: "www-data"
+    - src: "nginx/nginx.conf"
+      dest: "iot_nginx/conf/nginx.conf"
+      name: "iot_nginx"
+    - src: "nginx/stream.conf"
+      dest: "iot_nginx/conf/conf.d/stream.conf"
+      name: "iot_nginx"
+    - src: "nginx/http.conf"
+      dest: "iot_nginx/conf/conf.d/http.conf"
+      name: "iot_nginx"
 
-- name: Copy iot_nginx stream configuration file
-  ansible.builtin.copy:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/stream.conf"
-    dest: "{{ docker_persistent_data_path }}/iot_nginx/conf/conf.d/stream.conf"
-    owner: root
-    group: root
-    mode: '0644'
-  register: iot_nginx_stream
-
-- name: Copy iot_nginx http configuration file
-  ansible.builtin.copy:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/http.conf"
-    dest: "{{ docker_persistent_data_path }}/iot_nginx/conf/conf.d/http.conf"
-    owner: root
-    group: root
-    mode: '0644'
-  register: iot_nginx_http
-
-- name: Restart iot_nginx if config change
+- name: Restart containers if config change
   community.docker.docker_container:
-    name: iot_nginx
+    name: "{{ item.name }}"
     restart: yes
-  when: iot_nginx_base.changed or iot_nginx_stream.changed or iot_nginx_http.changed
+  when: item.changed
+  loop: "{{ docker_config.results }}"
