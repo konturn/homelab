@@ -27,11 +27,18 @@
     replace: 'load-module module-native-protocol-unix auth-anonymous=1'
   register: pulseaudio
 
+- name: Remove line that causes suspension
+  ansible.builtin.lineinfile:
+    path: /etc/pulse/system.pa
+    regexp: '^load-module module-suspend-on-idle$'
+    state: absent
+  register: pulseaudio_suspend
+
 - name: Restart pulseaudio if config change
   service:
     name: pulseaudio
     state: restarted
-  when: pulseaudio.changed
+  when: pulseaudio.changed or pulseaudio_suspend.changed
 
 - name: Template out rhasspy entrypoint
   ansible.builtin.template:
