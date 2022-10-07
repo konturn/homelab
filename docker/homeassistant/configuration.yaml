@@ -48,3 +48,11 @@ device_tracker:
 - platform: ping
   hosts:
     noah_phone: Galaxy-S10e.lab.nkontur.com
+
+rest_command:
+  bass_boost:
+    url: "http://zwave.lab.nkontur.com:5380/devices/0/config"
+    method: POST
+    headers:
+      Content-Type: application/json
+    payload: {{ '\'{ "master_status": { "preset": {% if is_state("input_boolean.bass_boost", "off")%}0{%else%}1{%endif%} } }\'' }}
