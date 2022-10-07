@@ -56,3 +56,52 @@ rest_command:
     headers:
       Content-Type: application/json
     payload: {{ '\'{ "master_status": { "preset": {% if is_state("input_boolean.bass_boost", "off")%}0{%else%}1{%endif%} } }\'' }}
+
+sensor:
+  - platform: rest
+    name: awair_kitchen_sensors
+    resource: http://AWAIR-ELEM-14B541.lab.nkontur.com/air-data/latest
+    json_attributes:
+      - timestamp
+      - score
+      - dew_point
+      - temp
+      - humid
+      - abs_humid
+      - co2
+      - co2_est
+      - voc
+      - voc_baseline
+      - voc_h2_raw
+      - voc_ethanol_raw
+      - pm25
+      - pm10_est
+    value_template: 'OK'
+  - platform: template
+    sensors:
+      awair_lr_score:
+        friendly_name: "Kitchen Sensor Quality Score"
+        value_template: {{ '\'{{ states.sensor.awair_kitchen_sensors.attributes["score"]}}\'' }}
+        unit_of_measurement: '%'
+      awair_lr_temp:
+        friendly_name: "Kitchen Sensor Temperature"
+        value_template: {{'\'{{ states.sensor.awair_kitchen_sensors.attributes["temp"] }}\''}}
+        device_class: temperature
+        unit_of_measurement: '°C'
+      awair_lr_humid:
+        friendly_name: "Kitchen Sensor Relative Humidity"
+        value_template: {{'\'{{ states.sensor.awair_kitchen_sensors.attributes["humid"] }}\''}}
+        device_class: humidity
+        unit_of_measurement: '%'
+      awair_lr_co2:
+        friendly_name: "Kitchen Sensor Carbon Dioxide"
+        value_template: {{'\'{{ states.sensor.awair_kitchen_sensors.attributes["co2"] }}\''}}
+        unit_of_measurement: 'ppm'
+      awair_lr_voc:
+        friendly_name: "Kitchen Sensor Total VOC"
+        value_template: {{'\'{{ states.sensor.awair_kitchen_sensors.attributes["voc"] }}\''}}
+        unit_of_measurement: 'ppb'
+      awair_lr_pm25:
+        friendly_name: "Kitchen Sensor Particulate Matter 2.5"
+        value_template: {{'\'{{ states.sensor.awair_kitchen_sensors.attributes["pm25"] }}\''}}
+        unit_of_measurement: 'μg/m³'
