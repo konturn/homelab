@@ -5,7 +5,7 @@ import copy
 import os
 import shutil
 import time
-def generate_stream_config(port_mappings, path):
+def generate_stream_config(port_mappings, path, output_prefix):
     with open(path + '/stream-master-template.conf', 'r') as stream:
         result = json.load(stream)
     with open(path + '/stream-entry-template.conf', 'r') as stream:
@@ -21,12 +21,14 @@ def generate_stream_config(port_mappings, path):
         template_instance['block'][0]['args'].append(host_port)
         template_instance['block'][2]['args'].append(service_name + ":" + container_port)
         result['config'][0]['parsed'][0]['block'].append(template_instance)
-    with open(path + "/stream-output.conf", "w") as output:
+    result['config'][0]['file'] = output_prefix + "stream.conf"
+    output_path = path + "/stream-output.conf"
+    with open(output_path, "w") as output:
         output.writelines(json.dumps(result))
-    cmd = "crossplane build -f -d " + path + " " + path + "/stream-output.conf"
+    cmd = "crossplane build -f -d " + path + " " + output_path
     os.system(cmd)
 
-def generate_http_config(port_mappings, path, domain_name):
+def generate_http_config(port_mappings, path, domain_name, output_prefix):
     with open(path + '/http-master-template.conf', 'r') as http:
         result = json.load(http)
     with open(path + '/http-entry-template.conf', 'r') as http:
@@ -47,9 +49,11 @@ def generate_http_config(port_mappings, path, domain_name):
         template_instance['block'][1]['args'].append(service_name + "." + domain_name)
         template_instance['block'][3]['block'][1]['args'].append("http://" + service_name + ":" + container_port)
         result['config'][0]['parsed'][0]['block'].append(template_instance)
-    with open(path + "/http-output.conf", "w") as output:
+    result['config'][0]['file'] = output_prefix + "http.conf"
+    output_path = path + "/http-output.conf"
+    with open(output_path, "w") as output:
         output.writelines(json.dumps(result))
-    cmd = "crossplane build -f -d " + path + " " + path + "/http-output.conf"
+    cmd = "crossplane build -f -d " + path + " " + output_path
     os.system(cmd)
 
 def generate_port_mappings(services, network):
@@ -71,6 +75,10 @@ def main():
     parser.add_argument('--workspace-path', type=str,
                         help='The path which the script should use as a workspace',
                         required=True)
+    parser.add_argument('--output-prefix', type=str,
+                        help='A prefix applied to the names of the output files',
+                        required=False,
+                        default='')
     parser.add_argument('--network', type=str,
                         help='The name of the docker network which the nginx instance serves for',
                         required=True)
@@ -87,8 +95,8 @@ def main():
         domain_name = "iot.lab.nkontur.com"
 
     stream_port_mappings, http_port_mappings = generate_port_mappings(services, args.network)
-    generate_http_config(http_port_mappings, args.workspace_path, domain_name)
-    generate_stream_config(stream_port_mappings, args.workspace_path)
+    generate_http_config(http_port_mappings, args.workspace_path, domain_name, args.output_prefix)
+    generate_stream_config(stream_port_mappings, args.workspace_path, args.output_prefix)
 
 
 if __name__ == "__main__":
