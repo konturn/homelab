@@ -2,6 +2,7 @@
   roles:
   - prepare-rhasspy
   - configure-zwave
+  - configure-docker
   - configure-snapclient
   become: yes
 

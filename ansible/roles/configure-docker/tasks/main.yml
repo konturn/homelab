@@ -22,15 +22,14 @@
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/' + docker_compose_source_path }}"
     dest: "{{ docker_compose_dest_path + '/docker-compose.yml' }}"
-    dest: "{{ docker_persistent_data_path + '/ansible_state/docker-compose.yml' }}"
     owner: root
     group: root
     mode: '0700'
 
 - name: Create and start Docker services
   community.docker.docker_compose:
-    project_name: docker
-    project_src: "{{ docker_persistent_data_path }}/ansible_state"
+    project_name: "{{ docker_compose_project_name | default('docker') }}"
+    project_src: "{{ docker_compose_dest_path }}/"
     state: present
 
 - name: Template out compose file to ansible state directory within container
@@ -48,7 +47,7 @@
     cmd: "/usr/bin/python3 {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/generate-configs.py --workspace-path {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx --network {{ item.network }} --output-prefix {{ item.network }}_"
   delegate_to: localhost
   changed_when: false
-  loop: "{{ nginx_config }}"
+  loop: "{{ nginx_config | default([]) }}"
 
 - name: initialize nginx conf file dicts
   set_fact: 
@@ -57,25 +56,25 @@
 - name: create nginx conf file dicts
   set_fact:
     docker_config_nginx: "{{ docker_config_nginx + [{'src': 'docker/nginx/nginx.conf',
-                        'dest': item.name + 'nginx/conf/nginx.conf',
-                        'name': item.name + 'nginx' }, 
+                        'dest': item.dest + '/conf/nginx.conf',
+                        'name': item.name }, 
                          {'src': 'docker/nginx/' + item.network + '_stream.conf',
-                        'dest': item.name + 'nginx/conf/conf.d/stream.conf',
-                        'name': item.name + 'nginx' },
+                        'dest': item.dest + '/conf/conf.d/stream.conf',
+                        'name': item.name },
                         {'src': 'docker/nginx/' + item.network + '_http.conf',
-                        'dest': item.name + 'nginx/conf/conf.d/http.conf',
-                        'name': item.name + 'nginx' }] }}"
-  loop: "{{ nginx_config }}"
+                        'dest': item.dest + '/conf/conf.d/http.conf',
+                        'name': item.name }] }}"
+  loop: "{{ nginx_config | default([]) }}"
 
 - name: Copy docker configuration files
   ansible.builtin.copy:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/{{ item.src }}"
-    dest: "{{ docker_persistent_data_path }}/{{ item.dest }}"
+    dest: "{{ item.dest }}"
     owner: "{{ item.owner | default('root') }}"
     group: "{{ item.owner | default('root') }}"
     mode: "{{ item.mode | default('0644') }}"
   register: docker_config
-  loop: "{{ docker_config + docker_config_nginx }}"
+  loop: "{{ docker_config + (docker_config_nginx | default([])) }}"
 
 - name: Restart containers if config change
   community.docker.docker_container:
