@@ -32,26 +32,6 @@
     project_src: "{{ docker_persistent_data_path }}/ansible_state"
     state: present
 
-- name: Sets up base cronjob for nextcloud
-  ansible.builtin.cron:
-    name: "Nextcloud base cronjob"
-    minute: "*/5"
-    job: "docker exec -t -u www-data nextcloud php -f /var/www/html/cron.php"
-
-- name: Sets up periodic file scan cronjob for nextcloud
-  ansible.builtin.cron:
-    name: "Nextcloud file scan cronjob"
-    minute: "0"
-    hour: "2"
-    weekday: "0"
-    job: "docker exec -u www-data nextcloud php occ files:scan --all"
-
-- name: Sets up perodic plex chown
-  ansible.builtin.cron:
-    name: "Plex dir chown"
-    hour: 0
-    job: "chown -R konoahko:konoahko /mpool/plex"
-
 - name: Template out compose file to ansible state directory within container
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/docker-compose.yml' }}"
@@ -62,23 +42,29 @@
   changed_when: false
   delegate_to: localhost
 
-- name: Execute Python script to generate lab_nginx custom config files
-  shell:
-    cmd: "/usr/bin/python3 {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/generate-configs.py --workspace-path {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx --network internal --output-prefix internal_"
-  delegate_to: localhost
-  changed_when: false
-
 - name: Execute Python script to generate nginx custom config files
   shell:
-    cmd: "/usr/bin/python3 {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/generate-configs.py --workspace-path {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx --network external --output-prefix external_"
+    cmd: "/usr/bin/python3 {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/generate-configs.py --workspace-path {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx --network {{ item.network }} --output-prefix {{ item.network }}_"
   delegate_to: localhost
   changed_when: false
+  loop: "{{ nginx_config }}"
 
-- name: Execute Python script to generate iot_nginx custom config files
-  shell:
-    cmd: "/usr/bin/python3 {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/generate-configs.py --workspace-path {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx --network iot"
-  delegate_to: localhost
-  changed_when: false
+- name: initialize nginx conf file dicts
+  set_fact: 
+    docker_config_nginx: []
+
+- name: create nginx conf file dicts
+  set_fact:
+    docker_config_nginx: "{{ docker_config_nginx + [{'src': 'docker/nginx/nginx.conf',
+                        'dest': item.name + 'nginx/conf/nginx.conf',
+                        'name': item.name + 'nginx' }, 
+                         {'src': 'docker/nginx/' + item.network + '_stream.conf',
+                        'dest': item.name + 'nginx/conf/conf.d/stream.conf',
+                        'name': item.name + 'nginx' },
+                        {'src': 'docker/nginx/' + item.network + '_http.conf',
+                        'dest': item.name + 'nginx/conf/conf.d/http.conf',
+                        'name': item.name + 'nginx' }] }}"
+  loop: "{{ nginx_config }}"
 
 - name: Copy docker configuration files
   ansible.builtin.copy:
@@ -88,7 +74,7 @@
     group: "{{ item.owner | default('root') }}"
     mode: "{{ item.mode | default('0644') }}"
   register: docker_config
-  loop: "{{ docker_config }}"
+  loop: "{{ docker_config + docker_config_nginx }}"
 
 - name: Restart containers if config change
   community.docker.docker_container:
