@@ -54,6 +54,8 @@ all:
       dhcp_address: 10.4.0.1
       dhcp_peer_address: 10.4.128.1
       rhasspy_entrypoint_dest: "{{ docker_persistent_data_path }}/rhasspy/startup.sh"
+      docker_compose_source_path: "docker-compose.yml"
+      docker_compose_dest_path: "{{ docker_persistent_data_path }}/ansible_state"
       nginx_config:
         - name: "lab_"
           network: "internal"

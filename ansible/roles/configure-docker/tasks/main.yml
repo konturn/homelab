@@ -20,7 +20,8 @@
 
 - name: Template out compose file to ansible state directory on host
   ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/docker-compose.yml' }}"
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/' + docker_compose_source_path }}"
+    dest: "{{ docker_compose_dest_path + '/docker-compose.yml' }}"
     dest: "{{ docker_persistent_data_path + '/ansible_state/docker-compose.yml' }}"
     owner: root
     group: root
