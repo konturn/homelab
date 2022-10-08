@@ -26,14 +26,6 @@
     group: root
     mode: '0700'
 
-- name: Populate RNDC key file for bind
-  ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/dhcp/rndc.key' }}"
-    dest: "{{ docker_persistent_data_path + '/bind/rndc.key' }}"
-    owner: 104
-    group: 105
-    mode: '0640'
-
 - name: Create and start Docker services
   community.docker.docker_compose:
     project_name: docker
@@ -90,69 +82,13 @@
 
 - name: Copy docker configuration files
   ansible.builtin.copy:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/{{ item.src }}"
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/{{ item.src }}"
     dest: "{{ docker_persistent_data_path }}/{{ item.dest }}"
     owner: "{{ item.owner | default('root') }}"
     group: "{{ item.owner | default('root') }}"
-    mode: '0644'
+    mode: "{{ item.mode | default('0644') }}"
   register: docker_config
-  loop:
-    - src: "nginx/nginx.conf"
-      dest: "nginx/conf/nginx.conf"
-      name: "nginx"
-    - src: "nginx/external_stream.conf"
-      dest: "nginx/conf/conf.d/stream.conf"
-      name: "nginx"
-    - src: "nginx/external_http.conf"
-      dest: "nginx/conf/conf.d/http.conf"
-      name: "nginx"
-    - src: "nginx/nginx.conf"
-      dest: "lab_nginx/conf/nginx.conf"
-      name: "lab_nginx"
-    - src: "nginx/internal_stream.conf"
-      dest: "lab_nginx/conf/conf.d/stream.conf"
-      name: "lab_nginx"
-    - src: "nginx/internal_http.conf"
-      dest: "lab_nginx/conf/conf.d/http.conf"
-      name: "lab_nginx"
-    - src: "pihole/custom.list"
-      dest: "pihole/conf/custom.list"
-      name: "pihole"
-    - src: "pihole/custom.conf"
-      dest: "pihole/dnsmasq/custom.conf"
-      name: "pihole"
-    - src: "bind/named.conf.local"
-      dest: "bind/named.conf.local"
-      name: "bind"
-    - src: "bind/db.lab.nkontur.com"
-      dest: "bind/db.lab.nkontur.com"
-      name: "bind"
-    - src: "homeassistant/configuration.yaml"
-      dest: "homeassistant/configuration.yaml"
-      name: "homeassistant"
-    - src: "snapserver/snapserver.conf"
-      dest: "snapserver/snapserver.conf"
-      name: "snapserver"
-    - src: "double-take/config/config.yml"
-      dest: "double-take/config/config.yml"
-      name: "double-take"
-    - src: "frigate/config.yml"
-      dest: "frigate/config.yml"
-      name: "frigate"
-    - src: "nextcloud/config.php"
-      dest: "nextcloud/config.php"
-      name: "nextcloud"
-      owner: "www-data"
-      group: "www-data"
-    - src: "nginx/nginx.conf"
-      dest: "iot_nginx/conf/nginx.conf"
-      name: "iot_nginx"
-    - src: "nginx/stream.conf"
-      dest: "iot_nginx/conf/conf.d/stream.conf"
-      name: "iot_nginx"
-    - src: "nginx/http.conf"
-      dest: "iot_nginx/conf/conf.d/http.conf"
-      name: "iot_nginx"
+  loop: "{{ docker_config }}"
 
 - name: Restart containers if config change
   community.docker.docker_container:
