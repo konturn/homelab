@@ -31,7 +31,6 @@ services:
     ports:
       - '80:80'
       - '443:443'
-      - '442:442'
     restart: unless-stopped
     volumes:
       - /root/nginx_conf:/etc/nginx

@@ -67,7 +67,7 @@ def generate_port_mappings(services, network):
                         if port.endswith('/tcp'):
                             stream_port_mappings[service_name] = port.split('/')[0]
                         else:
-                            http_port_mappings[service_name] = port
+                            http_port_mappings[service_name] = "443:" + port.split(':')[1]
     return stream_port_mappings, http_port_mappings
 
 def main():

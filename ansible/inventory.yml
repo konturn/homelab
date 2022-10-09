@@ -122,12 +122,11 @@ all:
       docker_compose_source_path: "docker-compose-zwave.yml"
       docker_compose_dest_path: ""
       docker_compose_project_name: "zwave"
-      docker_config: 
-        - src: "docker/nginx/nginx_zwave/nginx.conf"
-          dest: "/root/nginx_conf/nginx.conf"
+      docker_config: []
+      nginx_config:
+        - dest: "/root/nginx_conf"
+          network: "zwave"
           name: "nginx"
-        - src: "docker/nginx/nginx_zwave/conf.d/http.conf"
-          dest: "/root/nginx_conf/conf.d/http.conf"
-          name: "nginx"
+          domain_name: "zwave.lab.nkontur.com"
       use_onboard_audio: true
       rhasspy_entrypoint_dest: "/startup.sh"
