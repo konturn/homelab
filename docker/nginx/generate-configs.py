@@ -82,17 +82,24 @@ def main():
     parser.add_argument('--network', type=str,
                         help='The name of the docker network which the nginx instance serves for',
                         required=True)
+    parser.add_argument('--domain-name', type=str,
+                        help='The name of the domain the server lives under',
+                        required=False,
+                        default='')
     args = parser.parse_args()
 
     with open(args.workspace_path + "/docker-compose.yml", "r") as stream:
         services = yaml.safe_load(stream)['services']
 
-    if args.network == "internal":
-        domain_name = "lab.nkontur.com"
-    elif args.network == "external":
-        domain_name = "nkontur.com"
-    elif args.network == "iot":
-        domain_name = "iot.lab.nkontur.com"
+    if args.domain_name == '':
+        if args.network == "internal":
+            domain_name = "lab.nkontur.com"
+        elif args.network == "external":
+            domain_name = "nkontur.com"
+        elif args.network == "iot":
+            domain_name = "iot.lab.nkontur.com"
+    else:
+        domain_name = args.domain_name
 
     stream_port_mappings, http_port_mappings = generate_port_mappings(services, args.network)
     generate_http_config(http_port_mappings, args.workspace_path, domain_name, args.output_prefix)
