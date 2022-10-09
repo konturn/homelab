@@ -4,21 +4,25 @@ iface eth0.3 inet static
   address 10.3.128.1
   netmask 255.255.0.0
   gateway 10.3.0.1
+  dns-nameservers {{ pihole_ip }} 1.1.1.1
 auto eth0.4
 iface eth0.4 inet static
   vlan-raw-device eth0
   address {{ fallback_address }}
   netmask 255.255.0.0
   gateway 10.4.0.1
+  dns-nameservers {{ pihole_ip }} 1.1.1.1
 auto eth0.5
 iface eth0.5 inet static
   vlan-raw-device eth0
   address 10.5.128.1
   netmask 255.255.0.0
   gateway 10.5.0.1
+  dns-nameservers {{ pihole_ip }} 1.1.1.1
 auto eth0.6
 iface eth0.6 inet static
   vlan-raw-device eth0
   address 10.6.128.1
   netmask 255.255.0.0
   gateway 10.6.0.1
+  dns-nameservers {{ pihole_ip }} 1.1.1.1
