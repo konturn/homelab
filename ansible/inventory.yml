@@ -127,6 +127,6 @@ all:
         - dest: "/root/nginx_conf"
           network: "zwave"
           name: "nginx"
-          domain_name: "zwave.lab.nkontur.com"
+          extra_args: "--domain-name zwave.lab.nkontur.com"
       use_onboard_audio: true
       rhasspy_entrypoint_dest: "/startup.sh"

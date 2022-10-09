@@ -44,7 +44,7 @@
 
 - name: Execute Python script to generate nginx custom config files
   shell:
-    cmd: "/usr/bin/python3 {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/generate-configs.py --workspace-path {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx --network {{ item.network }} --output-prefix {{ item.network }}_ --domain-name {{ item.domain_name | default('') }}"
+    cmd: "/usr/bin/python3 {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/generate-configs.py --workspace-path {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx --network {{ item.network }} --output-prefix {{ item.network }}_ {{ item.extra_args | default('') }}"
   delegate_to: localhost
   changed_when: false
   loop: "{{ nginx_config | default([]) }}"
