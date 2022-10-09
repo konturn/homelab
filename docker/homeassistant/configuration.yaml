@@ -60,7 +60,7 @@ rest_command:
 sensor:
   - platform: rest
     name: awair_kitchen_sensors
-    resource: http://AWAIR-ELEM-14B541.lab.nkontur.com/air-data/latest
+    resource: http://AWAIR-ELEM-14B541.iot.lab.nkontur.com/air-data/latest
     json_attributes:
       - timestamp
       - score
