@@ -73,12 +73,12 @@
     owner: "{{ item.owner | default('root') }}"
     group: "{{ item.owner | default('root') }}"
     mode: "{{ item.mode | default('0644') }}"
-  register: docker_config
+  register: docker_config_copy
   loop: "{{ docker_config + (docker_config_nginx | default([])) }}"
-
+    
 - name: Restart containers if config change
   community.docker.docker_container:
-    name: "{{ item.name }}"
+    name: "{{ item.item.name }}"
     restart: yes
   when: item.changed
-  loop: "{{ docker_config.results }}"
+  loop: "{{ docker_config_copy.results }}"
