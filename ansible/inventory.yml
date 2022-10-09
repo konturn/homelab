@@ -46,6 +46,16 @@ all:
       dhcp_address: 10.4.128.1
       dhcp_peer_address: 10.4.0.1
       use_onboard_audio: false
+      docker_compose_source_path: "docker-compose-fallback.yml"
+      docker_compose_dest_path: ""
+      docker_compose_project_name: "fallback"
+      docker_config: 
+        - src: "docker/pihole/custom.list"
+          dest: "/etc/pihole/conf/custom.list"
+          name: "pihole"
+        - src: "docker/pihole/custom.conf"
+          dest: "/etc/pihole/dnsmasq/custom.conf"
+          name: "pihole"
     router.lab.nkontur.com:
       wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/wg0.conf' }}"
       wireguard_interface_name: "wg0"

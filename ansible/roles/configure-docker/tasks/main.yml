@@ -67,7 +67,7 @@
   loop: "{{ nginx_config | default([]) }}"
 
 - name: Copy docker configuration files
-  ansible.builtin.copy:
+  ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/{{ item.src }}"
     dest: "{{ item.dest }}"
     owner: "{{ item.owner | default('root') }}"
