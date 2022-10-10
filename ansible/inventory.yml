@@ -128,7 +128,10 @@ all:
       docker_compose_dest_path: ""
       docker_compose_project_name: "zwave"
       docker_compose_version: '3.7'
-      docker_config: []
+      docker_config:
+        - src: "docker/rhasspy/satellite-profile.json"
+          dest: "/root/.config/rhasspy/profiles/en/profile.json"
+          name: rhasspy
       nginx_config:
         - dest: "/root/nginx"
           network: "zwave"
@@ -136,3 +139,4 @@ all:
           extra_args: "--domain-name zwave.lab.nkontur.com"
       use_onboard_audio: true
       rhasspy_entrypoint_dest: "/startup.sh"
+      mic_device_name: "plughw:CARD=Microphone,DEV=0"

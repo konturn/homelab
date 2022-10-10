@@ -1,0 +1,41 @@
+{
+    "intent": {
+        "system": "hermes"
+    },
+    "microphone": {
+        "command": {
+            "record_arguments": "-q -r 16000 -f S16_LE -c 1 -D {{ mic_device_name }}",
+            "record_program": "arecord"
+        },
+        "system": "command"
+    },
+    "mqtt": {
+        "enabled": "true",
+        "host": "mqtt.lab.nkontur.com",
+        "password": "{{ lookup('env', 'MQTT_PASS') }}",
+        "site_id": "satellite-1",
+        "tls": {
+            "enabled": true
+        },
+        "username": "mosquitto"
+    },
+    "sounds": {
+        "aplay": {
+            "device": "hw:0,0"
+        },
+        "command": {
+            "play_program": "gst-launch-1.0  -v fdsrc ! wavparse ! audioresample ! audioconvert ! audio/x-raw,rate=48000,channels=2,format=S16LE ! wavenc !  tcpclientsink host={{ snapserver_address }} port=80"
+        },
+        "system": "command"
+    },
+    "speech_to_text": {
+        "system": "hermes"
+    },
+    "text_to_speech": {
+        "system": "hermes"
+    },
+    "wake": {
+        "keyword_path": "porcupine_raspberry-pi.ppn",
+        "system": "porcupine"
+    }
+}
