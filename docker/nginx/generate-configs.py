@@ -5,6 +5,7 @@ import copy
 import os
 import shutil
 import time
+import re
 def generate_stream_config(port_mappings, path, output_prefix):
     with open(path + '/stream-master-template.conf', 'r') as stream:
         result = json.load(stream)
@@ -88,8 +89,12 @@ def main():
                         default='')
     args = parser.parse_args()
 
-    with open(args.workspace_path + "/docker-compose.yml", "r") as stream:
-        services = yaml.safe_load(stream)['services']
+    services = {}
+    for filename in os.listdir(args.workspace_path):
+        if re.match("docker-compose*", filename):
+            with open(os.path.join(args.workspace_path, filename), 'r') as stream:
+                temp = yaml.safe_load(stream)['services']
+                services.update(temp)
 
     if args.domain_name == '':
         if args.network == "internal":

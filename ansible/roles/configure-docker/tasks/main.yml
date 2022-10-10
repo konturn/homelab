@@ -21,7 +21,7 @@
 - name: Template out compose file to ansible state directory on host
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/' + item }}"
-    dest: "{{ docker_compose_dest_path + item }}"
+    dest: "{{ docker_compose_dest_path + '/' + item }}"
     owner: root
     group: root
     mode: '0700'
@@ -37,7 +37,7 @@
 - name: Template out compose file to ansible state directory within container
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/' + item }}"
-    dest: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/docker-compose.yml"
+    dest: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/"
     owner: root
     group: root
     mode: '0755'
