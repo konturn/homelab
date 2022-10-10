@@ -20,26 +20,29 @@
 
 - name: Template out compose file to ansible state directory on host
   ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/' + docker_compose_source_path }}"
-    dest: "{{ docker_compose_dest_path + '/docker-compose.yml' }}"
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/' + item }}"
+    dest: "{{ docker_compose_dest_path + item }}"
     owner: root
     group: root
     mode: '0700'
+  loop: "{{ docker_compose_file_names }}"
 
 - name: Create and start Docker services
   community.docker.docker_compose:
     project_name: "{{ docker_compose_project_name | default('docker') }}"
     project_src: "{{ docker_compose_dest_path }}/"
+    files: "{{ docker_compose_file_names }}"
     state: present
 
 - name: Template out compose file to ansible state directory within container
   ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/' + docker_compose_source_path }}"
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/' + item }}"
     dest: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/docker-compose.yml"
     owner: root
     group: root
     mode: '0755'
   changed_when: false
+  loop: "{{ docker_compose_file_names }}"
   delegate_to: localhost
 
 - name: Execute Python script to generate nginx custom config files

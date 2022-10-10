@@ -47,7 +47,8 @@ all:
       dhcp_address: 10.4.128.1
       dhcp_peer_address: 10.4.0.1
       use_onboard_audio: false
-      docker_compose_source_path: "docker-compose-fallback.yml"
+      docker_compose_file_names:
+        - "docker-compose-fallback.yml"
       docker_compose_dest_path: ""
       docker_compose_project_name: "fallback"
       docker_config: 
@@ -65,7 +66,8 @@ all:
       dhcp_address: 10.4.0.1
       dhcp_peer_address: 10.4.128.1
       rhasspy_entrypoint_dest: "{{ docker_persistent_data_path }}/rhasspy/startup.sh"
-      docker_compose_source_path: "docker-compose.yml"
+      docker_compose_file_names:
+        -  "docker-compose.yml"
       docker_compose_dest_path: "{{ docker_persistent_data_path }}/ansible_state"
       nginx_config:
         - dest: "{{ docker_persistent_data_path }}/lab_nginx"
@@ -120,7 +122,9 @@ all:
       wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/backups/wg0.conf' }}"
       wireguard_interface_name: "wg0"
     zwave.lab.nkontur.com:
-      docker_compose_source_path: "docker-compose-zwave.yml"
+      docker_compose_file_names: 
+        - "docker-compose-zwave.yml"
+        - "docker-compose-satellite.yml"
       docker_compose_dest_path: ""
       docker_compose_project_name: "zwave"
       docker_compose_version: '3.7'
