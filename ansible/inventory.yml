@@ -75,7 +75,7 @@ all:
           name: "iot_nginx"
         - dest: "{{ docker_persistent_data_path }}/nginx"
           network: "external"
-          name: "lnginx"
+          name: "nginx"
       docker_config: 
         - src: "docker/pihole/custom.list"
           dest: "{{ docker_persistent_data_path }}/pihole/conf/custom.list"
@@ -124,7 +124,7 @@ all:
       docker_compose_project_name: "zwave"
       docker_config: []
       nginx_config:
-        - dest: "/root/nginx_conf"
+        - dest: "/root/nginx"
           network: "zwave"
           name: "nginx"
           extra_args: "--domain-name zwave.lab.nkontur.com"

@@ -34,8 +34,8 @@
 
 - name: Template out compose file to ansible state directory within container
   ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/docker-compose.yml' }}"
-    dest: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx"
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/' + docker_compose_source_path }}"
+    dest: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/docker-compose.yml"
     owner: root
     group: root
     mode: '0755'
@@ -63,7 +63,13 @@
                         'name': item.name },
                         {'src': 'docker/nginx/' + item.network + '_http.conf',
                         'dest': item.dest + '/conf/conf.d/http.conf',
-                        'name': item.name }] }}"
+                        'name': item.name },
+                        {'src': 'docker/nginx/ssl_config',
+                        'dest': item.dest + '/conf/ssl_config',
+                        'name': item.name,
+                        'owner': 'systemd-resolve',
+                        'group': 'systemd-journal',
+                        'mode': '0700'  }] }}"
   loop: "{{ nginx_config | default([]) }}"
 
 - name: Copy docker configuration files

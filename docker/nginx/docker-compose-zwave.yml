@@ -36,7 +36,7 @@ services:
       - /root/nginx/conf/conf.d:/etc/nginx/conf.d
       - /root/nginx/conf/nginx.conf:/etc/nginx/nginx.conf
       - /root/nginx/conf/ssl_config:/etc/nginx/ssl_config
-      - /root/nginx/log:/data/log
+      - /root/nginx/logs:/data/logs
       - /certs:/data/certs/nkontur.com/certificates
   rhasspy:
     image: "rhasspy/rhasspy"
