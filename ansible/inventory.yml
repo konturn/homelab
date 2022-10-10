@@ -8,6 +8,7 @@ all:
     deluge_ip: 10.3.32.3
     bind_ip: 10.3.32.4
     docker_persistent_data_path: /persistent_data/application
+    docker_compose_version: '3.9'
     movie_switch_mac: 8c:3b:ad:6f:0e:d0
     fallback_pihole_address: 10.3.128.3
     movie_switch_address: 10.4.128.3
@@ -122,6 +123,7 @@ all:
       docker_compose_source_path: "docker-compose-zwave.yml"
       docker_compose_dest_path: ""
       docker_compose_project_name: "zwave"
+      docker_compose_version: '3.7'
       docker_config: []
       nginx_config:
         - dest: "/root/nginx"

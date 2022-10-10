@@ -1,4 +1,4 @@
-version: '3.8'
+version: '{{ docker_compose_version }}'
 networks:
   internal:
     driver: macvlan
