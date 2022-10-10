@@ -404,7 +404,7 @@ services:
     ports:
       - "443:8123"
     devices: 
-      - "/dev/ttyUSB0:/dev/ttyUSB0"
+      - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_ETDRb11A920-if00-port0:/dev/ttyUSB0"
     image: "ghcr.io/home-assistant/home-assistant:2022.8"
     volumes:
       - "{{ docker_persistent_data_path }}/homeassistant:/config"
@@ -601,7 +601,7 @@ services:
     networks:
       internal:
     devices:
-      - "/dev/ttyUSB1:/dev/ttyUSB1"
+      - "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0:/dev/ttyUSB1"
     volumes:
         - "{{ docker_persistent_data_path }}/octoprint:/octoprint"
     ports:
