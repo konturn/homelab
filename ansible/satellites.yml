@@ -1,4 +1,4 @@
-- hosts: zwave.lab.nkontur.com
+- hosts: satellites
   roles:
   - prepare-rhasspy
   - configure-docker
