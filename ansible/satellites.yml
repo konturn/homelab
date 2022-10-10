@@ -1,6 +1,5 @@
 - hosts: zwave.lab.nkontur.com
   roles:
-  - configure-zwave
-  - configure-snapclient
+  - prepare-rhasspy
+  - configure-docker
   become: yes
-
