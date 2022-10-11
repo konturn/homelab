@@ -12,7 +12,6 @@ $TTL	604800
 lab.nkontur.com.    IN      NS      bind.lab.nkontur.com.
 *.iot IN A {{ iot_nginx_ip }}
 iot IN A {{ iot_nginx_ip }}
-a.satellite.iot IN CNAME satellite-2.iot.lab.nkontur.com
 *        IN      A      {{ lab_nginx_ip }}
 bind        IN      A      {{ bind_ip }}
 @        IN      A      {{ lab_nginx_ip }}
