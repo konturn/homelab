@@ -8,6 +8,7 @@
 {{ shield_address }} shield.lab.nkontur.com
 {{ denon_address }} denon.lab.nkontur.com
 {{ projector_address }} projector.lab.nkontur.com
+{{ kitchen_qual_address }} AWAIR-ELEM-14B541.lab.nkontur.com
 {{ registry_address }} registry.lab.nkontur.com
 {{ snapserver_address }} snapserver.lab.nkontur.com
 {{ amp_address }} amp.lab.nkontur.com

@@ -32,6 +32,8 @@ all:
     amp_address: 10.6.128.7
     doorbell_mac: 9c:8e:cd:3c:de:33
     doorbell_address: 10.6.128.9
+    kitchen_qual_address: 10.6.128.10
+    kitchen_qual_mac: 70:88:6b:14:b5:41
     snapserver_address: 10.6.32.2
     mosquitto_address: 10.6.32.3
     frigate_address: 10.6.32.4
@@ -141,19 +143,16 @@ all:
           docker_compose_file_names: 
             - "docker-compose-zwave.yml"
             - "docker-compose-satellite.yml"
-          docker_compose_dest_path: ""
           docker_compose_project_name: "zwave"
-          docker_compose_version: '3.7'
-          docker_config:
-            - src: "docker/rhasspy/satellite-profile.json"
-              dest: "/root/.config/rhasspy/profiles/en/profile.json"
-              name: rhasspy
           nginx_config:
             - dest: "/root/nginx"
               network: "zwave"
               name: "nginx"
               extra_args: "--domain-name zwave.lab.nkontur.com"
-          use_onboard_audio: true
-          rhasspy_entrypoint_dest: "/startup.sh"
           mic_device_name: "plughw:CARD=Microphone,DEV=0"
-    
+        satellite-2.iot.lab.nkontur.com:
+          nginx_config:
+            - dest: "/root/nginx"
+              network: "zwave"
+              name: "nginx"
+              extra_args: "--domain-name satellite-2.iot.lab.nkontur.com"
