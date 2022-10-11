@@ -34,6 +34,8 @@ all:
     doorbell_address: 10.6.128.9
     kitchen_qual_address: 10.6.128.10
     kitchen_qual_mac: 70:88:6b:14:b5:41
+    satellite_2_address: 10.6.128.11
+    satellite_2_mac: dc:a6:32:74:a1:cf
     snapserver_address: 10.6.32.2
     mosquitto_address: 10.6.32.3
     frigate_address: 10.6.32.4
