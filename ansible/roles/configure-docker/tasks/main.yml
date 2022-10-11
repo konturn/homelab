@@ -10,6 +10,7 @@
       - docker
       - PyYAML
       - docker-compose
+      - jsonschema
   delegate_to: localhost
 
 - name: Log in to private docker repo

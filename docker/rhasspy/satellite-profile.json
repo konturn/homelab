@@ -13,7 +13,7 @@
         "enabled": "true",
         "host": "mqtt.lab.nkontur.com",
         "password": "{{ lookup('env', 'MQTT_PASS') }}",
-        "site_id": "satellite-1",
+        "site_id": "satellite-{{ rhasspy_satellite_index }}",
         "tls": {
             "enabled": true
         },
