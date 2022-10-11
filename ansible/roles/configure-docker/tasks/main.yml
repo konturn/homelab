@@ -4,14 +4,71 @@
 #    state: present
 #  delegate_to: localhost
 
+### Install docker daemon
+- name: Install dependencies
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg-agent
+      - software-properties-common
+      - python3-pip
+    state: present
+    update_cache: yes
+
+- name: Add Docker GPG apt Key
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+
+- name: Add docker repository to apt
+  apt_repository:
+    repo: deb https://download.docker.com/linux/ubuntu bionic stable
+    state: present
+
+- name: Install docker
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+    state: latest
+    update_cache: yes
+
+- name: Make sure docker is started and enabled
+  service:
+    name: docker
+    state: started
+    enabled: yes
+
+### Configure docker daemon on host
+- name: Docker daemon config file
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/daemon.json' }}"
+    dest: '/etc/docker/daemon.json'
+    owner: root
+    group: root
+    mode: 0600
+  register: docker_conf
+
+- name: Reload Docker to pick up changes
+  ansible.builtin.systemd:
+
 - name: ensure required pip-packages are installed within docker image
   pip:
     name:
       - docker
       - PyYAML
       - docker-compose
-      - jsonschema
   delegate_to: localhost
+
+- name: ensure required pip-packages are installed on host
+  pip:
+    name:
+      - docker
+      - PyYAML
+      - docker-compose
 
 - name: Log in to private docker repo
   docker_login:
@@ -27,13 +84,6 @@
     group: root
     mode: '0700'
   loop: "{{ docker_compose_file_names }}"
-
-- name: Create and start Docker services
-  community.docker.docker_compose:
-    project_name: "{{ docker_compose_project_name | default('docker') }}"
-    project_src: "{{ docker_compose_dest_path }}/"
-    files: "{{ docker_compose_file_names }}"
-    state: present
 
 - name: Template out compose file to ansible state directory within container
   ansible.builtin.template:
@@ -85,6 +135,13 @@
     mode: "{{ item.mode | default('0644') }}"
   register: docker_config_copy
   loop: "{{ docker_config + (docker_config_nginx | default([])) }}"
+
+- name: Create and start Docker services
+  community.docker.docker_compose:
+    project_name: "{{ docker_compose_project_name | default('docker') }}"
+    project_src: "{{ docker_compose_dest_path }}/"
+    files: "{{ docker_compose_file_names }}"
+    state: present
     
 - name: Restart containers if config change
   community.docker.docker_container:
