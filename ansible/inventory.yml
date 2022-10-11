@@ -152,9 +152,9 @@ all:
               name: "nginx"
               extra_args: "--domain-name zwave.lab.nkontur.com"
           mic_device_name: "plughw:CARD=Microphone,DEV=0"
-        satellite-2.iot.lab.nkontur.com:
+        satellite-2.lab.nkontur.com:
           nginx_config:
             - dest: "/root/nginx"
               network: "zwave"
               name: "nginx"
-              extra_args: "--domain-name satellite-2.iot.lab.nkontur.com"
+              extra_args: "--domain-name satellite-2.lab.nkontur.com"
