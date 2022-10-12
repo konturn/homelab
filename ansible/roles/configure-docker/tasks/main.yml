@@ -55,14 +55,6 @@
 - name: Reload Docker to pick up changes
   ansible.builtin.systemd:
 
-- name: ensure required pip-packages are installed within docker image
-  pip:
-    name:
-      - docker
-      - PyYAML
-      - docker-compose
-  delegate_to: localhost
-
 - name: ensure required pip-packages are installed on host
   pip:
     name:
