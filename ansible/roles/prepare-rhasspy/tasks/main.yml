@@ -47,3 +47,9 @@
     owner: root
     group: root
     mode: '0744'
+
+- name: Git checkout
+  ansible.builtin.git:
+    repo: 'https://github.com/respeaker/seeed-voicecard.git'
+    dest: /root/seed-voicecard
+  when: is_respeaker
