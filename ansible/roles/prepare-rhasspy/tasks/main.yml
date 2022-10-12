@@ -57,7 +57,7 @@
 
 - name: Install respeaker drivers
   when: respeaker.changed
-  ansible.builtin.command: chdir=/root/seed-voicecard ./install.sh
+  ansible.builtin.command: chdir=/root/seed-voicecard ./install_arm64.sh
 
 - name: Reboot when respeaker drivers installed
   ansible.builtin.reboot:
