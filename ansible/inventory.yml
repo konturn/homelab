@@ -36,6 +36,8 @@ all:
     kitchen_qual_mac: 70:88:6b:14:b5:41
     satellite_2_address: 10.6.128.11
     satellite_2_mac: dc:a6:32:74:a1:cf
+    satellite_3_address: 10.6.128.11
+    satellite_3_mac: dc:a6:32:74:9b:1c
     snapserver_address: 10.6.32.2
     mosquitto_address: 10.6.32.3
     frigate_address: 10.6.32.4

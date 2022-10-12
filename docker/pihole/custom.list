@@ -10,6 +10,7 @@
 {{ projector_address }} projector.lab.nkontur.com
 {{ kitchen_qual_address }} AWAIR-ELEM-14B541.lab.nkontur.com
 {{ satellite_2_address }} satellite-2.lab.nkontur.com
+{{ satellite_3_address }} satellite-3.lab.nkontur.com
 {{ registry_address }} registry.lab.nkontur.com
 {{ snapserver_address }} snapserver.lab.nkontur.com
 {{ amp_address }} amp.lab.nkontur.com
