@@ -53,3 +53,12 @@
     repo: 'https://github.com/respeaker/seeed-voicecard.git'
     dest: /root/seed-voicecard
   when: is_respeaker
+  register: respeaker
+
+- name: Install respeaker drivers
+  when: respeaker.changed
+  ansible.builtin.command: chdir=/root/seed-voicecard ./install.sh
+
+- name: Reboot when respeaker drivers installed
+  ansible.builtin.reboot:
+  when: respeaker.changed
