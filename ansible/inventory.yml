@@ -165,3 +165,10 @@ all:
               network: "zwave"
               name: "nginx"
               extra_args: "--domain-name satellite-2.lab.nkontur.com"
+        satellite-3.lab.nkontur.com:
+          rhasspy_satellite_index: 3
+          nginx_config:
+            - dest: "/root/nginx"
+              network: "zwave"
+              name: "nginx"
+              extra_args: "--domain-name satellite-3.lab.nkontur.com"
