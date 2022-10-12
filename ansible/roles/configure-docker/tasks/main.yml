@@ -85,10 +85,17 @@
     mode: '0700'
   loop: "{{ docker_compose_file_names }}"
 
+- name: Create nginx config output subdir if it does not exist
+  ansible.builtin.file:
+    path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/nginx/' + inventory_hostname}}"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+
 - name: Template out compose file to ansible state directory within container
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/' + item }}"
-    dest: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/"
+    dest: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/nginx/' + inventory_hostname }}"
     owner: root
     group: root
     mode: '0755'
@@ -96,9 +103,10 @@
   loop: "{{ docker_compose_file_names }}"
   delegate_to: localhost
 
+
 - name: Execute Python script to generate nginx custom config files
   shell:
-    cmd: "/usr/bin/python3 {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/generate-configs.py --workspace-path {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx --network {{ item.network }} --output-prefix {{ item.network }}_ {{ item.extra_args | default('') }}"
+    cmd: "/usr/bin/python3 {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/generate-configs.py --workspace-path {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx --network {{ item.network }} --output-prefix {{ item.network }}_ --output-subdir {{ inventory_hostname }} {{ item.extra_args | default('') }}"
   delegate_to: localhost
   changed_when: false
   loop: "{{ nginx_config | default([]) }}"
@@ -112,10 +120,10 @@
     docker_config_nginx: "{{ docker_config_nginx + [{'src': 'docker/nginx/nginx.conf',
                         'dest': item.dest + '/conf/nginx.conf',
                         'name': item.name }, 
-                         {'src': 'docker/nginx/' + item.network + '_stream.conf',
+                         {'src': 'docker/nginx/' + inventory_hostname + '/' + item.network + '_stream.conf',
                         'dest': item.dest + '/conf/conf.d/stream.conf',
                         'name': item.name },
-                        {'src': 'docker/nginx/' + item.network + '_http.conf',
+                        {'src': 'docker/nginx/' + inventory_hostname + '/' + item.network +  '_http.conf',
                         'dest': item.dest + '/conf/conf.d/http.conf',
                         'name': item.name },
                         {'src': 'docker/nginx/ssl_config',

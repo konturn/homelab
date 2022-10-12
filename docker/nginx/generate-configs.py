@@ -7,9 +7,9 @@ import shutil
 import time
 import re
 def generate_stream_config(port_mappings, path, output_prefix):
-    with open(path + '/stream-master-template.conf', 'r') as stream:
+    with open(path.rsplit('/',1)[0] + '/stream-master-template.conf', 'r') as stream:
         result = json.load(stream)
-    with open(path + '/stream-entry-template.conf', 'r') as stream:
+    with open(path.rsplit('/',1)[0] + '/stream-entry-template.conf', 'r') as stream:
         template = json.load(stream)
     for service_name, port in port_mappings.items():
         template_instance = copy.deepcopy(template)
@@ -30,12 +30,12 @@ def generate_stream_config(port_mappings, path, output_prefix):
     os.system(cmd)
 
 def generate_http_config(port_mappings, path, domain_name, output_prefix):
-    with open(path + '/http-master-template.conf', 'r') as http:
+    with open(path.rsplit('/',1)[0] + '/http-master-template.conf', 'r') as http:
         result = json.load(http)
-    with open(path + '/http-entry-template.conf', 'r') as http:
+    with open(path.rsplit('/',1)[0] + '/http-entry-template.conf', 'r') as http:
         template = json.load(http)
     if domain_name == 'nkontur.com':
-        with open(path + '/http-external-drop-in.conf', 'r') as drop_in:
+        with open(path.rsplit('/',1)[0] + '/http-external-drop-in.conf', 'r') as drop_in:
             drop_in_template = json.load(drop_in)
             result['config'][0]['parsed'][0]['block'].append(drop_in_template['config'][0]['parsed'][0]['block'][0])
     for service_name, port in port_mappings.items():
@@ -87,12 +87,17 @@ def main():
                         help='The name of the domain the server lives under',
                         required=False,
                         default='')
+    parser.add_argument('--output-subdir', type=str,
+                        help='The subdirectory, relative to the workspace path, to place the output files.',
+                        required=False,
+                        default='/')
     args = parser.parse_args()
 
     services = {}
-    for filename in os.listdir(args.workspace_path):
+    full_path = args.workspace_path + '/' + args.output_subdir
+    for filename in os.listdir(full_path):
         if re.match("docker-compose*", filename):
-            with open(os.path.join(args.workspace_path, filename), 'r') as stream:
+            with open(os.path.join(full_path, filename), 'r') as stream:
                 temp = yaml.safe_load(stream)['services']
                 services.update(temp)
 
@@ -107,8 +112,8 @@ def main():
         domain_name = args.domain_name
 
     stream_port_mappings, http_port_mappings = generate_port_mappings(services, args.network)
-    generate_http_config(http_port_mappings, args.workspace_path, domain_name, args.output_prefix)
-    generate_stream_config(stream_port_mappings, args.workspace_path, args.output_prefix)
+    generate_http_config(http_port_mappings, full_path, domain_name, args.output_prefix)
+    generate_stream_config(stream_port_mappings, full_path, args.output_prefix)
 
 
 if __name__ == "__main__":
