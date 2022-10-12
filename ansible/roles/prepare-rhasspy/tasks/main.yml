@@ -44,7 +44,7 @@
   ansible.builtin.cron:
     name: "Nextcloud base cronjob"
     special_time: reboot
-    job: "echo 0 > /sys/class/leds/led1/brightness"
+    job: "echo 0 > /sys/class/leds/led1/brightness && echo 0 > /sys/class/leds/led0/brightness"
 
 - name: Template out rhasspy entrypoint
   ansible.builtin.template:
