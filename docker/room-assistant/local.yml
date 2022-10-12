@@ -1,0 +1,9 @@
+global:
+  integrations:
+    - homeAssistant
+homeAssistant:
+  mqttUrl: mqtt://mqtt.lab.nkontur.com:1883
+  mqttOptions:
+    username: mosquitto
+    password: {{ lookup('env', 'MQTT_PASS') }}
+  discoveryPrefix: homeassistant

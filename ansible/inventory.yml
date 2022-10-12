@@ -142,6 +142,9 @@ all:
           - src: "docker/rhasspy/satellite-profile.json"
             dest: "/root/.config/rhasspy/profiles/en/profile.json"
             name: rhasspy
+          - src: "docker/room-assistant/local.yml"
+            dest: "/root/room-assistant/config/local.yml"
+            name: room-assistant
         use_onboard_audio: true
         rhasspy_entrypoint_dest: "/startup.sh"
         is_respeaker: true

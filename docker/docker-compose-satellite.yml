@@ -32,3 +32,11 @@ services:
     ports:
         - "12101:12101"
     entrypoint: "/startup.sh"
+  room-assistant:
+    image: mkerix/room-assistant
+    container_name: room-assistant
+    networks:
+      - zwave
+    volumes:
+      - /var/run/dbus:/var/run/dbus
+      - /root/room-assistant/:/room-assistant/config
