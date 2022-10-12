@@ -40,6 +40,12 @@
     state: restarted
   when: pulseaudio.changed or pulseaudio_suspend.changed
 
+- name: Sets up cronjob to disable led lights
+  ansible.builtin.cron:
+    name: "Nextcloud base cronjob"
+    special_time: reboot
+    job: "echo 0 > /sys/class/leds/led1/brightness"
+
 - name: Template out rhasspy entrypoint
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/rhasspy/startup.sh' }}"
