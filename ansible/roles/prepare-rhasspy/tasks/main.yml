@@ -42,9 +42,16 @@
 
 - name: Sets up cronjob to disable led lights
   ansible.builtin.cron:
-    name: "Nextcloud base cronjob"
+    name: "Led disable"
     special_time: reboot
     job: "echo 0 > /sys/class/leds/led1/brightness && echo 0 > /sys/class/leds/led0/brightness"
+
+- name: Sets up cronjob to periodically restart rhasspy
+  ansible.builtin.cron:
+    name: "Rhasspy kick"
+    minute: "0"
+    hour: "5"
+    job: "docker restart rhasspy"
 
 - name: Template out rhasspy entrypoint
   ansible.builtin.template:
