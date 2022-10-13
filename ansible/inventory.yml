@@ -49,6 +49,7 @@ all:
     omapi_secret: "{{ lookup('env', 'OMAPI_SECRET') }}"
     vrrp_password: "{{ lookup('env', 'VRRP_PASSWORD') }}"
     is_respeaker: false
+    is_satellite: false
   hosts:
     fallback.lab.nkontur.com:
       is_primary_router: false
@@ -149,6 +150,7 @@ all:
         rhasspy_entrypoint_dest: "/startup.sh"
         is_respeaker: true
         mic_device_name: "plughw:CARD=seeed2micvoicec,DEV=0"
+        is_satellite: true
       hosts:
         zwave.lab.nkontur.com:
           rhasspy_satellite_index: 1

@@ -50,7 +50,7 @@
 
 ### Configure docker daemon on host
 - name: Docker daemon config file
-  ansible.builtin.copy:
+  ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/daemon.json' }}"
     dest: '/etc/docker/daemon.json'
     owner: root
@@ -60,6 +60,9 @@
 
 - name: Reload Docker to pick up changes
   ansible.builtin.systemd:
+    name: docker
+    state: restarted
+  when: docker_conf.changed
 
 - name: ensure required pip-packages are installed on host
   pip:
