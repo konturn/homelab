@@ -152,6 +152,7 @@ all:
       hosts:
         zwave.lab.nkontur.com:
           rhasspy_satellite_index: 1
+          location: "Movie Room"
           docker_compose_file_names: 
             - "docker-compose-zwave.yml"
             - "docker-compose-satellite.yml"
@@ -165,6 +166,7 @@ all:
           mic_device_name: "plughw:CARD=Microphone,DEV=0"
         satellite-2.lab.nkontur.com:
           rhasspy_satellite_index: 2
+          location: "Office"
           nginx_config:
             - dest: "/root/nginx"
               network: "zwave"
@@ -172,6 +174,7 @@ all:
               extra_args: "--domain-name satellite-2.lab.nkontur.com"
         satellite-3.lab.nkontur.com:
           rhasspy_satellite_index: 3
+          location: "Kitchen"
           nginx_config:
             - dest: "/root/nginx"
               network: "zwave"
@@ -179,6 +182,7 @@ all:
               extra_args: "--domain-name satellite-3.lab.nkontur.com"
         satellite-4.lab.nkontur.com:
           rhasspy_satellite_index: 4
+          location: "Main Bedroom"
           nginx_config:
             - dest: "/root/nginx"
               network: "zwave"

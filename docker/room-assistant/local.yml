@@ -1,4 +1,5 @@
 global:
+  instanceName: "{{ location }}"
   integrations:
     - homeAssistant
     - bluetoothClassic
