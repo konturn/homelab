@@ -1,9 +1,13 @@
 global:
   integrations:
     - homeAssistant
+    - bluetoothClassic
 homeAssistant:
-  mqttUrl: mqtt://mqtt.lab.nkontur.com:1883
+  mqttUrl: mqtts://mqtt.lab.nkontur.com:1883
   mqttOptions:
     username: mosquitto
     password: {{ lookup('env', 'MQTT_PASS') }}
-  discoveryPrefix: homeassistant
+bluetoothClassic:
+  addresses:
+    - 'E0:D0:83:4B:3F:84'
+

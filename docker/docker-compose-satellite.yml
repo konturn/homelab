@@ -35,8 +35,7 @@ services:
   room-assistant:
     image: mkerix/room-assistant
     container_name: room-assistant
-    networks:
-      - zwave
+    network_mode: host
     volumes:
       - /var/run/dbus:/var/run/dbus
       - /root/room-assistant/config:/room-assistant/config
