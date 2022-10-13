@@ -132,6 +132,12 @@
                         'mode': '0700'  }] }}"
   loop: "{{ nginx_config | default([]) }}"
 
+- name: Create docker conf directories
+  ansible.builtin.file:
+    path: "{{ item.dest | dirname }}"
+    state: directory
+  loop: "{{ docker_config + (docker_config_nginx | default([])) }}"
+
 - name: Copy docker configuration files
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/{{ item.src }}"

@@ -39,4 +39,4 @@ services:
       - zwave
     volumes:
       - /var/run/dbus:/var/run/dbus
-      - /root/room-assistant/:/room-assistant/config
+      - /root/room-assistant/config:/room-assistant/config
