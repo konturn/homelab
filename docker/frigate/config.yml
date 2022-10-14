@@ -17,6 +17,17 @@ cameras:
     detect:
       width: 2560
       height: 1920
+  back_door:
+    ffmpeg:
+      inputs:
+        - path: "rtsp://admin:{{ lookup('env', 'REAR_CAMERA_PASS') }}@{{ back_camera_address }}:554/cam/realmonitor?channel=1&subtype=0"
+          roles:
+            - detect
+            - rtmp
+            - record
+    detect:
+      width: 2592
+      height: 1944
 record:
   enabled: True
   retain:
