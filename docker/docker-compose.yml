@@ -401,6 +401,12 @@ services:
       - internal
       - iot
       - external
+    depends_on:
+      - frigate
+      - plex
+      - amcrest2mqtt
+      - snapserver
+      - double-take
     ports:
       - "443:8123"
     devices: 
@@ -447,6 +453,8 @@ services:
     container_name: frigate
     restart: unless-stopped
     image: blakeblackshear/frigate:0.11.0-rc2
+    depends_on:
+      - mosquitto
     networks:
       iot:
         ipv4_address: {{ frigate_address }}
@@ -461,6 +469,7 @@ services:
   mosquitto:
     container_name: mosquitto
     image: eclipse-mosquitto
+    restart: unless-stopped
     networks:
       iot:
         ipv4_address: {{ mosquitto_address }}
@@ -471,6 +480,8 @@ services:
   amcrest2mqtt:
     container_name: amcrest2mqtt
     image: registry.lab.nkontur.com/amcrest2mqtt:latest
+    depends_on:
+      - mosquitto
     restart: unless-stopped
     networks:
       iot:
@@ -585,6 +596,8 @@ services:
     image: "rhasspy/rhasspy"
     container_name: rhasspy
     restart: unless-stopped
+    depends_on:
+      - mosquitto
     networks:
       iot:
     volumes:
