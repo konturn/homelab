@@ -50,6 +50,7 @@ all:
     mosquitto_address: 10.6.32.3
     frigate_address: 10.6.32.4
     iot_nginx_ip: 10.6.32.5
+    weather_mqtt_bridge_ip: 10.6.32.6
     fallback_address: 10.4.128.1
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     omapi_secret: "{{ lookup('env', 'OMAPI_SECRET') }}"

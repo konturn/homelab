@@ -625,6 +625,7 @@ services:
     container_name: ambientweather
     networks:
       iot:
+        ipv4_address: {{ weather_mqtt_bridge_ip }}
     environment:
       STATION_MAC_ADDRESS: {{ weather_station_mac }}
       MQTT_SERVER: "mqtts://mqtt.lab.nkontur.com:1883"
