@@ -4,7 +4,7 @@
     },
     "microphone": {
         "command": {
-            "record_arguments": "-q -r 16000 -f S16_LE -c 1 -D {{ mic_device_name }}",
+            "record_arguments": "-q -r 16000 -f S16_LE -t raw -c 1 -D {{ mic_device_name }}",
             "record_program": "arecord"
         },
         "system": "command"
