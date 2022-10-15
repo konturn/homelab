@@ -126,29 +126,29 @@ sensor:
     value_template: 'OK'
   - platform: template
     sensors:
-      awair_lr_score:
+      bedroom_awair_lr_score:
         friendly_name: "Bedroom Sensor Quality Score"
         value_template: {{ '\'{{ states.sensor.awair_bedroom_sensors.attributes["score"]}}\'' }}
         unit_of_measurement: '%'
-      awair_lr_temp:
+      bedroom_awair_lr_temp:
         friendly_name: "Bedroom Sensor Temperature"
         value_template: {{'\'{{ states.sensor.awair_bedroom_sensors.attributes["temp"] }}\''}}
         device_class: temperature
         unit_of_measurement: '°C'
-      awair_lr_humid:
+      bedroom_awair_lr_humid:
         friendly_name: "Bedroom Sensor Relative Humidity"
         value_template: {{'\'{{ states.sensor.awair_bedroom_sensors.attributes["humid"] }}\''}}
         device_class: humidity
         unit_of_measurement: '%'
-      awair_lr_co2:
+      bedroom_awair_lr_co2:
         friendly_name: "Bedroom Sensor Carbon Dioxide"
         value_template: {{'\'{{ states.sensor.awair_bedroom_sensors.attributes["co2"] }}\''}}
         unit_of_measurement: 'ppm'
-      awair_lr_voc:
+      bedroom_awair_lr_voc:
         friendly_name: "Bedroom Sensor Total VOC"
         value_template: {{'\'{{ states.sensor.awair_bedroom_sensors.attributes["voc"] }}\''}}
         unit_of_measurement: 'ppb'
-      awair_lr_pm25:
+      bedroom_awair_lr_pm25:
         friendly_name: "Bedroom Sensor Particulate Matter 2.5"
         value_template: {{'\'{{ states.sensor.awair_bedroom_sensors.attributes["pm25"] }}\''}}
         unit_of_measurement: 'μg/m³'
