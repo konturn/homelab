@@ -7,13 +7,13 @@ network:
       addresses: [10.100.0.2/24]
     {{ inet_interface_name }}:
       dhcp4: yes
-    enp136s0f0:
+    enp4s0f0:
       dhcp4: no
-    enp136s0f1:
+    enp4s0f1:
       dhcp4: no
   bonds:
     bond0:
-      interfaces: [enp136s0f0,enp136s0f1]
+      interfaces: [enp4s0f0,enp4s0f1]
       parameters:
         mode: 802.3ad
       routing-policy:
