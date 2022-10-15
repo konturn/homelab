@@ -619,3 +619,18 @@ services:
         - "{{ docker_persistent_data_path }}/octoprint:/octoprint"
     ports:
         - "443:80"
+  ambientweather:
+    image: ghcr.io/neilenns/ambientweather2mqtt:latest
+    restart: unless-stopped
+    container_name: ambientweather
+    networks:
+      iot:
+    environment:
+      STATION_MAC_ADDRESS: {{ weather_station_mac }}
+      MQTT_SERVER: "mqtts://mqtt.lab.nkontur.com:1883"
+      TZ: America/New_York
+      PORT: 8080
+      MQTT_USERNAME: mosquitto
+      MQTT_PASSWORD: {{ lookup('env', 'MQTT_PASS') }}
+      MQTT_REJECT_UNAUTHORIZED: "false"
+

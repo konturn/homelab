@@ -44,6 +44,8 @@ all:
     back_camera_mac: 9c:8e:cd:3a:db:e8
     bedroom_qual_address: 10.6.128.15
     bedroom_qual_mac: 70:88:6b:14:7a:a0
+    weather_station_address: 10.6.128.16
+    weather_station_mac: 30:83:98:A6:92:7B
     snapserver_address: 10.6.32.2
     mosquitto_address: 10.6.32.3
     frigate_address: 10.6.32.4
