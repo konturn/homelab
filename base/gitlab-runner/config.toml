@@ -11,7 +11,7 @@ check_interval = 0
   executor = "docker"
   [runners.docker]
     image = "ubuntu:20.04"
-    network_mode = "docker_mgmt"
+    network_mode = "host"
 
 [[runners]]
   name = "images"
