@@ -460,7 +460,7 @@ services:
         ipv4_address: {{ frigate_address }}
     ports:
       - "443:5000"
-    shm_size: "64mb"
+    shm_size: "512mb"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - "{{ docker_persistent_data_path }}/frigate/config.yml:/config/config.yml:ro"
