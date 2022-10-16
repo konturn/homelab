@@ -3,6 +3,10 @@
 #    name: python-setuptools
 #    state: present
 #  delegate_to: localhost
+#
+- name: Set timezone
+  community.general.timezone:
+    name: America/New_York
 
 - name: Install dependencies
   apt:

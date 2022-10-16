@@ -40,3 +40,4 @@ services:
     volumes:
       - /var/run/dbus:/var/run/dbus
       - /root/room-assistant/config:/room-assistant/config
+      - /etc/localtime:/etc/localtime:ro
