@@ -1,7 +1,7 @@
 {
 {% if not is_satellite %}
     "data-root": "/persistent_data/docker",
-    "iptables": false,
+    "iptables": true,
 {% endif %}
     "storage-driver": "overlay2",
     "dns": ["10.3.32.2", "8.8.8.8"]

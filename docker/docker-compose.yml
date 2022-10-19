@@ -14,6 +14,13 @@ volumes:
       device: /mpool/nextcloud
   influxdb-storage:
   grafana-storage:
+  pelias_config_data:
+  pelias_placeholder_data:
+  pelias_elasticsearch_data:
+  mbtileserver_data:
+  otp_data:
+  valhalla_data:
+  headway_data:
 networks:
   mgmt:
     driver: macvlan
@@ -144,7 +151,7 @@ services:
     image: mariadb
     container_name: nextcloud_database
     command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
-    restart: always
+    restart: unless-stopped
     networks:
       - external
     volumes:
@@ -166,7 +173,7 @@ services:
       - {{ docker_persistent_data_path }}/nextcloud/mpm_prefork.conf:/etc/apache2/mods-available/mpm_prefork.conf
       - {{ docker_persistent_data_path }}/nextcloud/config/php.ini:/usr/local/etc/php/php.ini
       - /etc/localtime:/etc/localtime:ro
-    restart: always
+    restart: unless-stopped
   ombi:
     image: linuxserver/ombi
     container_name: ombi
@@ -255,7 +262,7 @@ services:
     networks:
       - internal
     image: grafana/grafana
-    restart: always
+    restart: unless-stopped
     volumes:
         - grafana-storage:/var/lib/grafana
         - {{ docker_persistent_data_path }}/grafana/grafana.ini:/etc/grafana/grafana.ini
@@ -266,7 +273,7 @@ services:
     networks:
       - internal
     image: influxdb:latest
-    restart: always
+    restart: unless-stopped
     volumes:
         - influxdb-storage:/var/lib/influxdb
         - {{ docker_persistent_data_path }}/influxdb/influxdb.conf:/etc/influxdb/influxdb.conf
@@ -284,7 +291,7 @@ services:
     networks:
       - internal
     image: 'gitlab/gitlab-ee:latest'
-    restart: always
+    restart: unless-stopped
     environment:
       GITLAB_OMNIBUS_CONFIG: |
         external_url 'http://gitlab.lab.nkontur.com'
@@ -297,7 +304,7 @@ services:
     ports:
       - "443:8112"
     image: 'lscr.io/linuxserver/deluge:latest'
-    restart: always
+    restart: unless-stopped
     networks:
       internal:
         ipv4_address: {{ deluge_ip }}
@@ -309,7 +316,7 @@ services:
     ports:
       - "443:80"
     image: 'vaultwarden/server:latest'
-    restart: always
+    restart: unless-stopped
     networks:
       - external
     volumes:
@@ -331,13 +338,13 @@ services:
     volumes:
       - {{ docker_persistent_data_path }}/wordpress/html:/var/www/html
       - {{ docker_persistent_data_path }}/wordpress/config:/etc/wordpress
-    restart: always
+    restart: unless-stopped
   wordpress_db:
     image: mysql
     container_name: wordpress_db
     networks:
       - external
-    restart: always
+    restart: unless-stopped
     cap_add:
       - SYS_NICE  # CAP_SYS_NICE
     environment:
@@ -431,7 +438,7 @@ services:
     restart: unless-stopped
   registry:
     container_name: registry
-    restart: always
+    restart: unless-stopped
     image: registry:2
     networks:
       mgmt:
@@ -635,3 +642,117 @@ services:
       MQTT_PASSWORD: {{ lookup('env', 'MQTT_PASS') }}
       MQTT_REJECT_UNAUTHORIZED: "false"
 
+  mbtileserver:
+    image: ghcr.io/headwaymaps/tileserver:latest
+    restart: unless-stopped
+    networks:
+      iot:
+    environment:
+      PORT: 8000
+      HEADWAY_PUBLIC_URL: {{ headway_url }}
+      HEADWAY_AREA: {{ headway_area }}
+    volumes:
+      - "mbtileserver_data:/data/:ro"
+    ports:
+      - "9000:8000"
+  otp:
+    image: ghcr.io/headwaymaps/opentripplanner:latest
+    restart: unless-stopped
+    environment:
+      HEADWAY_PUBLIC_URL: {{ headway_url }}
+      HEADWAY_AREA: {{ headway_area }}
+    networks:
+      iot:
+    volumes:
+      - "otp_data:/data/:ro"
+  valhalla:
+    image: ghcr.io/headwaymaps/valhalla:latest
+    networks:
+      iot:
+    restart: unless-stopped
+    environment:
+      HEADWAY_PUBLIC_URL: {{ headway_url }}
+      HEADWAY_AREA: {{ headway_area }}
+    volumes:
+      - "valhalla_data:/data/:ro"
+    ulimits:
+      nofile:
+        soft: 8192
+        hard: 8192
+  headway:
+    image: ghcr.io/headwaymaps/headway:latest
+    restart: unless-stopped
+    networks:
+      iot:
+    environment:
+      HEADWAY_RESOLVER: 127.0.0.11
+      HEADWAY_FORCE_BBOX: ${HEADWAY_FORCE_BBOX}
+      HEADWAY_PUBLIC_URL: {{ headway_url }}
+      HEADWAY_TILESERVER_URL: http://mbtileserver:8000
+      HEADWAY_PELIAS_URL: http://pelias_api:4000
+      HEADWAY_VALHALLA_URL: http://valhalla:8002
+      HEADWAY_AREA: {{ headway_area }}
+    ports:
+      - "443:8080"
+    volumes:
+      - "headway_data:/data/:ro"
+    depends_on:
+      - "valhalla"
+      - "otp"
+      - "pelias_api"
+      - "mbtileserver"
+  peliaslibpostal:
+    image: pelias/libpostal-service
+    restart: unless-stopped
+    environment:
+      HEADWAY_PUBLIC_URL: {{ headway_url }}
+      HEADWAY_AREA: {{ headway_area }}
+    networks:
+      iot:
+  pelias_api:
+    image: pelias/api:master
+    restart: unless-stopped
+    networks:
+      iot:
+    environment:
+      PORT: 4000
+      PELIAS_CONFIG: /config/pelias.json
+      HEADWAY_PUBLIC_URL: {{ headway_url }}
+      HEADWAY_AREA: {{ headway_area }}
+    volumes:
+      - "pelias_config_data:/config:ro"
+    depends_on:
+      peliaselasticsearch:
+        condition: service_healthy
+  peliasplaceholder:
+    image: pelias/placeholder:master
+    restart: unless-stopped
+    networks:
+      iot:
+    environment:
+      PORT: 4100
+      HEADWAY_PUBLIC_URL: {{ headway_url }}
+      HEADWAY_AREA: {{ headway_area }}
+    volumes:
+      - "pelias_config_data:/config:ro"
+      - "pelias_placeholder_data:/data/placeholder"
+  peliaselasticsearch:
+    image: pelias/elasticsearch:7.16.1
+    restart: unless-stopped
+    networks:
+      iot:
+    environment:
+      HEADWAY_PUBLIC_URL: {{ headway_url }}
+      HEADWAY_AREA: {{ headway_area }}
+    volumes:
+      - "pelias_elasticsearch_data:/usr/share/elasticsearch/data"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    cap_add: [ "IPC_LOCK" ]
+    healthcheck:
+      test: nc -z localhost 9200

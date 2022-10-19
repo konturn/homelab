@@ -57,6 +57,8 @@ all:
     vrrp_password: "{{ lookup('env', 'VRRP_PASSWORD') }}"
     is_respeaker: false
     is_satellite: false
+    headway_area: "ohio-latest"
+    headway_url: "https://headway.iot.lab.nkontur.com"
   hosts:
     fallback.lab.nkontur.com:
       is_primary_router: false
