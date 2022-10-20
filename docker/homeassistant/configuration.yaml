@@ -77,12 +77,6 @@ sensor:
       - pm25
       - pm10_est
     value_template: 'OK'
-  - platform: osrm_travel_time
-    name: Travel home by car
-    server: 'http://valhalla:8002'
-    profile: car
-    origin_entity_id: device_tracker.sm_g970u
-    destination_entity_id: zone.home
   - platform: template
     sensors:
       awair_lr_score:
