@@ -27,6 +27,14 @@
     replace: 'load-module module-native-protocol-unix auth-anonymous=1'
   register: pulseaudio
 
+- name: Add text block from a file for bluetooth support
+  blockinfile: 
+    path: /etc/pulse/system.pa
+    block: "{{ lookup('file', lookup('env', 'CI_PROJECT_DIR') + '/base/pulse/system-addendum.pa') }}"
+    create: yes 
+    state: present
+  when: not is_satellite
+
 - name: Remove line that causes suspension
   ansible.builtin.lineinfile:
     path: /etc/pulse/system.pa

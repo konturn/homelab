@@ -435,6 +435,7 @@ services:
     image: "registry.lab.nkontur.com/snapcast"
     volumes:
       - "{{ docker_persistent_data_path }}/snapserver/snapserver.conf:/etc/snapserver.conf"
+      - "/tmp/snapfifo:/tmp/snapfifo"
     restart: unless-stopped
   registry:
     container_name: registry
