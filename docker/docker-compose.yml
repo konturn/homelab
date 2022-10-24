@@ -757,3 +757,18 @@ services:
     cap_add: [ "IPC_LOCK" ]
     healthcheck:
       test: nc -z localhost 9200
+  osrm:
+    image: ghcr.io/project-osrm/osrm-backend
+    container_name: osrm
+    restart: unless-stopped
+    networks:
+      iot:
+    volumes:
+      - "{{ docker_persistent_data_path }}/headway/bootstrap:/data"
+    ports:
+      - "443:80"
+    command:
+      - "osrm-extract"
+      - "-p"
+      - "/opt/car.lua"
+      - "/data/ohio-latest.osm.pbf"
