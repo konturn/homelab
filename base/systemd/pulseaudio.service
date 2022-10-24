@@ -7,7 +7,7 @@ Description=Pulseaudio sound server
 After=avahi-daemon.service network.target
 
 [Service]
-ExecStart=/usr/bin/pulseaudio --system --disallow-exit --disallow-module-loading
+ExecStart=/usr/bin/pulseaudio --system --disallow-exit
 ExecReload=/bin/kill -HUP $MAINPID
 
 [Install]
