@@ -37,10 +37,6 @@ mqtt:
 shell_command:
   sound_doorbell: cat /config/sounds/doorbell-1.wav | nc {{ snapserver_address }} 80
 
-customize:
-    device_tracker.noah_phone:
-      source_type: router
-
 recorder:
   purge_keep_days: 1000
 
@@ -58,6 +54,12 @@ rest_command:
     payload: {{ '\'{ "master_status": { "preset": {% if is_state("input_boolean.bass_boost", "off")%}0{%else%}1{%endif%} } }\'' }}
 
 sensor:
+  - platform: osrm_travel_time
+    name: Travel home by car
+    server: 'https://osrm.iot.lab.nkontur.com'
+    profile: car
+    origin_entity_id: person.noah
+    destination_entity_id: zone.home
   - platform: rest
     name: awair_kitchen_sensors
     resource: http://AWAIR-ELEM-14B541.lab.nkontur.com/air-data/latest
