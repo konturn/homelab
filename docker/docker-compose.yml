@@ -766,9 +766,9 @@ services:
     volumes:
       - "{{ docker_persistent_data_path }}/headway/bootstrap:/data"
     ports:
-      - "443:80"
+      - "443:5000"
     command:
-      - "osrm-extract"
-      - "-p"
-      - "/opt/car.lua"
-      - "/data/ohio-latest.osm.pbf"
+      - "osrm-routed"
+      - "--algorithm"
+      - "mld"
+      - "/data/ohio-latest.osrm"
