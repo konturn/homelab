@@ -1,0 +1,19 @@
+- name: Install dependencies
+  apt:
+    name:
+      - sane
+      - sane-utils
+      - sane-airscan
+      - ipp-usb
+      - scanbd
+      - imagemagick
+    state: present
+    update_cache: yes
+
+- name: Template out Fujitsu backend
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/sane/fujitsu.conf' }}"
+    dest: "/etc/sane.d/fujitsu.conf"
+    owner: root
+    group: root
+    mode: '0644'
