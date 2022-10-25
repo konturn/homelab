@@ -26,6 +26,7 @@ $CONFIG = array (
     0 => 'nkontur.com',
   ),
   'datadirectory' => '/data',
+  'forwarded_for_headers' => array('HTTP_X_FORWARDED_FOR'),
   'dbtype' => 'mysql',
   'version' => '24.0.5',
   'overwritehost' => 'nkontur.com',
