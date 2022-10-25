@@ -396,6 +396,7 @@ services:
     restart: unless-stopped
   watchtower:
     container_name: watchtower
+    restart: unless-stopped
     networks:
       internal:
     image: containrrr/watchtower
