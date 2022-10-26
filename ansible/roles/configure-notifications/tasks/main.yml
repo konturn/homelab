@@ -1,0 +1,4 @@
+- cronvar:
+    name: MAILTO
+    value: noah@nkontur.com
+    cron_file: borgmatic
