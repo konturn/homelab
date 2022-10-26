@@ -112,27 +112,29 @@
     hour: 0
     job: "chown -R konoahko:konoahko /mpool/plex"
 
-- name: Install ssmtp
+- name: Install msmtp
   apt:
     name:
-      - ssmtp
+      - msmtp
+      - mailutils
+      - bsd-mailx
+      - msmtp-mta
     state: latest
     update_cache: yes
 
-### Template out ssmtp config file
-- name: Ssmtp config file
+### Template out msmtp config file
+- name: Msmtp config file
   ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/ssmtp/ssmtp.conf' }}"
-    dest: '/etc/ssmtp/ssmtp.conf'
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/msmtp/.msmtprc' }}"
+    dest: '/etc/msmtprc'
     owner: root
     group: mail
     mode: 0640
 
-### Template out ssmtp revaliases file
-- name: Ssmtp revaliases file
+- name: mail.rc config file
   ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/ssmtp/revaliases' }}"
-    dest: '/etc/ssmtp/revaliases'
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/msmtp/mail.rc' }}"
+    dest: '/etc/mail.rc'
     owner: root
-    group: mail
-    mode: 0640
+    group: root
+    mode: 0644
