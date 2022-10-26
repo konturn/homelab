@@ -111,3 +111,28 @@
     name: "Plex dir chown"
     hour: 0
     job: "chown -R konoahko:konoahko /mpool/plex"
+
+- name: Install ssmtp
+  apt:
+    name:
+      - ssmtp
+    state: latest
+    update_cache: yes
+
+### Template out ssmtp config file
+- name: Ssmtp config file
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/ssmtp/ssmtp.conf' }}"
+    dest: '/etc/ssmtp/ssmtp.conf'
+    owner: root
+    group: mail
+    mode: 0640
+
+### Template out ssmtp revaliases file
+- name: Ssmtp revaliases file
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/ssmtp/revaliases' }}"
+    dest: '/etc/ssmtp/revaliases'
+    owner: root
+    group: mail
+    mode: 0640
