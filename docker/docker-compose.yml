@@ -782,9 +782,8 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=America/New_York
+      - PAPERLESS_URL=https://paperless-ngx.lab.nkontur.com
     volumes:
       - "{{ docker_persistent_data_path }}/paperless:/config"
       - "/mpool/nextcloud/paperless:/data"
-    ports:
-      - 443:8000
     restart: unless-stopped

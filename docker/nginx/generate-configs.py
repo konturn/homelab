@@ -34,10 +34,15 @@ def generate_http_config(port_mappings, path, domain_name, output_prefix):
         result = json.load(http)
     with open(path.rsplit('/',1)[0] + '/http-entry-template.conf', 'r') as http:
         template = json.load(http)
-    if domain_name == 'nkontur.com':
-        with open(path.rsplit('/',1)[0] + '/http-external-drop-in.conf', 'r') as drop_in:
+    if domain_name == 'nkontur.com' or domain_name == 'lab.nkontur.com':
+        drop_in_file = ''
+        if domain_name == 'nkontur.com':
+            drop_in_file = 'http-external-drop-in.conf'
+        else:
+            drop_in_file = 'http-internal-drop-in.conf'
+        with open(path.rsplit('/',1)[0] + '/' + drop_in_file, 'r') as drop_in:
             drop_in_template = json.load(drop_in)
-            result['config'][0]['parsed'][0]['block'].append(drop_in_template['config'][0]['parsed'][0]['block'][0])
+            result['config'][0]['parsed'][0]['block'].append(drop_in_template)
     for service_name, port in port_mappings.items():
         template_instance = copy.deepcopy(template)
         host_port = port
