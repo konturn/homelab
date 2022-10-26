@@ -138,3 +138,31 @@
     owner: root
     group: root
     mode: 0644
+
+- name: Install nfs
+  apt:
+    name:
+      - nfs-kernel-server
+    state: latest
+    update_cache: yes
+
+- name: Make sure nfs is started and enabled
+  service:
+    name: nfs-server
+    state: started
+    enabled: yes
+
+- name: nfs config file
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/nfs/exports' }}"
+    dest: '/etc/exports'
+    owner: root
+    group: root
+    mode: 0644
+  register: nfs
+
+- name: Reload nfs to pick up changes
+  ansible.builtin.systemd:
+    name: nfs-server
+    state: restarted
+  when: nfs.changed
