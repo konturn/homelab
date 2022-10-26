@@ -31,3 +31,28 @@
     fstype: nfs
     state: mounted
 
+- name: Git checkout sane-scan-pdf
+  ansible.builtin.git:
+    repo: 'https://github.com/rocketraman/sane-scan-pdf.git'
+    dest: /root/sane-scan-pdf
+
+- name: Create scripts directory
+  ansible.builtin.file:
+    path: /etc/scanbd/scripts
+    state: directory
+    mode: '0755'
+
+- name: Template out Fujitsu backend
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/sane/scan.sh' }}"
+    dest: "/etc/scanbd/scripts"
+    owner: root
+    group: root
+    mode: '0744'
+  register: scanbd
+
+- name: Reload scanbd to pick up changes
+  ansible.builtin.systemd:
+    name: scanbd
+    state: restarted
+  when: scanbd.changed
