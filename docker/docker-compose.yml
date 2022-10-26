@@ -773,3 +773,18 @@ services:
       - "--algorithm"
       - "mld"
       - "/data/ohio-latest.osrm"
+  paperless-ngx:
+    image: lscr.io/linuxserver/paperless-ngx:latest
+    container_name: paperless-ngx
+    networks:
+      internal:
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+    volumes:
+      - "{{ docker_persistent_data_path }}/paperless:/config"
+      - "/mpool/nextcloud/paperless:/data"
+    ports:
+      - 443:8000
+    restart: unless-stopped
