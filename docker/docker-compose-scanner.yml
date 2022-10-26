@@ -1,0 +1,13 @@
+version: '{{ docker_compose_version }}'
+services:
+  shell2http:
+    container_name: shell2http
+    image: msoap/shell2http:1.14.0
+    restart: unless-stopped
+    networks:
+      - zwave
+    ports:
+      - '8080:8080'
+    command:
+      - "/scan"
+      - "/root/scan.sh"
