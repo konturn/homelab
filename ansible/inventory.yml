@@ -178,9 +178,6 @@ all:
         satellite-2.lab.nkontur.com:
           rhasspy_satellite_index: 2
           location: "Office"
-          docker_compose_file_names: 
-            - "docker-compose-scanner.yml"
-            - "docker-compose-satellite.yml"
           nginx_config:
             - dest: "/root/nginx"
               network: "zwave"
