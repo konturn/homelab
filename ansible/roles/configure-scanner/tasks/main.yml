@@ -43,3 +43,22 @@
     owner: root
     group: root
     mode: '0744'
+
+- name: Install shell2http
+  ansible.builtin.apt:
+    deb: https://github.com/msoap/shell2http/releases/download/v1.14.2/shell2http_1.14.2_linux_arm64.deb
+
+- name: shell2http systemd service
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/systemd/shell2http.service' }}"
+    dest: '/etc/systemd/system/shell2http.service'
+    owner: root
+    group: root
+    mode: 0600
+
+- name: Make sure shell2http enabled
+  ansible.builtin.systemd:
+    name: shell2http
+    state: started
+    enabled: yes
+    daemon_reload: yes
