@@ -18,3 +18,9 @@
     owner: root
     group: root
     mode: 0600
+
+- name: Sets up cronjob for DDNS
+  ansible.builtin.cron:
+    name: "Update public DNS records"
+    minute: "*/5"
+    job: "{{ '/usr/bin/python3 ' + '/root/cron/ddns.py -k ' + lookup('env', 'NAMESILO_API_KEY') }} -d backups.nkontur.com -r '' '*' >> /root/cron/logs/ddns.log 2>&1"
