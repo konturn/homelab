@@ -20,11 +20,13 @@
     enabled: yes
     daemon_reload: yes
 
-- name: Replace before the expression till the begin of the file (requires Ansible >= 2.4)
-  ansible.builtin.replace:
-    path: /etc/pulse/system.pa
-    regexp: '^load-module module-native-protocol-unix$'
-    replace: 'load-module module-native-protocol-unix auth-anonymous=1'
+- name: Template out pulseaudio system-wide config file
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/pulse/system.pa' }}"
+    dest: "/etc/pulse/system.pa"
+    owner: root
+    group: root
+    mode: '0644'
   register: pulseaudio
 
 - name: Add text block from a file for bluetooth support
@@ -35,18 +37,11 @@
     state: present
   when: not is_satellite
 
-- name: Remove line that causes suspension
-  ansible.builtin.lineinfile:
-    path: /etc/pulse/system.pa
-    regexp: '^load-module module-suspend-on-idle$'
-    state: absent
-  register: pulseaudio_suspend
-
 - name: Restart pulseaudio if config change
   service:
     name: pulseaudio
     state: restarted
-  when: pulseaudio.changed or pulseaudio_suspend.changed
+  when: pulseaudio.changed
 
 - name: Sets up cronjob to disable led lights
   ansible.builtin.cron:
