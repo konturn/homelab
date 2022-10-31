@@ -7,6 +7,11 @@
     state: present
     update_cache: yes
 
+- name: Set hostname on satellites
+  ansible.builtin.hostname:
+    name: "{{ ansible_hostname }}"
+  when: is_satellite
+
 - name: Template out pulseaudio system-wide service file
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/systemd/pulseaudio.service' }}"

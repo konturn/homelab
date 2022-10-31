@@ -57,4 +57,4 @@ load-module module-pipe-sink file=/tmp/snapfifo sink_name=Snapcast format=s16le 
 set-sink-volume 1 100000
 
 load-module module-zeroconf-publish
-load-module module-native-protocol-tcp auth-ip-acl=127.0.0.1,10.0.0.0/8;
+load-module module-native-protocol-tcp auth-anonymous=1 auth-ip-acl=127.0.0.1;10.0.0.0/8
