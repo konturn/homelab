@@ -49,10 +49,3 @@ load-module module-always-sink
 
 ### Enable positioned event sounds
 load-module module-position-event-sounds
-
-load-module module-bluetooth-policy  
-load-module module-bluetooth-discover  
-load-module module-switch-on-connect
-load-module module-pipe-sink file=/tmp/snapfifo sink_name=Snapcast format=s16le rate=48000
-set-sink-volume 1 100000
-
