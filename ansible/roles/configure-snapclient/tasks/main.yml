@@ -14,8 +14,6 @@
   community.general.timezone:
     name: America/New_York
 
-
-
 - name: Template out base configuration file
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/snapclient/config.txt"
@@ -25,15 +23,38 @@
   apt:
     deb: https://github.com/badaix/snapcast/releases/download/v0.26.0/snapclient_0.26.0-1_armhf.deb 
 
+- name: Stop snapclient
+  ansible.builtin.systemd:
+    name: snapclient
+    state: stopped
+    enabled: no
+
 - name: Template out snapclient config file
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/snapclient/snapclient_default' }}"
-    dest: '/etc/default/snapclient'
+    dest: '/etc/default/snapclient_{{ item.name }}'
     mode: 0600
   register: snapclient
+  loop: "{{ snapclient_config }}"
 
-- name: Restart snapclient if config change
+- name: Template out snapclient service file
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/snapclient/snapclient.service' }}"
+    dest: '/etc/systemd/system/snapclient_{{ item.name }}.service'
+    mode: 0600
+  loop: "{{ snapclient_config }}"
+
+- name: Make sure snapclient daemons started
   ansible.builtin.systemd:
-    name: snapclient
+    name: "snapclient_{{ item.name }}"
+    state: started
+    daemon_reload: yes
+    enabled: yes
+  loop: "{{ snapclient_config }}"
+
+- name: Restart snapclient daemon when config changed
+  ansible.builtin.systemd:
+    name: "snapclient_{{ item.item.name }}"
     state: restarted
-  when: snapclient.changed
+  loop: "{{ snapclient.results }}"
+  when: item.changed

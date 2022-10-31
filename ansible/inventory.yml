@@ -79,6 +79,9 @@ all:
         - src: "docker/pihole/custom.conf"
           dest: "/etc/pihole/dnsmasq/custom.conf"
           name: "pihole"
+      snapclient_config:
+        - soundcard: "plughw:CARD=sndrpihifiberry,DEV=0"
+          name: "global"
     router.lab.nkontur.com:
       wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/wg0.conf' }}"
       wireguard_interface_name: "wg0"
@@ -177,6 +180,9 @@ all:
               extra_args: "--domain-name zwave.lab.nkontur.com"
           is_respeaker: false
           mic_device_name: "plughw:CARD=Microphone,DEV=0"
+          snapclient_config:
+            - soundcard: "plughw:CARD=b1,DEV=0"
+              name: "movie"
         satellite-2.lab.nkontur.com:
           rhasspy_satellite_index: 2
           location: "Office"
