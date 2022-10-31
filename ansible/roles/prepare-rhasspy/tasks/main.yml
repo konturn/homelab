@@ -2,6 +2,8 @@
   apt:
     name:
       - pulseaudio
+      - pulseaudio-module-zeroconf
+      - pulseaudio-module-bluetooth
     state: present
     update_cache: yes
 
