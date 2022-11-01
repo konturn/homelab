@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <service-group>
-    <name>Snapcast</name>
+    <name>Global</name>
     <service>
         <type>_spotify-connect._tcp</type>
         <host-name>snapserver.local</host-name>
@@ -10,11 +10,38 @@
 </service-group>
 
 <service-group>
-    <name>Kitchen</name>
+    <name>Movie Room</name>
     <service>
         <type>_spotify-connect._tcp</type>
         <host-name>snapserver.local</host-name>
         <port>50001</port>
+	<txt>["CPath=/" "VERSION=1.0"]</txt>
+    </service>
+
+<service-group>
+    <name>Office</name>
+    <service>
+        <type>_spotify-connect._tcp</type>
+        <host-name>snapserver.local</host-name>
+        <port>50002</port>
+	<txt>["CPath=/" "VERSION=1.0"]</txt>
+    </service>
+
+<service-group>
+    <name>Kitchen</name>
+    <service>
+        <type>_spotify-connect._tcp</type>
+        <host-name>snapserver.local</host-name>
+        <port>50003</port>
+	<txt>["CPath=/" "VERSION=1.0"]</txt>
+    </service>
+
+<service-group>
+    <name>Main Bedroom</name>
+    <service>
+        <type>_spotify-connect._tcp</type>
+        <host-name>snapserver.local</host-name>
+        <port>50004</port>
 	<txt>["CPath=/" "VERSION=1.0"]</txt>
     </service>
 </service-group>
