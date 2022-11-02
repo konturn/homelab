@@ -166,3 +166,11 @@
     name: nfs-server
     state: restarted
   when: nfs.changed
+
+- name: udev rule for sound cards
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/udev/85-my-usb-audio.rules' }}"
+    dest: '/lib/udev/rules.d/85-my-usb-audio.rules'
+    owner: root
+    group: root
+    mode: 0644

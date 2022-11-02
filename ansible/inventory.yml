@@ -84,12 +84,6 @@ all:
           name: "global"
         - soundcard: "plughw:CARD=Device,DEV=0"
           name: "kitchen"
-        - soundcard: "plughw:CARD=Device_1,DEV=0"
-          name: "bedroom"
-        - soundcard: "plughw:CARD=Device_2,DEV=0"
-          name: "office"
-        - soundcard: "plughw:CARD=Device_3,DEV=0"
-          name: "main_bathroom"
     router.lab.nkontur.com:
       wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/wg0.conf' }}"
       wireguard_interface_name: "wg0"
