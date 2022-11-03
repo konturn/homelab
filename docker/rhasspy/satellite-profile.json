@@ -24,7 +24,7 @@
             "device": "hw:0,0"
         },
         "command": {
-            "play_program": "gst-launch-1.0  -v fdsrc ! wavparse ! audioresample ! audioconvert ! audio/x-raw,rate=48000,channels=2,format=S16LE ! wavenc !  tcpclientsink host={{ snapserver_address }} port=80"
+            "play_program": "gst-launch-1.0  -v fdsrc ! wavparse ! audioresample ! audioconvert ! audio/x-raw,rate=48000,channels=2,format=S16LE ! wavenc !  tcpclientsink host={{ snapserver_address }} port={{ rhasspy_snapserver_port }}"
         },
         "system": "command"
     },
