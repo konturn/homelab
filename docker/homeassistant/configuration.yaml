@@ -155,3 +155,16 @@ sensor:
         friendly_name: "Bedroom Sensor Particulate Matter 2.5"
         value_template: {{'\'{{ states.sensor.awair_bedroom_sensors.attributes["pm25"] }}\''}}
         unit_of_measurement: 'μg/m³'
+template:
+  binary_sensor:
+    - name: "Front Hallway Door Active"
+      state: >
+        {{ expand('binary_sensor.main_bathroom_door_sensor_access_control_window_door_is_open')
+           | selectattr('last_changed', 'gt', now()-timedelta(minutes=1))
+           | list | count + expand('binary_sensor.main_bedroom_door_sensor_access_control_window_door_is_open')
+           | selectattr('last_changed', 'gt', now()-timedelta(minutes=1))
+           | list | count + expand('binary_sensor.office_door_sensor_access_control_window_door_is_open')
+           | selectattr('last_changed', 'gt', now()-timedelta(minutes=1))
+           | list | count  + expand('binary_sensor.guest_bedroom_door_sensor_access_control_window_door_is_open')
+           | selectattr('last_changed', 'gt', now()-timedelta(minutes=1))
+           | list | count  > 0 ( as_timestamp(now()) - as_timestamp(states('sensor.uptime'))) > 60 }}
