@@ -11,7 +11,7 @@ detect:
     # hours to keep match images until they are deleted
     purge: 168
     # minimum area in pixels to consider a result a match
-    min_area: 10000
+    min_area: 6000
 
   unknown:
     # save unknown images
