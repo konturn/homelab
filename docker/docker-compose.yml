@@ -841,6 +841,8 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=America/New_York
+    ports:
+      - "443:80"
     volumes:
       - /persistent_data/application/grocy:/config
     restart: unless-stopped
