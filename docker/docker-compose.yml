@@ -832,3 +832,15 @@ services:
       - "{{ docker_persistent_data_path }}/paperless:/config"
       - "/mpool/nextcloud/paperless:/data"
     restart: unless-stopped
+  grocy:
+    image: lscr.io/linuxserver/grocy:latest
+    container_name: grocy
+    networks:
+      internal:
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+    volumes:
+      - /persistent_data/application/grocy:/config
+    restart: unless-stopped
