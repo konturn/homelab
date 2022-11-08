@@ -484,6 +484,21 @@ services:
       - "plughw:CARD=Main_Bedroom,DEV=0"
       - "--hostID"
       - "main_bedroom"
+  snapclient_main_bathroom:
+    container_name: snapclient_main_bathroom
+    networks:
+      iot:
+    image: "registry.lab.nkontur.com/snapclient"
+    restart: unless-stopped
+    devices:
+      - "/dev/snd"
+    command:
+      - "-h"
+      - {{ snapserver_address }}
+      - "-s"
+      - "plughw:CARD=Main_Bathroom,DEV=0"
+      - "--hostID"
+      - "main_bathroom"
   registry:
     container_name: registry
     restart: unless-stopped
