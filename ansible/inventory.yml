@@ -172,6 +172,16 @@ all:
         rhasspy_snapserver_port: 80
       hosts:
         zwave.lab.nkontur.com:
+          docker_config:
+            - src: "docker/rhasspy/satellite-profile.json"
+              dest: "/root/.config/rhasspy/profiles/en/profile.json"
+              name: rhasspy
+            - src: "docker/room-assistant/local.yml"
+              dest: "/root/room-assistant/config/local.yml"
+              name: room-assistant
+            - src: "docker/zigbee2mqtt/configuration.yaml"
+              dest: "/root/zigbee2mqtt/configuration.yaml"
+              name: zigbee2mqtt
           rhasspy_satellite_index: 1
           location: "Movie Room"
           docker_compose_file_names: 
