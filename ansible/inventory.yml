@@ -48,6 +48,8 @@ all:
     weather_station_mac: 30:83:98:A6:92:7B
     satellite_5_address: 10.6.128.17
     satellite_5_mac: b8:27:eb:69:90:cc
+    vac_address: 10.6.128.18
+    vac_mac: b8:4d:43:98:68:4f
     snapserver_address: 10.6.32.2
     mosquitto_address: 10.6.32.3
     frigate_address: 10.6.32.4
