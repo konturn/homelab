@@ -167,4 +167,4 @@ template:
            | selectattr('last_changed', 'gt', now()-timedelta(minutes=1))
            | list | count  + expand('binary_sensor.guest_bedroom_door_sensor_access_control_window_door_is_open')
            | selectattr('last_changed', 'gt', now()-timedelta(minutes=1))
-           | list | count  > 0 ( as_timestamp(now()) - as_timestamp(states('sensor.uptime'))) > 60 {{ '}}' }}
+           | list | count  > 0 and ( as_timestamp(now()) - as_timestamp(states('sensor.uptime'))) > 60 {{ '}}' }}
