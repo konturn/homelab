@@ -1,0 +1,23 @@
+Bus 004 Device 005: ID 0bda:8153 Realtek Semiconductor Corp. 
+Bus 004 Device 004: ID 05e3:0754 Genesys Logic, Inc. 
+Bus 004 Device 003: ID 2109:0815 VIA Labs, Inc. 
+Bus 004 Device 002: ID 2109:0822 VIA Labs, Inc. 
+Bus 004 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
+Bus 003 Device 008: ID 2109:8817 VIA Labs, Inc. 
+Bus 003 Device 022: ID 0d8c:0012 C-Media Electronics, Inc. 
+Bus 003 Device 021: ID 0d8c:0012 C-Media Electronics, Inc. 
+Bus 003 Device 023: ID 0d8c:0012 C-Media Electronics, Inc. 
+Bus 003 Device 005: ID 1a40:0801 Terminus Technology Inc. 
+Bus 003 Device 003: ID 2109:2815 VIA Labs, Inc. 
+Bus 003 Device 025: ID 067b:2303 Prolific Technology, Inc. PL2303 Serial Port
+Bus 003 Device 027: ID 0d8c:0012 C-Media Electronics, Inc. 
+Bus 003 Device 002: ID 2109:2822 VIA Labs, Inc. 
+Bus 003 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 002 Device 006: ID 0bda:8771 Realtek Semiconductor Corp. 
+Bus 002 Device 005: ID 413c:2107 Dell Computer Corp. 
+Bus 002 Device 003: ID 067b:23a3 Prolific Technology, Inc. 
+Bus 002 Device 002: ID 8087:0024 Intel Corp. Integrated Rate Matching Hub
+Bus 002 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 001 Device 003: ID 0557:2221 ATEN International Co., Ltd Winbond Hermon
+Bus 001 Device 002: ID 8087:0024 Intel Corp. Integrated Rate Matching Hub
+Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
