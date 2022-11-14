@@ -6,6 +6,7 @@ DEVPATH=="/devices/pci0000:80/0000:80:01.0/0000:81:00.0/usb3/3-2/3-2.4/3-2.4.2/3
 DEVPATH=="/devices/pci0000:80/0000:80:01.0/0000:81:00.0/usb3/3-2/3-2.4/3-2.4.4/3-2.4.4:1.0/sound/card?", ATTR{id}="Kitchen"
 DEVPATH=="/devices/pci0000:80/0000:80:01.0/0000:81:00.0/usb3/3-2/3-2.2/3-2.2:1.0/sound/card?", ATTR{id}="Main_Bathroom"
 DEVPATH=="/devices/pci0000:80/0000:80:01.0/0000:81:00.0/usb3/3-4/3-4:1.0/sound/card?", ATTR{id}="Guest_Bathroom"
+DEVPATH=="/devices/pci0000:80/0000:80:01.0/0000:81:00.0/usb3/3-3/3-3:1.0/sound/card?", ATTR{id}="Guest_Bedroom"
 
 LABEL="my_usb_audio_end"
 
