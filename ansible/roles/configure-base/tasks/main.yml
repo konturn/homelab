@@ -174,3 +174,9 @@
     owner: root
     group: root
     mode: 0644
+
+- name: Add loopback alsa module
+  ansible.builtin.lineinfile:
+    path: /etc/modules
+    line: snd-aloop
+    create: yes

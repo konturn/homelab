@@ -441,6 +441,8 @@ services:
       - "/tmp/snapfifo:/tmp/snapfifo"
       - "fifos:/tmp/fifo"
     restart: unless-stopped
+    devices:
+      - "/dev/snd"
   snapclient_office:
     container_name: snapclient_office
     networks:
@@ -894,6 +896,8 @@ services:
       - "{{ docker_persistent_data_path }}/mopidy/playlists:/var/lib/mopidy/playlists"
       - "{{ docker_persistent_data_path }}/mopidy/config/mopidy.conf:/config/mopidy.conf"
       - "fifos:/tmp/fifo"
+    devices:
+      - "/dev/snd"
     ports:
       - "443:6680"
     restart: unless-stopped
