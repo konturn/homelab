@@ -885,6 +885,7 @@ services:
     container_name: mopidy
     networks:
       iot:
+        ipv4_address: {{ mopidy_address }}
     environment:
       - TZ=America/New_York
     volumes:
