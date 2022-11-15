@@ -3,6 +3,7 @@ volumes:
   db:
   wordpress_db:
   ombi:
+  fifos:
   registry:
   compreface:
   mosquitto:
@@ -438,6 +439,7 @@ services:
     volumes:
       - "{{ docker_persistent_data_path }}/snapserver/snapserver.conf:/etc/snapserver.conf"
       - "/tmp/snapfifo:/tmp/snapfifo"
+      - "fifos:/tmp/fifo"
     restart: unless-stopped
   snapclient_office:
     container_name: snapclient_office
@@ -888,8 +890,8 @@ services:
     volumes:
       - "{{ docker_persistent_data_path }}/mopidy/media:/var/lib/mopidy/media:ro"
       - "{{ docker_persistent_data_path }}/mopidy/local:/var/lib/mopidy/local"
-      - "/tmp/snapfifo:/tmp/snapfifo"
       - "{{ docker_persistent_data_path }}/mopidy/config/mopidy.conf:/config/mopidy.conf"
+      - "fifos:/tmp/fifo"
     ports:
       - "443:6680"
     restart: unless-stopped
