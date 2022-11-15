@@ -890,6 +890,7 @@ services:
     volumes:
       - "{{ docker_persistent_data_path }}/mopidy/media:/var/lib/mopidy/media:ro"
       - "{{ docker_persistent_data_path }}/mopidy/local:/var/lib/mopidy/local"
+      - "{{ docker_persistent_data_path }}/mopidy/playlists:/var/lib/mopidy/playlists"
       - "{{ docker_persistent_data_path }}/mopidy/config/mopidy.conf:/config/mopidy.conf"
       - "fifos:/tmp/fifo"
     ports:
