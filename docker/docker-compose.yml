@@ -878,3 +878,18 @@ services:
       - "{{ docker_persistent_data_path }}/paperless:/config"
       - "/mpool/nextcloud/paperless:/data"
     restart: unless-stopped
+  mopidy:
+    image: wernight/mopidy
+    container_name: mopidy
+    networks:
+      iot:
+    environment:
+      - TZ=America/New_York
+    volumes:
+      - "{{ docker_persistent_data_path }}/mopidy/media:/var/lib/mopidy/media:ro"
+      - "{{ docker_persistent_data_path }}/mopidy/local:/var/lib/mopidy/local"
+      - "/tmp/snapfifo:/tmp/snapfifo"
+      - "{{ docker_persistent_data_path }}/mopidy/config/mopidy.conf:/config/mopidy.conf"
+    ports:
+      - "443:6680"
+    restart: unless-stopped
