@@ -12,6 +12,10 @@ media_player:
     host: projector.lab.nkontur.com
   - platform: snapcast
     host: snapserver.lab.nkontur.com
+  - name: mopidy
+    host: mopidy.iot.lab.nkontur.com
+    port: 443
+    platform: mopidy
 
 # Text to speech
 tts:
