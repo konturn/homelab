@@ -438,7 +438,9 @@ services:
     volumes:
       - "{{ docker_persistent_data_path }}/snapserver/snapserver.conf:/etc/snapserver.conf"
       - "/tmp/snapfifo:/tmp/snapfifo"
+      - "/var/run/dbus:/var/run/dbus"
     restart: unless-stopped
+    privileged: true
   snapclient_office:
     container_name: snapclient_office
     networks:
