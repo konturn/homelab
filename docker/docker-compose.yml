@@ -438,6 +438,7 @@ services:
     image: "registry.lab.nkontur.com/snapcast"
     volumes:
       - "{{ docker_persistent_data_path }}/snapserver/snapserver.conf:/etc/snapserver.conf"
+      - "{{ docker_persistent_data_path }}/snapserver/server.json:/root/.config/snapserver/server.json"
       - "/tmp/snapfifo:/tmp/snapfifo"
       - "fifos:/tmp/fifo"
     restart: unless-stopped
