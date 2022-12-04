@@ -27,6 +27,7 @@ services:
         - "$HOME/.config/rhasspy/profiles:/profiles"
         - "/etc/localtime:/etc/localtime:ro"
         - "/startup.sh:/startup.sh"
+        - "/etc/ssl:/etc/ssl:ro"
     devices:
       - "/dev/snd"
     ports:
