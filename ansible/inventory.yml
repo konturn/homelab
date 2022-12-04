@@ -37,7 +37,7 @@ all:
     satellite_2_address: 10.6.128.11
     satellite_2_mac: dc:a6:32:74:a1:cf
     satellite_3_address: 10.6.128.12
-    satellite_3_mac: dc:a6:32:74:9b:1c
+    satellite_3_mac: dc:a6:32:74:9b:1b
     satellite_4_address: 10.6.128.13
     satellite_4_mac: dc:a6:32:02:b4:83
     back_camera_address: 10.6.128.14
