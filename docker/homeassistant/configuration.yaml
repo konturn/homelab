@@ -56,6 +56,12 @@ rest_command:
     headers:
       Content-Type: application/json
     payload: {{ '\'{ "master_status": { "preset": {% if is_state("input_boolean.bass_boost", "off")%}0{%else%}1{%endif%} } }\'' }}
+  bass_boost_2:
+    url: "http://zwave.lab.nkontur.com:5380/devices/1/config"
+    method: POST
+    headers:
+      Content-Type: application/json
+    payload: {{ '\'{ "master_status": { "preset": {% if is_state("input_boolean.bass_boost", "off")%}0{%else%}1{%endif%} } }\'' }}
 
 sensor:
   - platform: osrm_travel_time
