@@ -219,6 +219,7 @@ all:
               network: "zwave"
               name: "nginx"
               extra_args: "--domain-name satellite-3.lab.nkontur.com"
+          mic_device_name: "plughw:CARD=Convertor,DEV=0"
           rhasspy_snapserver_port: 83
         satellite-4.lab.nkontur.com:
           rhasspy_satellite_index: 4
