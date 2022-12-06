@@ -199,6 +199,7 @@ all:
               extra_args: "--domain-name zwave.lab.nkontur.com"
           is_respeaker: false
           mic_device_name: "plughw:CARD=Microphone,DEV=0"
+          rhasspy_snapserver_port: 81
           snapclient_config:
             - soundcard: "plughw:CARD=b1,DEV=0"
               name: "movie"
