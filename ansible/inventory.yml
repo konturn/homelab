@@ -7,6 +7,7 @@ all:
     pihole_ip: 10.3.32.2
     deluge_ip: 10.3.32.3
     bind_ip: 10.3.32.4
+    obico_ip: 10.3.32.5
     docker_persistent_data_path: /persistent_data/application
     docker_compose_version: '3.9'
     movie_switch_mac: 8c:3b:ad:6f:0e:d0
@@ -97,6 +98,7 @@ all:
       rhasspy_entrypoint_dest: "{{ docker_persistent_data_path }}/rhasspy/startup.sh"
       docker_compose_file_names:
         -  "docker-compose.yml"
+        -  "docker-compose-obico.yml"
       docker_compose_dest_path: "{{ docker_persistent_data_path }}/ansible_state"
       nginx_config:
         - dest: "{{ docker_persistent_data_path }}/lab_nginx"
