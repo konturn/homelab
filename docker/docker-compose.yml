@@ -717,7 +717,7 @@ services:
     container_name: octoprint
     restart: unless-stopped
     networks:
-      internal:
+      iot:
     environment:
       ENABLE_MJPG_STREAMER: "true"
     devices:

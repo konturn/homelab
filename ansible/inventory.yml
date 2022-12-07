@@ -7,7 +7,6 @@ all:
     pihole_ip: 10.3.32.2
     deluge_ip: 10.3.32.3
     bind_ip: 10.3.32.4
-    obico_ip: 10.3.32.5
     docker_persistent_data_path: /persistent_data/application
     docker_compose_version: '3.9'
     movie_switch_mac: 8c:3b:ad:6f:0e:d0
@@ -57,6 +56,7 @@ all:
     iot_nginx_ip: 10.6.32.5
     weather_mqtt_bridge_ip: 10.6.32.6
     mopidy_address: 10.6.32.7
+    obico_ip: 10.6.32.8
     fallback_address: 10.4.128.1
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     omapi_secret: "{{ lookup('env', 'OMAPI_SECRET') }}"

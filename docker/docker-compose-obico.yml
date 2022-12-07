@@ -39,7 +39,7 @@ services:
     restart: unless-stopped
     image: registry.lab.nkontur.com/obico-server-ml-api:latest
     networks:
-      internal:
+      iot:
     environment:
         DEBUG: 'True'
         FLASK_APP: 'server.py'
@@ -53,7 +53,7 @@ services:
     container_name: obico
     image: registry.lab.nkontur.com/obico-server-web:latest
     networks:
-      internal:
+      iot:
         ipv4_address: {{ obico_ip }}
     depends_on:
       - ml_api
