@@ -718,8 +718,11 @@ services:
     restart: unless-stopped
     networks:
       internal:
+    environment:
+      ENABLE_MJPG_STREAMER: "true"
     devices:
       - "/dev/serial/by-id/usb-Prusa_Research__prusa3d.com__Original_Prusa_i3_MK3_CZPX4222X004XC90532-if00:/dev/ttyUSB1"
+      - "/dev/video0:/dev/video0"
     volumes:
         - "{{ docker_persistent_data_path }}/octoprint:/octoprint"
     ports:
