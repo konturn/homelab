@@ -23,6 +23,20 @@
     group: root
     mode: 0600
 
+- name: Set max memory per process for non-root users
+  community.general.pam_limits:
+    domain: "*"
+    limit_type: soft
+    limit_item: as
+    value: 40000000
+
+- name: Set max memory per process for root user
+  community.general.pam_limits:
+    domain: "root"
+    limit_type: soft
+    limit_item: as
+    value: 40000000
+
 ### Configure monthly zpool scrub
 - name: Zpool systemd timer
   ansible.builtin.copy:
