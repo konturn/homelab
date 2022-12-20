@@ -34,7 +34,7 @@ smtp_tls_CApath=/etc/ssl/certs
 smtp_tls_security_level=may
 smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
 
-
+header_checks = regexp:/etc/postfix/list_unsub_header
 smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
 myhostname = vps.nkontur.com
 alias_maps = hash:/etc/aliases
