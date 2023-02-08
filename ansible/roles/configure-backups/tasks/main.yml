@@ -19,8 +19,16 @@
     group: root
     mode: 0600
 
+- name: Template out cron script for DDNS
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/dns/ddns.py' }}"
+    dest: /root/ddns.py
+    owner: root
+    group: root
+    mode: '0700'
+
 - name: Sets up cronjob for DDNS
   ansible.builtin.cron:
     name: "Update public DNS records"
     minute: "*/5"
-    job: "{{ '/usr/bin/python3 ' + '/root/cron/ddns.py -k ' + lookup('env', 'NAMESILO_API_KEY') }} -d backups.nkontur.com -r '' '*' >> /root/ddns.log 2>&1"
+    job: "{{ '/usr/bin/python3 ' + '/root/ddns.py -k ' + lookup('env', 'NAMESILO_API_KEY') }} -d nkontur.com -r 'backups' >> /root/ddns.log 2>&1"
