@@ -164,6 +164,13 @@ sensor:
         friendly_name: "Bedroom Sensor Particulate Matter 2.5"
         value_template: {{'\'{{ states.sensor.awair_bedroom_sensors.attributes["pm25"] }}\''}}
         unit_of_measurement: 'μg/m³'
+  - platform: history_stats
+    name: "Hours of work today"
+    entity_id: binary_sensor.office_sensor_home_security_motion_detection
+    state: "on"
+    type: time
+    start: "{{ '{{' }} now().replace(hour=0, minute=0, second=0) {{ '}}' }}"
+    end: "{{ '{{' }} now() {{ '}}' }}"
 template:
   binary_sensor:
     - name: "Front Hallway Door Active"
