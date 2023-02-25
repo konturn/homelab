@@ -10,5 +10,5 @@ homeAssistant:
     password: {{ lookup('env', 'MQTT_PASS') }}
 bluetoothClassic:
   addresses:
-    - 'E0:D0:83:4B:3F:84'
+    - 'CO:D2:DD:33:43:0C'
 
