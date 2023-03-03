@@ -62,6 +62,14 @@
     group: root
     mode: 0644
 
+- name: ZFS Tunables
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/disk/zfs.conf' }}"
+    dest: '/etc/modprobe.d/zfs.conf'
+    owner: root
+    group: root
+    mode: 0644
+
 - name: Make sure timer enabled
   ansible.builtin.systemd:
     name: zpool-scrub.timer
