@@ -54,6 +54,14 @@
     group: root
     mode: 0600
 
+- name: ZFS Zed
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/disk/zed.rc' }}"
+    dest: '/etc/zfs/zed.d/zed.rc'
+    owner: root
+    group: root
+    mode: 0644
+
 - name: Make sure timer enabled
   ansible.builtin.systemd:
     name: zpool-scrub.timer
