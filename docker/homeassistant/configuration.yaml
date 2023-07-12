@@ -16,10 +16,6 @@ media_player:
     host: {{ mopidy_address }}
     platform: mopidy
 
-# Text to speech
-tts:
-  - platform: google_translate
-
 automation: !include automations.yaml
 script: !include scripts.yaml
 scene: !include scenes.yaml
@@ -44,11 +40,6 @@ shell_command:
 recorder:
   purge_keep_days: 1000
 
-device_tracker:
-- platform: ping
-  hosts:
-    noah_phone: Galaxy-S10e.lab.nkontur.com
-
 rest_command:
   bass_boost:
     url: "http://zwave.lab.nkontur.com:5380/devices/0/config"
@@ -64,12 +55,6 @@ rest_command:
     payload: {{ '\'{ "master_status": { "preset": {% if is_state("input_boolean.bass_boost", "off")%}0{%else%}1{%endif%} } }\'' }}
 
 sensor:
-  - platform: osrm_travel_time
-    name: Travel home by car
-    server: 'https://osrm.iot.lab.nkontur.com'
-    profile: car
-    origin_entity_id: person.noah
-    destination_entity_id: zone.home
   - platform: rest
     name: awair_kitchen_sensors
     resource: http://AWAIR-ELEM-14B541.lab.nkontur.com/air-data/latest
