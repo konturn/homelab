@@ -185,8 +185,24 @@ services:
       - /etc/ssl/certs:/etc/ssl/certs
       - /etc/ssl/private:/etc/ssl/private
     restart: unless-stopped
+  nzbget:
+    image: linuxserver/nzbget
+    container_name: nzbget
+    ports:
+      - "6789:6789"
+    networks:
+      - internal
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+    volumes:
+      - {{ docker_persistent_data_path }}/nzbget:/config
+      - /mpool/plex/Movies:/movies
+      - /mpool/samba_share/nfs:/remote
+    restart: unless-stopped
   radarr:
-    image: linuxserver/radarr:4.2.0-nightly
+    image: linuxserver/radarr:5.0.0-nightly
     container_name: radarr
     ports:
       - "443:7878"
