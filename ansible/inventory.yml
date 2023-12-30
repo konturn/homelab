@@ -54,7 +54,6 @@ all:
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     omapi_secret: "{{ lookup('env', 'OMAPI_SECRET') }}"
     vrrp_password: "{{ lookup('env', 'VRRP_PASSWORD') }}"
-    is_respeaker: false
     is_satellite: false
     headway_area: "ohio-latest"
     headway_url: "https://headway.iot.lab.nkontur.com"
@@ -155,6 +154,7 @@ all:
         docker_compose_project_name: "satellite"
         docker_compose_version: '3.7'
         is_satellite: true
+        use_onboard_audio: true
       hosts:
         zwave.lab.nkontur.com:
           docker_config:
@@ -171,8 +171,6 @@ all:
               network: "zwave"
               name: "nginx"
               extra_args: "--domain-name zwave.lab.nkontur.com"
-          is_respeaker: false
-          mic_device_name: "plughw:CARD=Microphone,DEV=0"
           snapclient_config:
             - soundcard: "plughw:CARD=b1,DEV=0"
               name: "movie"
