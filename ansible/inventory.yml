@@ -36,18 +36,12 @@ all:
     kitchen_qual_mac: 70:88:6b:14:b5:41
     satellite_2_address: 10.6.128.11
     satellite_2_mac: dc:a6:32:74:a1:cf
-    satellite_3_address: 10.6.128.12
-    satellite_3_mac: dc:a6:32:74:9b:1b
-    satellite_4_address: 10.6.128.13
-    satellite_4_mac: dc:a6:32:02:b4:83
     back_camera_address: 10.6.128.14
     back_camera_mac: 9c:8e:cd:3a:db:e8
     bedroom_qual_address: 10.6.128.15
     bedroom_qual_mac: 70:88:6b:14:7a:a0
     weather_station_address: 10.6.128.16
     weather_station_mac: 30:83:98:A6:92:7B
-    satellite_5_address: 10.6.128.17
-    satellite_5_mac: b8:27:eb:69:90:cc
     vac_address: 10.6.128.18
     vac_mac: b8:4d:43:98:68:4f
     snapserver_address: 10.6.32.2
@@ -94,7 +88,6 @@ all:
       local_interface_name: bond0
       dhcp_address: 10.4.0.1
       dhcp_peer_address: 10.4.128.1
-      rhasspy_entrypoint_dest: "{{ docker_persistent_data_path }}/rhasspy/startup.sh"
       docker_compose_file_names:
         -  "docker-compose.yml"
       docker_compose_dest_path: "{{ docker_persistent_data_path }}/ansible_state"
@@ -161,32 +154,13 @@ all:
         docker_compose_dest_path: ""
         docker_compose_project_name: "satellite"
         docker_compose_version: '3.7'
-        docker_config:
-          - src: "docker/rhasspy/satellite-profile.json"
-            dest: "/root/.config/rhasspy/profiles/en/profile.json"
-            name: rhasspy
-          - src: "docker/room-assistant/local.yml"
-            dest: "/root/room-assistant/config/local.yml"
-            name: room-assistant
-        use_onboard_audio: true
-        rhasspy_entrypoint_dest: "/startup.sh"
-        is_respeaker: true
-        mic_device_name: "plughw:CARD=seeed2micvoicec,DEV=0"
         is_satellite: true
-        rhasspy_snapserver_port: 80
       hosts:
         zwave.lab.nkontur.com:
           docker_config:
-            - src: "docker/rhasspy/satellite-profile.json"
-              dest: "/root/.config/rhasspy/profiles/en/profile.json"
-              name: rhasspy
-            - src: "docker/room-assistant/local.yml"
-              dest: "/root/room-assistant/config/local.yml"
-              name: room-assistant
             - src: "docker/zigbee2mqtt/configuration.yaml"
               dest: "/root/zigbee2mqtt/configuration.yaml"
               name: zigbee2mqtt
-          rhasspy_satellite_index: 1
           location: "Movie Room"
           docker_compose_file_names: 
             - "docker-compose-zwave.yml"
@@ -199,34 +173,12 @@ all:
               extra_args: "--domain-name zwave.lab.nkontur.com"
           is_respeaker: false
           mic_device_name: "plughw:CARD=Microphone,DEV=0"
-          rhasspy_snapserver_port: 81
           snapclient_config:
             - soundcard: "plughw:CARD=b1,DEV=0"
               name: "movie"
         satellite-2.lab.nkontur.com:
-          rhasspy_satellite_index: 2
-          location: "Office"
           nginx_config:
             - dest: "/root/nginx"
               network: "zwave"
               name: "nginx"
               extra_args: "--domain-name satellite-2.lab.nkontur.com"
-          rhasspy_snapserver_port: 82
-        satellite-4.lab.nkontur.com:
-          rhasspy_satellite_index: 4
-          location: "Main Bedroom"
-          nginx_config:
-            - dest: "/root/nginx"
-              network: "zwave"
-              name: "nginx"
-              extra_args: "--domain-name satellite-4.lab.nkontur.com"
-          rhasspy_snapserver_port: 84
-        satellite-5.lab.nkontur.com:
-          rhasspy_satellite_index: 5
-          location: "Living Room"
-          nginx_config:
-            - dest: "/root/nginx"
-              network: "zwave"
-              name: "nginx"
-              extra_args: "--domain-name satellite-5.lab.nkontur.com"
-          rhasspy_snapserver_port: 83

@@ -1,6 +1,5 @@
 - hosts: satellites:!satellite-2.lab.nkontur.com
   roles:
-  - prepare-rhasspy
   - configure-docker
   become: yes
 - hosts: satellite-2.lab.nkontur.com
