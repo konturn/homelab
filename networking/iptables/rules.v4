@@ -16,7 +16,6 @@ COMMIT
 -A PREROUTING ! -d 10.0.0.0/8 -i {{ local_interface_name }}.3 -j MARK --set-xmark 0x1/0xffffffff
 -A PREROUTING ! -d 10.0.0.0/8 -i vlan6-shim -j MARK --set-xmark 0x1/0xffffffff
 {% endif %}
--A PREROUTING ! -d 10.0.0.0/8 -i {{ local_interface_name }}.5 -j MARK --set-xmark 0x1/0xffffffff
 -A PREROUTING ! -d 10.0.0.0/8 -i {{ local_interface_name }}.6 -j MARK --set-xmark 0x1/0xffffffff
 -A PREROUTING ! -d 10.0.0.0/8 -i {{ local_interface_name }}.7 -j MARK --set-xmark 0x1/0xffffffff
 COMMIT
@@ -80,7 +79,6 @@ COMMIT
 -A FORWARD -i vlan3-shim -o {{ mullvad_interface_name }} -j ACCEPT
 -A FORWARD -i {{ local_interface_name }}.3 -o {{ mullvad_interface_name }} -j ACCEPT
 -A FORWARD -i vlan6-shim -o {{ mullvad_interface_name }} -j ACCEPT
--A FORWARD -i vlan5-shim -o {{ mullvad_interface_name }} -j ACCEPT
 -A FORWARD -i vlan4-shim -j ACCEPT
 -A FORWARD -s {{ shield_address }} -j ACCEPT
 -A FORWARD -d {{ snapserver_address }} -j ACCEPT
