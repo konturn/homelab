@@ -303,9 +303,6 @@ services:
       - internal
     image: 'gitlab/gitlab-ee:latest'
     restart: unless-stopped
-    environment:
-      GITLAB_OMNIBUS_CONFIG: |
-        external_url 'http://gitlab.lab.nkontur.com'
     volumes:
       - '{{ docker_persistent_data_path }}/gitlab/config:/etc/gitlab'
       - '{{ docker_persistent_data_path }}/gitlab/logs:/var/log/gitlab'
@@ -380,22 +377,6 @@ services:
     stdin_open: true
     volumes:
       - "{{ docker_persistent_data_path }}/minecraft/danny:/data"
-    restart: unless-stopped
-  minecraft:
-    container_name: minecraft
-    ports:
-      - "25565:25565/tcp"
-    networks:
-      external:
-        ipv4_address: 10.2.32.2
-    image: itzg/minecraft-server
-    environment:
-      EULA: "TRUE"
-      MEMORY: "4G"
-    tty: true
-    stdin_open: true
-    volumes:
-      - "{{ docker_persistent_data_path }}/minecraft/main:/data"
     restart: unless-stopped
   diagram:
     container_name: diagram
