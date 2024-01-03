@@ -46,6 +46,32 @@
     state: latest
     update_cache: yes
 
+- name: Add Nvidia Docker GPG apt Key
+  apt_key:
+    url: https://nvidia.github.io/nvidia-docker/gpgkey
+    state: present
+
+  when: nvidia_container_runtime
+
+- name: Add the NVIDIA Docker repository to APT sources
+  ansible.builtin.lineinfile:
+    path: /etc/apt/sources.list.d/nvidia-docker.list
+    line: "deb https://nvidia.github.io/nvidia-docker/ubuntu18.04/amd64 /"
+    create: yes
+  when: nvidia_container_runtime
+
+- name: Update APT cache
+  ansible.builtin.apt:
+    update_cache: yes
+  when: nvidia_container_runtime
+
+- name: Install NVIDIA docker package
+  apt:
+    name: nvidia-docker2
+    state: present
+    update_cache: yes
+  when: nvidia_container_runtime
+
 - name: Make sure docker is started and enabled
   service:
     name: docker
