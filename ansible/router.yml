@@ -12,7 +12,7 @@
   - configure-router-network
   - role: configure-docker
     vars:
-      nvidia-container-runtime: true
+      nvidia_container_runtime: true
   - role: borgbase.ansible_role_borgbackup
     borg_encryption_passphrase: "{{ lookup('env', 'BORG_ENCRYPTION_PASSPHRASE_BASE64') | b64decode }}"
     borg_repository: root@backups.nkontur.com:/backups/main_backup

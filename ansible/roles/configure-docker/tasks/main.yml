@@ -50,7 +50,6 @@
   apt_key:
     url: https://nvidia.github.io/nvidia-docker/gpgkey
     state: present
-
   when: nvidia_container_runtime
 
 - name: Add the NVIDIA Docker repository to APT sources
