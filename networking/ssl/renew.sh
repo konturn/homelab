@@ -11,6 +11,7 @@ docker run --rm \
   -d *.iot.lab.nkontur.com \
   -d *.lab.nkontur.com \
   -d nkontur.com \
+  -d vps.nkontur.com \
   -d homeassistant.nkontur.com \
   -d blog.nkontur.com \
   -d bitwarden.nkontur.com \
