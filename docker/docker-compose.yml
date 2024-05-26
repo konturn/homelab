@@ -365,22 +365,6 @@ services:
       MYSQL_ROOT_PASSWORD: {{ lookup('env', 'WORDPRESS_DB_PASSWORD') }}
     volumes:
       - wordpress_db:/var/lib/mysql
-  minecraft_danny:
-    container_name: minecraft_danny
-    ports:
-      - "25564:25565/tcp"
-    networks:
-      external:
-        ipv4_address: 10.2.32.3
-    image: itzg/minecraft-server
-    environment:
-      EULA: "TRUE"
-      MEMORY: "4G"
-    tty: true
-    stdin_open: true
-    volumes:
-      - "{{ docker_persistent_data_path }}/minecraft/danny:/data"
-    restart: unless-stopped
   diagram:
     container_name: diagram
     ports:
