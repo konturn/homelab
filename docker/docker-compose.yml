@@ -520,8 +520,8 @@ services:
       mgmt:
         ipv4_address: {{ registry_address }}
     environment:
-      REGISTRY_HTTP_TLS_CERTIFICATE: /certs/nkontur.com/certificates/_.nkontur.com.crt
-      REGISTRY_HTTP_TLS_KEY: /certs/nkontur.com/certificates/_.nkontur.com.key
+      REGISTRY_HTTP_TLS_CERTIFICATE: /certs/nkontur.com/live/iot.lab.nkontur.com-0001/cert.pem
+      REGISTRY_HTTP_TLS_KEY: /certs/nkontur.com/live/iot.lab.nkontur.com-0001/privkey.pem
       REGISTRY_AUTH: htpasswd
       REGISTRY_AUTH_HTPASSWD_PATH: /auth/htpasswd
       REGISTRY_AUTH_HTPASSWD_REALM: Registry Realm
@@ -548,7 +548,7 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - "{{ docker_persistent_data_path }}/frigate/config.yml:/config/config.yml:ro"
       - /mpool/plex/frigate:/media/frigate
-      - "{{ docker_persistent_data_path }}/certs/nkontur.com/certificates:/certs"
+      - "{{ docker_persistent_data_path }}/certs/nkontur.com/live/iot.lab.nkontur.com-0001:/certs"
   mosquitto:
     container_name: mosquitto
     image: eclipse-mosquitto
