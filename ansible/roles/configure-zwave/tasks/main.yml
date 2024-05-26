@@ -34,21 +34,3 @@
     name: minidsp
     state: restarted
   when: minidsp.changed
-
-# needs gpg --dearmor
-#- name: Add Hyperion GPG apt Key
-#  apt_key:
-#    url: https://apt.hyperion-project.org/hyperion.pub.key
-#    state: present
-#    keyring: /usr/share/keyrings/hyperion.pub.gpg
-
-- name: Add Hyperion repo
-  ansible.builtin.apt_repository:
-    repo: 'deb [signed-by=/usr/share/keyrings/hyperion.pub.gpg] https://apt.hyperion-project.org/ bullseye main'
-    state: present
-    update_cache: yes
-
-- name: Install Hyperion package
-  ansible.builtin.apt:
-    name: hyperion
-    state: present
