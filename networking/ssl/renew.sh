@@ -16,8 +16,8 @@ docker run --rm \
   -d bitwarden.nkontur.com \
   -d booksonic.nkontur.com \
   -v
-scp -i /root/.ssh/id_rsa /persistent_data/application/certs/nkontur.com/certificates/_.nkontur.com.crt root@vps.nkontur.com:/etc/ssl/certs/nkontur.com/_.nkontur.com.crt
-scp -i /root/.ssh/id_rsa /persistent_data/application/certs/nkontur.com/certificates/_.nkontur.com.key root@vps.nkontur.com:/etc/ssl/private/_.nkontur.com.key
+scp -i /root/.ssh/id_rsa /persistent_data/application/certs/nkontur.com/live/iot.lab.nkontur.com-0001/cert.pem root@vps.nkontur.com:/etc/ssl/certs/nkontur.com/_.nkontur.com.crt
+scp -i /root/.ssh/id_rsa /persistent_data/application/certs/nkontur.com/live/iot.lab.nkontur.com-0001/privkey.pem root@vps.nkontur.com:/etc/ssl/private/_.nkontur.com.key
 rsync -avz -e 'ssh -i /root/.ssh/id_rsa' /persistent_data/application/certs/nkontur.com/live/iot.lab.nkontur.com-0001 root@zwave.lab.nkontur.com:/certs/
 ssh -i /root/.ssh/id_rsa vps.nkontur.com "chown konoahko:konoahko /etc/ssl/certs/nkontur.com/_.nkontur.com.crt && chown root:ssl-cert /etc/ssl/private/_.nkontur.com.key"
 ssh -i /root/.ssh/id_rsa vps.nkontur.com "systemctl restart postfix dovecot"
