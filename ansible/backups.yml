@@ -1,6 +1,0 @@
-- hosts: backups.nkontur.com
-  roles:
-  - configure-wireguard
-  - configure-backups
-  become: yes
-
