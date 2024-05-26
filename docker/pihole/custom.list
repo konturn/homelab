@@ -4,7 +4,6 @@
 {{ office_switch_address }} office-switch.lab.nkontur.com
 {{ ipmi_address }} ipmi.lab.nkontur.com
 {{ ups_address }} ups.lab.nkontur.com
-{{ fallback_address }} fallback.lab.nkontur.com
 {{ shield_address }} shield.lab.nkontur.com
 {{ denon_address }} denon.lab.nkontur.com
 {{ projector_address }} projector.lab.nkontur.com
@@ -18,4 +17,3 @@
 {{ mosquitto_address }} mqtt.lab.nkontur.com
 10.6.0.1 router.lab.nkontur.com
 10.0.0.4 vps.nkontur.com
-10.0.0.2 backups.nkontur.com
