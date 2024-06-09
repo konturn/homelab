@@ -3,6 +3,7 @@
   image: willhallonline/ansible:latest
   before_script:
     - pip3 install -r requirements.txt 
+    - ansible-galaxy install -r ansible/requirements.yml
     - echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp
     - chmod 600 tmp
     - mkdir ~/.ssh
