@@ -20,8 +20,10 @@
       restic_repository: "s3:s3.us-east-005.backblazeb2.com/nkontur-homelab"
       restic_aws_access_key_id: "{{ lookup('env', 'BACKBLAZE_ACCESS_KEY_ID') }}"
       restic_aws_secret_access_key: "{{ lookup('env', 'BACKBLAZE_SECRET_ACCESS_KEY') }}"
+      restic_default_folders: []
       restic_folders:
         - {path: "/mpool/nextcloud"}
         - {path: "/persistent_data"}
         - {path: "/var/log"}
+        - {path: "/root"}
       restic_password: "{{ lookup('env', 'RESTIC_PASSWORD') }}" 
