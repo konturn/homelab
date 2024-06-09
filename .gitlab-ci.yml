@@ -3,7 +3,6 @@
   image: willhallonline/ansible:latest
   before_script:
     - pip3 install -r requirements.txt 
-    - ansible-galaxy install borgbase.ansible_role_borgbackup,v1.0.0
     - echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp
     - chmod 600 tmp
     - mkdir ~/.ssh
