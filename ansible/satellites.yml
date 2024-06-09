@@ -1,4 +1,4 @@
-- hosts: satellites:!satellite-2.lab.nkontur.com
+- hosts: zwave.lab.nkontur.com
   roles:
   - configure-docker
   become: yes
