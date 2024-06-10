@@ -1,3 +1,2 @@
-- src: https://github.com/angristan/ansible-restic.git
-  version: fd989a95b1cb379ae01c80f7d8fd19547443dea3
+- src: https://github.com/konturn/ansible-restic.git
   name: restic

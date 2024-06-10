@@ -23,7 +23,13 @@
       restic_default_folders: []
       restic_folders:
         - {path: "/mpool/nextcloud"}
-        - {path: "/persistent_data"}
+        - {path: "/persistent_data/docker/volumes",
+           exclude: "/persistent_data/docker/volumes/docker_nextcloud"
+          }
+        - {path: "/persistent_data/application"}
+        - {path: "/mpool/plex/config"}
+        - {path: "/mpool/plex/frigate"}
+        - {path: "/mpool/plex/Photos"}
         - {path: "/var/log"}
         - {path: "/root"}
       restic_password: "{{ lookup('env', 'RESTIC_PASSWORD') }}" 
