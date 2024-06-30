@@ -30,9 +30,6 @@ spotcast:
   sp_dc: "{{ lookup('env', 'SPOTIFY_DC') }}"
   sp_key: "{{ lookup('env', 'SPOTIFY_KEY') }}"
 
-mqtt:
-  certificate: auto
-
 shell_command:
   sound_doorbell: cat /config/sounds/doorbell-1.wav | nc {{ snapserver_address }} 80
   scan_doc: curl satellite-2.lab.nkontur.com:8080/scan
