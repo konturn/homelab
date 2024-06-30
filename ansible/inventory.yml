@@ -152,11 +152,8 @@ all:
         use_onboard_audio: true
       hosts:
         zwave.lab.nkontur.com:
-          docker_config:
-            - src: "docker/zigbee2mqtt/configuration.yaml"
-              dest: "/root/zigbee2mqtt/configuration.yaml"
-              name: zigbee2mqtt
           location: "Movie Room"
+          docker_config: []
           docker_compose_file_names: 
             - "docker-compose-zwave.yml"
             - "docker-compose-satellite.yml"
@@ -170,8 +167,12 @@ all:
             - soundcard: "plughw:CARD=b1,DEV=0"
               name: "movie"
         satellite-2.lab.nkontur.com:
+          docker_config: []
           nginx_config:
             - dest: "/root/nginx"
               network: "zwave"
               name: "nginx"
               extra_args: "--domain-name satellite-2.lab.nkontur.com"
+          docker_compose_file_names: 
+            - "docker-compose-zigbee.yml"
+            - "docker-compose-satellite.yml"

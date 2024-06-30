@@ -1,0 +1,20 @@
+version: '{{ docker_compose_version }}'
+services:
+  zigbee2mqtt:
+    container_name: zigbee2mqtt
+    restart: unless-stopped
+    image: koenkk/zigbee2mqtt
+    volumes:
+      - /root/zigbee2mqtt:/app/data
+      - /run/udev:/run/udev:ro
+    ports:
+      - 8081:8080
+    networks:
+      - zwave
+    environment:
+      - TZ=America/New_York
+    devices:
+      - '/dev/serial/by-id/usb-ITead_Sonoff_Zigbee_3.0_USB_Dongle_Plus_3e106b805a19ec118ac637cc47486eb0-if00-port0:/dev/ttyACM0'
+volumes:
+  zigbee-config:
+    name: zigbee-config

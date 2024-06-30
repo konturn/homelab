@@ -5,4 +5,5 @@
 - hosts: satellite-2.lab.nkontur.com
   roles:
     - configure-scanner
+    - configure-docker
 

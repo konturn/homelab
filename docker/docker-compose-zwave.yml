@@ -23,23 +23,6 @@ services:
     ports:
       - '8091:8091' # port for web interface
       - '3000:3000' # port for Z-Wave JS websocket server
-  zigbee2mqtt:
-    container_name: zigbee2mqtt
-    restart: unless-stopped
-    image: koenkk/zigbee2mqtt
-    volumes:
-      - /root/zigbee2mqtt:/app/data
-      - /run/udev:/run/udev:ro
-    ports:
-      - 8080:8080
-    networks:
-      - zwave
-    environment:
-      - TZ=America/New_York
-    devices:
-      - '/dev/serial/by-id/usb-ITead_Sonoff_Zigbee_3.0_USB_Dongle_Plus_3e106b805a19ec118ac637cc47486eb0-if00-port0:/dev/ttyACM0'
 volumes:
   zwave-config:
     name: zwave-config
-  zigbee-config:
-    name: zigbee-config

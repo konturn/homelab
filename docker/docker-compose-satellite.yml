@@ -17,22 +17,6 @@ services:
       - /root/nginx/conf/ssl_config:/etc/nginx/ssl_config
       - /root/nginx/log:/data/log
       - /certs:/data/certs/nkontur.com/certificates
-  rhasspy:
-    image: "rhasspy/rhasspy"
-    container_name: rhasspy
-    restart: unless-stopped
-    networks:
-      - zwave
-    volumes:
-        - "$HOME/.config/rhasspy/profiles:/profiles"
-        - "/etc/localtime:/etc/localtime:ro"
-        - "/startup.sh:/startup.sh"
-        - "/etc/ssl:/etc/ssl:ro"
-    devices:
-      - "/dev/snd"
-    ports:
-        - "12101:12101"
-    entrypoint: "/startup.sh"
   room-assistant:
     image: mkerix/room-assistant
     container_name: room-assistant
