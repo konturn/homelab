@@ -559,7 +559,7 @@ services:
     volumes:
       - "{{ docker_persistent_data_path }}/mqtt/conf:/mosquitto/config"
       - mosquitto:/mosquitto/data
-      - "{{ docker_persistent_data_path }}/certs/nkontur.com/live/iot.lab.nkontur.com-0001:/mosquitto/certs"
+      - "{{ docker_persistent_data_path }}/certs:/mosquitto/certs"
   amcrest2mqtt:
     container_name: amcrest2mqtt
     image: registry.lab.nkontur.com/amcrest2mqtt:latest
@@ -569,7 +569,7 @@ services:
     networks:
       iot:
     volumes:
-      - "{{ docker_persistent_data_path }}/certs/nkontur.com/live/iot.lab.nkontur.com-0001:/certs"
+      - "{{ docker_persistent_data_path }}/certs:/certs"
     environment:
       AMCREST_HOST: 10.6.128.9
       AMCREST_PASSWORD: {{ lookup('env', 'DOORBELL_PASS') }}
@@ -579,8 +579,8 @@ services:
       HOME_ASSISTANT: "true"
       MQTT_TLS_ENABLED: "true"
       MQTT_TLS_CA_CERT: "/etc/ssl/certs/ca-cert-ISRG_Root_X1.pem"
-      MQTT_TLS_CERT: "/certs/_.nkontur.com.crt"
-      MQTT_TLS_KEY: "/certs/_.nkontur.com.key"
+      MQTT_TLS_CERT: "/certs/nkontur.com/live/iot.lab.nkontur.com-0001/cert.pem"
+      MQTT_TLS_KEY: "/certs/nkontur.com/live/iot.lab.nkontur.com-0001/privkey.pem"
       STORAGE_POLL_INTERVAL: 0
 
   compreface-postgres-db:
@@ -661,7 +661,7 @@ services:
       iot:
     volumes:
       - "{{ docker_persistent_data_path }}/double-take:/.storage"
-      - "{{ docker_persistent_data_path }}/certs/nkontur.com/live/iot.lab.nkontur.com-0001:/certs"
+      - "{{ docker_persistent_data_path }}/certs:/certs"
     ports:
       - 443:3000
   bind:
