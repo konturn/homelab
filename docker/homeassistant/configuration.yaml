@@ -10,8 +10,6 @@ switch:
 media_player:
   - platform: pjlink
     host: projector.lab.nkontur.com
-  - platform: snapcast
-    host: snapserver.lab.nkontur.com
   - name: mopidy
     host: {{ mopidy_address }}
     platform: mopidy
