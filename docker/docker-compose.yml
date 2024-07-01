@@ -548,7 +548,7 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - "{{ docker_persistent_data_path }}/frigate/config.yml:/config/config.yml:ro"
       - /mpool/plex/frigate:/media/frigate
-      - "{{ docker_persistent_data_path }}/certs/nkontur.com/live/iot.lab.nkontur.com-0001:/certs"
+      - "{{ docker_persistent_data_path }}/certs:/certs"
   mosquitto:
     container_name: mosquitto
     image: eclipse-mosquitto

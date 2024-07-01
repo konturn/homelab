@@ -3,8 +3,8 @@ mqtt:
   user: mosquitto
   password: {{ lookup('env', 'MQTT_PASS') }}
   tls_ca_certs: /etc/ssl/certs/ISRG_Root_X1.pem
-  tls_client_cert: /certs/cert.pem
-  tls_client_key: /certs/privkey.pem
+  tls_client_cert: /certs/nkontur.com/live/iot.lab.nkontur.com-0001/cert.pem
+  tls_client_key: /certs/nkontur.com/live/iot.lab.nkontur.com-0001/privkey.pem
 cameras:
   front_door:
     ffmpeg:
