@@ -2,7 +2,7 @@ version: '{{ docker_compose_version }}'
 services:
   zwavejs2mqtt:
     container_name: zwavejs2mqtt
-    image: zwavejs/zwave-js-ui:latest
+    image: zwavejs/zwave-js-ui:9.14.4
     restart: always
     tty: true
     stop_signal: SIGINT
