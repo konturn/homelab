@@ -535,7 +535,7 @@ services:
   frigate:
     container_name: frigate
     restart: unless-stopped
-    image: blakeblackshear/frigate:0.11.0-rc2
+    image: ghcr.io/blakeblackshear/frigate:0.13.2
     depends_on:
       - mosquitto
     networks:
@@ -546,7 +546,7 @@ services:
     shm_size: "512mb"
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - "{{ docker_persistent_data_path }}/frigate/config.yml:/config/config.yml:ro"
+      - "{{ docker_persistent_data_path }}/frigate:/config"
       - /mpool/plex/frigate:/media/frigate
       - "{{ docker_persistent_data_path }}/certs:/certs"
   mosquitto:
