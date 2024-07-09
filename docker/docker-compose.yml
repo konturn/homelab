@@ -381,6 +381,41 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     command: --interval 3600
+  piper:
+    image: rhasspy/wyoming-piper
+    container_name: piper
+    volumes:
+      - "{{ docker_persistent_data_path }}/piper:/data"
+    networks:
+      - iot
+    command: --voice en_US-ryan-high
+    restart: unless-stopped
+  openwakeword:
+    image: rhasspy/wyoming-openwakeword
+    container_name: openwakeword
+    networks:
+      - iot
+    volumes:
+      - "{{ docker_persistent_data_path }}/openwakeword:/data"
+    command: --model alexa
+    restart: unless-stopped
+  whisper:
+    image: rhasspy/wyoming-whisper:latest
+    container_name: whisper
+    volumes:
+      - /persistent_data/application/whisper:/config
+      - /usr/lib/x86_64-linux-gnu/libcudnn_ops_infer.so.8:/usr/lib/x86_64-linux-gnu/libcudnn_ops_infer.so.8:ro
+      - /usr/lib/x86_64-linux-gnu/libcudnn_cnn_infer.so.8:/usr/lib/x86_64-linux-gnu/libcudnn_cnn_infer.so.8:ro
+      - /usr/lib/x86_64-linux-gnu/libcublasLt.so.11:/usr/lib/x86_64-linux-gnu/libcublasLt.so.12:ro
+      - /usr/lib/x86_64-linux-gnu/libcublas.so.11:/usr/lib/x86_64-linux-gnu/libcublas.so.12:ro
+    command: --model tiny-int8 --language no --beam-size 5
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+    restart: unless-stopped
+    networks:
+      - iot
   homeassistant:
     container_name: homeassistant
     networks:
