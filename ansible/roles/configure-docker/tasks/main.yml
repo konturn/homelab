@@ -98,6 +98,7 @@
     name:
       - docker
       - PyYAML
+      - docker-compose
 
 - name: Log in to private docker repo
   docker_login:
