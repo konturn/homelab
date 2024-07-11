@@ -36,8 +36,9 @@ record:
     retain:
       default: 100
 detectors:
-  cpu1:
-    type: cpu
+  tensorrt:
+    type: tensorrt
+    device: 0
 objects:
   filters:
     person:

@@ -4,6 +4,7 @@
     "iptables": true,
 {% endif %}
     "storage-driver": "overlay2",
+    "insecure-registries" : [ "registry.lab.nkontur.com" ],
     "dns": ["10.3.32.2", "8.8.8.8"],
     "runtimes": {
       "nvidia": {
