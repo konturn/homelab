@@ -7,6 +7,7 @@ DEVPATH=="/devices/pci0000:80/0000:80:02.0/0000:82:00.0/usb3/3-2/3-2.3/3-2.3:1.0
 DEVPATH=="/devices/pci0000:80/0000:80:02.0/0000:82:00.0/usb3/3-2/3-2.2/3-2.2:1.0/sound/card?", ATTR{id}="Main_Bathroom"
 DEVPATH=="/devices/pci0000:80/0000:80:02.0/0000:82:00.0/usb3/3-4/3-4:1.0/sound/card?", ATTR{id}="Guest_Bathroom"
 DEVPATH=="/devices/pci0000:80/0000:80:02.0/0000:82:00.0/usb3/3-3/3-3:1.0/sound/card?", ATTR{id}="Guest_Bedroom"
+DEVPATH=="/devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1.2/2-1.2.1/2-1.2.1:1.0/sound/card?", ATTR{id}="Global"
 
 
 LABEL="my_usb_audio_end"
