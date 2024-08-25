@@ -10,5 +10,6 @@
       "nvidia": {
         "path": "/usr/bin/nvidia-container-runtime"
       }
-    }
+    },
+    "exec-opts": ["native.cgroupdriver=cgroupfs"]
 }
