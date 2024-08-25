@@ -268,17 +268,6 @@ services:
       - /mpool/audioserve/audiobooks:/audiobooks
       - /mpool/audioserve/data:/data
     restart: unless-stopped
-  grafana:
-    container_name: grafana
-    ports:
-      - "443:3000"
-    networks:
-      - internal
-    image: grafana/grafana
-    restart: unless-stopped
-    volumes:
-        - grafana-storage:/var/lib/grafana
-        - {{ docker_persistent_data_path }}/grafana/grafana.ini:/etc/grafana/grafana.ini
   influxdb:
     container_name: influxdb
     ports:
