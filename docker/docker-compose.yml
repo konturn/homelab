@@ -703,17 +703,6 @@ services:
       - "{{ docker_persistent_data_path }}/certs:/certs"
     ports:
       - 443:3000
-  bind:
-    container_name: bind
-    image: internetsystemsconsortium/bind9:9.18
-    networks:
-      internal:
-        ipv4_address: {{ bind_ip }}
-    volumes:
-      - {{ docker_persistent_data_path }}/bind/named.conf.local:/etc/bind/named.conf.local
-      - {{ docker_persistent_data_path }}/bind/db.lab.nkontur.com:/var/lib/bind/db.lab.nkontur.com
-      - {{ docker_persistent_data_path }}/bind/rndc.key:/etc/bind/rndc.key
-    restart: unless-stopped
   octoprint:
     image: "octoprint/octoprint"
     container_name: octoprint
