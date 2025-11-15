@@ -159,7 +159,7 @@ services:
       - MYSQL_DATABASE=nextcloud
       - MYSQL_USER=nextcloud
   app:
-    image: nextcloud:32.0.1
+    image: nextcloud:25.0.1
     container_name: nextcloud
     networks:
       - external
@@ -370,41 +370,6 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     command: --interval 3600
-  piper:
-    image: rhasspy/wyoming-piper
-    container_name: piper
-    volumes:
-      - "{{ docker_persistent_data_path }}/piper:/data"
-    networks:
-      - iot
-    command: --voice en_US-ryan-high
-    restart: unless-stopped
-  openwakeword:
-    image: rhasspy/wyoming-openwakeword
-    container_name: openwakeword
-    networks:
-      - iot
-    volumes:
-      - "{{ docker_persistent_data_path }}/openwakeword:/data"
-    command: --model alexa
-    restart: unless-stopped
-  whisper:
-    image: rhasspy/wyoming-whisper:latest
-    container_name: whisper
-    volumes:
-      - /persistent_data/application/whisper:/config
-      - /usr/lib/x86_64-linux-gnu/libcudnn_ops_infer.so.8:/usr/lib/x86_64-linux-gnu/libcudnn_ops_infer.so.8:ro
-      - /usr/lib/x86_64-linux-gnu/libcudnn_cnn_infer.so.8:/usr/lib/x86_64-linux-gnu/libcudnn_cnn_infer.so.8:ro
-      - /usr/lib/x86_64-linux-gnu/libcublasLt.so.11:/usr/lib/x86_64-linux-gnu/libcublasLt.so.12:ro
-      - /usr/lib/x86_64-linux-gnu/libcublas.so.11:/usr/lib/x86_64-linux-gnu/libcublas.so.12:ro
-    command: --model tiny-int8 --language no --beam-size 5
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Etc/UTC
-    restart: unless-stopped
-    networks:
-      - iot
   homeassistant:
     container_name: homeassistant
     networks:
@@ -573,7 +538,7 @@ services:
   frigate:
     container_name: frigate
     restart: unless-stopped
-    image: ghcr.io/blakeblackshear/frigate:0.13.2-tensorrt
+    image: ghcr.io/blakeblackshear/frigate:stable
     depends_on:
       - mosquitto
     networks:
@@ -703,21 +668,6 @@ services:
       - "{{ docker_persistent_data_path }}/certs:/certs"
     ports:
       - 443:3000
-  octoprint:
-    image: "octoprint/octoprint"
-    container_name: octoprint
-    restart: unless-stopped
-    networks:
-      iot:
-    environment:
-      ENABLE_MJPG_STREAMER: "true"
-    devices:
-      - "/dev/serial/by-id/usb-Prusa_Research__prusa3d.com__Original_Prusa_i3_MK3_CZPX4222X004XC90532-if00:/dev/ttyUSB1"
-      - "/dev/video1:/dev/video0"
-    volumes:
-        - "{{ docker_persistent_data_path }}/octoprint:/octoprint"
-    ports:
-        - "443:80"
   ambientweather:
     image: ghcr.io/neilenns/ambientweather2mqtt:latest
     restart: unless-stopped
