@@ -17,17 +17,7 @@ router:
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml 
 
-vps:
-  extends: .ansible
-  script:
-    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/vps.yml
-
 zwave:
   extends: .ansible
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/zwave.yml
-
-satellites:
-  extends: .ansible
-  script:
-    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellites.yml
