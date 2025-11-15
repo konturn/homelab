@@ -1,3 +1,0 @@
-default._domainkey	IN	TXT	( "v=DKIM1; h=sha256; k=rsa; "
-	  "p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzJP2McQgSdN3PolyOuS1LxqzqL3nfMibLTZWa1hm9H2yukqoDPrG0Hx8fsQa9wtCSWrloPW+3uMnRSJWKc2e0AXeM5HDXZtFXZArIiVNriUq5EQV3mVaB7idaKp+Yy/Isapzz9b5Ic+9aO8owo6zKZdeiVxhpc4rNL3fV/MuSfuEuVeaQBVqvvzZ1UBV0tX/7//j4zJGd3zsPI"
-	  "tcw4nJC42L/z+k4tFTGX7liRkPqqb+1xsliTqB+QzRGq8jdn2LD2rObcJwHMcbSbP8rYiPXSkwqb915TL8B2zsOEew4fXkeivNblOxwFRemZbgXU/BSm1A2axVlp0uUz7Hm29Y/wIDAQAB" )  ; ----- DKIM key default for nkontur.com

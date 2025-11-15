@@ -16,4 +16,3 @@
 {{ frigate_address }} frigate.lab.nkontur.com
 {{ mosquitto_address }} mqtt.lab.nkontur.com
 10.6.0.1 router.lab.nkontur.com
-10.0.0.4 vps.nkontur.com

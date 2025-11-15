@@ -126,9 +126,6 @@ all:
           name: "nextcloud"
           owner: "www-data"
           group: "www-data"
-    vps.nkontur.com:
-      wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/vps/wg0.conf' }}"
-      wireguard_interface_name: "wg0"
   children:
     satellites:
       vars:
