@@ -6,7 +6,6 @@ all:
     lab_nginx_ip: 10.3.32.1
     pihole_ip: 10.3.32.2
     deluge_ip: 10.3.32.3
-    bind_ip: 10.3.32.4
     docker_persistent_data_path: /persistent_data/application
     docker_compose_version: '3.9'
     movie_switch_mac: 8c:3b:ad:6f:0e:d0
@@ -107,18 +106,6 @@ all:
         - src: "docker/pihole/custom.conf"
           dest: "{{ docker_persistent_data_path }}/pihole/dnsmasq/custom.conf"
           name: "pihole"
-        - src: "docker/bind/named.conf.local"
-          dest: "{{ docker_persistent_data_path }}/bind/named.conf.local"
-          name: "bind"
-        - src: "docker/bind/db.lab.nkontur.com"
-          dest: "{{ docker_persistent_data_path }}/bind/db.lab.nkontur.com"
-          name: "bind"
-        - src: "networking/dhcp/rndc.key"
-          dest: "{{ docker_persistent_data_path }}/bind/rndc.key"
-          name: "bind"
-          owner: 104
-          group: 105
-          mode: '0640'
         - src: "docker/homeassistant/configuration.yaml"
           dest: "{{ docker_persistent_data_path }}/homeassistant/configuration.yaml"
           name: "homeassistant"
