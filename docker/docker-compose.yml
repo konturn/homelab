@@ -159,7 +159,7 @@ services:
       - MYSQL_DATABASE=nextcloud
       - MYSQL_USER=nextcloud
   app:
-    image: nextcloud:24.0.5
+    image: nextcloud:32.0.1
     container_name: nextcloud
     networks:
       - external
@@ -204,7 +204,7 @@ services:
       - /mpool/samba_share/nfs:/remote
     restart: unless-stopped
   radarr:
-    image: linuxserver/radarr:5.0.0-nightly
+    image: linuxserver/radarr:6.1.0-nightly
     container_name: radarr
     ports:
       - "443:7878"
