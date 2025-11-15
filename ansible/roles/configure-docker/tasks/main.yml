@@ -93,12 +93,12 @@
 #    state: restarted
 #  when: docker_conf.changed
 
-- name: ensure required pip-packages are installed on host
-  pip:
-    name:
-      - docker
-      - PyYAML
-      - docker-compose
+#- name: ensure required pip-packages are installed on host
+#  pip:
+#    name:
+#      - docker
+#      - PyYAML
+#      - docker-compose
 
 - name: Log in to private docker repo
   docker_login:
