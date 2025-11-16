@@ -7,7 +7,7 @@ check_interval = 0
 [[runners]]
   name = "main.nkontur.com"
   url = "https://gitlab.lab.nkontur.com/"
-  tls-ca-file = "/persistent_data/application/certs/nkontur.com/live/iot.lab.nkontur.com-0001/chain.pem"
+  tls-ca-file = "/persistent_data/application/certs/nkontur.com/live/iot.lab.nkontur.com-0003/chain.pem"
   token = "{{ lookup('env', 'GITLAB_RUNNER_TOKEN') }}"
   executor = "docker"
   [runners.docker]
@@ -17,7 +17,7 @@ check_interval = 0
 [[runners]]
   name = "images"
   url = "https://gitlab.lab.nkontur.com/"
-  tls-ca-file = "/persistent_data/application/certs/nkontur.com/live/iot.lab.nkontur.com-0001/chain.pem"
+  tls-ca-file = "/persistent_data/application/certs/nkontur.com/live/iot.lab.nkontur.com-0003/chain.pem"
   token = "{{ lookup('env', 'IMAGES_GITLAB_RUNNER_TOKEN') }}"
   executor = "docker"
   [runners.docker]

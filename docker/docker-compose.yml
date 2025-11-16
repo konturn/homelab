@@ -1,4 +1,5 @@
 volumes:
+  nextcloud_db:
   wordpress_db:
   ombi:
   fifos:
@@ -497,8 +498,8 @@ services:
       mgmt:
         ipv4_address: {{ registry_address }}
     environment:
-      REGISTRY_HTTP_TLS_CERTIFICATE: /certs/nkontur.com/live/iot.lab.nkontur.com-0001/cert.pem
-      REGISTRY_HTTP_TLS_KEY: /certs/nkontur.com/live/iot.lab.nkontur.com-0001/privkey.pem
+      REGISTRY_HTTP_TLS_CERTIFICATE: /certs/nkontur.com/live/iot.lab.nkontur.com-0003/cert.pem
+      REGISTRY_HTTP_TLS_KEY: /certs/nkontur.com/live/iot.lab.nkontur.com-0003/privkey.pem
       REGISTRY_AUTH: htpasswd
       REGISTRY_AUTH_HTPASSWD_PATH: /auth/htpasswd
       REGISTRY_AUTH_HTPASSWD_REALM: Registry Realm
@@ -557,8 +558,8 @@ services:
       HOME_ASSISTANT: "true"
       MQTT_TLS_ENABLED: "true"
       MQTT_TLS_CA_CERT: "/etc/ssl/certs/ca-cert-ISRG_Root_X1.pem"
-      MQTT_TLS_CERT: "/certs/nkontur.com/live/iot.lab.nkontur.com-0001/cert.pem"
-      MQTT_TLS_KEY: "/certs/nkontur.com/live/iot.lab.nkontur.com-0001/privkey.pem"
+      MQTT_TLS_CERT: "/certs/nkontur.com/live/iot.lab.nkontur.com-0003/cert.pem"
+      MQTT_TLS_KEY: "/certs/nkontur.com/live/iot.lab.nkontur.com-0003/privkey.pem"
       STORAGE_POLL_INTERVAL: 0
 
   compreface-postgres-db:
@@ -690,19 +691,32 @@ services:
     ports:
       - "443:6680"
     restart: unless-stopped
-  nextcloud:
-    image: nextcloud/all-in-one:latest
-    restart: always
+  nextcloud_db:
+    image: mariadb
+    container_name: nextcloud_database
+    command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
+    restart: unless-stopped
     networks:
-      external:
-      internal:
-    container_name: nextcloud-aio-mastercontainer
+      - external
     volumes:
-      - nextcloud_aio_mastercontainer:/mnt/docker-aio-config
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - nextcloud_db:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD={{ lookup('env', 'NEXTCLOUD_DB_PASSWORD') }}
+      - MYSQL_PASSWORD={{ lookup('env', 'NEXTCLOUD_DB_PASSWORD') }}
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+  nextcloud:
+    image: nextcloud:25.0.1
+    container_name: nextcloud
+    networks:
+      - external
+    hostname: nkontur.com
     ports:
       - "443:80"
-    environment:
-      - APACHE_PORT=11000
-      - APACHE_IP_BINDING=0.0.0.0
-      - SKIP_DOMAIN_VALIDATION=true
+    volumes:
+      - nextcloud:/data
+#      - {{ docker_persistent_data_path }}/nextcloud/config:/var/www/html/config
+#      - {{ docker_persistent_data_path }}/nextcloud/mpm_prefork.conf:/etc/apache2/mods-available/mpm_prefork.conf
+#      - {{ docker_persistent_data_path }}/nextcloud/config/php.ini:/usr/local/etc/php/php.ini
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
