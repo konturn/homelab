@@ -12,6 +12,7 @@ docker run --rm \
   -d *.lab.nkontur.com \
   -d nkontur.com \
   -d homeassistant.nkontur.com \
+  -d nextcloud.nkontur.com \
   -d blog.nkontur.com \
   -d bitwarden.nkontur.com \
   -d booksonic.nkontur.com \
