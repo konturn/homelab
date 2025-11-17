@@ -720,3 +720,18 @@ services:
 #      - {{ docker_persistent_data_path }}/nextcloud/config/php.ini:/usr/local/etc/php/php.ini
       - /etc/localtime:/etc/localtime:ro
     restart: unless-stopped
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    restart: unless-stopped
+    ports:
+      - "443:7878"
+    networks:
+      - internal
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+    volumes:
+      - {{ docker_persistent_data_path }}/prowlarr:/config
