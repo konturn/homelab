@@ -664,6 +664,20 @@ services:
       MQTT_USERNAME: mosquitto
       MQTT_PASSWORD: {{ lookup('env', 'MQTT_PASS') }}
       MQTT_REJECT_UNAUTHORIZED: "false"
+  zigbee2mqtt:
+    container_name: zigbee2mqtt
+    restart: unless-stopped
+    image: koenkk/zigbee2mqtt
+    depends_on:
+      - mosquitto
+    networks:
+      iot:
+    ports:
+      - 8081:8080
+    volumes:
+      - "{{ docker_persistent_data_path }}/zigbee2mqtt:/app/data"
+    environment:
+      - TZ=America/New_York
   paperless-ngx:
     image: lscr.io/linuxserver/paperless-ngx:latest
     container_name: paperless-ngx
