@@ -44,6 +44,8 @@ all:
     vac_mac: b8:4d:43:98:68:4f
     apple_tv_mac: 8c:26:aa:c7:d0:41
     apple_tv_address: 10.6.128.19
+    zigbee_radio_mac: 68:25:dd:2f:51:27
+    zigbee_radio_address: 10.6.128.20
     snapserver_address: 10.6.32.2
     mosquitto_address: 10.6.32.3
     frigate_address: 10.6.32.4
