@@ -360,7 +360,6 @@ services:
       - plex
       - amcrest2mqtt
       - snapserver
-      - double-take
     ports:
       - "443:8123"
     devices: 
