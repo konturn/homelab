@@ -358,7 +358,6 @@ services:
       - iot
       - external
     depends_on:
-      - frigate
       - plex
       - amcrest2mqtt
       - snapserver
@@ -516,24 +515,6 @@ services:
       - registry:/var/lib/registry
       - {{ docker_persistent_data_path }}/registry/auth:/auth
       - {{ docker_persistent_data_path }}/certs:/certs
-  frigate:
-    container_name: frigate
-    restart: unless-stopped
-    image: ghcr.io/blakeblackshear/frigate:stable
-    depends_on:
-      - mosquitto
-    networks:
-      iot:
-        ipv4_address: {{ frigate_address }}
-    ports:
-      - "443:5000"
-    shm_size: "512mb"
-    runtime: nvidia
-    volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - "{{ docker_persistent_data_path }}/frigate:/config"
-      - /mpool/plex/frigate:/media/frigate
-      - "{{ docker_persistent_data_path }}/certs:/certs"
   mosquitto:
     container_name: mosquitto
     image: eclipse-mosquitto

@@ -13,6 +13,5 @@
 {{ registry_address }} registry.lab.nkontur.com
 {{ snapserver_address }} snapserver.lab.nkontur.com
 {{ amp_address }} amp.lab.nkontur.com
-{{ frigate_address }} frigate.lab.nkontur.com
 {{ mosquitto_address }} mqtt.lab.nkontur.com
 10.6.0.1 router.lab.nkontur.com

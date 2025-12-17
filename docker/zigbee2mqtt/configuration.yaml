@@ -7,7 +7,10 @@ mqtt:
   user: mosquitto
   password: {{ lookup('env', 'MQTT_PASS') }}
 serial:
-  port: tcp://{{ zigbee_radio_address }}:6638
+  port: tcp://{{ zigbee_radio_address }}:7638
+  adapter: zstack
+  baudrate: 115200
+  rtscts: false
 advanced:
   homeassistant_legacy_entity_attributes: false
   legacy_api: false

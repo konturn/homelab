@@ -48,7 +48,6 @@ all:
     zigbee_radio_address: 10.6.128.20
     snapserver_address: 10.6.32.2
     mosquitto_address: 10.6.32.3
-    frigate_address: 10.6.32.4
     iot_nginx_ip: 10.6.32.5
     weather_mqtt_bridge_ip: 10.6.32.6
     mopidy_address: 10.6.32.7
@@ -120,9 +119,6 @@ all:
         - src: "docker/double-take/config/config.yml"
           dest: "{{ docker_persistent_data_path }}/double-take/config/config.yml"
           name: "double-take"
-        - src: "docker/frigate/config.yml"
-          dest: "{{ docker_persistent_data_path }}/frigate/config.yml"
-          name: "frigate"
         - src: "docker/nextcloud/config.php"
           dest: "{{ docker_persistent_data_path }}/nextcloud/config.php"
           name: "nextcloud"
