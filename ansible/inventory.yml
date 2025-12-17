@@ -1,7 +1,7 @@
 all:
   vars:
     mullvad_interface_name: us-chi-wg-201
-    inet_interface_name: enp2s0f0
+    inet_interface_name: enx6c1ff76b2ec9
     nginx_ip: 10.2.32.1
     lab_nginx_ip: 10.3.32.1
     pihole_ip: 10.3.32.2
