@@ -188,8 +188,8 @@
     state: present
     
 - name: Restart containers if config change
-  community.docker.docker_container:
-    name: "{{ item.item.name }}"
-    restart: yes
+  ansible.builtin.command:
+    cmd: "docker restart {{ item.item.name }}"
   when: item.changed
   loop: "{{ docker_config_copy.results }}"
+  ignore_errors: yes
