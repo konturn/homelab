@@ -366,7 +366,7 @@ services:
     devices: 
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_ETDRb11A920-if00-port0:/dev/ttyUSB0"
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0:/dev/ttyUSB1"
-    image: "homeassistant/home-assistant:2024.6"
+    image: "homeassistant/home-assistant:2025.12"
     volumes:
       - "{{ docker_persistent_data_path }}/homeassistant:/config"
       - /etc/localtime:/etc/localtime:ro
