@@ -126,6 +126,21 @@
     weekday: "1"
     job: "{{ '/bin/bash ' + '/root/cron/renew.sh ' + lookup('env', 'NAMESILO_API_KEY') + ' >> /root/cron/logs/ssl.log 2>&1' }}"
 
+- name: Template out cron script for ISO conversion
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/plex/convert_isos_makemkv.sh' }}"
+    dest: /root/cron/convert_isos.sh
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Sets up cronjob for ISO conversion
+  ansible.builtin.cron:
+    name: "Convert ISO files to MKV"
+    minute: "0"
+    hour: "2"
+    job: "{{ '/bin/bash ' + '/root/cron/convert_isos.sh >> /root/cron/logs/iso_convert.log 2>&1' }}"
+
 
 - name: Sync systemd-networkd drop-in files
   ansible.posix.synchronize:
