@@ -53,40 +53,15 @@ all:
     mopidy_address: 10.6.32.7
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     omapi_secret: "{{ lookup('env', 'OMAPI_SECRET') }}"
-    vrrp_password: "{{ lookup('env', 'VRRP_PASSWORD') }}"
     is_satellite: false
     headway_area: "ohio-latest"
     headway_url: "https://headway.iot.lab.nkontur.com"
   hosts:
-    fallback.lab.nkontur.com:
-      is_primary_router: false
-      local_interface_name: eth0
-      dhcp_address: 10.4.128.1
-      dhcp_peer_address: 10.4.0.1
-      use_onboard_audio: false
-      docker_compose_file_names:
-        - "docker-compose-fallback.yml"
-      docker_compose_dest_path: ""
-      docker_compose_project_name: "fallback"
-      docker_config: 
-        - src: "docker/pihole/custom.list"
-          dest: "/etc/pihole/conf/custom.list"
-          name: "pihole"
-        - src: "docker/pihole/custom.conf"
-          dest: "/etc/pihole/dnsmasq/custom.conf"
-          name: "pihole"
-      snapclient_config:
-        - soundcard: "plughw:CARD=sndrpihifiberry,DEV=0"
-          name: "global"
-        - soundcard: "plughw:CARD=Device,DEV=0"
-          name: "kitchen"
     router.lab.nkontur.com:
       wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/wg0.conf' }}"
       wireguard_interface_name: "wg0"
-      is_primary_router: true
       local_interface_name: bond0
       dhcp_address: 10.4.0.1
-      dhcp_peer_address: 10.4.128.1
       docker_compose_file_names:
         -  "docker-compose.yml"
       docker_compose_dest_path: "{{ docker_persistent_data_path }}/ansible_state"
