@@ -669,4 +669,4 @@ services:
       - {{ docker_persistent_data_path }}/moltbot/config:/home/node/.moltbot
       - {{ docker_persistent_data_path }}/moltbot/workspace:/home/node/clawd
       - /var/run/docker.sock:/var/run/docker.sock
-    command: ["node", "dist/index.js", "gateway", "--bind", "0.0.0.0", "--port", "18789"]
+    command: ["node", "dist/index.js", "gateway", "--bind", "lan", "--port", "18789"]
