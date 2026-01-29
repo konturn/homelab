@@ -47,3 +47,7 @@ ansible-playbook -i ansible/inventory.yml ansible/router.yml
 - `external` - Internet-facing services (nginx)
 - `internal` - Lab services (internal nginx, databases)
 - `iot` - IoT devices (zigbee, mqtt, home assistant)
+
+## Coding Conventions
+
+- Use exponential backoff when polling or looping (e.g., waiting for pipelines, health checks). Cap at 5 minutes max between iterations unless otherwise specified.
