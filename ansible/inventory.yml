@@ -106,13 +106,13 @@ all:
           dest: "{{ docker_persistent_data_path }}/zigbee2mqtt/configuration.yaml"
           name: "zigbee2mqtt"
         - src: "docker/moltbot/moltbot.json"
-          dest: "{{ docker_persistent_data_path }}/moltbot/config/moltbot.json"
+          dest: "{{ docker_persistent_data_path }}/moltbot/data/moltbot.json"
           name: "moltbot-gateway"
         - src: "docker/moltbot/mcporter/mcporter.json"
           dest: "{{ docker_persistent_data_path }}/moltbot/mcporter/mcporter.json"
           name: "moltbot-gateway"
         - src: "docker/moltbot/agents/main/agent/auth-profiles.json"
-          dest: "{{ docker_persistent_data_path }}/moltbot/config/agents/main/agent/auth-profiles.json"
+          dest: "{{ docker_persistent_data_path }}/moltbot/data/agents/main/agent/auth-profiles.json"
           name: "moltbot-gateway"
   children:
     satellites:
