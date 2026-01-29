@@ -14,5 +14,13 @@
     "telegram": {
       "enabled": true
     }
+  },
+  "auth": {
+    "profiles": {
+      "anthropic:manual": {
+        "provider": "anthropic",
+        "mode": "token"
+      }
+    }
   }
 }

@@ -1,7 +1,10 @@
 {
-  "anthropic:default": {
-    "provider": "anthropic",
-    "mode": "token",
-    "access": "{{ lookup('env', 'CLAUDE_CODE_OAUTH_TOKEN') }}"
+  "version": 1,
+  "profiles": {
+    "anthropic:manual": {
+      "type": "token",
+      "provider": "anthropic",
+      "token": "{{ lookup('env', 'CLAUDE_CODE_OAUTH_TOKEN') }}"
+    }
   }
 }
