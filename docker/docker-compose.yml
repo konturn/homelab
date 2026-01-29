@@ -665,6 +665,8 @@ services:
     environment:
       - TZ=America/New_York
       - ANTHROPIC_API_KEY={{ lookup('env', 'ANTHROPIC_API_KEY') }}
+      - CLAWDBOT_GATEWAY_TOKEN={{ lookup('env', 'MOLTBOT_GATEWAY_TOKEN') }}
+      - TELEGRAM_BOT_TOKEN={{ lookup('env', 'MOLTBOT_TELEGRAM_TOKEN') }}
     volumes:
       - {{ docker_persistent_data_path }}/moltbot/config:/home/node/.moltbot
       - {{ docker_persistent_data_path }}/moltbot/workspace:/home/node/clawd

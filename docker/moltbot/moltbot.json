@@ -9,5 +9,10 @@
     "controlUi": {
       "allowInsecureAuth": true
     }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true
+    }
   }
 }
