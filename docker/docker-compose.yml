@@ -667,8 +667,11 @@ services:
       - ANTHROPIC_API_KEY={{ lookup('env', 'ANTHROPIC_API_KEY') }}
       - CLAWDBOT_GATEWAY_TOKEN={{ lookup('env', 'MOLTBOT_GATEWAY_TOKEN') }}
       - TELEGRAM_BOT_TOKEN={{ lookup('env', 'MOLTBOT_TELEGRAM_TOKEN') }}
+      - HASS_URL=http://homeassistant:8123
+      - HASS_TOKEN={{ lookup('env', 'HASS_TOKEN') }}
     volumes:
       - {{ docker_persistent_data_path }}/moltbot/config:/home/node/.moltbot
+      - {{ docker_persistent_data_path }}/moltbot/mcporter:/home/node/.mcporter
       - {{ docker_persistent_data_path }}/moltbot/workspace:/home/node/clawd
       - /var/run/docker.sock:/var/run/docker.sock
     command: ["node", "dist/index.js", "gateway", "--bind", "lan", "--port", "18789"]
