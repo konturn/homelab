@@ -16,6 +16,12 @@ all:
     ipmi_address: 10.4.128.7
     ups_mac: 00:c0:b7:84:80:f4
     ups_address: 10.4.128.8
+    privileged_access_point_1_mac: d2:3f:2a:7e:a7:98
+    privileged_access_point_1_address: 10.4.128.21
+    privileged_access_point_2_mac: 4e:83:ba:97:05:47
+    privileged_access_point_2_address: 10.4.128.22
+    privileged_access_point_3_mac: 80:a9:97:12:5b:30
+    privileged_access_point_3_address: 10.4.128.23
     registry_address: 10.4.32.1
     denon_mac: 00:06:78:84:0e:d8
     denon_address: 10.6.128.3
