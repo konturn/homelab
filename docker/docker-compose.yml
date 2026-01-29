@@ -653,3 +653,19 @@ services:
       - TZ=America/New_York
     volumes:
       - {{ docker_persistent_data_path }}/prowlarr:/config
+  moltbot-gateway:
+    image: ghcr.io/moltbot/moltbot:main
+    container_name: moltbot-gateway
+    restart: unless-stopped
+    networks:
+      - internal
+    ports:
+      - "18789:18789"
+    environment:
+      - TZ=America/New_York
+      - ANTHROPIC_API_KEY={{ lookup('env', 'ANTHROPIC_API_KEY') }}
+    volumes:
+      - {{ docker_persistent_data_path }}/moltbot/config:/home/node/.clawdbot
+      - {{ docker_persistent_data_path }}/moltbot/workspace:/home/node/clawd
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: ["node", "dist/index.js", "gateway", "--bind", "0.0.0.0", "--port", "18789"]

@@ -77,10 +77,11 @@
     enabled: yes
     daemon_reload: yes
 
-- name: Install gitlab-runner
+- name: Install gitlab-runner and glab
   apt:
     name:
       - gitlab-runner
+      - glab
     state: latest
     update_cache: yes
 
