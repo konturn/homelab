@@ -1,4 +1,13 @@
 {
+  "auth": {
+    "profiles": {
+      "anthropic:default": {
+        "provider": "anthropic",
+        "mode": "token",
+        "token": "{{ lookup('env', 'CLAUDE_CODE_OAUTH_TOKEN') }}"
+      }
+    }
+  },
   "gateway": {
     "mode": "local",
     "auth": {
