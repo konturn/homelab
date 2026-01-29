@@ -665,6 +665,7 @@ services:
     environment:
       - TZ=America/New_York
       - ANTHROPIC_API_KEY={{ lookup('env', 'ANTHROPIC_API_KEY') }}
+      - OPENAI_API_KEY={{ lookup('env', 'OPENAI_API_KEY') }}
       - CLAWDBOT_GATEWAY_TOKEN={{ lookup('env', 'MOLTBOT_GATEWAY_TOKEN') }}
       - TELEGRAM_BOT_TOKEN={{ lookup('env', 'MOLTBOT_TELEGRAM_TOKEN') }}
       - HASS_URL=http://homeassistant:8123
