@@ -1,0 +1,7 @@
+{
+  "anthropic:default": {
+    "provider": "anthropic",
+    "mode": "token",
+    "access": "{{ lookup('env', 'CLAUDE_CODE_OAUTH_TOKEN') }}"
+  }
+}

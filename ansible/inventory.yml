@@ -111,6 +111,9 @@ all:
         - src: "docker/moltbot/mcporter/mcporter.json"
           dest: "{{ docker_persistent_data_path }}/moltbot/mcporter/mcporter.json"
           name: "moltbot-gateway"
+        - src: "docker/moltbot/agents/main/agent/auth-profiles.json"
+          dest: "{{ docker_persistent_data_path }}/moltbot/config/agents/main/agent/auth-profiles.json"
+          name: "moltbot-gateway"
   children:
     satellites:
       vars:
