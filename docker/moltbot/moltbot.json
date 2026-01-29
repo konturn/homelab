@@ -4,6 +4,7 @@
     "auth": {
       "mode": "token",
       "token": "{{ lookup('env', 'MOLTBOT_GATEWAY_TOKEN') }}"
-    }
+    },
+    "trustedProxies": ["10.3.32.1"]
   }
 }
