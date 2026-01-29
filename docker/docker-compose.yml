@@ -77,11 +77,12 @@ services:
       - external
       - internal
     restart: unless-stopped
-    runtime: nvidia
+    # GPU disabled until NVML driver/library mismatch is fixed
+    # runtime: nvidia
     environment:
       - TZ=America/New_York
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
+      # - NVIDIA_VISIBLE_DEVICES=all
+      # - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
     volumes:
       - /mpool/plex/config:/config
       - /mpool/plex/transcode:/transcode
