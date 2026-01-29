@@ -99,6 +99,9 @@ all:
         - src: "docker/zigbee2mqtt/configuration.yaml"
           dest: "{{ docker_persistent_data_path }}/zigbee2mqtt/configuration.yaml"
           name: "zigbee2mqtt"
+        - src: "docker/moltbot/config.json"
+          dest: "{{ docker_persistent_data_path }}/moltbot/config/config.json"
+          name: "moltbot-gateway"
   children:
     satellites:
       vars:
