@@ -1,5 +1,9 @@
 {
   "gateway": {
-    "mode": "local"
+    "mode": "local",
+    "auth": {
+      "mode": "token",
+      "token": "{{ lookup('env', 'MOLTBOT_GATEWAY_TOKEN') }}"
+    }
   }
 }
