@@ -665,6 +665,12 @@ services:
       - internal
     ports:
       - "18789:18789"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18789/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     environment:
       - TZ=America/New_York
       - OPENAI_API_KEY={{ lookup('env', 'OPENAI_API_KEY') }}
