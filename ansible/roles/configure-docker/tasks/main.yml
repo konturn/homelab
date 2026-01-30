@@ -178,6 +178,8 @@
     group: "{{ item.owner | default('root') }}"
     mode: "{{ item.mode | default('0644') }}"
   register: docker_config_copy
+  # Ignore errors in check mode for dynamically generated nginx configs
+  ignore_errors: "{{ ansible_check_mode }}"
   loop: "{{ docker_config + (docker_config_nginx | default([])) }}"
 
 - name: Create and start Docker services
