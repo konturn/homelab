@@ -1,11 +1,32 @@
+# GitLab CI Configuration for Homelab
+# Optimized with caching for faster builds
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  ANSIBLE_GALAXY_CACHE_DIR: "$CI_PROJECT_DIR/.cache/ansible-galaxy"
+
 .ansible:
   image: willhallonline/ansible:latest
+  cache:
+    key: ansible-deps-v1
+    paths:
+      - .cache/pip
+      - .cache/ansible-galaxy
+      - /root/.ansible/roles
   before_script:
-    - pip3 install -r requirements.txt 
-    - ansible-galaxy install -r ansible/requirements.yml
+    # Use cached pip packages
+    - pip3 install --cache-dir $PIP_CACHE_DIR -r requirements.txt
+    # Use cached ansible roles (check if already installed)
+    - |
+      if [ ! -d "/root/.ansible/roles/restic" ]; then
+        ansible-galaxy install -r ansible/requirements.yml
+      else
+        echo "Ansible roles already cached, skipping install"
+      fi
+    # SSH setup
     - echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp
     - chmod 600 tmp
-    - mkdir ~/.ssh
+    - mkdir -p ~/.ssh
     - cp ansible/known_hosts ~/.ssh/known_hosts
 
 stages:
