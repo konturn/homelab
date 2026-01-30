@@ -13,6 +13,7 @@ check_interval = 0
   [runners.docker]
     image = "ubuntu:20.04"
     network_mode = "host"
+    volumes = ["/cache/gitlab-runner:/cache"]
 
 [[runners]]
   name = "images"
@@ -24,4 +25,4 @@ check_interval = 0
     image = "ubuntu:20.04"
     network_mode = "docker_mgmt"
     privileged = true
-    volumes = ["/certs/client"]
+    volumes = ["/certs/client", "/cache/gitlab-runner:/cache"]

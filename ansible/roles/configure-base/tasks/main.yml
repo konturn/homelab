@@ -91,6 +91,18 @@
     append: yes
     groups: docker
 
+### Create directories for gitlab-runner volume mounts
+- name: Ensure gitlab-runner volume mount directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - /certs/client
+    - /cache/gitlab-runner
+
 ### Configure gitlab-runner on host
 - name: Gitlab runner config file
   ansible.builtin.template:
