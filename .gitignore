@@ -1,0 +1,24 @@
+# Prometheus Workspace - Git Ignore
+# Only track markdown files for memory/identity/skills
+
+# Ignore everything by default
+*
+
+# But allow descending into directories
+!*/
+
+# Track markdown files
+!.gitignore
+!*.md
+
+# Ignore homelab entirely (separate repo)
+homelab/
+
+# Ignore runtime/session data even if .md
+*.jsonl
+*.json
+*.log
+
+# Ignore temp and canvas directories
+tmp/
+canvas/
