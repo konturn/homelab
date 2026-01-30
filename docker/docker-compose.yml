@@ -661,10 +661,18 @@ services:
     image: moltbot-custom:latest
     container_name: moltbot-gateway
     restart: unless-stopped
+    depends_on:
+      - homeassistant
     networks:
       - internal
     ports:
       - "18789:18789"
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 512M
     environment:
       - TZ=America/New_York
       - OPENAI_API_KEY={{ lookup('env', 'OPENAI_API_KEY') }}
