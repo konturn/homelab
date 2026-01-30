@@ -669,6 +669,7 @@ services:
       - TELEGRAM_BOT_TOKEN={{ lookup('env', 'MOLTBOT_TELEGRAM_TOKEN') }}
       - HASS_URL=http://homeassistant:8123
       - HASS_TOKEN={{ lookup('env', 'HASS_TOKEN') }}
+      - GITLAB_TOKEN={{ lookup('env', 'MOLTBOT_GITLAB_TOKEN') }}
     volumes:
       - {{ docker_persistent_data_path }}/moltbot/data:/home/node/.moltbot
       - {{ docker_persistent_data_path }}/moltbot/data:/home/node/.clawdbot
