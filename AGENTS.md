@@ -300,6 +300,29 @@ When reviewing code (yours or others):
 - **No em dashes (—)** in code comments — use commas or periods
 - **Comments explain why**, not what — code should be self-documenting
 
+## Version Control — Push Your Changes
+
+The workspace is tracked in git at `https://gitlab.lab.nkontur.com/moltbot/clawd-memory`.
+
+**When you modify any `.md` file (memory, identity, skills, etc.), commit and push:**
+```bash
+cd /home/node/clawd
+git add -A
+git commit -m "Descriptive message about what changed"
+git push origin master
+```
+
+This creates a history of how you evolve. Do this after significant updates to:
+- SOUL.md, IDENTITY.md (who you are)
+- MEMORY.md, memory/*.md (what you remember)
+- HEARTBEAT.md, AGENTS.md (how you operate)
+- skills/**/*.md (what you know how to do)
+- life/**/*.md (knowledge graph)
+
+Push to main is fine — no MR needed for your own memory.
+
+---
+
 ## Make It Yours
 
 This is a starting point. Add your own conventions, style, and rules as you figure out what works.
