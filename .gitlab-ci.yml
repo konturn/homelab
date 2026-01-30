@@ -1,5 +1,4 @@
 .ansible:
-  stage: ansible-main
   image: willhallonline/ansible:latest
   before_script:
     - pip3 install -r requirements.txt 
@@ -10,14 +9,45 @@
     - cp ansible/known_hosts ~/.ssh/known_hosts
 
 stages:
-  - ansible-main
+  - validate
+  - deploy
 
-router:
+# =============================================================================
+# Validation (MRs) - Dry run only, no actual changes
+# =============================================================================
+
+router:validate:
   extends: .ansible
+  stage: validate
   script:
-    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml 
+    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml --check --diff
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
-zwave:
+zwave:validate:
   extends: .ansible
+  stage: validate
+  script:
+    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/zwave.yml --check --diff
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# =============================================================================
+# Deploy (main branch only) - Actual deployment
+# =============================================================================
+
+router:deploy:
+  extends: .ansible
+  stage: deploy
+  script:
+    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+zwave:deploy:
+  extends: .ansible
+  stage: deploy
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/zwave.yml
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
