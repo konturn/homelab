@@ -655,7 +655,10 @@ services:
     volumes:
       - {{ docker_persistent_data_path }}/prowlarr:/config
   moltbot-gateway:
-    image: ghcr.io/moltbot/moltbot:main
+    build:
+      context: "{{ docker_persistent_data_path }}/moltbot/build"
+      dockerfile: Dockerfile
+    image: moltbot-custom:latest
     container_name: moltbot-gateway
     restart: unless-stopped
     networks:
