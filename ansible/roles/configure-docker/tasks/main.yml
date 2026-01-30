@@ -188,10 +188,11 @@
     project_src: "{{ docker_compose_dest_path }}/"
     files: "{{ docker_compose_file_names }}"
     state: present
+  when: not ansible_check_mode
     
 - name: Restart containers if config change
   ansible.builtin.command:
     cmd: "docker restart {{ item.item.name }}"
-  when: item.changed
+  when: item.changed and not ansible_check_mode
   loop: "{{ docker_config_copy.results }}"
   ignore_errors: yes
