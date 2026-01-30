@@ -8,8 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
     && rm -rf /var/lib/apt/lists/*
 
-# Install glab (GitLab CLI)
-RUN curl -fsSL https://gitlab.com/gitlab-org/cli/-/releases/v1.46.1/downloads/glab_1.46.1_linux_amd64.deb -o /tmp/glab.deb \
+# Install glab (GitLab CLI) from GitHub
+RUN curl -fsSL https://github.com/profclems/glab/releases/download/v1.22.0/glab_1.22.0_Linux_x86_64.deb -o /tmp/glab.deb \
     && dpkg -i /tmp/glab.deb \
     && rm /tmp/glab.deb
 
