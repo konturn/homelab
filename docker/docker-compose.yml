@@ -680,3 +680,9 @@ services:
       - {{ docker_persistent_data_path }}/moltbot/workspace:/home/node/clawd
       - /var/run/docker.sock:/var/run/docker.sock
     command: ["node", "dist/index.js", "gateway", "--bind", "lan", "--port", "18789"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18789/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
