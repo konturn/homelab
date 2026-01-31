@@ -63,6 +63,7 @@ ansible-playbook -i ansible/inventory.yml ansible/zwave.yml
 - **Radarr/Sonarr** - Media automation
 - **PiHole** - DNS ad-blocking
 - **Paperless-ngx** - Document management
+- **Uptime Kuma** - Service availability monitoring
 
 ### IoT (10.6.x.x)
 - **Home Assistant** - Home automation

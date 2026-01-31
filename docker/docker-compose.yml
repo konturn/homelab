@@ -5,6 +5,7 @@ volumes:
   fifos:
   registry:
   mosquitto:
+  uptime-kuma-data:
   nextcloud:
     driver: local
     driver_opts:
@@ -280,6 +281,14 @@ services:
       - INFLUXDB_TOKEN={{ lookup('env', 'INFLUXDB_ADMIN_TOKEN') }}
     depends_on:
       - influxdb
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: uptime-kuma
+    volumes:
+      - uptime-kuma-data:/app/data
+    networks:
+      - internal
+    restart: unless-stopped
   gitlab:
     container_name: gitlab
     ports:
