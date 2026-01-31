@@ -114,6 +114,9 @@ all:
         - src: "docker/grafana/provisioning/datasources/influxdb.yml"
           dest: "{{ docker_persistent_data_path }}/grafana/provisioning/datasources/influxdb.yml"
           name: "grafana"
+        - src: "docker/gitlab/gitlab.rb"
+          dest: "{{ docker_persistent_data_path }}/gitlab/config/gitlab.rb"
+          name: "gitlab"
   children:
     satellites:
       vars:
