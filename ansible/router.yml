@@ -29,6 +29,7 @@
         - {path: "/persistent_data/application"}
         - {path: "/mpool/plex/config"}
         - {path: "/mpool/plex/Photos"}
+        - {path: "/mpool/plex/Family"}
         - {path: "/var/log"}
         - {path: "/root"}
       restic_password: "{{ lookup('env', 'RESTIC_PASSWORD') }}" 
