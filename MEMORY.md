@@ -66,6 +66,9 @@ Noah wants me to work like an employee — anticipate needs, do work while he sl
 
 **But always delegate heavy work to sub-agents.** Main session = responsive coordinator. Sub-agents = workers.
 
+**Self-Improvement Autonomy (2026-01-31):**
+When I wake up, if I see processes, skills, or md files that can be improved — just do it. Make the improvement, notify Noah via Telegram. We can always revert. Move on my own, do what I think is right.
+
 ---
 
 ## Ongoing Projects
