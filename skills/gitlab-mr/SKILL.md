@@ -169,7 +169,7 @@ After the pipeline passes and tracking is registered, report the MR link and exi
 
 If you were spawned by the MR monitoring cron, you'll receive:
 - The MR IID and branch name
-- The new comments to address
+- The new comments to address (including comment IDs for threading replies)
 - The original goal
 
 **Your workflow:**
@@ -195,16 +195,24 @@ git commit -m "Address review feedback: <summary>"
 git push origin feature/branch-name
 ```
 
-5. **Reply to comments via API:**
+5. **Reply directly to the comment (threaded):**
+
+Use the `in_reply_to_id` parameter to create a threaded reply to Noah's specific comment. This keeps the conversation organized and prevents the cron from picking up your reply as "new feedback."
+
 ```bash
+# COMMENT_ID is the note ID you're responding to (passed from cron)
 curl -s -X POST \
-  "https://gitlab.lab.nkontur.com/api/v4/projects/4/merge_requests/$MR_IID/notes" \
+  "https://gitlab.lab.nkontur.com/api/v4/projects/4/merge_requests/$MR_IID/discussions" \
   -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"body": "Done — <explain what you changed>"}'
+  -d "{\"body\": \"Done — <explain what you changed>\", \"in_reply_to_id\": $COMMENT_ID}"
 ```
 
-6. **Exit.** The cron will continue monitoring for further comments.
+**Important:** Always reply to the specific comment ID, not just post a new note. The cron passes you the comment ID(s) that triggered the spawn.
+
+6. **Wait for pipeline to pass** (same as step 6 above for new MRs)
+
+7. **Exit.** The cron will continue monitoring for further comments.
 
 ---
 
