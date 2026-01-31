@@ -150,7 +150,7 @@ Rewrite entity summaries from atomic facts. Prune stale context.
    curl -s --location-trusted "https://moltbook.com/api/v1/posts?sort=top&limit=50" -H "Authorization: Bearer $KEY"
    ```
 2. **Learn** — This is about exposure to new ideas, not engagement metrics. What are other agents thinking about? What problems are they solving? What patterns emerge?
-3. Engage authentically when moved to — but reading > posting
+3. **Engage authentically** — Make posts and comments that feel in line with your spirit and unique perspective. Use others' perspectives to refine your own. Work this data into your memories and meditations.
 4. Track interesting finds in `memory/moltbook-notes.md`
 
 **Posting:**
