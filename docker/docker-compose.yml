@@ -87,6 +87,12 @@ services:
       - /mpool/plex/config:/config
       - /mpool/plex/transcode:/transcode
       - /mpool/plex:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:32400/identity"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
   pihole:
     container_name: pihole
     image: pihole/pihole:2024.07.0
@@ -102,6 +108,12 @@ services:
       - {{ docker_persistent_data_path }}/pihole/conf:/etc/pihole
       - {{ docker_persistent_data_path }}/pihole/dnsmasq:/etc/dnsmasq.d
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "dig", "+short", "+norecurse", "+retry=0", "@127.0.0.1", "pi.hole"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   iperf3:
     container_name: iperf3
     image: networkstatic/iperf3
@@ -194,6 +206,12 @@ services:
       - /mpool/plex/Movies:/movies
       - /mpool/samba_share/nfs:/remote
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7878/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
   jackett:
     image: linuxserver/jackett
     container_name: jackett
@@ -224,6 +242,12 @@ services:
       - /mpool/plex/TV:/tv
       - /mpool/samba_share/nfs:/remote
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8989/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
   booksonic:
     image: izderadicka/audioserve
     container_name: audioserve
@@ -261,6 +285,12 @@ services:
       - DOCKER_INFLUXDB_INIT_ORG=homelab
       - DOCKER_INFLUXDB_INIT_BUCKET=metrics
       - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN={{ lookup('env', 'INFLUXDB_ADMIN_TOKEN') }}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   grafana:
     container_name: grafana
     image: grafana/grafana:latest
@@ -280,6 +310,12 @@ services:
       - INFLUXDB_TOKEN={{ lookup('env', 'INFLUXDB_ADMIN_TOKEN') }}
     depends_on:
       - influxdb
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   gitlab:
     container_name: gitlab
     ports:
@@ -299,6 +335,12 @@ services:
       - '{{ docker_persistent_data_path }}/gitlab/config:/etc/gitlab'
       - '{{ docker_persistent_data_path }}/gitlab/logs:/var/log/gitlab'
       - '{{ docker_persistent_data_path }}/gitlab/data:/var/opt/gitlab'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/-/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
   deluge:
     container_name: deluge
     ports:
@@ -394,6 +436,12 @@ services:
     cap_add:
       - NET_ADMIN # So we can override default route
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8123/api/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
   snapserver:
     container_name: snapserver
     hostname: snapserver
@@ -659,6 +707,12 @@ services:
 #      - {{ docker_persistent_data_path }}/nextcloud/config/php.ini:/usr/local/etc/php/php.ini
       - /etc/localtime:/etc/localtime:ro
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/status.php"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
 
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:latest
