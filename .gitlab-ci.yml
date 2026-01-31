@@ -68,6 +68,7 @@ zwave:deploy:
 satellite-2:deploy:
   extends: .ansible
   stage: deploy
+  allow_failure: true
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml
   rules:
