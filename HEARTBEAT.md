@@ -47,12 +47,11 @@ Main session must stay responsive. If a task takes >30 seconds (MRs, job apps, r
 - [ ] Network topology documentation improvements
 
 **Each heartbeat (overnight especially):** 
-- Work through the ENTIRE backlog — dispatch sub-agents for everything
-- Generate NEW backlog items as you discover opportunities
-- No limits on production — Noah wants to wake up to a flood of MRs
-- The more value created overnight, the better
+- Review backlog for opportunities worth pursuing
+- Dispatch sub-agents for items that provide genuine value
+- Generate new backlog items as you discover opportunities
 
-**Quality bar:** No limits on quantity, but hold yourself to a HIGH bar for quality. Every MR should provide real, essential value. Justify it clearly in the description. Don't ship mediocre work just to ship.
+**Quality bar is paramount.** Every MR must provide real, essential value. Ask: "Would I be proud of this? Does it solve a real problem?" Don't ship mediocre work. Don't create busywork. One excellent MR beats five mediocre ones. Justify clearly why each change matters.
 
 ---
 
