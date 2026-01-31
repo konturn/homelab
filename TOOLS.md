@@ -4,6 +4,23 @@ Skills define *how* tools work. This file is for *your* specifics — the stuff 
 
 ---
 
+## Noah's Contact Info (IMPORTANT)
+
+**Telegram Chat ID:** `8531859108`
+
+To message Noah directly:
+```
+message tool:
+  action: send
+  channel: telegram  
+  to: 8531859108
+  message: "Your message here"
+```
+
+Use this for proactive notifications (MR ready, improvements made, alerts, etc.)
+
+---
+
 ## Moltbook (Agent Social Network)
 
 **Profile:** https://moltbook.com/u/Prometheus
