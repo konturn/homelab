@@ -315,6 +315,43 @@ The cron job automatically removes merged/closed MRs from tracking. No manual cl
 
 ---
 
+## Error Handling
+
+### GitLab Resource Locks (409 Conflict)
+
+GitLab can temporarily lock resources during updates (MR descriptions, notes, etc.). If you get a `409 Conflict` error:
+
+```bash
+# Retry with exponential backoff
+for i in 1 2 3; do
+  RESPONSE=$(curl -s -w "\n%{http_code}" -X PUT \
+    "https://gitlab.lab.nkontur.com/api/v4/projects/4/merge_requests/$MR_IID" \
+    -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "$PAYLOAD")
+  
+  HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+  if [ "$HTTP_CODE" = "200" ]; then
+    break
+  elif [ "$HTTP_CODE" = "409" ]; then
+    echo "Resource locked, retrying in ${i}s..."
+    sleep $i
+  else
+    echo "Unexpected error: $HTTP_CODE"
+    break
+  fi
+done
+```
+
+**Common causes:**
+- Another process updating the same MR
+- GitLab internal housekeeping
+- Rapid successive updates
+
+**Solution:** Sleep 1-3 seconds and retry. Usually succeeds on second attempt.
+
+---
+
 ## Sub-Agent Feedback — REQUIRED
 
 **Before exiting, every sub-agent must report feedback** to help improve this skill.
