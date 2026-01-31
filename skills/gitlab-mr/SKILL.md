@@ -157,9 +157,22 @@ fi
 
 Only report the MR as complete once the pipeline is green (or you've exhausted reasonable retry attempts).
 
-### 7. Report and Exit
+### 7. Notify via Telegram
 
-After the pipeline passes and tracking is registered, report the MR link and exit. A cron job will monitor for comments and spawn a new agent if Noah responds.
+After the pipeline passes, **send a Telegram notification** so Noah knows an MR is ready for review:
+
+```
+Use the message tool:
+- action: send
+- channel: telegram
+- message: "🔀 MR Ready: <title>\n\n<brief description of what it does>\n\n<MR_URL>"
+```
+
+This ensures Noah doesn't have to check GitLab constantly — he gets a ping when something needs attention.
+
+### 8. Report and Exit
+
+After the pipeline passes, tracking is registered, and Telegram notification is sent, report the MR link and exit. A cron job will monitor for comments and spawn a new agent if Noah responds.
 
 **Do NOT implement comment polling loops.** The cron handles that. But DO wait for pipeline success before exiting.
 
