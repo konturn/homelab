@@ -56,6 +56,10 @@ sessions_spawn(
 
 **You are the coordinator if your task mentions "coordinator" or "batch".**
 
+**⚠️ BATCH LIMITS:**
+- **Max 10 applications per batch** — Quality over quantity. Don't spam.
+- If search returns more than 10, pick the best 10 (highest salary, best fit, most interesting)
+
 1. **Read this skill fully** — Understand all requirements
 2. **Search for jobs** — Use Hiring Cafe, filter against blocklist/applied.json
 3. **For each job, spawn ONE worker at a time:**

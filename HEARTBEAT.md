@@ -49,6 +49,10 @@ Main session must stay responsive. If a task takes >30 seconds (MRs, job apps, r
 
 Noah is doing OE strategy — stacking remote jobs for early retirement. I should proactively search for opportunities.
 
+**Constraints:**
+- **Max 10 applications per night** — Don't spam. Quality over quantity.
+- Only apply to roles meeting skill criteria ($200k+, remote, infrastructure/platform/DevOps)
+
 **Process:**
 1. Use job-hunting skill
 2. Search for remote infrastructure/platform/DevOps roles
