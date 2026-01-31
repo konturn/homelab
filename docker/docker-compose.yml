@@ -82,9 +82,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 4G
+          memory: 16G
         reservations:
-          memory: 1G
+          memory: 4G
     environment:
       - TZ=America/New_York
       # - NVIDIA_VISIBLE_DEVICES=all
@@ -260,9 +260,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 4G
+          memory: 16G
         reservations:
-          memory: 1G
+          memory: 4G
     volumes:
         - influxdb-storage:/var/lib/influxdb2
         - {{ docker_persistent_data_path }}/influxdb/config:/etc/influxdb2
@@ -284,9 +284,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 4G
         reservations:
-          memory: 256M
+          memory: 1G
     volumes:
       - grafana-storage:/var/lib/grafana
       - {{ docker_persistent_data_path }}/grafana/provisioning:/etc/grafana/provisioning
@@ -316,9 +316,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 6G
+          memory: 24G
         reservations:
-          memory: 2G
+          memory: 8G
     volumes:
       - '{{ docker_persistent_data_path }}/gitlab/config:/etc/gitlab'
       - '{{ docker_persistent_data_path }}/gitlab/logs:/var/log/gitlab'
@@ -374,9 +374,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 8G
         reservations:
-          memory: 512M
+          memory: 2G
     environment:
       MYSQL_DATABASE: wordpress
       MYSQL_USER: wordpress
@@ -420,9 +420,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 8G
         reservations:
-          memory: 512M
+          memory: 2G
     volumes:
       - "{{ docker_persistent_data_path }}/homeassistant:/config"
       - /etc/localtime:/etc/localtime:ro
@@ -641,9 +641,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 8G
         reservations:
-          memory: 512M
+          memory: 2G
     environment:
       - PUID=1000
       - PGID=1000
@@ -682,9 +682,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 8G
         reservations:
-          memory: 512M
+          memory: 2G
     volumes:
       - nextcloud_db:/var/lib/mysql
     environment:
@@ -703,9 +703,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 8G
         reservations:
-          memory: 512M
+          memory: 2G
     volumes:
       - nextcloud:/data
 #      - {{ docker_persistent_data_path }}/nextcloud/config:/var/www/html/config
@@ -742,9 +742,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 4G
+          memory: 16G
         reservations:
-          memory: 1G
+          memory: 4G
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:18789/health"]
       interval: 30s
