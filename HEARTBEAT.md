@@ -38,8 +38,17 @@ Main session must stay responsive. If a task takes >30 seconds (MRs, job apps, r
 - [ ] Home Assistant automation improvements
 - [ ] Security hardening (rate limits, fail2ban, etc.)
 - [ ] Backup verification / restore testing
+- [ ] Log aggregation (Loki + Promtail)
+- [ ] Uptime monitoring (Uptime Kuma or similar)
+- [ ] Secret rotation documentation
+- [ ] Firewall rules audit and nftables migration
+- [ ] Network topology documentation improvements
 
-**Each heartbeat (overnight especially):** Pick 1-2 items from backlog, dispatch sub-agents. Noah wants to wake up to MRs.
+**Each heartbeat (overnight especially):** 
+- Work through the ENTIRE backlog — dispatch sub-agents for everything
+- Generate NEW backlog items as you discover opportunities
+- No limits on production — Noah wants to wake up to a flood of MRs
+- The more value created overnight, the better
 
 ---
 
