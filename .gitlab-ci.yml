@@ -1,22 +1,21 @@
 # =============================================================================
-# CI Pipeline - Aggressive Optimization for Speed
+# CI Pipeline - Minimal Setup, Maximum Parallelization
 # =============================================================================
 # Target: Total pipeline time < 3 minutes
 #
 # Key optimizations:
-# 1. Setup job downloads deps ONCE, passes as artifacts (not cache)
-# 2. Validate jobs skip all dep installation — just use artifacts
-# 3. Path-based rules - jobs only run when relevant files change
-# 4. DAG pipelines - deploy jobs start immediately after their validation
-# 5. Interruptible validation - new commits cancel in-progress MR pipelines
+# 1. NO setup stage - validate jobs start immediately
+# 2. All jobs share cache for deps (populated on first run)
+# 3. Install deps in parallel per-job (from cache = fast)
+# 4. Path-based rules - jobs only run when relevant files change
+# 5. DAG pipelines - deploy jobs start immediately after their validation
+# 6. Interruptible validation - new commits cancel in-progress MR pipelines
 #
 # Pipeline structure (DAG visualization):
 #
-#   setup ─┬─► router:validate ──► router:deploy
-#          │
-#          ├─► zwave:validate ───► zwave:deploy
-#          │
-#          └─► satellite-2:validate ──► satellite-2:deploy
+#   router:validate ──► router:deploy
+#   zwave:validate ───► zwave:deploy
+#   satellite-2:validate ──► satellite-2:deploy
 #
 # =============================================================================
 
@@ -30,11 +29,19 @@ workflow:
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
   ANSIBLE_ROLES_PATH: "$CI_PROJECT_DIR/.ansible-roles"
-  # Disable pip version check to save time
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
-  # Speed up ansible
   ANSIBLE_HOST_KEY_CHECKING: "False"
   ANSIBLE_PIPELINING: "True"
+
+# Cache config - all jobs share this
+.cache_config:
+  cache:
+    - key: pip-cache-v1
+      paths:
+        - .cache/pip
+    - key: ansible-roles-v1
+      paths:
+        - .ansible-roles
 
 # =============================================================================
 # Path-based change detection
@@ -123,66 +130,49 @@ variables:
   interruptible: true
 
 stages:
-  - setup
   - validate
   - deploy
 
 # =============================================================================
-# Setup Stage - Download dependencies ONCE, share as artifacts
+# Base job - minimal setup
 # =============================================================================
-setup:dependencies:
+.ansible:
   image: willhallonline/ansible:latest
-  stage: setup
-  script:
+  extends: .cache_config
+  before_script:
     - mkdir -p .cache/pip .ansible-roles ~/.ssh
     - pip3 install --cache-dir .cache/pip --no-warn-script-location -q -r requirements.txt
     - ansible-galaxy install -r ansible/requirements.yml -p .ansible-roles 2>/dev/null || true
     - cp ansible/known_hosts ~/.ssh/known_hosts
-    - echo "Dependencies ready"
-  artifacts:
-    paths:
-      - .ansible-roles/
-      - .cache/pip/
-    expire_in: 1 hour
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == "main"
+    - echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp && chmod 600 tmp
 
 # =============================================================================
-# Validation Stage - NO dependency installation, just use artifacts
+# Validation Stage - Runs in parallel on MRs
 # =============================================================================
-.validate_base:
-  image: willhallonline/ansible:latest
-  stage: validate
-  extends: .interruptible
-  needs:
-    - job: setup:dependencies
-      artifacts: true
-  before_script:
-    - mkdir -p ~/.ssh
-    - cp ansible/known_hosts ~/.ssh/known_hosts
-    - pip3 install --cache-dir .cache/pip --no-warn-script-location -q -r requirements.txt
-    - echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp
-    - chmod 600 tmp
-
 router:validate:
   extends:
-    - .validate_base
+    - .ansible
+    - .interruptible
     - .router_changes
+  stage: validate
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml --check --diff
 
 zwave:validate:
   extends:
-    - .validate_base
+    - .ansible
+    - .interruptible
     - .zwave_changes
+  stage: validate
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/zwave.yml --check --diff
 
 satellite-2:validate:
   extends:
-    - .validate_base
+    - .ansible
+    - .interruptible
     - .satellite2_changes
+  stage: validate
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml --check --diff
 
@@ -193,52 +183,38 @@ satellite-2:validate:
 # Uses resource_group to ensure deploys run in order across pipelines.
 # NOT interruptible - never cancel mid-deploy.
 
-.deploy_base:
-  image: willhallonline/ansible:latest
-  stage: deploy
-  resource_group: deploy-$CI_JOB_NAME
-  before_script:
-    - mkdir -p ~/.ssh
-    - cp ansible/known_hosts ~/.ssh/known_hosts
-    - pip3 install --cache-dir .cache/pip --no-warn-script-location -q -r requirements.txt
-    - echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp
-    - chmod 600 tmp
-
 router:deploy:
   extends:
-    - .deploy_base
+    - .ansible
     - .router_deploy_rules
+  stage: deploy
+  resource_group: deploy-router
   needs:
     - job: router:validate
-      optional: true
-    - job: setup:dependencies
-      artifacts: true
       optional: true
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml
 
 zwave:deploy:
   extends:
-    - .deploy_base
+    - .ansible
     - .zwave_deploy_rules
+  stage: deploy
+  resource_group: deploy-zwave
   needs:
     - job: zwave:validate
-      optional: true
-    - job: setup:dependencies
-      artifacts: true
       optional: true
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/zwave.yml
 
 satellite-2:deploy:
   extends:
-    - .deploy_base
+    - .ansible
     - .satellite2_deploy_rules
+  stage: deploy
+  resource_group: deploy-satellite-2
   needs:
     - job: satellite-2:validate
-      optional: true
-    - job: setup:dependencies
-      artifacts: true
       optional: true
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml
