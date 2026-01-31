@@ -115,12 +115,15 @@
     mode: '0700'
   loop: "{{ docker_compose_file_names }}"
 
+# The following three tasks generate nginx configs dynamically on the CI runner.
+# They must run even in check mode so validation can properly test config copying.
 - name: Create nginx config output subdir if it does not exist
   ansible.builtin.file:
     path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/nginx/' + inventory_hostname}}"
     state: directory
     mode: '0755'
   delegate_to: localhost
+  check_mode: no
 
 - name: Template out compose file to ansible state directory within container
   ansible.builtin.template:
@@ -132,13 +135,14 @@
   changed_when: false
   loop: "{{ docker_compose_file_names }}"
   delegate_to: localhost
-
+  check_mode: no
 
 - name: Execute Python script to generate nginx custom config files
   shell:
     cmd: "/usr/bin/python3 {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/generate-configs.py --workspace-path {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx --network {{ item.network }} --output-prefix {{ item.network }}_ --output-subdir {{ inventory_hostname }} {{ item.extra_args | default('') }}"
   delegate_to: localhost
   changed_when: false
+  check_mode: no
   loop: "{{ nginx_config | default([]) }}"
 
 - name: initialize nginx conf file dicts
@@ -178,8 +182,6 @@
     group: "{{ item.owner | default('root') }}"
     mode: "{{ item.mode | default('0644') }}"
   register: docker_config_copy
-  # Ignore errors in check mode for dynamically generated nginx configs
-  ignore_errors: "{{ ansible_check_mode }}"
   loop: "{{ docker_config + (docker_config_nginx | default([])) }}"
 
 - name: Create and start Docker services
