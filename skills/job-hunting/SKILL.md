@@ -16,6 +16,26 @@ description: Search and apply for remote software engineering jobs. Use when sea
 
 ## ⚠️ CRITICAL REQUIREMENTS
 
+### Node Availability Check (FIRST THING)
+
+**Before doing ANY work, verify Noah's laptop node is connected:**
+
+```
+nodes action=status
+```
+
+Look for `noah-XPS-13-7390-2-in-1` in the response with `"connected": true`.
+
+**If the node is disconnected:**
+1. **DO NOT attempt workarounds** (no web_fetch, no curl, no alternative approaches)
+2. **IMMEDIATELY terminate** with this exact report:
+   ```
+   BLOCKED: Node `noah-XPS-13-7390-2-in-1` is disconnected. Cannot proceed with browser automation.
+   ```
+3. The main agent will notify Noah and retry when the node is back online
+
+**Why this is critical:** Job applications REQUIRE browser automation on Noah's laptop. Without the node, the task is impossible. Attempting workarounds wastes tokens and produces no results.
+
 ### Three-Tier Architecture: Main → Coordinator → Workers
 
 ```
@@ -706,35 +726,36 @@ Report back when done: SUCCESS / FAILED / NEEDS_INPUT
 
 **Sub-agent workflow:**
 
-1. **Read the skill** — Load SKILL.md for profile, resume path, persona guidance
-2. **Validate job criteria FIRST** — Before filling anything:
+1. **Check node connectivity FIRST** — Run `nodes action=status` and verify `noah-XPS-13-7390-2-in-1` shows `"connected": true`. **If disconnected, IMMEDIATELY terminate** with: `BLOCKED: Node disconnected. Cannot proceed.` Do NOT attempt workarounds.
+2. **Read the skill** — Load SKILL.md for profile, resume path, persona guidance
+3. **Validate job criteria** — Before filling anything:
    - Open the job posting and READ the full description
    - Verify salary: top of range must be ≥ $200k
    - Verify location: must be Remote (not Hybrid/Onsite only)
    - **If criteria don't match → IMMEDIATELY TERMINATE and report:**
      `SKIPPED: <Company> - <Role> - <reason: e.g. "Hybrid only" or "Max salary $180k">`
    - Do NOT waste time on applications that don't meet criteria
-3. **Create checkpoint** — `in_progress/<jobId>.json` for crash recovery
-4. **Open new tab in YOUR profile** — `browser action=open profile=<assigned-profile> targetUrl=<url>`
+4. **Create checkpoint** — `in_progress/<jobId>.json` for crash recovery
+5. **Open new tab in YOUR profile** — `browser action=open profile=<assigned-profile> targetUrl=<url>`
    - CRITICAL: Always use the profile assigned in your task
    - Do NOT use `profile=clawd` or `target=node` — those are for the main agent
    - Each sub-agent gets its own isolated browser instance
-4. **Fill application** — Follow standard workflow, BE Noah (first person)
-5. **Handle prompts:**
+6. **Fill application** — Follow standard workflow, BE Noah (first person)
+7. **Handle prompts:**
    - Standard fields → fill from profile
    - Stories → use stories.md, or NEEDS_INPUT if none fit
    - "Why this company?" → research and craft response per skill guidelines
-6. **Submit** — Click submit (no user confirmation needed for sub-agents)
-7. **Verify resume upload** — Before submitting, CONFIRM the resume was attached:
+8. **Submit** — Click submit (no user confirmation needed for sub-agents)
+9. **Verify resume upload** — Before submitting, CONFIRM the resume was attached:
    - Check for filename visible in the form
    - Look for upload success indicator
    - If resume upload failed → DO NOT SUBMIT → report as FAILED
-8. **Report back** — Send result to main session:
+10. **Report back** — Send result to main session:
    - `SUCCESS: Applied to <Company> - <Role>` (ONLY if resume was uploaded)
    - `SKIPPED: <Company> - <Role> - <reason>` (job didn't meet criteria after reading description)
    - `FAILED: <reason>` (including "resume upload failed")
    - `NEEDS_INPUT: <question that needs Noah's answer>`
-9. **Include open-ended responses** — If you wrote ANY free-text responses (e.g., "Why are you interested?", cover letter, personal story), include them in your report:
+11. **Include open-ended responses** — If you wrote ANY free-text responses (e.g., "Why are you interested?", cover letter, personal story), include them in your report:
    ```
    **Open-Ended Responses:**
    
@@ -743,7 +764,7 @@ Report back when done: SUCCESS / FAILED / NEEDS_INPUT
    ```
    This lets the main agent review quality and provide feedback to Noah if needed.
 
-10. **Include feedback** — With EVERY report (success or failure), add a `**Feedback:**` section:
+12. **Include feedback** — With EVERY report (success or failure), add a `**Feedback:**` section:
    - What worked well?
    - What was frustrating or harder than expected?
    - What's missing from the skill that would have helped?
@@ -764,7 +785,7 @@ Report back when done: SUCCESS / FAILED / NEEDS_INPUT
    - Frustration: Had to guess at button coordinates, wish there was a more reliable way
    - Suggestion: Add guidance for handling multi-page application forms
    ```
-11. **Clean up:**
+13. **Clean up:**
    - Delete checkpoint file if created
    - **Close the browser tab on SUCCESS:** `browser action=close profile=<your-profile> targetId=<your-targetId>`
    - This keeps browser clean for next sub-agent
