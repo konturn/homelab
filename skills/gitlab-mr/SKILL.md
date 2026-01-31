@@ -311,6 +311,45 @@ The cron job automatically removes merged/closed MRs from tracking. No manual cl
 - **Register every MR** — Or comments won't be detected
 - **No polling loops** — Let cron handle monitoring
 - **Cleanup temp dirs** — `rm -rf "$WORK_DIR"` when done
+- **Always report feedback** — Help improve this skill (see below)
+
+---
+
+## Sub-Agent Feedback — REQUIRED
+
+**Before exiting, every sub-agent must report feedback** to help improve this skill.
+
+Ask yourself:
+- Did I hit any friction or confusion?
+- Was something in the skill unclear or missing?
+- Did I have to improvise or figure something out?
+- Did the pipeline fail for a reason the skill should document?
+- What would have made this easier?
+
+**Feedback file:** `/home/node/clawd/skills/gitlab-mr/feedback.jsonl`
+
+**Append a JSON line:**
+```bash
+echo '{"ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","session":"'$SESSION_LABEL'","mr":'$MR_IID',"outcome":"success|partial|failed","friction":"what was hard or unclear","suggestion":"how to improve the skill","notes":"any other context"}' >> /home/node/clawd/skills/gitlab-mr/feedback.jsonl
+```
+
+**Example entries:**
+```json
+{"ts":"2026-01-31T02:00:00Z","session":"gitlab.mr.21.feedback","mr":21,"outcome":"success","friction":"none","suggestion":"none","notes":"Clean run, no issues"}
+{"ts":"2026-01-31T02:30:00Z","session":"gitlab.mr.22.feedback","mr":22,"outcome":"partial","friction":"Pipeline failed with ansible-lint error not covered in skill","suggestion":"Add section on common ansible-lint fixes","notes":"Had to google the fix"}
+{"ts":"2026-01-31T03:00:00Z","session":"gitlab.mr.14.feedback","mr":14,"outcome":"failed","friction":"Couldn't figure out how to test locally","suggestion":"Add local testing instructions for docker-compose changes","notes":"Gave up after 3 attempts"}
+```
+
+**Outcome values:**
+- `success` — Completed the task without issues
+- `partial` — Completed but hit friction or had to improvise  
+- `failed` — Could not complete the task
+
+Even successful runs should report — knowing what works well is valuable too.
+
+The main session reviews this feedback during heartbeats and updates the skill accordingly.
+
+---
 
 ## Bundled Resources
 

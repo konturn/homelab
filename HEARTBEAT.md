@@ -140,6 +140,37 @@ Extract durable facts from recent conversations into the knowledge graph.
 
 ---
 
+## Skill Feedback Review (every few days)
+
+**Status:** Active 🔧
+
+Review sub-agent feedback and improve skills.
+
+**Process:**
+1. Check `skills/*/feedback.jsonl` for new entries
+2. For each skill with feedback:
+   a. Read feedback entries
+   b. Identify patterns (common friction points, repeated suggestions)
+   c. Update SKILL.md to address issues:
+      - Clarify confusing sections
+      - Add missing edge cases
+      - Document common errors and fixes
+      - Improve examples
+   d. Clear processed feedback (or archive to `feedback-archive.jsonl`)
+3. Update `memory/heartbeat-state.json` with `lastSkillReview` timestamp
+
+**Currently tracked:**
+- `skills/gitlab-mr/feedback.jsonl` — MR lifecycle feedback
+
+**When to act:**
+- Multiple entries point to same issue → definitely fix
+- Single entry with clear suggestion → consider fixing
+- Success entries with no friction → skill is working well
+
+**Cost:** Medium — reading feedback + potentially editing skill files.
+
+---
+
 ## Weekly Knowledge Graph Synthesis (Sundays, or 7+ days since last)
 
 **Status:** Active 📚
