@@ -1,4 +1,19 @@
 - hosts: satellite-2.lab.nkontur.com
+  pre_tasks:
+    - name: Check for Zigbee USB dongle
+      ansible.builtin.stat:
+        path: /dev/serial/by-id/usb-ITead_Sonoff_Zigbee_3.0_USB_Dongle_Plus_3e106b805a19ec118ac637cc47486eb0-if00-port0
+      register: zigbee_device
+
+    - name: Warn if Zigbee dongle not connected
+      ansible.builtin.debug:
+        msg: "⚠️ Zigbee USB dongle not connected - skipping zigbee2mqtt deployment"
+      when: not zigbee_device.stat.exists
+
+    - name: Filter out zigbee compose file if dongle missing
+      ansible.builtin.set_fact:
+        docker_compose_file_names: "{{ docker_compose_file_names | reject('search', 'zigbee') | list }}"
+      when: not zigbee_device.stat.exists
   roles:
     - configure-scanner
     - configure-docker
