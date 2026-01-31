@@ -20,6 +20,7 @@ Configured in `ansible/router.yml`:
 - `/persistent_data/docker/volumes` — Docker named volumes (excludes nextcloud volume)
 - `/mpool/plex/config` — Plex configuration
 - `/mpool/plex/Photos` — Photo library
+- `/mpool/plex/Family` — Family videos
 - `/var/log` — System logs
 - `/root` — Root home directory
 
