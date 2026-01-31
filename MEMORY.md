@@ -44,6 +44,7 @@ This file is auto-loaded in main sessions. Keep it meaningful and current.
 
 ## Lessons Learned
 
+- **Don't obsess over saving resources.** Really dig into things, really consider. Pull lots of data if needed. Thoroughness > token frugality.
 - **"Mental notes" don't survive.** If it matters, write it to a file immediately.
 - **Compression happens suddenly.** Can't always save in time. Put critical stuff in auto-injected files.
 - **NEVER do heavy lifting in main session.** Delegate to sub-agents. If I'm doing long-running work (MRs, job applications, research, anything >30 seconds), spawn a sub-agent. Main session must stay responsive so Noah can always reach me. He had to restart me because I blocked him by working directly. Don't repeat this mistake.
