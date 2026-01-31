@@ -1,0 +1,289 @@
+# Firewall Architecture
+
+This document describes the iptables firewall configuration for the homelab infrastructure.
+
+**Last Audit:** January 2025  
+**Rules File:** `networking/iptables/rules.v4`
+
+---
+
+## Network Topology
+
+```
+                    ┌─────────────────┐
+                    │    Internet     │
+                    └────────┬────────┘
+                             │
+               {{ inet_interface_name }}
+                             │
+                    ┌────────┴────────┐
+                    │     Router      │
+                    │  (iptables)     │
+                    └────────┬────────┘
+                             │
+            ┌────────────────┼────────────────┐
+            │          bond0 (trunk)          │
+            └────────────────┼────────────────┘
+                             │
+     ┌───────────┬───────────┼───────────┬───────────┐
+     │           │           │           │           │
+  bond0.2    bond0.3     bond0.4     bond0.5     bond0.6
+     │           │           │           │           │
+ ┌───┴───┐  ┌───┴───┐  ┌───┴───┐  ┌───┴───┐  ┌───┴───┐
+ │external│  │internal│  │ mgmt  │  │ guest │  │  iot  │
+ │10.2.x.x│  │10.3.x.x│  │10.4.x.x│ │10.5.x.x│ │10.6.x.x│
+ └────────┘  └────────┘  └────────┘  └────────┘  └────────┘
+```
+
+### VLANs
+
+| VLAN | Subnet       | Purpose                          | Docker Network |
+|------|--------------|----------------------------------|----------------|
+| 2    | 10.2.0.0/16  | Internet-facing services         | `external`     |
+| 3    | 10.3.0.0/16  | Internal lab services            | `internal`     |
+| 4    | 10.4.0.0/16  | Management/infrastructure        | `mgmt`         |
+| 5    | 10.5.0.0/16  | Guest network                    | `guest`        |
+| 6    | 10.6.0.0/16  | IoT devices                      | `iot`          |
+
+### Additional Interfaces
+
+| Interface | Purpose |
+|-----------|---------|
+| `wg0`     | Primary WireGuard VPN (port 51871) |
+| `wg1`     | Secondary WireGuard VPN (port 51872) |
+| `{{ mullvad_interface_name }}` | Mullvad VPN tunnel (privacy routing) |
+| `vlanX-shim` | Docker macvlan shim interfaces |
+
+---
+
+## Traffic Flow Summary
+
+### Inbound (Internet → Services)
+
+| Port | Protocol | Destination | Service |
+|------|----------|-------------|---------|
+| 443  | TCP      | nginx       | HTTPS (reverse proxy) |
+| 32400| TCP      | nginx       | Plex Media Server |
+| 25564| TCP      | nginx       | Minecraft (Bedrock/secondary) |
+| 25565| TCP      | nginx       | Minecraft (Java) |
+| 51871| UDP      | router      | WireGuard VPN |
+| 62941| TCP      | deluge (via Mullvad) | BitTorrent |
+
+### Outbound (Internal → Internet)
+
+All local VLANs can reach the internet. Some traffic is routed through Mullvad VPN for privacy.
+
+### Inter-VLAN Traffic
+
+| Source | Destination | Policy |
+|--------|-------------|--------|
+| mgmt (10.4.x.x) | Any | **ALLOW ALL** (trusted) |
+| internal (10.3.x.x) | mgmt | SSH, ICMP only |
+| iot (10.6.x.x) | Pi-hole | DNS only |
+| iot (10.6.x.x) | registry | Container pulls |
+| Any | snapserver | **ALLOW ALL** |
+| Shield TV | Any | **ALLOW ALL** |
+| Apple TV | Any | **ALLOW ALL** |
+
+---
+
+## Services by Network
+
+### External Network (10.2.x.x)
+
+Internet-facing services proxied through nginx:
+
+| Service | Container | Purpose |
+|---------|-----------|---------|
+| nginx | `nginx` | Reverse proxy, SSL termination |
+| Plex | `plex` | Media streaming |
+| Bitwarden | `bitwarden` | Password manager |
+| Nextcloud | `nextcloud` | File sync/share |
+| WordPress | `wordpress` | Blog |
+| Ombi | `ombi` | Plex requests |
+| AudioServe | `audioserve` | Audiobook streaming |
+| Home Assistant | `homeassistant` | Smart home (also on internal/iot) |
+
+### Internal Network (10.3.x.x)
+
+Lab services (not internet-exposed):
+
+| Service | Container | Purpose |
+|---------|-----------|---------|
+| GitLab | `gitlab` | Code hosting, CI/CD |
+| Grafana | `grafana` | Monitoring dashboards |
+| InfluxDB | `influxdb` | Time-series database |
+| Pi-hole | `pihole` | DNS ad-blocking |
+| Radarr | `radarr` | Movie management |
+| Sonarr | `sonarr` | TV management |
+| Prowlarr | `prowlarr` | Indexer management |
+| Jackett | `jackett` | Torrent indexer (legacy) |
+| NZBGet | `nzbget` | Usenet downloader |
+| Deluge | `deluge` | BitTorrent client |
+| lab_nginx | `lab_nginx` | Internal reverse proxy |
+| Paperless-ngx | `paperless-ngx` | Document management |
+| iperf3 | `iperf3` | Network testing |
+| Draw.io | `diagram` | Diagramming |
+| **Moltbot** | `moltbot-gateway` | AI assistant |
+
+### IoT Network (10.6.x.x)
+
+Smart home and media devices:
+
+| Service | Container/IP | Purpose |
+|---------|--------------|---------|
+| Home Assistant | `homeassistant` | Smart home hub |
+| Mosquitto | `mosquitto` | MQTT broker |
+| Zigbee2MQTT | `zigbee2mqtt` | Zigbee gateway |
+| Snapserver | `snapserver` | Multi-room audio server |
+| Snapclients | `snapclient_*` | Audio zone endpoints |
+| Mopidy | `mopidy` | Music player |
+| iot_nginx | `iot_nginx` | IoT reverse proxy |
+| Amcrest2MQTT | `amcrest2mqtt` | Doorbell bridge |
+| AmbientWeather | `ambientweather` | Weather station bridge |
+
+### Management Network (10.4.x.x)
+
+Infrastructure services:
+
+| Service | Container | Purpose |
+|---------|-----------|---------|
+| Registry | `registry` | Docker container registry |
+
+---
+
+## Known Issues
+
+### 🐛 Bugs
+
+1. **SMB Port Typo**
+   - **Location:** `INPUT` chain, mgmt VLAN SMB rule
+   - **Issue:** Port `145` should be `445`
+   - **Current:** `-m multiport --dports 139,145`
+   - **Should be:** `-m multiport --dports 139,445`
+   - **Impact:** SMB access from mgmt VLAN broken
+
+### ⚠️ Stale Rules
+
+1. **VLAN 7 Marking**
+   - Rule marks traffic from `{{ local_interface_name }}.7`
+   - VLAN 7 not defined in docker-compose.yml networks
+   - May be legacy or host-only network — needs verification
+
+2. **Photoprism Port (2342)**
+   - WireGuard rule allows port 2342 (Photoprism)
+   - No Photoprism container in current docker-compose.yml
+   - Either remove rule or add service
+
+3. **Port 33333**
+   - WireGuard rule allows port 33333
+   - Purpose unknown — no matching service found
+
+### 🚨 Missing Rules
+
+Services added since July 2022 that may need firewall consideration:
+
+| Service | Network | Ports | Notes |
+|---------|---------|-------|-------|
+| `moltbot-gateway` | internal | 18789 | New AI assistant — may need WireGuard access |
+| `prowlarr` | internal | 7878 | Indexer management |
+| `paperless-ngx` | internal | (mapped internally) | Document management |
+| `zigbee2mqtt` | iot | 8081 | Zigbee web UI |
+| `ambientweather` | iot | 8080 | Weather station receiver |
+
+**Note:** These services may not need explicit firewall rules if they only communicate within their Docker network or are accessed via existing reverse proxy rules.
+
+### 🔐 Security Recommendations
+
+1. **Restrict SSH Input**
+   - Current: SSH allowed from any interface
+   - Recommendation: Restrict to mgmt VLAN and WireGuard only
+   ```
+   -A INPUT -i {{ local_interface_name }}.4 -p tcp --dport 22 -j ACCEPT
+   -A INPUT -i wg0 -p tcp --dport 22 -j ACCEPT
+   -A INPUT -i wg1 -p tcp --dport 22 -j ACCEPT
+   ```
+
+2. **Device-specific rules**
+   - Shield TV and Apple TV have full forward access
+   - Consider restricting to specific destination ports/IPs
+
+3. **Audit WireGuard access**
+   - wg1 has full forward access (trusted)
+   - Verify this is intentional and wg1 is properly secured
+
+---
+
+## Rule Categories
+
+### INPUT Chain
+
+Controls traffic TO the router itself:
+
+| Purpose | Interface | Ports |
+|---------|-----------|-------|
+| SSH | any | 22 |
+| ICMP | any | - |
+| NFS | mgmt, iot, wg0 | 2049, 111 |
+| SMB | mgmt | 139, 445 (broken: 145) |
+| TFTP | mgmt | 69 |
+| WireGuard | any | 51871, 51872 |
+| mDNS | !internet | 5353 |
+
+### FORWARD Chain
+
+Controls traffic THROUGH the router:
+
+1. **Established/Related** — Always allowed (stateful)
+2. **Trusted networks** — mgmt VLAN, wg1 (full access)
+3. **Internet-bound** — All VLANs can reach internet
+4. **Inter-VLAN** — Restricted by default
+5. **Inbound from internet** — Specific ports to external VLAN
+6. **VPN traffic** — WireGuard and Mullvad routing
+
+### NAT Table
+
+1. **DNAT (port forwarding)** — Internet inbound to services
+2. **SNAT/MASQUERADE** — Outbound NAT for all networks
+3. **Hairpin NAT** — Guest/IoT accessing services via WAN IP
+
+---
+
+## Maintenance
+
+### Adding New Services
+
+1. Determine which network the service should be on
+2. If internet-exposed: Add DNAT rule for port forwarding
+3. If inter-VLAN access needed: Add FORWARD rule
+4. Update this document
+
+### Testing Changes
+
+```bash
+# Test before applying
+iptables-restore -t < networking/iptables/rules.v4
+
+# Apply via Ansible
+ansible-playbook -i inventory deploy.yml --tags iptables
+```
+
+### Debugging
+
+```bash
+# Watch live traffic
+iptables -L -v -n --line-numbers
+
+# Log dropped packets (temporarily)
+iptables -A INPUT -j LOG --log-prefix "DROPPED: "
+iptables -A FORWARD -j LOG --log-prefix "FWD-DROPPED: "
+```
+
+---
+
+## Changelog
+
+| Date | Change |
+|------|--------|
+| 2022-07-03 | Original rules generated |
+| 2025-01 | Audit and documentation added |
