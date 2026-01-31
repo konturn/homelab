@@ -101,18 +101,69 @@ if [ ! -f "$TRACKING_FILE" ]; then
   echo '{}' > "$TRACKING_FILE"
 fi
 
-# Add this MR to tracking
+# Add this MR to tracking (include description for changelog updates)
 jq --arg iid "$MR_IID" \
    --arg title "$MR_TITLE" \
    --arg branch "$BRANCH_NAME" \
    --arg goal "$ORIGINAL_GOAL" \
-   '. + {($iid): {"title": $title, "branch": $branch, "goal": $goal, "lastCommentId": 0}}' \
+   --arg desc "$MR_DESCRIPTION" \
+   '. + {($iid): {"title": $title, "branch": $branch, "goal": $goal, "description": $desc, "lastCommentId": 0, "version": 1}}' \
    "$TRACKING_FILE" > tmp.json && mv tmp.json "$TRACKING_FILE"
 ```
 
+**Tracking schema:**
+```json
+{
+  "42": {
+    "title": "MR title",
+    "branch": "feature/branch-name",
+    "goal": "Original goal description",
+    "description": "Current MR description",
+    "lastCommentId": 123,
+    "version": 2
+  }
+}
+```
+
+The `version` field tracks how many iterations of changes have been made (for changelog entries like "v2: Fixed pipeline").
+
 Or using the `write` tool to update the JSON directly.
 
-### 6. Wait for Pipeline to Pass
+### 6. Update MR Description When Making Changes
+
+**Keep the MR description current** as you iterate. When you fix pipeline issues or respond to feedback, update the description to reflect what's changed. This creates a living changelog.
+
+```bash
+# Update MR description via API
+curl -s -X PUT "https://gitlab.lab.nkontur.com/api/v4/projects/4/merge_requests/$MR_IID" \
+  -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "description": "## Summary\n\nOriginal description here...\n\n## Changes Log\n\n- **v2**: Fixed pipeline failure (missing dependency)\n- **v1**: Initial implementation"
+  }'
+```
+
+**Description structure:**
+```markdown
+## Summary
+What this MR does and why.
+
+## Changes
+- List of files/configs modified
+- Key implementation details
+
+## Changes Log
+- **v3**: Addressed review feedback (added X, removed Y)
+- **v2**: Fixed CI failure (typo in config)
+- **v1**: Initial implementation
+
+## Testing
+How to verify this works.
+```
+
+This helps Noah see at a glance what's happened without reading through all the commits and comments.
+
+### 7. Wait for Pipeline to Pass
 
 Before reporting done, **wait for the CI pipeline to pass**. An MR with a red pipeline isn't done.
 
@@ -208,24 +259,42 @@ git commit -m "Address review feedback: <summary>"
 git push origin feature/branch-name
 ```
 
-5. **Reply directly to the comment (threaded):**
+5. **Reply in the discussion thread:**
 
-Use the `in_reply_to_id` parameter to create a threaded reply to Noah's specific comment. This keeps the conversation organized and prevents the cron from picking up your reply as "new feedback."
+Reply directly in the existing discussion thread. The cron passes you both the `COMMENT_ID` and `DISCUSSION_ID` — use the discussion endpoint for proper threading:
 
 ```bash
-# COMMENT_ID is the note ID you're responding to (passed from cron)
+# Reply within the existing discussion thread
 curl -s -X POST \
-  "https://gitlab.lab.nkontur.com/api/v4/projects/4/merge_requests/$MR_IID/discussions" \
+  "https://gitlab.lab.nkontur.com/api/v4/projects/4/merge_requests/$MR_IID/discussions/$DISCUSSION_ID/notes" \
   -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"body\": \"Done — <explain what you changed>\", \"in_reply_to_id\": $COMMENT_ID}"
+  -d '{"body": "Done — <explain what you changed>"}'
 ```
 
-**Important:** Always reply to the specific comment ID, not just post a new note. The cron passes you the comment ID(s) that triggered the spawn.
+**Important:** Always use the discussions endpoint with the `discussion_id`, not just `/notes`. This keeps replies threaded under the original comment.
 
-6. **Wait for pipeline to pass** (same as step 6 above for new MRs)
+6. **Update the MR description:**
 
-7. **Exit.** The cron will continue monitoring for further comments.
+After making changes, update the MR description with a changelog entry so the history is visible at a glance:
+
+```bash
+# Get current description
+CURRENT_DESC=$(curl -s "https://gitlab.lab.nkontur.com/api/v4/projects/4/merge_requests/$MR_IID" \
+  -H "PRIVATE-TOKEN: $GITLAB_TOKEN" | jq -r '.description')
+
+# Append to changelog (or update programmatically)
+NEW_DESC="$CURRENT_DESC\n- **v2**: Addressed feedback — <summary of changes>"
+
+curl -s -X PUT "https://gitlab.lab.nkontur.com/api/v4/projects/4/merge_requests/$MR_IID" \
+  -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"description\": \"$NEW_DESC\"}"
+```
+
+7. **Wait for pipeline to pass** (same as earlier for new MRs)
+
+8. **Exit.** The cron will continue monitoring for further comments.
 
 ---
 

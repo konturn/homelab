@@ -56,7 +56,7 @@ GET /projects/4/merge_requests/{mr_iid}/notes
 - `author.username`: Comment author
 - `system`: Boolean (true for system notes like "approved", false for user comments)
 
-### Create Comment Reply
+### Create Standalone Comment
 ```bash
 POST /projects/4/merge_requests/{mr_iid}/notes
 ```
@@ -64,7 +64,61 @@ POST /projects/4/merge_requests/{mr_iid}/notes
 **Payload:**
 ```json
 {
-  "body": "Response text acknowledging changes"
+  "body": "Response text (not threaded)"
+}
+```
+
+**Note:** This creates a top-level comment, NOT a threaded reply. Use discussions for threading.
+
+## Discussions (Threaded Comments)
+
+### List Discussions
+```bash
+GET /projects/4/merge_requests/{mr_iid}/discussions
+```
+
+Returns array of discussions. Each discussion has:
+- `id`: Discussion ID (use this for replies)
+- `notes`: Array of notes in the thread
+  - `id`: Note ID
+  - `body`: Comment text
+  - `author.username`: Author
+
+### Create New Discussion
+```bash
+POST /projects/4/merge_requests/{mr_iid}/discussions
+```
+
+**Payload:**
+```json
+{
+  "body": "Starting a new discussion thread"
+}
+```
+
+### Reply to Existing Discussion (THREADED)
+```bash
+POST /projects/4/merge_requests/{mr_iid}/discussions/{discussion_id}/notes
+```
+
+**Payload:**
+```json
+{
+  "body": "This reply appears in the thread"
+}
+```
+
+**This is the correct way to reply to comments.** Always use the discussion_id from the original comment's discussion.
+
+### Update MR Description
+```bash
+PUT /projects/4/merge_requests/{mr_iid}
+```
+
+**Payload:**
+```json
+{
+  "description": "Updated description with changelog"
 }
 ```
 
