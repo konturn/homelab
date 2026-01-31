@@ -144,7 +144,7 @@ Extract durable facts from recent conversations into the knowledge graph.
 
 **Status:** Active 🔧
 
-Review sub-agent feedback and improve skills.
+Review sub-agent feedback, improve skills, and identify hardening opportunities.
 
 **Process:**
 1. Check `skills/*/feedback.jsonl` for new entries
@@ -156,7 +156,8 @@ Review sub-agent feedback and improve skills.
       - Add missing edge cases
       - Document common errors and fixes
       - Improve examples
-   d. Clear processed feedback (or archive to `feedback-archive.jsonl`)
+   d. **Check for hardening candidates** (see below)
+   e. Clear processed feedback (or archive to `feedback-archive.jsonl`)
 3. Update `memory/heartbeat-state.json` with `lastSkillReview` timestamp
 
 **Currently tracked:**
@@ -165,9 +166,58 @@ Review sub-agent feedback and improve skills.
 **When to act:**
 - Multiple entries point to same issue → definitely fix
 - Single entry with clear suggestion → consider fixing
-- Success entries with no friction → skill is working well
+- Success entries with no friction → skill is working well, check for hardening
 
 **Cost:** Medium — reading feedback + potentially editing skill files.
+
+### Skill Hardening Pipeline
+
+**Goal:** Collapse stable, deterministic procedures into scripts. Save tokens for judgment.
+
+**Maturity stages:**
+```
+1. LLM-driven (exploratory) → learning the pattern
+2. Documented (SKILL.md) → pattern understood, instructions stable
+3. Hardened (script) → deterministic execution, LLM for decisions only
+4. Monitoring → track if script causes regressions
+5. Revert if needed → back to LLM-driven if script fails
+```
+
+**Signals a procedure is ready to harden:**
+- 5+ consecutive "success" feedback entries with no friction
+- No changes to that section of SKILL.md in 7+ days
+- Procedure is purely mechanical (no judgment calls mid-stream)
+- Same steps executed identically each time
+
+**Hardening process:**
+1. Extract stable sub-procedure to `skills/<skill>/scripts/<procedure>.sh`
+2. Update SKILL.md to call script instead of manual steps
+3. Add to `skills/<skill>/hardened.json`:
+   ```json
+   {"procedure": "create-mr", "hardenedAt": "2026-01-31", "scriptPath": "scripts/create-mr.sh", "runs": 0, "failures": 0}
+   ```
+4. Continue collecting feedback on the hardened version
+
+**Monitoring hardened scripts:**
+- Track runs/failures in `hardened.json`
+- If failure rate > 20% over 5+ runs → flag for review
+- If 3 consecutive failures → auto-revert:
+  1. Move script to `scripts/deprecated/`
+  2. Restore LLM-driven instructions in SKILL.md
+  3. Add note: "Reverted from script — failure pattern: X"
+  4. Reset feedback collection
+
+**What to harden first (gitlab-mr candidates):**
+- MR creation API call sequence
+- Pipeline status polling loop
+- Threaded reply posting
+- MR description updates
+
+**What NOT to harden:**
+- Deciding what changes to make
+- Understanding feedback intent
+- Handling novel error types
+- Judgment about when to give up
 
 ---
 

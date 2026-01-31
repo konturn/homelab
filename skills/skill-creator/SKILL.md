@@ -203,13 +203,40 @@ scripts/init_skill.py <skill-name> --path <output-dir> [--resources scripts,refe
 scripts/package_skill.py <path/to/skill-folder>
 ```
 
-### Step 6: Iterate
+### Step 6: Iterate and Harden
 
+**Iteration loop:**
 1. Use skill on real tasks
 2. Notice struggles or inefficiencies  
 3. **Review feedback.jsonl** (if skill spawns sub-agents)
 4. Update SKILL.md and resources
 5. Test again
+
+**Hardening stable procedures:**
+
+As a skill matures, deterministic sub-procedures should collapse into scripts:
+
+```
+LLM-driven → stable patterns → harden to script → monitor → revert if worse
+```
+
+**Signals ready to harden:**
+- 5+ consecutive success feedback entries
+- No SKILL.md changes to that section in 7+ days
+- Procedure is purely mechanical (no mid-stream judgment)
+
+**Hardening process:**
+1. Extract to `scripts/<procedure>.sh`
+2. Update SKILL.md to call script
+3. Track in `hardened.json`: `{"procedure": "...", "hardenedAt": "...", "runs": 0, "failures": 0}`
+4. Continue monitoring via feedback
+
+**Revert if failing:**
+- Failure rate > 20% over 5+ runs → review
+- 3 consecutive failures → auto-revert to LLM-driven
+- Document why the script failed
+
+**Goal:** LLM handles intent, judgment, edge cases. Scripts handle the mechanical parts.
 
 ---
 
