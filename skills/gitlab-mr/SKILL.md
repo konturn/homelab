@@ -112,11 +112,56 @@ jq --arg iid "$MR_IID" \
 
 Or using the `write` tool to update the JSON directly.
 
-### 6. Report and Exit
+### 6. Wait for Pipeline to Pass
 
-After registering, report the MR link and exit. A cron job will monitor for comments and spawn a new agent if Noah responds.
+Before reporting done, **wait for the CI pipeline to pass**. An MR with a red pipeline isn't done.
 
-**Do NOT implement your own polling loop.** The cron handles monitoring.
+```bash
+# Poll pipeline status until it completes
+echo "Waiting for pipeline..."
+MAX_ATTEMPTS=60  # 10 minutes max (60 * 10s)
+ATTEMPT=0
+
+while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+  PIPELINE_STATUS=$(glab mr view "$MR_IID" --output json 2>/dev/null | jq -r '.pipeline.status // "pending"')
+  
+  case "$PIPELINE_STATUS" in
+    "success")
+      echo "✓ Pipeline passed"
+      break
+      ;;
+    "failed"|"canceled")
+      echo "✗ Pipeline $PIPELINE_STATUS — investigating..."
+      # Check job logs, fix issues, push again, reset counter
+      # ... handle failure ...
+      ATTEMPT=0
+      ;;
+    *)
+      echo "Pipeline status: $PIPELINE_STATUS (attempt $ATTEMPT)"
+      sleep 10
+      ATTEMPT=$((ATTEMPT + 1))
+      ;;
+  esac
+done
+
+if [ $ATTEMPT -ge $MAX_ATTEMPTS ]; then
+  echo "⚠ Pipeline timed out — reporting anyway"
+fi
+```
+
+**If pipeline fails:**
+1. Check the job logs: `glab ci view`
+2. Fix the issue in your branch
+3. Commit and push the fix
+4. Reset the polling loop
+
+Only report the MR as complete once the pipeline is green (or you've exhausted reasonable retry attempts).
+
+### 7. Report and Exit
+
+After the pipeline passes and tracking is registered, report the MR link and exit. A cron job will monitor for comments and spawn a new agent if Noah responds.
+
+**Do NOT implement comment polling loops.** The cron handles that. But DO wait for pipeline success before exiting.
 
 ---
 
