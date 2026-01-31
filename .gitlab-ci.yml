@@ -127,8 +127,6 @@ stages:
 # =============================================================================
 build-image:
   stage: build
-  tags:
-    - images
   image:
     name: gcr.io/kaniko-project/executor:v1.23.0-debug
     entrypoint: [""]
