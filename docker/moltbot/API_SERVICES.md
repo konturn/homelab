@@ -2,38 +2,53 @@
 
 This document lists the external services that Moltbot can access via their APIs.
 
-## Environment Variables Required
+## Adding New Secrets
 
-Set these in the router's environment (e.g., via `.env` file or secrets management):
+Secrets are managed via **GitLab CI/CD Variables** (not on the router directly). During deployment, Ansible reads these variables and renders them into `docker-compose.yml` using Jinja2 templating.
+
+### To add a new API key:
+
+1. **Get the API key** from the service (see tables below)
+2. **Add to GitLab CI/CD**: Project > Settings > CI/CD > Variables
+   - Variable name: e.g., `RADARR_API_KEY`
+   - Value: the actual API key
+   - Protected: Yes (only available on protected branches)
+   - Masked: Yes (hidden in job logs)
+3. **Reference in docker-compose.yml**: `{{ lookup('env', 'RADARR_API_KEY') }}`
+4. **Deploy**: Push to main branch (or merge MR) to trigger CI/CD
+
+The `lookup('env', '...')` pattern reads the variable during the Ansible deployment job, not at container runtime.
+
+## Required GitLab CI/CD Variables
 
 ### Media Management (arr stack)
 
-| Service | URL (internal) | Environment Variables |
-|---------|----------------|----------------------|
-| **Radarr** | http://radarr:7878 | `RADARR_API_KEY` — Settings > General > API Key |
-| **Sonarr** | http://sonarr:8989 | `SONARR_API_KEY` — Settings > General > API Key |
-| **Prowlarr** | http://prowlarr:9696 | `PROWLARR_API_KEY` — Settings > General > API Key |
-| **Plex** | http://plex:32400 | `PLEX_TOKEN` — [Get X-Plex-Token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/) |
-| **Ombi** | http://ombi:3579 | `OMBI_API_KEY` — Settings > Ombi > API Key |
+| Service | Container URL | GitLab Variable | How to Get |
+|---------|---------------|-----------------|------------|
+| **Radarr** | http://radarr:7878 | `RADARR_API_KEY` | Settings > General > API Key |
+| **Sonarr** | http://sonarr:8989 | `SONARR_API_KEY` | Settings > General > API Key |
+| **Prowlarr** | http://prowlarr:9696 | `PROWLARR_API_KEY` | Settings > General > API Key |
+| **Plex** | http://plex:32400 | `PLEX_TOKEN` | [Get X-Plex-Token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/) |
+| **Ombi** | http://ombi:3579 | `OMBI_API_KEY` | Settings > Ombi > API Key |
 
 ### Download Clients
 
-| Service | URL (internal) | Environment Variables |
-|---------|----------------|----------------------|
-| **NZBGet** | http://nzbget:6789 | `NZBGET_USERNAME`, `NZBGET_PASSWORD` — Settings > Security |
-| **Deluge** | http://deluge:8112 | `DELUGE_PASSWORD` — WebUI password |
+| Service | Container URL | GitLab Variables | How to Get |
+|---------|---------------|------------------|------------|
+| **NZBGet** | http://nzbget:6789 | `NZBGET_USERNAME`, `NZBGET_PASSWORD` | Settings > Security |
+| **Deluge** | http://deluge:8112 | `DELUGE_PASSWORD` | WebUI password |
 
 ### Document Management
 
-| Service | URL (internal) | Environment Variables |
-|---------|----------------|----------------------|
-| **Paperless-NGX** | http://paperless-ngx:8000 | `PAPERLESS_TOKEN` — Admin > Auth Tokens |
+| Service | Container URL | GitLab Variable | How to Get |
+|---------|---------------|-----------------|------------|
+| **Paperless-NGX** | http://paperless-ngx:8000 | `PAPERLESS_TOKEN` | Admin > Auth Tokens |
 
 ### Monitoring
 
-| Service | URL (internal) | Environment Variables |
-|---------|----------------|----------------------|
-| **InfluxDB** | http://influxdb:8086 | `INFLUXDB_TOKEN` — Data > Tokens |
+| Service | Container URL | GitLab Variable | How to Get |
+|---------|---------------|-----------------|------------|
+| **InfluxDB** | http://influxdb:8086 | `INFLUXDB_TOKEN` | Data > Tokens |
 
 ## Example API Usage
 
