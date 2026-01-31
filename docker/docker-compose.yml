@@ -252,14 +252,34 @@ services:
     image: influxdb:latest
     restart: unless-stopped
     volumes:
-        - influxdb-storage:/var/lib/influxdb
-        - {{ docker_persistent_data_path }}/influxdb/influxdb.conf:/etc/influxdb/influxdb.conf
+        - influxdb-storage:/var/lib/influxdb2
+        - {{ docker_persistent_data_path }}/influxdb/config:/etc/influxdb2
     environment:
       - DOCKER_INFLUXDB_INIT_MODE=setup
-      - DOCKER_INFLUXDB_INIT_USERNAME=telegraf
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
       - DOCKER_INFLUXDB_INIT_PASSWORD={{ lookup('env', 'INFLUXDB_PASSWORD') }}
       - DOCKER_INFLUXDB_INIT_ORG=homelab
       - DOCKER_INFLUXDB_INIT_BUCKET=metrics
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN={{ lookup('env', 'INFLUXDB_ADMIN_TOKEN') }}
+  grafana:
+    container_name: grafana
+    image: grafana/grafana:latest
+    ports:
+      - "443:3000"
+    networks:
+      - internal
+    restart: unless-stopped
+    volumes:
+      - grafana-storage:/var/lib/grafana
+      - {{ docker_persistent_data_path }}/grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD={{ lookup('env', 'GRAFANA_ADMIN_PASSWORD') }}
+      - GF_SERVER_ROOT_URL=https://grafana.lab.nkontur.com
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - INFLUXDB_TOKEN={{ lookup('env', 'INFLUXDB_ADMIN_TOKEN') }}
+    depends_on:
+      - influxdb
   gitlab:
     container_name: gitlab
     ports:
