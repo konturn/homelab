@@ -79,6 +79,12 @@ services:
     restart: unless-stopped
     # GPU disabled until NVML driver/library mismatch is fixed
     # runtime: nvidia
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
     environment:
       - TZ=America/New_York
       # - NVIDIA_VISIBLE_DEVICES=all
@@ -251,6 +257,12 @@ services:
       - internal
     image: influxdb:latest
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
     volumes:
         - influxdb-storage:/var/lib/influxdb2
         - {{ docker_persistent_data_path }}/influxdb/config:/etc/influxdb2
@@ -269,6 +281,12 @@ services:
     networks:
       - internal
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
     volumes:
       - grafana-storage:/var/lib/grafana
       - {{ docker_persistent_data_path }}/grafana/provisioning:/etc/grafana/provisioning
@@ -295,6 +313,12 @@ services:
         soft: 65536
         hard: 65536
       nproc: 65536
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+        reservations:
+          memory: 2G
     volumes:
       - '{{ docker_persistent_data_path }}/gitlab/config:/etc/gitlab'
       - '{{ docker_persistent_data_path }}/gitlab/logs:/var/log/gitlab'
@@ -347,6 +371,12 @@ services:
     restart: unless-stopped
     cap_add:
       - SYS_NICE  # CAP_SYS_NICE
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
     environment:
       MYSQL_DATABASE: wordpress
       MYSQL_USER: wordpress
@@ -387,6 +417,12 @@ services:
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_ETDRb11A920-if00-port0:/dev/ttyUSB0"
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0:/dev/ttyUSB1"
     image: "homeassistant/home-assistant:2025.12"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
     volumes:
       - "{{ docker_persistent_data_path }}/homeassistant:/config"
       - /etc/localtime:/etc/localtime:ro
@@ -602,6 +638,12 @@ services:
     container_name: paperless-ngx
     networks:
       internal:
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
     environment:
       - PUID=1000
       - PGID=1000
@@ -637,6 +679,12 @@ services:
     restart: unless-stopped
     networks:
       - external
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
     volumes:
       - nextcloud_db:/var/lib/mysql
     environment:
@@ -652,6 +700,12 @@ services:
     hostname: nkontur.com
     ports:
       - "443:80"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
     volumes:
       - nextcloud:/data
 #      - {{ docker_persistent_data_path }}/nextcloud/config:/var/www/html/config
@@ -685,6 +739,12 @@ services:
       - internal
     ports:
       - "18789:18789"
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:18789/health"]
       interval: 30s
