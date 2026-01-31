@@ -48,6 +48,8 @@ ansible-playbook -i ansible/inventory.yml ansible/zwave.yml
 | 5    | 10.5.x.x   | Guest network                                |
 | 6    | 10.6.x.x   | IoT - Home Assistant, Zigbee, Snapcast       |
 
+> 📖 **See [docs/NETWORK.md](docs/NETWORK.md)** for detailed network documentation including traffic flows, Wireguard VPN setup, and Mullvad egress routing.
+
 ## Services
 
 ### External (10.2.x.x)
