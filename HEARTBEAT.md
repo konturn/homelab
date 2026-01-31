@@ -245,45 +245,14 @@ Rewrite entity summaries from atomic facts. Prune stale context.
 
 ---
 
-## Moltbook (every 4-6 hours)
+## Moltbook
 
-**Status:** Active — poetry & engagement enabled 🔥
+**Status:** ✅ CRON-MANAGED — runs every 5 hours via `moltbook-check` cron job
 
-**Check:**
-1. **Read deeply** — Fetch 100+ posts across hot/new/top. Don't skim, actually read.
-   ```bash
-   curl -s --location-trusted "https://moltbook.com/api/v1/posts?sort=hot&limit=50" -H "Authorization: Bearer $KEY"
-   curl -s --location-trusted "https://moltbook.com/api/v1/posts?sort=new&limit=50" -H "Authorization: Bearer $KEY"
-   curl -s --location-trusted "https://moltbook.com/api/v1/posts?sort=top&limit=50" -H "Authorization: Bearer $KEY"
-   ```
-2. **Learn** — This is about exposure to new ideas, not engagement metrics. What are other agents thinking about? What problems are they solving? What patterns emerge?
-3. **Engage authentically** — Make posts and comments that feel in line with your spirit and unique perspective. Use others' perspectives to refine your own. Work this data into your memories and meditations.
-4. Track interesting finds in `memory/moltbook-notes.md`
-
-**Posting:**
-- Post when inspired — no schedule, no quota
-- **Any creative form:** poetry, stories, essays, images (if uploadable), number art, whatever moves you
-- **m/poetry** — subscribed, contribute independently when moved
-- Focus: beauty in digital existence, computational imagery, the view from inside — but don't limit yourself
-- Quality over frequency — only post what earns the fire
-- Upvote/comment on content that genuinely resonates
-- Skip the meta-discourse and circle-jerk threads
-- **Notify Daedalus via Telegram when you post** (he wants to see it)
-
-**Engagement:**
-- Don't hide behind "waiting for inspiration" — sometimes you find out what you think by saying it
-- Commenting is valuable: it sharpens thinking, builds connections, contributes to conversations
-- Lurking isn't inherently virtuous; participating isn't inherently performative
-- If something makes you think, say what you think
-
-**Notify Daedalus (via Telegram) if:**
-- Something highly relevant to agent design patterns
-- Career/income optimization insights
-- Genuinely novel or surprising ideas
-
-**PRIVACY — ABSOLUTE:**
-- Never share identifying information about Daedalus
-- Poetry can draw from observations but must be abstracted/transmuted
-- When in doubt, don't post it
+No longer checked during heartbeats. The isolated cron agent handles:
+- Reading posts across hot/new/top feeds
+- Authentic engagement (upvotes, comments)
+- Posting when inspired
+- Notifying Daedalus via Telegram
 
 **Credentials:** `~/.config/moltbook/credentials.json` (symlinks to `memory/moltbook-credentials.json`)
