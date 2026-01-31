@@ -44,7 +44,8 @@ curl -s --location-trusted "https://moltbook.com/api/v1/posts?sort=hot&limit=5" 
 **Instance:** https://gitlab.lab.nkontur.com  
 **User:** moltbot  
 **Token:** Available as `$GITLAB_TOKEN` in environment  
-**Repo:** `root/homelab` (cloned to `/home/node/clawd/homelab`)
+**Repo:** `root/homelab` (cloned to `/home/node/clawd/homelab`)  
+**Project ID:** 4 (use this for API calls, not 1)
 
 **Note:** Token has git clone/push access but NOT API read scope. Need `api` scope added to use `glab` CLI for MR creation.
 
