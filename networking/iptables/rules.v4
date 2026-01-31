@@ -52,9 +52,6 @@ COMMIT
 -A PREROUTING ! -d 10.0.0.0/8 -i vlan6-shim -j MARK --set-xmark 0x1/0xffffffff
 -A PREROUTING ! -d 10.0.0.0/8 -i {{ local_interface_name }}.6 -j MARK --set-xmark 0x1/0xffffffff
 
-# Mark VLAN 7 internet-bound traffic
-# NOTE: VLAN 7 not defined in docker-compose.yml - may be legacy or host-only
--A PREROUTING ! -d 10.0.0.0/8 -i {{ local_interface_name }}.7 -j MARK --set-xmark 0x1/0xffffffff
 COMMIT
 
 # =============================================================================
@@ -141,9 +138,8 @@ COMMIT
 -A INPUT -i {{ local_interface_name }}.4 -p tcp -m tcp --dport 2049 -j ACCEPT
 
 # SMB/CIFS access from mgmt VLAN
-# ⚠️ BUG: Port 145 should be 445! This rule is ineffective.
-# Ports should be: 139 (NetBIOS), 445 (SMB direct)
--A INPUT -i {{ local_interface_name }}.4 -p tcp -m tcp -m multiport --dports 139,145 -j ACCEPT
+# Ports: 139 (NetBIOS), 445 (SMB direct)
+-A INPUT -i {{ local_interface_name }}.4 -p tcp -m tcp -m multiport --dports 139,445 -j ACCEPT
 
 # TFTP access from mgmt VLAN (for PXE boot)
 -A INPUT -i {{ local_interface_name }}.4 -p udp -m udp --dport 69 -j ACCEPT
@@ -204,8 +200,8 @@ COMMIT
 -A FORWARD -i {{ mullvad_interface_name }} -o vlan3-shim -p tcp -m multiport --dports 62941 -j ACCEPT
 
 # WireGuard VPN to internal network - specific services only
-# Ports: RPC(111), HTTPS(443), iperf3(5201), NFS(2049), photoprism(2342), custom(33333)
--A FORWARD -i wg0 -o {{ local_interface_name }} -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -m multiport --dports 111,443,5201,2049,2342,33333 -m conntrack --ctstate NEW -j ACCEPT
+# Ports: RPC(111), HTTPS(443), iperf3(5201), NFS(2049)
+-A FORWARD -i wg0 -o {{ local_interface_name }} -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -m multiport --dports 111,443,5201,2049 -m conntrack --ctstate NEW -j ACCEPT
 
 # WireGuard VPN to internal - DNS (UDP)
 -A FORWARD -i wg0 -o {{ local_interface_name }} -p udp -m multiport --dports 53 -j ACCEPT

@@ -154,45 +154,6 @@ Infrastructure services:
 
 ## Known Issues
 
-### 🐛 Bugs
-
-1. **SMB Port Typo**
-   - **Location:** `INPUT` chain, mgmt VLAN SMB rule
-   - **Issue:** Port `145` should be `445`
-   - **Current:** `-m multiport --dports 139,145`
-   - **Should be:** `-m multiport --dports 139,445`
-   - **Impact:** SMB access from mgmt VLAN broken
-
-### ⚠️ Stale Rules
-
-1. **VLAN 7 Marking**
-   - Rule marks traffic from `{{ local_interface_name }}.7`
-   - VLAN 7 not defined in docker-compose.yml networks
-   - May be legacy or host-only network — needs verification
-
-2. **Photoprism Port (2342)**
-   - WireGuard rule allows port 2342 (Photoprism)
-   - No Photoprism container in current docker-compose.yml
-   - Either remove rule or add service
-
-3. **Port 33333**
-   - WireGuard rule allows port 33333
-   - Purpose unknown — no matching service found
-
-### 🚨 Missing Rules
-
-Services added since July 2022 that may need firewall consideration:
-
-| Service | Network | Ports | Notes |
-|---------|---------|-------|-------|
-| `moltbot-gateway` | internal | 18789 | New AI assistant — may need WireGuard access |
-| `prowlarr` | internal | 7878 | Indexer management |
-| `paperless-ngx` | internal | (mapped internally) | Document management |
-| `zigbee2mqtt` | iot | 8081 | Zigbee web UI |
-| `ambientweather` | iot | 8080 | Weather station receiver |
-
-**Note:** These services may not need explicit firewall rules if they only communicate within their Docker network or are accessed via existing reverse proxy rules.
-
 ### 🔐 Security Recommendations
 
 1. **Restrict SSH Input**
@@ -225,7 +186,7 @@ Controls traffic TO the router itself:
 | SSH | any | 22 |
 | ICMP | any | - |
 | NFS | mgmt, iot, wg0 | 2049, 111 |
-| SMB | mgmt | 139, 445 (broken: 145) |
+| SMB | mgmt | 139, 445 |
 | TFTP | mgmt | 69 |
 | WireGuard | any | 51871, 51872 |
 | mDNS | !internet | 5353 |
