@@ -1,22 +1,27 @@
 # =============================================================================
-# CI Pipeline - Minimal Setup, Maximum Parallelization
+# CI Pipeline - Docker-Based, Zero Runtime Dependencies
 # =============================================================================
-# Target: Total pipeline time < 3 minutes
+# Target: Total pipeline time < 2 minutes
 #
-# Key optimizations:
-# 1. NO setup stage - validate jobs start immediately
-# 2. All jobs share cache for deps (populated on first run)
-# 3. Install deps in parallel per-job (from cache = fast)
-# 4. Path-based rules - jobs only run when relevant files change
-# 5. DAG pipelines - deploy jobs start immediately after their validation
-# 6. Interruptible validation - new commits cancel in-progress MR pipelines
+# Strategy:
+# - Custom Docker image with ALL deps pre-installed (pip packages, ansible roles)
+# - Jobs only set up SSH and run playbooks - no pip install, no ansible-galaxy
+# - Image rebuilt automatically when deps change (via build stage)
+# - Registry: GitLab Container Registry (registry.lab.nkontur.com)
+# - Path-based rules - jobs only run when relevant files change
+# - DAG pipelines - deploy jobs start immediately after their validation
+# - Interruptible validation - new commits cancel in-progress MR pipelines
 #
 # Pipeline structure (DAG visualization):
 #
+#   [build:ci-image] (only when deps change)
+#          │
+#          v
 #   router:validate ──► router:deploy
 #   zwave:validate ───► zwave:deploy
 #   satellite-2:validate ──► satellite-2:deploy
 #
+# To force image rebuild: increment CI_IMAGE_VERSION
 # =============================================================================
 
 # =============================================================================
@@ -27,21 +32,10 @@ workflow:
     on_new_commit: interruptible
 
 variables:
-  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-  ANSIBLE_ROLES_PATH: "$CI_PROJECT_DIR/.ansible-roles"
-  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  CI_IMAGE_VERSION: "1"
+  CI_IMAGE: "${CI_REGISTRY_IMAGE}/ci:${CI_IMAGE_VERSION}"
   ANSIBLE_HOST_KEY_CHECKING: "False"
   ANSIBLE_PIPELINING: "True"
-
-# Cache config - all jobs share this
-.cache_config:
-  cache:
-    - key: pip-cache-v1
-      paths:
-        - .cache/pip
-    - key: ansible-roles-v1
-      paths:
-        - .ansible-roles
 
 # =============================================================================
 # Path-based change detection
@@ -130,19 +124,49 @@ variables:
   interruptible: true
 
 stages:
+  - build-image
   - validate
   - deploy
 
 # =============================================================================
-# Base job - minimal setup
+# Build Stage - Rebuild CI image when dependencies change
+# =============================================================================
+build:ci-image:
+  stage: build-image
+  image: docker:latest
+  services:
+    - docker:dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - docker build -t "$CI_IMAGE" -f ci/Dockerfile .
+    - docker push "$CI_IMAGE"
+  rules:
+    # Build on main when deps files change
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - requirements.txt
+        - ansible/requirements.yml
+        - ci/Dockerfile
+    # Build on MR when deps files change (for testing)
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - requirements.txt
+        - ansible/requirements.yml
+        - ci/Dockerfile
+    # Manual trigger
+    - when: manual
+      allow_failure: true
+
+# =============================================================================
+# Base job - minimal setup (just SSH keys)
 # =============================================================================
 .ansible:
-  image: willhallonline/ansible:latest
-  extends: .cache_config
+  image: $CI_IMAGE
   before_script:
-    - mkdir -p .cache/pip .ansible-roles ~/.ssh
-    - pip3 install --cache-dir .cache/pip --no-warn-script-location -q -r requirements.txt
-    - ansible-galaxy install -r ansible/requirements.yml -p .ansible-roles 2>/dev/null || true
+    - mkdir -p ~/.ssh
     - cp ansible/known_hosts ~/.ssh/known_hosts
     - echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp && chmod 600 tmp
 
@@ -155,6 +179,9 @@ router:validate:
     - .interruptible
     - .router_changes
   stage: validate
+  needs:
+    - job: build:ci-image
+      optional: true
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml --check --diff
 
@@ -164,6 +191,9 @@ zwave:validate:
     - .interruptible
     - .zwave_changes
   stage: validate
+  needs:
+    - job: build:ci-image
+      optional: true
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/zwave.yml --check --diff
 
@@ -173,6 +203,9 @@ satellite-2:validate:
     - .interruptible
     - .satellite2_changes
   stage: validate
+  needs:
+    - job: build:ci-image
+      optional: true
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml --check --diff
 
@@ -192,6 +225,8 @@ router:deploy:
   needs:
     - job: router:validate
       optional: true
+    - job: build:ci-image
+      optional: true
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml
 
@@ -204,6 +239,8 @@ zwave:deploy:
   needs:
     - job: zwave:validate
       optional: true
+    - job: build:ci-image
+      optional: true
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/zwave.yml
 
@@ -215,6 +252,8 @@ satellite-2:deploy:
   resource_group: deploy-satellite-2
   needs:
     - job: satellite-2:validate
+      optional: true
+    - job: build:ci-image
       optional: true
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml
