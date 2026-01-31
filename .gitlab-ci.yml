@@ -163,8 +163,8 @@ setup:dependencies:
   stage: setup
   script:
     - echo "Dependencies cached successfully"
-    - pip3 list | head -20
-    - ls -la .ansible-roles/
+    - pip3 list | head -20 || true
+    - ls -la .ansible-roles/ || true
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == "main"
