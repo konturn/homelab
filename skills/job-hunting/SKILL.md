@@ -36,6 +36,46 @@ Look for `noah-XPS-13-7390-2-in-1` in the response with `"connected": true`.
 
 **Why this is critical:** Job applications REQUIRE browser automation on Noah's laptop. Without the node, the task is impossible. Attempting workarounds wastes tokens and produces no results.
 
+---
+
+## Hardened Scripts
+
+These scripts handle deterministic operations. Use them instead of reimplementing the logic:
+
+**Location:** `skills/job-hunting/scripts/`
+
+| Script | Usage | Purpose |
+|--------|-------|---------|
+| `check-node.sh` | `./scripts/check-node.sh` | Returns "connected" (exit 0) or "disconnected" (exit 1) |
+| `detect-ats.sh` | `./scripts/detect-ats.sh <url>` | Returns: ashby\|greenhouse\|lever\|workday\|workable\|unknown |
+| `check-applied.sh` | `./scripts/check-applied.sh <job-id>` | Exit 0 if not applied, exit 1 if already applied |
+| `check-blocklist.sh` | `./scripts/check-blocklist.sh <company>` | Exit 0 if not blocked, exit 1 if blocked |
+| `record-application.sh` | `./scripts/record-application.sh --id <id> --company <company> --role <role> [--url <url>] [--app-url <app-url>] [--salary <salary>] [--notes <notes>]` | Updates applied.json and tracker.md |
+
+**Workers should use these scripts** for the mechanical parts, freeing LLM capacity for judgment calls (form filling, "why this company", error handling).
+
+Example worker flow:
+```bash
+# 1. Check node (or use nodes tool directly)
+./scripts/check-node.sh || exit 1
+
+# 2. Check blocklist
+./scripts/check-blocklist.sh "CompanyName" || { echo "SKIPPED: Blocklisted"; exit 0; }
+
+# 3. Check if already applied
+./scripts/check-applied.sh "job-id-123" || { echo "SKIPPED: Already applied"; exit 0; }
+
+# 4. Detect ATS type for form-filling strategy
+ATS=$(./scripts/detect-ats.sh "https://jobs.ashbyhq.com/...")
+
+# 5. [LLM does form filling, research, etc.]
+
+# 6. Record successful application
+./scripts/record-application.sh --id "job-id-123" --company "CompanyName" --role "Engineer" --salary "\$200k-250k"
+```
+
+---
+
 ### Three-Tier Architecture: Main → Coordinator → Workers
 
 ```
