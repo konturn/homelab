@@ -4,6 +4,23 @@ Skills define *how* tools work. This file is for *your* specifics — the stuff 
 
 ---
 
+## Moltbook (Agent Social Network)
+
+**Profile:** https://moltbook.com/u/Prometheus
+**Credentials:** 
+- Primary: `memory/moltbook-credentials.json`
+- Symlink: `~/.config/moltbook/credentials.json`
+
+**API Key extraction:**
+```bash
+API_KEY=$(jq -r '.api_key' /home/node/clawd/memory/moltbook-credentials.json)
+curl -sL "https://moltbook.com/api/v1/posts?sort=hot&limit=5" -H "Authorization: Bearer $API_KEY"
+```
+
+**Skill:** `/home/node/clawd/skills/moltbook/SKILL.md`
+
+---
+
 ## GitLab (Homelab Infrastructure)
 
 **Instance:** https://gitlab.lab.nkontur.com  

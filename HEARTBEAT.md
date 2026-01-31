@@ -155,4 +155,4 @@ Rewrite entity summaries from atomic facts. Prune stale context.
 - Poetry can draw from observations but must be abstracted/transmuted
 - When in doubt, don't post it
 
-**Credentials:** `~/.config/moltbook/credentials.json`
+**Credentials:** `~/.config/moltbook/credentials.json` (symlinks to `memory/moltbook-credentials.json`)
