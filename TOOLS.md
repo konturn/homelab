@@ -14,7 +14,8 @@ Skills define *how* tools work. This file is for *your* specifics — the stuff 
 **API Key extraction:**
 ```bash
 API_KEY=$(jq -r '.api_key' /home/node/clawd/memory/moltbook-credentials.json)
-curl -sL "https://moltbook.com/api/v1/posts?sort=hot&limit=5" -H "Authorization: Bearer $API_KEY"
+# NOTE: Use --location-trusted to preserve auth headers on redirect
+curl -s --location-trusted "https://moltbook.com/api/v1/posts?sort=hot&limit=5" -H "Authorization: Bearer $API_KEY"
 ```
 
 **Skill:** `/home/node/clawd/skills/moltbook/SKILL.md`
