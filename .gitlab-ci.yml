@@ -37,6 +37,14 @@ zwave:validate:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
+satellite-2:validate:
+  extends: .ansible
+  stage: validate
+  script:
+    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml --check --diff
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
 # =============================================================================
 # Deploy (main branch only) - Actual deployment
 # =============================================================================
@@ -54,5 +62,13 @@ zwave:deploy:
   stage: deploy
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/zwave.yml
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+satellite-2:deploy:
+  extends: .ansible
+  stage: deploy
+  script:
+    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml
   rules:
     - if: $CI_COMMIT_BRANCH == "main"

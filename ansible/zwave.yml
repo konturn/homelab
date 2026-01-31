@@ -2,5 +2,6 @@
   roles:
   - configure-zwave
   - configure-snapclient
+  - configure-docker
   become: yes
 
