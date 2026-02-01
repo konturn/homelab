@@ -9,7 +9,10 @@ variables:
   PIP_CACHE_DIR: "/cache/pip"
   ANSIBLE_ROLES_PATH: "/cache/ansible-roles"
   GIT_DEPTH: 1  # Shallow clone - only need current commit for CI
-  GIT_STRATEGY: clone  # Fresh clone each time (faster than fetch into deep cached repo)
+  GIT_STRATEGY: fetch  # Reuse cached repo when available
+  GIT_CLEAN_FLAGS: -ffdx -e .cache/  # Aggressive clean but preserve cache
+  GIT_FETCH_EXTRA_FLAGS: --no-tags --prune  # Skip tags, clean stale refs
+  FF_USE_FASTZIP: "true"  # Faster cache/artifact handling
 
 # =============================================================================
 # Job Templates
