@@ -883,6 +883,9 @@ services:
       - GRAFANA_TOKEN={{ grafana_token }}
       # Tailscale API access
       - TAILSCALE_API_TOKEN={{ lookup('env', 'TAILSCALE_API_TOKEN') }}
+      # IPMI access for server management
+      - IPMI_USER={{ lookup('env', 'IPMI_USER') }}
+      - IPMI_PASSWORD={{ lookup('env', 'IPMI_PASSWORD') }}
     volumes:
       - {{ docker_persistent_data_path }}/moltbot/data:/home/node/.moltbot
       - {{ docker_persistent_data_path }}/moltbot/data:/home/node/.clawdbot
