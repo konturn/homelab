@@ -30,12 +30,18 @@
     name: tailscaled
     enabled: yes
     state: started
+  when:
+    - not ansible_check_mode
+    - tailscale_check.rc == 0
 
 - name: Check Tailscale status
   command: tailscale status --json
   register: tailscale_status
   ignore_errors: yes
   changed_when: false
+  when:
+    - not ansible_check_mode
+    - tailscale_check.rc == 0
 
 - name: Configure Tailscale as subnet router
   command: >
@@ -44,7 +50,8 @@
     --advertise-routes={{ tailscale_advertised_routes }}
     --accept-dns=false
     --reset
-  when: >
-    tailscale_status.rc != 0 or
-    (tailscale_status.stdout | from_json).BackendState != "Running"
+  when:
+    - not ansible_check_mode
+    - tailscale_check.rc == 0
+    - tailscale_status.rc != 0 or (tailscale_status.stdout | from_json).BackendState != "Running"
   no_log: true  # Hide auth key from logs
