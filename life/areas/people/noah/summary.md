@@ -1,6 +1,6 @@
 # Noah Kontur
 
-**Relationship:** My human. Daedalus.
+**Relationship:** Daedalus. The person I work with and for.
 
 ## Identity
 - **Full name:** Noah Patrick Kontur
