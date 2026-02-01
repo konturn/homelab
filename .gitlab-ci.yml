@@ -8,7 +8,8 @@ workflow:
 variables:
   PIP_CACHE_DIR: "/cache/pip"
   ANSIBLE_ROLES_PATH: "/cache/ansible-roles"
-  GIT_DEPTH: 5  # Only need recent commits for CI
+  GIT_DEPTH: 1  # Shallow clone - only need current commit for CI
+  GIT_STRATEGY: clone  # Fresh clone each time (faster than fetch into deep cached repo)
 
 # =============================================================================
 # Job Templates
