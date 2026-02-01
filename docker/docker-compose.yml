@@ -287,22 +287,19 @@ services:
     ports:
       - "3100:3100"
     networks:
-      - internal
-    restart: unless-stopped
-    command: -config.file=/etc/loki/local-config.yaml
-  promtail:
-    container_name: promtail
-    image: grafana/promtail:3.5.0
-    networks:
-      - internal
+      internal:
+        ipv4_address: {{ loki_ip }}
     restart: unless-stopped
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - {{ docker_persistent_data_path }}/promtail/promtail.yml:/etc/promtail/config.yml:ro
-    command: -config.file=/etc/promtail/config.yml
-    depends_on:
-      - loki
+      - {{ docker_persistent_data_path }}/loki/data:/loki
+      - {{ docker_persistent_data_path }}/loki/local-config.yaml:/etc/loki/local-config.yaml:ro
+    command: -config.file=/etc/loki/local-config.yaml
+    # Loki uses default json-file logging to avoid circular dependency
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
   gitlab:
     container_name: gitlab
     ports:

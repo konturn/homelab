@@ -77,6 +77,15 @@
     state: started
     enabled: yes
 
+### Install Loki Docker logging driver plugin (router only)
+- name: Install Loki Docker logging driver plugin
+  community.docker.docker_plugin:
+    plugin_name: grafana/loki-docker-driver:2.9.2
+    alias: loki
+    state: present
+  when: not is_satellite
+  ignore_errors: yes  # Don't fail if plugin already exists
+
 ### Configure docker daemon on host
 - name: Docker daemon config file
   ansible.builtin.template:
