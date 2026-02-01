@@ -339,7 +339,6 @@ services:
     ports:
       - "22/tcp"
       - "443:80"
-      - "5050:5050"
     networks:
       - internal
     image: 'gitlab/gitlab-ee:latest'
