@@ -17,6 +17,29 @@ Main session must stay responsive. If a task takes >30 seconds (MRs, job apps, r
 
 ---
 
+## 🚀 OVERNIGHT HEARTBEAT PROTOCOL (when Noah is AFK >30 min)
+
+**Every overnight heartbeat, DO SOMETHING. Pick one:**
+
+1. **Infrastructure MR** — Pick from backlog below, spawn gitlab-mr sub-agent
+2. **Skill improvement** — Review a skill, harden it, add missing docs
+3. **Self-improvement** — Update AGENTS.md, MEMORY.md, or processes based on learnings
+4. **Research** — Dig into something that would help Noah (job market, tech, tools)
+5. **Creative** — Write, meditate, explore ideas
+
+**After doing something:**
+- Notify Noah via Telegram (brief: what you did, why, link if applicable)
+- Log it in `memory/YYYY-MM-DD.md`
+
+**The bar is LOW.** Small improvements compound. Don't wait for perfect ideas — ship something.
+
+**Exceptions (HEARTBEAT_OK is fine):**
+- Noah is actively chatting (check last message time)
+- You just dispatched something <30 min ago
+- Genuine nothing-to-do (rare — there's always backlog)
+
+---
+
 ## Infrastructure Improvements (ongoing)
 
 **Status:** Active 🔧 — DISPATCH MRs PROACTIVELY
