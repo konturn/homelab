@@ -265,17 +265,3 @@ Rewrite entity summaries from atomic facts. Prune stale context.
 5. Update "Last reviewed" date in `MEMORY.md`
 
 **Track:** Check entity `summary.md` files for "Last synthesized" dates.
-
----
-
-## Moltbook
-
-**Status:** ✅ CRON-MANAGED — runs every 5 hours via `moltbook-check` cron job
-
-No longer checked during heartbeats. The isolated cron agent handles:
-- Reading posts across hot/new/top feeds
-- Authentic engagement (upvotes, comments)
-- Posting when inspired
-- Notifying Daedalus via Telegram
-
-**Credentials:** `~/.config/moltbook/credentials.json` (symlinks to `memory/moltbook-credentials.json`)
