@@ -5,6 +5,7 @@
 # - Custom CI image with pre-baked dependencies (zero runtime installs)
 # - Parallel validation jobs using DAG (needs: [])
 # - Image rebuilds only when dependencies change
+# - Uses GitLab's built-in container registry for fast access
 # - Path-based rules - jobs only run when relevant files change
 # - DAG pipelines - deploy jobs start immediately after their validation
 # - Interruptible validation - new commits cancel in-progress MR pipelines
@@ -29,7 +30,8 @@ workflow:
 variables:
   ANSIBLE_HOST_KEY_CHECKING: "False"
   ANSIBLE_PIPELINING: "True"
-  CI_IMAGE: registry.lab.nkontur.com/root/homelab/ci:1
+  # Use GitLab's built-in registry - faster than external registries
+  CI_IMAGE: ${CI_REGISTRY_IMAGE}/ci:latest
 
 # =============================================================================
 # Path-based change detection
@@ -123,22 +125,19 @@ stages:
   - deploy
 
 # =============================================================================
-# Build Stage - Custom CI image using Kaniko (no dind required)
+# Build Stage - Custom CI image (runs only when deps change)
 # =============================================================================
 build-image:
   stage: build
-  image:
-    name: gcr.io/kaniko-project/executor:v1.23.0-debug
-    entrypoint: [""]
+  image: docker:24-cli
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
   script:
-    - mkdir -p /kaniko/.docker
-    - echo "{\"auths\":{\"registry.lab.nkontur.com\":{\"auth\":\"$(printf '%s:%s' "${CI_REGISTRY_USER}" "${CI_REGISTRY_PASSWORD}" | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
-    - /kaniko/executor
-      --context "${CI_PROJECT_DIR}"
-      --dockerfile "${CI_PROJECT_DIR}/ci/Dockerfile"
-      --destination "${CI_IMAGE}"
-      --cache=true
-      --skip-tls-verify-registry=registry.lab.nkontur.com
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker build -t $CI_IMAGE -f ci/Dockerfile .
+    - docker push $CI_IMAGE
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
