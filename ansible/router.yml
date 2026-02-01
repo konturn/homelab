@@ -2,6 +2,10 @@
   roles:
   - configure-base
   - configure-router-network
+  - role: configure-tailscale
+    vars:
+      tailscale_auth_key: "{{ lookup('env', 'TAILSCALE_AUTH_KEY') }}"
+      tailscale_advertised_routes: "10.2.0.0/16,10.3.0.0/16,10.4.0.0/16,10.6.0.0/16"
   - role: configure-docker
     vars:
       nvidia_container_runtime: true

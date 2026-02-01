@@ -1,0 +1,56 @@
+---
+# Tailscale installation and configuration
+# Configures the router as a subnet router advertising local VLANs
+
+- name: Check if Tailscale binary exists
+  ansible.builtin.stat:
+    path: /usr/bin/tailscale
+  register: tailscale_binary
+
+- name: Download and install Tailscale
+  shell: curl -fsSL https://tailscale.com/install.sh | sh
+  args:
+    creates: /usr/bin/tailscale
+  when: not tailscale_binary.stat.exists
+
+- name: Enable IP forwarding for Tailscale subnet routing
+  sysctl:
+    name: "{{ item }}"
+    value: '1'
+    sysctl_set: yes
+    state: present
+    reload: yes
+  loop:
+    - net.ipv4.ip_forward
+    - net.ipv6.conf.all.forwarding
+
+- name: Ensure tailscaled service is enabled and running
+  systemd:
+    name: tailscaled
+    enabled: yes
+    state: started
+  when:
+    - not ansible_check_mode
+    - tailscale_binary.stat.exists
+
+- name: Check Tailscale status
+  command: tailscale status --json
+  register: tailscale_status
+  ignore_errors: yes
+  changed_when: false
+  when:
+    - not ansible_check_mode
+    - tailscale_binary.stat.exists
+
+- name: Configure Tailscale as subnet router
+  command: >
+    tailscale up
+    --authkey={{ tailscale_auth_key }}
+    --advertise-routes={{ tailscale_advertised_routes }}
+    --accept-dns=false
+    --reset
+  when:
+    - not ansible_check_mode
+    - tailscale_binary.stat.exists
+    - tailscale_status.rc != 0 or (tailscale_status.stdout | from_json).BackendState != "Running"
+  no_log: true  # Hide auth key from logs
