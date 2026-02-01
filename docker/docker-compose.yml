@@ -296,7 +296,8 @@ services:
     ports:
       - "443:8086"
     networks:
-      - internal
+      internal:
+        ipv4_address: {{ influxdb_ip }}
     image: influxdb:latest
     restart: unless-stopped
     deploy:
