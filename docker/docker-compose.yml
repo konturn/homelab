@@ -807,12 +807,36 @@ services:
       start_period: 60s
     environment:
       - TZ=America/New_York
+      # Core moltbot configuration
       - OPENAI_API_KEY={{ lookup('env', 'OPENAI_API_KEY') }}
       - CLAWDBOT_GATEWAY_TOKEN={{ lookup('env', 'MOLTBOT_GATEWAY_TOKEN') }}
       - TELEGRAM_BOT_TOKEN={{ lookup('env', 'MOLTBOT_TELEGRAM_TOKEN') }}
       - HASS_URL=http://homeassistant:8123
       - HASS_TOKEN={{ lookup('env', 'HASS_TOKEN') }}
       - GITLAB_TOKEN={{ lookup('env', 'MOLTBOT_GITLAB_TOKEN') }}
+      # Media management APIs (internal network)
+      - RADARR_URL=http://radarr:7878
+      - RADARR_API_KEY={{ lookup('env', 'RADARR_API_KEY') }}
+      - SONARR_URL=http://sonarr:8989
+      - SONARR_API_KEY={{ lookup('env', 'SONARR_API_KEY') }}
+      - PROWLARR_URL=http://prowlarr:9696
+      - PROWLARR_API_KEY={{ lookup('env', 'PROWLARR_API_KEY') }}
+      - PLEX_URL=http://plex:32400
+      - PLEX_TOKEN={{ lookup('env', 'PLEX_TOKEN') }}
+      - OMBI_URL=http://ombi:3579
+      - OMBI_API_KEY={{ lookup('env', 'OMBI_API_KEY') }}
+      # Download clients
+      - NZBGET_URL=http://nzbget:6789
+      - NZBGET_USERNAME={{ lookup('env', 'NZBGET_USERNAME') }}
+      - NZBGET_PASSWORD={{ lookup('env', 'NZBGET_PASSWORD') }}
+      - DELUGE_URL=http://deluge:8112
+      - DELUGE_PASSWORD={{ lookup('env', 'DELUGE_PASSWORD') }}
+      # Document management
+      - PAPERLESS_URL=http://paperless-ngx:8000
+      - PAPERLESS_TOKEN={{ lookup('env', 'PAPERLESS_TOKEN') }}
+      # Metrics/monitoring
+      - INFLUXDB_URL=http://influxdb:8086
+      - INFLUXDB_TOKEN={{ lookup('env', 'INFLUXDB_TOKEN') }}
     volumes:
       - {{ docker_persistent_data_path }}/moltbot/data:/home/node/.moltbot
       - {{ docker_persistent_data_path }}/moltbot/data:/home/node/.clawdbot
