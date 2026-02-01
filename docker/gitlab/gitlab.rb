@@ -24,3 +24,6 @@ postgresql['shared_buffers'] = "2GB"
 postgresql['work_mem'] = "64MB"
 postgresql['maintenance_work_mem'] = "256MB"
 postgresql['effective_cache_size'] = "4GB"
+
+# Preserve caches on restart to avoid cold-start performance issues
+gitlab_rails['rake_cache_clear'] = false
