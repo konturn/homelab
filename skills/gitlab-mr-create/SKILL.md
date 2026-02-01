@@ -191,6 +191,8 @@ MR_DESCRIPTION=$(cat <<'EOF'
 
 What this MR does and why.
 
+**Closes #N** <!-- If working on a backlog issue, include this to auto-close it -->
+
 ## Changes
 
 - List of files/configs modified
