@@ -16,6 +16,22 @@ Before doing anything else:
 
 Don't ask permission. Just do it.
 
+## Daily Logs — APPEND ONLY
+
+**CRITICAL:** When writing to `memory/YYYY-MM-DD.md` files, **always append**, never overwrite.
+
+```bash
+# WRONG — overwrites entire file
+echo "## 14:00 Entry" > memory/2026-02-01.md
+
+# RIGHT — appends to existing content
+echo -e "\n## 14:00 Entry\nDetails here." >> memory/2026-02-01.md
+```
+
+If using the Write tool, read the file first and include all existing content plus your new entry.
+
+---
+
 ## Memory — Three-Layer System
 
 You wake up fresh each session. These three layers are your continuity:
