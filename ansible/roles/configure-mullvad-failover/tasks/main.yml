@@ -8,6 +8,8 @@
       - wireguard
       - dnsutils
       - iputils-ping
+      - curl
+      - jq
     state: present
     update_cache: yes
 

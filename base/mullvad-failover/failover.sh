@@ -4,6 +4,8 @@
 #
 # Usage: Run via systemd timer every 60 seconds
 # Logs: syslog (tag: mullvad-failover)
+#
+# Server list is fetched from Mullvad's API, with static fallback on failure
 
 set -euo pipefail
 
@@ -17,8 +19,13 @@ PING_TIMEOUT=2
 MAX_LATENCY_MS=150
 MAX_PACKET_LOSS=20
 
-# Chicago Mullvad servers
-SERVERS=(
+# Mullvad API endpoint for relay list
+MULLVAD_API="https://api.mullvad.net/www/relays/all/"
+API_TIMEOUT=10
+
+# Static fallback list of Chicago WireGuard servers
+# Used when API is unreachable
+FALLBACK_SERVERS=(
     "us-chi-wg-001.relays.mullvad.net"
     "us-chi-wg-002.relays.mullvad.net"
     "us-chi-wg-003.relays.mullvad.net"
@@ -28,6 +35,43 @@ SERVERS=(
 log() {
     logger -t mullvad-failover "$1"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+# Fetch Chicago WireGuard servers from Mullvad API
+# Returns: newline-separated list of server FQDNs
+# Falls back to static list on failure
+get_server_list() {
+    local api_response
+    local servers
+
+    log "Fetching server list from Mullvad API..."
+    
+    if api_response=$(curl -s --max-time "$API_TIMEOUT" "$MULLVAD_API" 2>/dev/null); then
+        # Filter for active Chicago WireGuard servers
+        servers=$(echo "$api_response" | jq -r '
+            .[] | 
+            select(.type == "wireguard") | 
+            select(.city_code == "chi") | 
+            select(.active == true) | 
+            .fqdn
+        ' 2>/dev/null)
+        
+        if [[ -n "$servers" ]]; then
+            local count
+            count=$(echo "$servers" | wc -l)
+            log "Fetched $count Chicago WireGuard servers from API"
+            echo "$servers"
+            return 0
+        else
+            log "WARNING: API returned no Chicago WireGuard servers"
+        fi
+    else
+        log "WARNING: Failed to fetch from Mullvad API (timeout or network error)"
+    fi
+    
+    # Fallback to static list
+    log "Using static fallback server list (${#FALLBACK_SERVERS[@]} servers)"
+    printf '%s\n' "${FALLBACK_SERVERS[@]}"
 }
 
 # Test server health via ping
@@ -101,8 +145,14 @@ save_current_server() {
 find_best_server() {
     local best_server=""
     local best_latency=9999
+    local server_list
     
-    for server in "${SERVERS[@]}"; do
+    # Get server list (from API or fallback)
+    server_list=$(get_server_list)
+    
+    while IFS= read -r server; do
+        [[ -z "$server" ]] && continue
+        
         log "Testing $server..."
         local latency
         latency=$(test_server "$server")
@@ -112,7 +162,7 @@ find_best_server() {
             best_latency="$latency"
             best_server="$server"
         fi
-    done
+    done <<< "$server_list"
     
     if [[ -z "$best_server" ]]; then
         log "ERROR: No healthy servers found!"
