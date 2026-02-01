@@ -1,8 +1,8 @@
-# Chris and Patty
+# Chris and Patty Kontur
 
-Noah's parents. Live in Northfield, Ohio. Noah currently lives with them.
+Noah's parents. Live in Northfield, Ohio (Cleveland area).
 
-Nice house with a backyard and a wall of books.
+Noah grew up here but now owns his own house nearby at 620 W Highland Rd.
 
 ---
-*Last synthesized: 2026-01-30*
+*Last synthesized: 2026-02-01*
