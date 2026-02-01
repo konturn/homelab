@@ -131,35 +131,53 @@ services:
       - "-s"
     restart: unless-stopped
   nginx: 
-    image: nginx:latest
+    image: nginx:alpine
     container_name: nginx
     networks:
       external:
         ipv4_address: {{ nginx_ip }}
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     volumes:
       - {{ docker_persistent_data_path }}/nginx/conf:/etc/nginx
       - {{ docker_persistent_data_path }}/nginx/webroot:/data/webroot
       - /var/log/nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   lab_nginx: 
-    image: nginx:latest
+    image: nginx:alpine
     container_name: lab_nginx
     networks:
       internal:
         ipv4_address: {{ lab_nginx_ip }}
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     volumes:
       - {{ docker_persistent_data_path }}/lab_nginx/conf:/etc/nginx
       - /var/log/lab_nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   iot_nginx: 
-    image: nginx:latest
+    image: nginx:alpine
     container_name: iot_nginx
     networks:
       iot:
         ipv4_address: {{ iot_nginx_ip }}
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     volumes:
       - {{ docker_persistent_data_path }}/iot_nginx/conf:/etc/nginx
       - /var/log/iot_nginx:/data/log
