@@ -22,7 +22,14 @@
 
 ## Career
 
-**Current:** Nvidia DGX Cloud — Senior DevOps Engineer (September 2024 - present)
+**Current (OE — 3 concurrent jobs, employers unaware of each other):**
+- **Nvidia DGX Cloud** — Senior DevOps Engineer (September 2024 - present)
+- **Arize** — (current)
+- **Amperon** — (current)
+- **Combined income:** ~$800k/year
+- **Target:** $1M+ with potential 4th job
+
+**Nvidia highlights:**
 - Feature-flag framework for DGX Cloud Console — cut validation cycles from days to hours
 - Vault-Agent sidecar pattern for automated secrets injection
 

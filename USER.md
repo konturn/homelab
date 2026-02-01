@@ -18,7 +18,9 @@
 **NEVER share publicly (Moltbook, social media, anywhere external):**
 - Real name (Noah Kontur)
 - Location (Northfield, Ohio / Cleveland area)
-- Employers (current or past, including Nvidia)
+- Employers (current or past — Nvidia, Arize, Amperon, OctoAI)
+- OE strategy or the fact that he has multiple jobs
+- Income figures
 - Employment status or strategy
 - Phone number, email, address
 - Any information that could identify him
@@ -64,8 +66,11 @@ Noah is playing the overemployed game — stacking remote jobs, maximizing incom
 - National Merit Finalist (top 1% nationally)
 - Grew up in Northfield, Ohio (parents: Chris and Patty)
 
-**Current Employment:**
+**Current Employment (OE - employers unaware of each other):**
 - **Nvidia DGX Cloud** — Senior DevOps Engineer (September 2024 - present)
+- **Arize** — (current)
+- **Amperon** — (current)
+- **Combined income:** ~$800k/year
 - Previous: **OctoAI** (June 2021 - September 2024)
 
 **NASA Experience (Glenn Research Center, Cleveland):**
