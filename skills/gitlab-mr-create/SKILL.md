@@ -107,6 +107,47 @@ export GITLAB_TOKEN="${GITLAB_TOKEN}"
 
 ---
 
+## Complexity Assessment — Before Implementation
+
+**Before writing code, assess the task complexity:**
+
+### Simple (proceed directly):
+- Single file change
+- Adding/updating environment variables
+- Obvious config tweaks
+- Pattern already exists elsewhere in repo
+
+### Complex (bubble up first):
+- Touches 4+ files
+- New service or major component
+- Architectural decisions involved
+- Novel pattern not seen in repo before
+- Multiple ways to implement it
+- You're unsure about the approach
+
+**If complex:** Draft a brief plan and ask for confirmation before implementing:
+
+```
+Use sessions_send to main session:
+"Planning MR for: [task]
+
+Approach:
+- [What files to change]
+- [Key implementation decisions]
+- [Potential risks or tradeoffs]
+
+Questions:
+- [Any uncertainties]
+
+Proceed with this approach?"
+```
+
+**Wait for approval before implementing complex changes.** This catches wrong approaches early, before wasted effort.
+
+For simple changes, proceed directly — don't add overhead where it's not needed.
+
+---
+
 ## Core Workflow
 
 ### 1. Create Feature Branch
