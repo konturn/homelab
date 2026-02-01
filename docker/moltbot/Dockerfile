@@ -3,10 +3,33 @@ FROM ghcr.io/moltbot/moltbot:main
 
 USER root
 
-# Install system packages
+# Install system packages including Chromium for headless browser automation
+# Chromium deps: minimal set for headless operation (no X11 desktop)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
+    chromium \
+    fonts-liberation \
+    fonts-noto-color-emoji \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libasound2 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libnss3 \
+    libxshmfence1 \
     && rm -rf /var/lib/apt/lists/*
+
+# Set Chromium flags for container/sandbox environment
+ENV CHROMIUM_FLAGS="--headless --no-sandbox --disable-gpu --disable-dev-shm-usage"
+ENV PUPPETEER_EXECUTABLE_PATH="/usr/bin/chromium"
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="/usr/bin/chromium"
 
 # Install glab (GitLab CLI) from GitHub
 RUN curl -fsSL https://github.com/profclems/glab/releases/download/v1.22.0/glab_1.22.0_Linux_x86_64.deb -o /tmp/glab.deb \
