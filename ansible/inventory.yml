@@ -60,6 +60,7 @@ all:
     mopidy_address: 10.6.32.7
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     omapi_secret: "{{ lookup('env', 'OMAPI_SECRET') }}"
+    tailscale_api_token: "{{ lookup('env', 'TAILSCALE_API_TOKEN') }}"
     is_satellite: false
     headway_area: "ohio-latest"
     headway_url: "https://headway.iot.lab.nkontur.com"

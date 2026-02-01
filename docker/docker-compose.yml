@@ -875,6 +875,8 @@ services:
       # Metrics/monitoring
       - INFLUXDB_URL=http://influxdb:8086
       - INFLUXDB_TOKEN={{ lookup('env', 'INFLUXDB_TOKEN') }}
+      # Tailscale API access
+      - TAILSCALE_API_TOKEN={{ lookup('env', 'TAILSCALE_API_TOKEN') }}
     volumes:
       - {{ docker_persistent_data_path }}/moltbot/data:/home/node/.moltbot
       - {{ docker_persistent_data_path }}/moltbot/data:/home/node/.clawdbot
