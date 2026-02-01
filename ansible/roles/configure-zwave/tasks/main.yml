@@ -10,9 +10,18 @@
     state: present
     update_cache: yes
 
+- name: Set minidsp package architecture
+  set_fact:
+    minidsp_arch: >-
+      {%- if ansible_architecture == 'x86_64' -%}amd64
+      {%- elif ansible_architecture == 'aarch64' -%}arm64
+      {%- elif ansible_architecture in ['armv7l', 'armv6l'] -%}armhf
+      {%- else -%}{{ ansible_architecture }}
+      {%- endif -%}
+
 - name: Install minidsp-rs package
   ansible.builtin.apt:
-    deb: https://github.com/mrene/minidsp-rs/releases/download/v0.1.7/minidsp_0.1.7_arm64.deb
+    deb: "https://github.com/mrene/minidsp-rs/releases/download/v0.1.7/minidsp_0.1.7_{{ minidsp_arch }}.deb"
 
 - name: Make sure minidsp is started and enabled
   service:
