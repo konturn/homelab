@@ -15,10 +15,13 @@ Requires environment variables:
 
 ## Authentication
 
-Include token in all requests:
+Include token AND Host header in all requests:
 ```
 Authorization: Token $PAPERLESS_TOKEN
+Host: paperless-ngx.lab.nkontur.com
 ```
+
+**Important:** The Host header is required because the internal Docker network URL differs from the external hostname. Without it, you'll get 400 Bad Request errors.
 
 ## Core Operations
 
