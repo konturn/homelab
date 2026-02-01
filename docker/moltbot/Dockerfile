@@ -1,5 +1,5 @@
-# Extend official moltbot image with additional tooling
-FROM ghcr.io/moltbot/moltbot:main
+# Extend official OpenClaw image with additional tooling
+FROM ghcr.io/openclaw/openclaw:main
 
 USER root
 
