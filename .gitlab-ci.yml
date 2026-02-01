@@ -138,6 +138,7 @@ build-image:
       --dockerfile "${CI_PROJECT_DIR}/ci/Dockerfile"
       --destination "${CI_IMAGE}"
       --cache=true
+      --skip-tls-verify-registry=registry.lab.nkontur.com
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
