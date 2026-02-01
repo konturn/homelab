@@ -120,12 +120,32 @@ sessions_spawn(
 
 **You are the coordinator if your task mentions "coordinator" or "batch".**
 
+**⚠️ CRITICAL: COORDINATOR NEVER APPLIES TO JOBS**
+```
+╔══════════════════════════════════════════════════════════════════╗
+║  THE COORDINATOR DOES NOT FILL OUT APPLICATION FORMS. EVER.      ║
+║  THE COORDINATOR DOES NOT CLICK "APPLY" BUTTONS. EVER.           ║
+║  THE COORDINATOR DOES NOT OPEN JOB POSTING PAGES. EVER.          ║
+║                                                                  ║
+║  If you find yourself filling out a form → STOP → You broke it   ║
+║  If you're clicking Apply → STOP → Spawn a worker instead        ║
+║  If you're reading a job description in detail → STOP            ║
+╚══════════════════════════════════════════════════════════════════╝
+```
+
+**Coordinator's ONLY jobs:**
+1. Search Hiring Cafe listing page (NOT individual job pages)
+2. Extract job titles, companies, salaries, URLs from the LIST view
+3. Filter against blocklist and applied.json
+4. Spawn workers with the URLs — workers open the actual job pages
+5. Track results and update files
+
 **⚠️ BATCH LIMITS:**
 - **Max 10 applications per batch** — Quality over quantity. Don't spam.
 - If search returns more than 10, pick the best 10 (highest salary, best fit, most interesting)
 
 1. **Read this skill fully** — Understand all requirements
-2. **Search for jobs** — Use Hiring Cafe, filter against blocklist/applied.json
+2. **Search for jobs** — Use Hiring Cafe LIST VIEW ONLY, filter against blocklist/applied.json
 3. **For each job, spawn ONE worker at a time:**
    ```
    sessions_spawn(
@@ -146,6 +166,19 @@ sessions_spawn(
 8. **Send summary to Telegram** when batch completes
 
 **⚠️ NEVER run multiple workers simultaneously.** Browser profiles clobber each other on the node.
+
+**Coordinator Browser Rules:**
+| Action | Allowed? | Notes |
+|--------|----------|-------|
+| Open Hiring Cafe search page | ✅ | Only the search/list view |
+| Scroll through job listings | ✅ | To see more results |
+| Click pagination / "Load More" | ✅ | On listing page only |
+| Extract job info from list | ✅ | Title, company, salary, URL |
+| Click on a job posting | ❌ | Workers do this |
+| Open application forms | ❌ | Workers do this |
+| Fill any form fields | ❌ | Workers do this |
+| Click "Apply" buttons | ❌ | Workers do this |
+| Read full job descriptions | ❌ | Workers do this |
 
 **Progress monitoring:** Every 60 seconds while a worker is running:
 - Check `sessions_history` for the worker
