@@ -121,6 +121,9 @@ all:
         - src: "docker/loki/local-config.yaml"
           dest: "{{ docker_persistent_data_path }}/loki/local-config.yaml"
           name: "loki"
+        - src: "docker/gitlab/gitlab.rb"
+          dest: "{{ docker_persistent_data_path }}/gitlab/config/gitlab.rb"
+          name: "gitlab"
   children:
     satellites:
       vars:

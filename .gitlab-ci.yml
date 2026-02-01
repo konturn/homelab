@@ -1,7 +1,17 @@
+# =============================================================================
+# Workflow Configuration
+# =============================================================================
+workflow:
+  auto_cancel:
+    on_new_commit: interruptible
+
 variables:
   PIP_CACHE_DIR: "/cache/pip"
   ANSIBLE_ROLES_PATH: "/cache/ansible-roles"
 
+# =============================================================================
+# Job Templates
+# =============================================================================
 .ansible:
   image: willhallonline/ansible:latest
   before_script:
@@ -13,6 +23,9 @@ variables:
     - mkdir ~/.ssh
     - cp ansible/known_hosts ~/.ssh/known_hosts
 
+.interruptible:
+  interruptible: true
+
 stages:
   - validate
   - deploy
@@ -22,7 +35,9 @@ stages:
 # =============================================================================
 
 router:validate:
-  extends: .ansible
+  extends:
+    - .ansible
+    - .interruptible
   stage: validate
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml --check --diff
@@ -30,7 +45,9 @@ router:validate:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
 zwave:validate:
-  extends: .ansible
+  extends:
+    - .ansible
+    - .interruptible
   stage: validate
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/zwave.yml --check --diff
@@ -38,7 +55,9 @@ zwave:validate:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
 satellite-2:validate:
-  extends: .ansible
+  extends:
+    - .ansible
+    - .interruptible
   stage: validate
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml --check --diff
@@ -47,28 +66,28 @@ satellite-2:validate:
 
 # =============================================================================
 # Deploy (main branch only) - Actual deployment
+# NOT interruptible - never cancel mid-deploy
+# Uses resource_group to ensure deploys run in order across pipelines
 # =============================================================================
 
-router:deploy:
+.deploy:
   extends: .ansible
   stage: deploy
+  resource_group: deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+router:deploy:
+  extends: .deploy
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
 
 zwave:deploy:
-  extends: .ansible
-  stage: deploy
+  extends: .deploy
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/zwave.yml
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
 
 satellite-2:deploy:
-  extends: .ansible
-  stage: deploy
+  extends: .deploy
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"

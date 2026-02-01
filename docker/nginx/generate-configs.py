@@ -42,7 +42,11 @@ def generate_http_config(port_mappings, path, domain_name, output_prefix):
             drop_in_file = 'http-internal-drop-in.conf'
         with open(path.rsplit('/',1)[0] + '/' + drop_in_file, 'r') as drop_in:
             drop_in_template = json.load(drop_in)
-            result['config'][0]['parsed'][0]['block'].append(drop_in_template)
+            # Handle both single object and array of server blocks
+            if isinstance(drop_in_template, list):
+                result['config'][0]['parsed'][0]['block'].extend(drop_in_template)
+            else:
+                result['config'][0]['parsed'][0]['block'].append(drop_in_template)
     for service_name, port in port_mappings.items():
         template_instance = copy.deepcopy(template)
         host_port = port

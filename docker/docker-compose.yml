@@ -79,6 +79,12 @@ services:
     restart: unless-stopped
     # GPU disabled until NVML driver/library mismatch is fixed
     # runtime: nvidia
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+        reservations:
+          memory: 4G
     environment:
       - TZ=America/New_York
       # - NVIDIA_VISIBLE_DEVICES=all
@@ -87,6 +93,12 @@ services:
       - /mpool/plex/config:/config
       - /mpool/plex/transcode:/transcode
       - /mpool/plex:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:32400/identity"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
   pihole:
     container_name: pihole
     image: pihole/pihole:2024.07.0
@@ -102,6 +114,12 @@ services:
       - {{ docker_persistent_data_path }}/pihole/conf:/etc/pihole
       - {{ docker_persistent_data_path }}/pihole/dnsmasq:/etc/dnsmasq.d
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "dig", "+short", "+norecurse", "+retry=0", "@127.0.0.1", "pi.hole"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   iperf3:
     container_name: iperf3
     image: networkstatic/iperf3
@@ -194,6 +212,12 @@ services:
       - /mpool/plex/Movies:/movies
       - /mpool/samba_share/nfs:/remote
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7878/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
   jackett:
     image: linuxserver/jackett
     container_name: jackett
@@ -224,6 +248,12 @@ services:
       - /mpool/plex/TV:/tv
       - /mpool/samba_share/nfs:/remote
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8989/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
   booksonic:
     image: izderadicka/audioserve
     container_name: audioserve
@@ -251,6 +281,12 @@ services:
       - internal
     image: influxdb:latest
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+        reservations:
+          memory: 4G
     volumes:
         - influxdb-storage:/var/lib/influxdb2
         - {{ docker_persistent_data_path }}/influxdb/config:/etc/influxdb2
@@ -261,6 +297,12 @@ services:
       - DOCKER_INFLUXDB_INIT_ORG=homelab
       - DOCKER_INFLUXDB_INIT_BUCKET=metrics
       - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN={{ lookup('env', 'INFLUXDB_ADMIN_TOKEN') }}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   grafana:
     container_name: grafana
     image: grafana/grafana:latest
@@ -269,6 +311,12 @@ services:
     networks:
       - internal
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
     volumes:
       - grafana-storage:/var/lib/grafana
       - {{ docker_persistent_data_path }}/grafana/provisioning:/etc/grafana/provisioning
@@ -281,6 +329,12 @@ services:
     depends_on:
       - influxdb
       - loki
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   loki:
     container_name: loki
     image: grafana/loki:3.5.0
@@ -315,10 +369,22 @@ services:
         soft: 65536
         hard: 65536
       nproc: 65536
+    deploy:
+      resources:
+        limits:
+          memory: 24G
+        reservations:
+          memory: 8G
     volumes:
       - '{{ docker_persistent_data_path }}/gitlab/config:/etc/gitlab'
       - '{{ docker_persistent_data_path }}/gitlab/logs:/var/log/gitlab'
       - '{{ docker_persistent_data_path }}/gitlab/data:/var/opt/gitlab'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/-/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
   deluge:
     container_name: deluge
     ports:
@@ -367,6 +433,12 @@ services:
     restart: unless-stopped
     cap_add:
       - SYS_NICE  # CAP_SYS_NICE
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 2G
     environment:
       MYSQL_DATABASE: wordpress
       MYSQL_USER: wordpress
@@ -407,6 +479,12 @@ services:
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_ETDRb11A920-if00-port0:/dev/ttyUSB0"
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0:/dev/ttyUSB1"
     image: "homeassistant/home-assistant:2025.12"
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 2G
     volumes:
       - "{{ docker_persistent_data_path }}/homeassistant:/config"
       - /etc/localtime:/etc/localtime:ro
@@ -414,6 +492,12 @@ services:
     cap_add:
       - NET_ADMIN # So we can override default route
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8123/api/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
   snapserver:
     container_name: snapserver
     hostname: snapserver
@@ -622,6 +706,12 @@ services:
     container_name: paperless-ngx
     networks:
       internal:
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 2G
     environment:
       - PUID=1000
       - PGID=1000
@@ -657,6 +747,12 @@ services:
     restart: unless-stopped
     networks:
       - external
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 2G
     volumes:
       - nextcloud_db:/var/lib/mysql
     environment:
@@ -672,6 +768,12 @@ services:
     hostname: nkontur.com
     ports:
       - "443:80"
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 2G
     volumes:
       - nextcloud:/data
 #      - {{ docker_persistent_data_path }}/nextcloud/config:/var/www/html/config
@@ -679,6 +781,12 @@ services:
 #      - {{ docker_persistent_data_path }}/nextcloud/config/php.ini:/usr/local/etc/php/php.ini
       - /etc/localtime:/etc/localtime:ro
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/status.php"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
 
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:latest
@@ -705,6 +813,12 @@ services:
       - internal
     ports:
       - "18789:18789"
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+        reservations:
+          memory: 4G
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:18789/health"]
       interval: 30s
@@ -713,12 +827,36 @@ services:
       start_period: 60s
     environment:
       - TZ=America/New_York
+      # Core moltbot configuration
       - OPENAI_API_KEY={{ lookup('env', 'OPENAI_API_KEY') }}
       - CLAWDBOT_GATEWAY_TOKEN={{ lookup('env', 'MOLTBOT_GATEWAY_TOKEN') }}
       - TELEGRAM_BOT_TOKEN={{ lookup('env', 'MOLTBOT_TELEGRAM_TOKEN') }}
       - HASS_URL=http://homeassistant:8123
       - HASS_TOKEN={{ lookup('env', 'HASS_TOKEN') }}
       - GITLAB_TOKEN={{ lookup('env', 'MOLTBOT_GITLAB_TOKEN') }}
+      # Media management APIs (internal network)
+      - RADARR_URL=http://radarr:7878
+      - RADARR_API_KEY={{ lookup('env', 'RADARR_API_KEY') }}
+      - SONARR_URL=http://sonarr:8989
+      - SONARR_API_KEY={{ lookup('env', 'SONARR_API_KEY') }}
+      - PROWLARR_URL=http://prowlarr:9696
+      - PROWLARR_API_KEY={{ lookup('env', 'PROWLARR_API_KEY') }}
+      - PLEX_URL=http://plex:32400
+      - PLEX_TOKEN={{ lookup('env', 'PLEX_TOKEN') }}
+      - OMBI_URL=http://ombi:3579
+      - OMBI_API_KEY={{ lookup('env', 'OMBI_API_KEY') }}
+      # Download clients
+      - NZBGET_URL=http://nzbget:6789
+      - NZBGET_USERNAME={{ lookup('env', 'NZBGET_USERNAME') }}
+      - NZBGET_PASSWORD={{ lookup('env', 'NZBGET_PASSWORD') }}
+      - DELUGE_URL=http://deluge:8112
+      - DELUGE_PASSWORD={{ lookup('env', 'DELUGE_PASSWORD') }}
+      # Document management
+      - PAPERLESS_URL=http://paperless-ngx:8000
+      - PAPERLESS_TOKEN={{ lookup('env', 'PAPERLESS_TOKEN') }}
+      # Metrics/monitoring
+      - INFLUXDB_URL=http://influxdb:8086
+      - INFLUXDB_TOKEN={{ lookup('env', 'INFLUXDB_TOKEN') }}
     volumes:
       - {{ docker_persistent_data_path }}/moltbot/data:/home/node/.moltbot
       - {{ docker_persistent_data_path }}/moltbot/data:/home/node/.clawdbot
