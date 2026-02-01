@@ -7,7 +7,11 @@ description: Search and apply for remote software engineering jobs. Use when sea
 
 ## Target Criteria
 
-- **Location:** Remote only (US-based). **Never willing to relocate.**
+- **Location:** Remote only, **US-based ONLY**. **Never willing to relocate.**
+  - ✅ "Remote (US)" or "Remote (United States)" — good
+  - ❌ "Remote (Canada)", "Remote (UK)", "Remote (EMEA)", etc. — **REJECT immediately**
+  - ❌ "Remote (North America)" — **REJECT** (could require Canada residency)
+  - If location says just "Remote" with no country, check the job description for residency requirements
 - **Salary:** Top of range ≥ $200k (transparent salaries preferred)
 - **Roles:** Infrastructure Engineer, Cloud Engineer, DevOps, SRE, Platform Engineer
 - **Commitment:** Full-time
@@ -771,9 +775,13 @@ Report back when done: SUCCESS / FAILED / NEEDS_INPUT
 3. **Validate job criteria** — Before filling anything:
    - Open the job posting and READ the full description
    - Verify salary: top of range must be ≥ $200k
-   - Verify location: must be Remote (not Hybrid/Onsite only)
+   - Verify location: must be Remote **AND** US-based
+     - ✅ "Remote (US)" or "Remote (United States)" — proceed
+     - ❌ "Remote (Canada)", "Remote (UK)", "Remote (EMEA)", etc. — REJECT
+     - ❌ "Remote (North America)" — REJECT (could require Canada)
+     - Check job description for "must be located in [non-US country]" — REJECT
    - **If criteria don't match → IMMEDIATELY TERMINATE and report:**
-     `SKIPPED: <Company> - <Role> - <reason: e.g. "Hybrid only" or "Max salary $180k">`
+     `SKIPPED: <Company> - <Role> - <reason: e.g. "Hybrid only" or "Max salary $180k" or "Remote Canada only">`
    - Do NOT waste time on applications that don't meet criteria
 4. **Create checkpoint** — `in_progress/<jobId>.json` for crash recovery
 5. **Open new tab in YOUR profile** — `browser action=open profile=<assigned-profile> targetUrl=<url>`
