@@ -133,6 +133,21 @@ curl -s "$SONARR_URL/api/v3/system/status" \
   -H "X-Api-Key: $SONARR_API_KEY" | jq '{version, startTime}'
 ```
 
+## ⚠️ API Best Practices
+
+**NEVER use mass operations:**
+- `MissingEpisodeSearch` — searches ENTIRE library, will timeout
+- Avoid iterating over all series unless necessary
+
+**DO use targeted operations:**
+- `SeriesSearch` with specific `seriesId`
+- `SeasonSearch` with `seriesId` + `seasonNumber`
+- `EpisodeSearch` with specific `episodeIds` array
+
+**Timeouts:** Use `-m 60` or longer for search commands. The API can be slow with large libraries (400+ shows).
+
+**Batch carefully:** If searching multiple shows, do them one at a time with delays, not in parallel.
+
 ## Common Workflows
 
 ### "Add this show and download it"
