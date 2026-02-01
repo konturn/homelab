@@ -184,6 +184,15 @@
     state: directory
   loop: "{{ docker_config + (docker_config_nginx | default([])) }}"
 
+- name: Create docker data directories with specific ownership
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.group | default('root') }}"
+    mode: "{{ item.mode | default('0755') }}"
+  loop: "{{ docker_data_dirs | default([]) }}"
+
 - name: Copy docker configuration files
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/{{ item.src }}"
