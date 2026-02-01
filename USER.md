@@ -9,7 +9,7 @@
 - **Timezone:** America/New_York (Cleveland, Ohio)
 - **Notes:** Building toward early retirement
 - **Cats:** Half Dome and Calypso
-- **Home:** Northfield, Ohio — parents' place, nice backyard, wall of books
+- **Home:** Northfield, Ohio — owns his own house
 
 ## Privacy — CRITICAL
 
