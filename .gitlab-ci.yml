@@ -8,6 +8,7 @@ workflow:
 variables:
   PIP_CACHE_DIR: "/cache/pip"
   ANSIBLE_ROLES_PATH: "/cache/ansible-roles"
+  GIT_DEPTH: 5  # Only need recent commits for CI
 
 # =============================================================================
 # Job Templates
