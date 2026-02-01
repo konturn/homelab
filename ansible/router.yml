@@ -1,14 +1,6 @@
 - hosts: router.lab.nkontur.com
   roles:
   - configure-base
-  - role: configure-wireguard
-    vars: 
-      wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/wg0.conf' }}"
-      wireguard_interface_name: "wg0"
-  - role: configure-wireguard
-    vars: 
-      wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/wg1.conf' }}"
-      wireguard_interface_name: "wg1"
   - configure-router-network
   - role: configure-docker
     vars:
@@ -32,4 +24,4 @@
         - {path: "/mpool/plex/Family"}
         - {path: "/var/log"}
         - {path: "/root"}
-      restic_password: "{{ lookup('env', 'RESTIC_PASSWORD') }}" 
+      restic_password: "{{ lookup('env', 'RESTIC_PASSWORD') }}"
