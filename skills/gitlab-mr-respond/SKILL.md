@@ -43,6 +43,30 @@ This provides: `wait_for_pipeline`, `push_and_wait`, `check_merge_conflicts`, `e
 
 ---
 
+## MR Locking — REQUIRED
+
+**Prevent cron conflicts by locking the MR you're working on.**
+
+```bash
+TRACKING_FILE="/home/node/clawd/memory/open-mrs.json"
+SESSION_LABEL="gitlab.mr.${MR_IID}.feedback"
+TIMESTAMP=$(date +%s)000
+
+# Set lock on start
+jq --arg iid "$MR_IID" --arg session "$SESSION_LABEL" --argjson ts "$TIMESTAMP" \
+  '.[$iid].lockedBy = $session | .[$iid].lockedAt = $ts' \
+  "$TRACKING_FILE" > tmp.json && mv tmp.json "$TRACKING_FILE"
+
+# Clear lock on exit (use trap)
+trap 'jq --arg iid "$MR_IID" "del(.[\$iid].lockedBy, .[\$iid].lockedAt)" "$TRACKING_FILE" > tmp.json && mv tmp.json "$TRACKING_FILE"' EXIT
+
+# ... do your work ...
+```
+
+Locks expire after 15 minutes. The comment-monitor cron skips locked MRs.
+
+---
+
 ## Issue Tracking — CRITICAL
 
 **Keep issues and MRs in sync at all times.**

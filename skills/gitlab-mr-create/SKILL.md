@@ -68,6 +68,48 @@ curl -s -X POST "https://gitlab.lab.nkontur.com/api/v4/projects/4/issues" \
 
 ---
 
+## MR Locking — REQUIRED
+
+**Prevent cron/sub-agent conflicts by locking MRs you're working on.**
+
+When you start working on an MR, set a lock in the tracking file. This tells the comment-monitor cron to skip this MR.
+
+```bash
+TRACKING_FILE="/home/node/clawd/memory/open-mrs.json"
+SESSION_LABEL="gitlab.mr.${MR_IID}.your-task"
+TIMESTAMP=$(date +%s)000  # milliseconds
+
+# Set lock when starting work
+jq --arg iid "$MR_IID" --arg session "$SESSION_LABEL" --argjson ts "$TIMESTAMP" \
+  '.[$iid].lockedBy = $session | .[$iid].lockedAt = $ts' \
+  "$TRACKING_FILE" > tmp.json && mv tmp.json "$TRACKING_FILE"
+
+# ... do your work ...
+
+# Clear lock when done (success or failure)
+jq --arg iid "$MR_IID" 'del(.[$iid].lockedBy, .[$iid].lockedAt)' \
+  "$TRACKING_FILE" > tmp.json && mv tmp.json "$TRACKING_FILE"
+```
+
+**Lock schema:**
+```json
+{
+  "35": {
+    "title": "...",
+    "lastCommentId": 0,
+    "lockedBy": "gitlab.mr.35.fix-pipeline",
+    "lockedAt": 1769973600000
+  }
+}
+```
+
+**Rules:**
+- Always set lock before starting work
+- Always clear lock on exit (use trap for cleanup)
+- Locks expire after 15 minutes (cron ignores stale locks)
+
+---
+
 ## Pre-Flight Validation — REQUIRED
 
 ```bash
