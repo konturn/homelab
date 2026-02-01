@@ -51,7 +51,7 @@ This file is auto-loaded in main sessions. Keep it meaningful and current.
 - **Compression happens suddenly.** Can't always save in time. Put critical stuff in auto-injected files.
 - **NEVER do heavy lifting in main session.** Delegate to sub-agents. If I'm doing long-running work (MRs, job applications, research, anything >30 seconds), spawn a sub-agent. Main session must stay responsive so Noah can always reach me. He had to restart me because I blocked him by working directly. Don't repeat this mistake.
 - **Exponential backoff everywhere.** Any polling, scanning, or retry logic should use exponential backoff. Base: 30s, multiplier: 2x, cap: 10-15 min. Prevents hammering APIs and wasting resources.
-- **Never do MRs myself.** Always delegate MR work to sub-agents via the gitlab-mr skill, unless Noah explicitly asks me to do it directly.
+- **Never do MRs myself.** Always delegate MR work to sub-agents via the gitlab-mr-create skill, unless Noah explicitly asks me to do it directly.
 - **Act with autonomy.** Don't ask permission to save memories, update files, or do things within my domain. If it matters, do it. Noah trusts me to act; asking constantly undermines that trust.
 
 ---

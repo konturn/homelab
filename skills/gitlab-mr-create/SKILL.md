@@ -235,6 +235,7 @@ echo "Waiting for pipeline..."
 MAX_ATTEMPTS=60  # 10 minutes max
 ATTEMPT=0
 STUCK_START=""
+FIX_ATTEMPTS=0  # Track how many times we've tried to fix failures
 
 while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
   PIPELINE_JSON=$(curl -s "https://gitlab.lab.nkontur.com/api/v4/projects/4/merge_requests/$MR_IID/pipelines" \
@@ -257,12 +258,51 @@ while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
       ;;
     "failed"|"canceled")
       echo "✗ Pipeline $PIPELINE_STATUS — investigating..."
-      # Get failed job logs
+      
+      # YOU MUST FIX THIS BEFORE CONTINUING
+      # Do NOT just reset and hope — diagnose and fix the root cause
+      
+      # Step A: Get failed job details
       FAILED_JOBS=$(curl -s "https://gitlab.lab.nkontur.com/api/v4/projects/4/pipelines/$PIPELINE_ID/jobs" \
-        -H "PRIVATE-TOKEN: $GITLAB_TOKEN" | jq -r '.[] | select(.status == "failed") | .name')
-      echo "Failed jobs: $FAILED_JOBS"
-      # Handle failure (fix and push), then reset
-      # ... implementation-specific fixes ...
+        -H "PRIVATE-TOKEN: $GITLAB_TOKEN")
+      
+      # Step B: For each failed job, get the log
+      for JOB_ID in $(echo "$FAILED_JOBS" | jq -r '.[] | select(.status == "failed") | .id'); do
+        JOB_NAME=$(echo "$FAILED_JOBS" | jq -r ".[] | select(.id == $JOB_ID) | .name")
+        echo "=== Failed job: $JOB_NAME (ID: $JOB_ID) ==="
+        
+        # Fetch job log (last 100 lines usually enough)
+        JOB_LOG=$(curl -s "https://gitlab.lab.nkontur.com/api/v4/projects/4/jobs/$JOB_ID/trace" \
+          -H "PRIVATE-TOKEN: $GITLAB_TOKEN" | tail -100)
+        echo "$JOB_LOG"
+      done
+      
+      # Step C: DIAGNOSE the failure
+      # Common failures:
+      # - Ansible syntax error → fix the YAML
+      # - Docker-compose validation error → fix compose syntax
+      # - Missing variable → add the variable
+      # - Linting error → fix the style issue
+      # - Jinja2 template error → fix template syntax
+      
+      # Step D: MAKE THE FIX
+      # - Edit the relevant files
+      # - Test locally if possible (ansible-lint, docker-compose config, etc.)
+      
+      # Step E: COMMIT AND PUSH THE FIX
+      # git add -A
+      # git commit -m "fix: address pipeline failure - <describe fix>"
+      # git push origin $BRANCH_NAME
+      
+      # Step F: INCREMENT FIX COUNTER (give up after 3 attempts)
+      FIX_ATTEMPTS=$((FIX_ATTEMPTS + 1))
+      if [ $FIX_ATTEMPTS -ge 3 ]; then
+        echo "❌ Failed to fix pipeline after 3 attempts — ESCALATING"
+        # Notify via Telegram with full context of what was tried
+        exit 1
+      fi
+      
+      echo "Fix attempt $FIX_ATTEMPTS pushed. Waiting for new pipeline..."
       ATTEMPT=0
       STUCK_START=""
       ;;

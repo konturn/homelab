@@ -272,16 +272,22 @@ jq --arg iid "$MR_IID" \
    "$TRACKING_FILE" > tmp.json && mv tmp.json "$TRACKING_FILE"
 ```
 
-### 8. Wait for Pipeline
+### 8. Wait for Pipeline — CRITICAL
+
+**DO NOT respond "Done" until pipeline is green.** If pipeline fails, fix it first.
 
 ```bash
 echo "Waiting for pipeline..."
 MAX_ATTEMPTS=60
 ATTEMPT=0
+FIX_ATTEMPTS=0
 
 while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-  PIPELINE_STATUS=$(curl -s "https://gitlab.lab.nkontur.com/api/v4/projects/4/merge_requests/$MR_IID/pipelines" \
-    -H "PRIVATE-TOKEN: $GITLAB_TOKEN" | jq -r '.[0].status // "pending"')
+  PIPELINE_JSON=$(curl -s "https://gitlab.lab.nkontur.com/api/v4/projects/4/merge_requests/$MR_IID/pipelines" \
+    -H "PRIVATE-TOKEN: $GITLAB_TOKEN" | jq -r '.[0] // empty')
+  
+  PIPELINE_STATUS=$(echo "$PIPELINE_JSON" | jq -r '.status // "pending"')
+  PIPELINE_ID=$(echo "$PIPELINE_JSON" | jq -r '.id // empty')
   
   case "$PIPELINE_STATUS" in
     "success")
@@ -289,8 +295,38 @@ while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
       break
       ;;
     "failed")
-      echo "✗ Pipeline failed — investigating..."
-      # Check logs, fix, push again, reset counter
+      echo "✗ Pipeline failed — YOU MUST FIX THIS"
+      
+      # Step A: Get failed job logs
+      FAILED_JOBS=$(curl -s "https://gitlab.lab.nkontur.com/api/v4/projects/4/pipelines/$PIPELINE_ID/jobs" \
+        -H "PRIVATE-TOKEN: $GITLAB_TOKEN")
+      
+      # Step B: For each failed job, fetch and display log
+      for JOB_ID in $(echo "$FAILED_JOBS" | jq -r '.[] | select(.status == "failed") | .id'); do
+        JOB_NAME=$(echo "$FAILED_JOBS" | jq -r ".[] | select(.id == $JOB_ID) | .name")
+        echo "=== Failed job: $JOB_NAME ==="
+        curl -s "https://gitlab.lab.nkontur.com/api/v4/projects/4/jobs/$JOB_ID/trace" \
+          -H "PRIVATE-TOKEN: $GITLAB_TOKEN" | tail -80
+      done
+      
+      # Step C: Diagnose and fix the issue
+      # - Read the error message carefully
+      # - Edit the relevant files to fix
+      # - Common issues: YAML syntax, Jinja2 errors, missing vars
+      
+      # Step D: Commit and push fix
+      # git add -A
+      # git commit -m "fix: address pipeline failure"
+      # git push origin $BRANCH_NAME
+      
+      # Step E: Check attempt limit
+      FIX_ATTEMPTS=$((FIX_ATTEMPTS + 1))
+      if [ $FIX_ATTEMPTS -ge 3 ]; then
+        echo "❌ Failed 3 times — escalating to main session"
+        # Post comment explaining you're stuck, then exit
+        exit 1
+      fi
+      
       ATTEMPT=0
       ;;
     *)

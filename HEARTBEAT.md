@@ -49,7 +49,7 @@ Main session must stay responsive. If a task takes >30 seconds (MRs, job apps, r
 **Process:**
 1. Fetch issues with `agent-backlog` label from GitLab
 2. Pick one that provides genuine value
-3. **Dispatch sub-agent using gitlab-mr skill** (never do MRs myself)
+3. **Dispatch sub-agent using gitlab-mr-create skill** (never do MRs myself)
 4. Sub-agent creates MR with `Closes #N` to link to issue
 5. MR merge auto-closes the issue
 6. Notify via Telegram when MR is ready
