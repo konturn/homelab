@@ -1,0 +1,67 @@
+---
+# Configure Mullvad WireGuard Adaptive Failover
+# Deploys health-check script that automatically switches to healthiest Chicago server
+
+- name: Ensure required packages are installed
+  apt:
+    name:
+      - wireguard
+      - dnsutils
+      - iputils-ping
+    state: present
+    update_cache: yes
+
+- name: Create mullvad-failover state directory
+  file:
+    path: /var/lib/mullvad-failover
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Copy mullvad failover script
+  copy:
+    src: "{{ playbook_dir }}/../base/mullvad-failover/failover.sh"
+    dest: /usr/local/bin/mullvad-failover.sh
+    owner: root
+    group: root
+    mode: '0755'
+  notify: restart mullvad-failover
+
+- name: Copy mullvad config template
+  copy:
+    src: "{{ playbook_dir }}/../base/mullvad-failover/mullvad.conf.template"
+    dest: /etc/wireguard/mullvad.conf.template
+    owner: root
+    group: root
+    mode: '0600'
+  notify: restart mullvad-failover
+
+- name: Deploy mullvad-failover systemd service
+  template:
+    src: mullvad-failover.service.j2
+    dest: /etc/systemd/system/mullvad-failover.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - daemon reload
+    - restart mullvad-failover
+
+- name: Deploy mullvad-failover systemd timer
+  template:
+    src: mullvad-failover.timer.j2
+    dest: /etc/systemd/system/mullvad-failover.timer
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - daemon reload
+    - enable mullvad-failover timer
+
+- name: Enable and start mullvad-failover timer
+  systemd:
+    name: mullvad-failover.timer
+    state: started
+    enabled: yes
+    daemon_reload: yes

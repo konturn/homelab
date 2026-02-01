@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Mullvad Failover Check Every 60 Seconds
+Documentation=https://gitlab.lab.nkontur.com/root/homelab
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=5s
+
+[Install]
+WantedBy=timers.target

@@ -6,6 +6,7 @@
     vars:
       nvidia_container_runtime: true
   - configure-notifications
+  - configure-mullvad-failover
   - role: restic
     vars:
       restic_ssh_enabled: false
