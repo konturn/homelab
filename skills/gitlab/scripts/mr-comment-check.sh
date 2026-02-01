@@ -5,7 +5,7 @@
 TRACKING_FILE="/home/node/clawd/memory/open-mrs.json"
 GITLAB_API="https://gitlab.lab.nkontur.com/api/v4"
 PROJECT_ID="4"
-LOCK_EXPIRY_MS=900000
+LOCK_EXPIRY_MS=3600000  # 1 hour
 
 [[ ! -f "$TRACKING_FILE" ]] && echo '{"dispatch":[],"cleanup":[],"skipped":[],"error":"no tracking file"}' && exit 0
 

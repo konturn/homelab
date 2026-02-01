@@ -106,7 +106,7 @@ jq --arg iid "$MR_IID" 'del(.[$iid].lockedBy, .[$iid].lockedAt)' \
 **Rules:**
 - Always set lock before starting work
 - Always clear lock on exit (use trap for cleanup)
-- Locks expire after 15 minutes (cron ignores stale locks)
+- Locks expire after 1 hour (cron ignores stale locks)
 
 ---
 
