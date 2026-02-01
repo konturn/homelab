@@ -80,110 +80,120 @@ ATS=$(./scripts/detect-ats.sh "https://jobs.ashbyhq.com/...")
 
 ---
 
-### Three-Tier Architecture: Main → Coordinator → Workers
+### Two-Tier Architecture: Main → Scout → Main → Workers
 
 ```
 MAIN AGENT (conversation with user)
-    ↓ spawns once, returns immediately (fire-and-forget)
-COORDINATOR SUB-AGENT (long-running batch manager)
-    ↓ spawns ONE at a time, monitors, waits for completion
+    ↓ spawns scout
+SCOUT SUB-AGENT (searches, filters, returns list)
+    ↓ reports findings back to main (does NOT apply)
+MAIN AGENT 
+    ↓ spawns workers ONE at a time based on scout's list
 WORKER SUB-AGENT (does ONE job application)
-    ↓ reports back to coordinator
-Coordinator updates tracking, improves skill, spawns next worker
+    ↓ reports back to main
+Main updates tracking, spawns next worker
 ```
 
 **Why this architecture:**
-- Main agent is NOT blocked — spawns coordinator and returns to user immediately
-- Coordinator handles serial execution (ONE worker at a time — multiple clobber each other on the node)
+- Sub-agents CANNOT spawn other sub-agents (Moltbot limitation)
+- Scout stays lightweight — only searches list view, never opens job pages
+- Main agent dispatches workers serially (ONE at a time — multiple clobber each other on the node)
 - Workers get fresh context per application
-- Feedback loops work: workers report → coordinator updates skill → future workers benefit
-- Coordinator forwards important messages to Telegram
+- Main agent handles all coordination and tracking
 
 ### Main Agent Responsibilities (YOU, talking to user)
 
 When user requests job applications:
-1. Spawn a coordinator sub-agent with the job batch or search criteria
-2. Return immediately — do NOT wait for coordinator to finish
-3. User can check status anytime by asking
+1. Spawn a **scout** sub-agent to search and return a list of jobs
+2. Wait for scout to report back with job list
+3. Spawn **worker** sub-agents ONE AT A TIME for each job
+4. Track results, update applied.json and tracker.md after each worker completes
 
-**Spawn coordinator like this:**
+**Step 1: Spawn scout:**
 ```
 sessions_spawn(
-  label: "job-coordinator",
+  label: "jobs.scout",
   model: "anthropic/claude-sonnet-4-20250514",
-  task: "You are the job application coordinator. Read the job-hunting skill. Search for [N] jobs matching criteria, then apply to each ONE AT A TIME. See COORDINATOR INSTRUCTIONS in the skill.",
-  runTimeoutSeconds: 7200  // 2 hours for a batch
+  task: "You are a job scout. Read the job-hunting skill. Search Hiring Cafe LIST VIEW ONLY for up to [N] jobs matching criteria. Return a structured list with: company, role, salary, job ID, URL. Do NOT open job pages or apply. See SCOUT INSTRUCTIONS in the skill.",
+  runTimeoutSeconds: 600  // 10 min max for searching
 )
 ```
 
-### Coordinator Sub-Agent Responsibilities
+**Step 2: When scout reports back, spawn workers one at a time:**
+```
+sessions_spawn(
+  label: "jobs.apply.<company>",
+  model: "anthropic/claude-sonnet-4-20250514", 
+  task: "Apply to <Company> - <Role>. Job ID: <id>. URL: <url>. Browser profile: job-1. Read job-hunting skill, section WORKER INSTRUCTIONS.",
+  runTimeoutSeconds: 1800  // 30 min per application
+)
+```
 
-**You are the coordinator if your task mentions "coordinator" or "batch".**
+**Step 3: After each worker completes:**
+- If SUCCESS: Update applied.json and tracker.md
+- If FAILED: Log reason, decide whether to retry
+- If NEEDS_INPUT: Get answer from user, can relay via sessions_send or spawn new worker
+- Then spawn next worker
 
-**⚠️ CRITICAL: COORDINATOR NEVER APPLIES TO JOBS**
+### Scout Sub-Agent Responsibilities
+
+**You are a scout if your task mentions "scout" or asks you to search/find jobs.**
+
+**⚠️ CRITICAL: SCOUT NEVER APPLIES TO JOBS**
 ```
 ╔══════════════════════════════════════════════════════════════════╗
-║  THE COORDINATOR DOES NOT FILL OUT APPLICATION FORMS. EVER.      ║
-║  THE COORDINATOR DOES NOT CLICK "APPLY" BUTTONS. EVER.           ║
-║  THE COORDINATOR DOES NOT OPEN JOB POSTING PAGES. EVER.          ║
+║  THE SCOUT DOES NOT FILL OUT APPLICATION FORMS. EVER.            ║
+║  THE SCOUT DOES NOT CLICK "APPLY" BUTTONS. EVER.                 ║
+║  THE SCOUT DOES NOT OPEN JOB POSTING PAGES. EVER.                ║
+║  THE SCOUT DOES NOT SPAWN WORKERS (can't — Moltbot limitation).  ║
 ║                                                                  ║
-║  If you find yourself filling out a form → STOP → You broke it   ║
-║  If you're clicking Apply → STOP → Spawn a worker instead        ║
-║  If you're reading a job description in detail → STOP            ║
+║  You search. You filter. You report. That's it.                  ║
 ╚══════════════════════════════════════════════════════════════════╝
 ```
 
-**Coordinator's ONLY jobs:**
+**Scout's ONLY jobs:**
 1. Search Hiring Cafe listing page (NOT individual job pages)
 2. Extract job titles, companies, salaries, URLs from the LIST view
 3. Filter against blocklist and applied.json
-4. Spawn workers with the URLs — workers open the actual job pages
-5. Track results and update files
+4. **Report structured list back to main agent and EXIT**
 
 **⚠️ BATCH LIMITS:**
-- **Max 10 applications per batch** — Quality over quantity. Don't spam.
-- If search returns more than 10, pick the best 10 (highest salary, best fit, most interesting)
+- **Max 10 jobs per search** — Quality over quantity.
+- If search returns more than 10, pick the best 10 (highest salary, best fit)
 
-1. **Read this skill fully** — Understand all requirements
-2. **Search for jobs** — Use Hiring Cafe LIST VIEW ONLY, filter against blocklist/applied.json
-3. **For each job, spawn ONE worker at a time:**
-   ```
-   sessions_spawn(
-     label: "job-worker-<company>",
-     model: "anthropic/claude-sonnet-4-20250514",
-     task: "Apply to <Company> - <Role>. Job ID: <id>. URL: <url>. Browser profile: job-1. Read job-hunting skill, section WORKER INSTRUCTIONS.",
-     runTimeoutSeconds: 1800  // 30 min per application
-   )
-   ```
-4. **Wait for worker completion** — Poll `sessions_history` every 30-60 seconds
-5. **Process worker report:**
-   - SUCCESS → Update applied.json and tracker.md
-   - SKIPPED → Note reason, move to next job
-   - FAILED → Log failure, consider retry or skip
-   - NEEDS_INPUT → Forward to Telegram, wait for response, relay back
-6. **Update skill based on feedback** — If worker reports friction or suggestions, edit SKILL.md
-7. **Only after worker completes** → Spawn next worker
-8. **Send summary to Telegram** when batch completes
+**Scout Workflow:**
+1. **Read this skill** — Understand criteria and filters
+2. **Search Hiring Cafe** — Use the search URL in Browser Workflow section, LIST VIEW ONLY
+3. **Extract job info** — For each promising job: company, role, salary range, job ID, URL
+4. **Filter** — Check against `references/blocklist.md` and `references/applied.json`
+5. **Report back** — Return structured list to main agent in this format:
 
-**⚠️ NEVER run multiple workers simultaneously.** Browser profiles clobber each other on the node.
+```markdown
+## Jobs Found
 
-**Coordinator Browser Rules:**
+### 1. <Company> - <Role>
+- **Salary:** $XXXk-$XXXk/yr
+- **ID:** <job-id-from-url>
+- **URL:** https://hiring.cafe/viewjob/<id>
+- **Location:** Remote (US) ✅
+
+### 2. ...
+```
+
+Then **EXIT**. Main agent handles spawning workers.
+
+**Scout Browser Rules:**
 | Action | Allowed? | Notes |
 |--------|----------|-------|
 | Open Hiring Cafe search page | ✅ | Only the search/list view |
 | Scroll through job listings | ✅ | To see more results |
 | Click pagination / "Load More" | ✅ | On listing page only |
 | Extract job info from list | ✅ | Title, company, salary, URL |
-| Click on a job posting | ❌ | Workers do this |
+| Click on a job posting | ❌ | Main spawns workers for this |
 | Open application forms | ❌ | Workers do this |
 | Fill any form fields | ❌ | Workers do this |
 | Click "Apply" buttons | ❌ | Workers do this |
 | Read full job descriptions | ❌ | Workers do this |
-
-**Progress monitoring:** Every 60 seconds while a worker is running:
-- Check `sessions_history` for the worker
-- If worker appears stuck (no new messages for 5+ minutes), investigate
-- If worker needs input, handle it or forward to Telegram
 
 ### Worker Sub-Agent Responsibilities
 
@@ -695,74 +705,95 @@ If not found, open new tab and navigate
 
 ---
 
-## Coordinator Instructions
+## Scout Instructions
 
-**You are the coordinator if your task includes "coordinator" or asks you to manage a batch of applications.**
+**You are a scout if your task includes "scout" or asks you to search/find jobs.**
 
 ### Your Workflow
 
-1. **Read this entire skill** — Understand criteria, voice, ATS patterns
+1. **Read this entire skill** — Understand criteria and filters
 2. **Search for jobs:**
    - Use the Hiring Cafe search URL in Browser Workflow section
+   - Stay in LIST VIEW ONLY — do NOT click into individual job postings
    - Filter results against `references/blocklist.md` and `references/applied.json`
-   - Build a list of eligible jobs (Remote, $200k+ top of range, not already applied)
-3. **For each job:**
-   a. Spawn ONE worker sub-agent (see spawn example below)
-   b. Poll worker status every 30-60 seconds via `sessions_history`
-   c. Wait for worker to complete (SUCCESS/SKIPPED/FAILED/NEEDS_INPUT)
-   d. Handle the result (see below)
-   e. Only then spawn the next worker
-4. **When batch completes**, send summary to Telegram
+3. **Build a structured list** of eligible jobs (Remote US, $200k+ top of range, not already applied)
+4. **Report back to main agent** with the list in this format:
 
-### Spawning a Worker
+```markdown
+## Jobs Found
 
+### 1. <Company> - <Role>
+- **Salary:** $XXXk-$XXXk/yr
+- **ID:** <job-id-from-url>
+- **URL:** https://hiring.cafe/viewjob/<id>
+- **Location:** Remote (US) ✅
+
+### 2. ...
+```
+
+5. **Exit immediately** — Main agent handles spawning workers
+
+### What You Do NOT Do
+
+- ❌ Open individual job posting pages
+- ❌ Read full job descriptions
+- ❌ Fill out any forms
+- ❌ Click "Apply" buttons
+- ❌ Spawn worker sub-agents (you can't — Moltbot limitation)
+- ❌ Update applied.json or tracker.md (main agent does this)
+
+You are a lightweight search agent. Search, filter, report, exit.
+
+---
+
+## Main Agent Dispatcher Instructions
+
+**After scout reports back with a job list, YOU (main agent) spawn workers.**
+
+### Spawning Workers
+
+For each job in the scout's list, spawn ONE worker at a time:
 ```
 sessions_spawn(
-  label: "job-worker-<company>",
+  label: "jobs.apply.<company>",
   model: "anthropic/claude-sonnet-4-20250514",
-  task: "Apply to <Company> - <Role>. Job ID: <id>. Hiring Cafe URL: <url>. Browser profile: job-1. Read the job-hunting skill at /home/node/clawd/skills/job-hunting/SKILL.md, section WORKER INSTRUCTIONS.",
+  task: "Apply to <Company> - <Role>. Job ID: <id>. URL: <url>. Browser profile: job-1. Read job-hunting skill at /home/node/clawd/skills/job-hunting/SKILL.md, section WORKER INSTRUCTIONS.",
   runTimeoutSeconds: 1800
 )
 ```
 
-**Always use browser profile `job-1`** — since only one worker runs at a time, they all share the same profile.
+**Always use browser profile `job-1`** — only one worker at a time, they share the profile.
 
 ### Handling Worker Results
 
 **SUCCESS:**
 1. Update `references/applied.json` with the new entry
-2. Update `references/tracker.md` 
-3. Review any open-ended responses — if quality is poor, note for skill improvement
-4. Process feedback — if worker suggests improvements, edit this skill file
+2. Update `references/tracker.md`
+3. Spawn next worker
 
 **SKIPPED:**
-1. Log the reason (e.g., "YOE too high", "Not actually remote")
-2. Move to next job
-3. If many jobs are being skipped for the same reason, adjust search criteria
+1. Log the reason (e.g., "Canada only", "Max salary $180k")
+2. Spawn next worker
 
 **FAILED:**
 1. Log the failure reason
-2. Decide: retry (if transient error) or skip (if fundamental issue)
-3. If resume upload failed, consider flagging for manual completion
+2. Decide: retry or skip
+3. Spawn next worker
 
 **NEEDS_INPUT:**
-1. Forward the question to Telegram:
-   ```
-   message action=send channel=telegram target=8531859108 message="🚨 Job App Needs Input\n\nCompany: <company>\nRole: <role>\nQuestion: <question>\n\nReply here to continue."
-   ```
-2. Wait for response (check periodically or wait for session message)
-3. Relay answer back to worker via `sessions_send`
+1. Ask user the question
+2. Relay answer via `sessions_send` or spawn fresh worker with answer included
 
 ### Progress Monitoring
 
-While a worker is running, check on it every 60 seconds:
+While a worker is running, check on it periodically:
 ```
 sessions_history sessionKey=<worker-session-key> limit=3 includeTools=false
 ```
 
 **Signs of trouble:**
 - No new messages for 5+ minutes → worker may be stuck
-- Worker asking questions but not receiving answers → relay to Telegram
+- Worker asking questions → relay to user
 - Browser errors → may need manual intervention
 
 ### Updating the Skill
