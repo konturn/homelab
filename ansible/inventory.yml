@@ -6,6 +6,7 @@ all:
     lab_nginx_ip: 10.3.32.1
     pihole_ip: 10.3.32.2
     deluge_ip: 10.3.32.3
+    loki_ip: 10.3.32.4
     docker_persistent_data_path: /persistent_data/application
     docker_compose_version: '3.9'
     movie_switch_mac: 8c:3b:ad:6f:0e:d0
@@ -114,6 +115,12 @@ all:
         - src: "docker/grafana/provisioning/datasources/influxdb.yml"
           dest: "{{ docker_persistent_data_path }}/grafana/provisioning/datasources/influxdb.yml"
           name: "grafana"
+        - src: "docker/grafana/provisioning/datasources/loki.yml"
+          dest: "{{ docker_persistent_data_path }}/grafana/provisioning/datasources/loki.yml"
+          name: "grafana"
+        - src: "docker/loki/local-config.yaml"
+          dest: "{{ docker_persistent_data_path }}/loki/local-config.yaml"
+          name: "loki"
         - src: "docker/gitlab/gitlab.rb"
           dest: "{{ docker_persistent_data_path }}/gitlab/config/gitlab.rb"
           name: "gitlab"

@@ -328,12 +328,32 @@ services:
       - INFLUXDB_TOKEN={{ lookup('env', 'INFLUXDB_ADMIN_TOKEN') }}
     depends_on:
       - influxdb
+      - loki
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
+  loki:
+    container_name: loki
+    image: grafana/loki:3.5.0
+    ports:
+      - "3100:3100"
+    networks:
+      internal:
+        ipv4_address: {{ loki_ip }}
+    restart: unless-stopped
+    volumes:
+      - {{ docker_persistent_data_path }}/loki/data:/loki
+      - {{ docker_persistent_data_path }}/loki/local-config.yaml:/etc/loki/local-config.yaml:ro
+    command: -config.file=/etc/loki/local-config.yaml
+    # Loki uses default json-file logging to avoid circular dependency
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
   gitlab:
     container_name: gitlab
     ports:

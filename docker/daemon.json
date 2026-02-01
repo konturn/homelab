@@ -2,6 +2,14 @@
 {% if not is_satellite %}
     "data-root": "/persistent_data/docker",
     "iptables": true,
+    "log-driver": "loki",
+    "log-opts": {
+        "loki-url": "http://{{ loki_ip }}:3100/loki/api/v1/push",
+        "loki-retries": "5",
+        "loki-batch-size": "400",
+        "mode": "non-blocking",
+        "max-buffer-size": "4m"
+    },
 {% endif %}
     "storage-driver": "overlay2",
     "insecure-registries" : [ "registry.lab.nkontur.com" ],
