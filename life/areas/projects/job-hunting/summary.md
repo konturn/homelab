@@ -1,15 +1,29 @@
 # Job Hunting Project
 
-Active project to find additional remote infrastructure/DevOps roles for Noah's OE (overemployed) strategy.
+Noah's OE (overemployment) strategy - stacking remote jobs for early retirement.
 
-**Target:** Remote roles, $200k+ top of range, Infrastructure/Cloud/DevOps/SRE/Platform Engineer
+## Current Status
+Active job searching with automated application assistance.
 
-**Status:** Active. 26 applications submitted as of 2026-01-30.
+## Applications Submitted
+- **XBOW** - Research Engineer / Platform Infrastructure (2026-01-30)
+- **Chainalysis** - Security Engineer, Product Infrastructure (2026-01-31)
 
-**Recent activity:**
-- Updated job-hunting skill with three-tier coordinator architecture
-- Most $200k+ roles suitable for ~3-4 YOE have been applied to
-- High YOE requirements (7-15+ years) filtering out many remaining roles
+## In Progress
+- **ICMARC** - Workday application partially completed
+
+## Infrastructure
+- MR #25 pending: Add Chromium to moltbot container for autonomous applications
+- Considering xvfb for xdotool compatibility and stealth
+
+## Criteria
+- Remote US positions
+- $200k+ salary range
+- Infrastructure/Platform/DevOps roles
+
+## Known ATS Challenges
+- **Ashby forms**: React state management issues - autofill helps
+- **Workday**: Unresponsive buttons - hover-then-click workaround
 
 ---
-*Last synthesized: 2026-01-30*
+*Last synthesized: 2026-02-01*
