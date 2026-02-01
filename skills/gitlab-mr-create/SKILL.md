@@ -36,6 +36,31 @@ This provides: `wait_for_pipeline`, `push_and_wait`, `check_merge_conflicts`, `e
 **Authentication:** `$GITLAB_TOKEN` environment variable  
 **MR Tracking File:** `/home/node/clawd/memory/open-mrs.json`
 
+---
+
+## Issue Tracking — CRITICAL
+
+**Keep issues and MRs in sync. This is mandatory.**
+
+1. **When working on a backlog issue:** Include `Closes #N` in MR description (auto-closes issue on merge)
+2. **When MR is merged:** Verify the linked issue was closed
+3. **When MR is closed without merge:** Update or close the issue manually with explanation
+4. **When creating new work:** Check if a backlog issue exists first; create one if it doesn't
+
+**The backlog is the source of truth.** Don't let MRs exist without corresponding issues, and don't let issues stay open after their MR merges.
+
+```bash
+# Check if issue exists for your work
+curl -s "https://gitlab.lab.nkontur.com/api/v4/projects/4/issues?labels=agent-backlog&search=your+topic" \
+  -H "PRIVATE-TOKEN: $GITLAB_TOKEN" | jq '.[].iid'
+
+# Create issue if needed
+curl -s -X POST "https://gitlab.lab.nkontur.com/api/v4/projects/4/issues" \
+  -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Issue title", "description": "What and why", "labels": "agent-backlog"}'
+```
+
 **CI Runner Notes:**
 - Runner has **no tags** — jobs run on default runner
 - Pipeline stages: lint → validate → deploy

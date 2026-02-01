@@ -43,6 +43,19 @@ This provides: `wait_for_pipeline`, `push_and_wait`, `check_merge_conflicts`, `e
 
 ---
 
+## Issue Tracking — CRITICAL
+
+**Keep issues and MRs in sync at all times.**
+
+- If the MR references an issue (`Closes #N`), verify the link is still valid
+- If feedback changes the MR scope significantly, update the linked issue description
+- If the MR is abandoned/closed, update or close the related issue with explanation
+- **Never leave orphaned issues** — if work is done, issues should be closed
+
+When responding to feedback that changes scope, consider whether the issue description needs updating too.
+
+---
+
 ## When You're Spawned
 
 The MR monitoring cron spawns you with context including:
