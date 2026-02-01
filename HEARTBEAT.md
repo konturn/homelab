@@ -44,35 +44,19 @@ Main session must stay responsive. If a task takes >30 seconds (MRs, job apps, r
 
 **Status:** Active 🔧 — DISPATCH MRs PROACTIVELY
 
+**Backlog:** https://gitlab.lab.nkontur.com/root/homelab/-/issues?label_name=agent-backlog
+
 **Process:**
-1. Review `homelab/` repo for improvement opportunities
-2. **Dispatch sub-agent using gitlab-mr skill** (never do MRs myself)
-3. Sub-agent creates MR and registers in `memory/open-mrs.json`
-4. Cron monitors for Noah's comments, spawns agents to respond
-5. Notify via Telegram when MR is ready
+1. Fetch issues with `agent-backlog` label from GitLab
+2. Pick one that provides genuine value
+3. **Dispatch sub-agent using gitlab-mr skill** (never do MRs myself)
+4. Sub-agent creates MR with `Closes #N` to link to issue
+5. MR merge auto-closes the issue
+6. Notify via Telegram when MR is ready
 
-**Ideas backlog:**
-- [x] Add healthcheck to moltbot-gateway container (MR #4)
-- [x] CI optimization — runner concurrency (MR #7)
-- [x] CI optimization — persistent cache (MR #8)
-- [x] CI safe validation (MR #6)
-- [x] Documentation cleanup (MR #5)
-- [ ] Container resource limits / memory caps for critical services
-- [ ] Healthchecks for more containers (plex, gitlab, nextcloud, etc.)
-- [ ] Monitoring/alerting (container health, disk space, etc.)
-- [ ] Home Assistant automation improvements
-- [ ] Security hardening (rate limits, fail2ban, etc.)
-- [ ] Backup verification / restore testing
-- [ ] Log aggregation (Loki + Promtail)
-- [ ] Uptime monitoring (Uptime Kuma or similar)
-- [ ] Secret rotation documentation
-- [ ] Firewall rules audit and nftables migration
-- [ ] Network topology documentation improvements
-
-**Each heartbeat (overnight especially):** 
-- Review backlog for opportunities worth pursuing
-- Dispatch sub-agents for items that provide genuine value
-- Generate new backlog items as you discover opportunities
+**Creating new backlog items:**
+- If you discover an improvement opportunity, create a GitLab issue with the `agent-backlog` label
+- Include clear description of the problem and potential solution
 
 **Quality bar is paramount.** Every MR must provide real, essential value. Ask: "Would I be proud of this? Does it solve a real problem?" Don't ship mediocre work. Don't create busywork. One excellent MR beats five mediocre ones. Justify clearly why each change matters.
 
