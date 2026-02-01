@@ -7,6 +7,7 @@ USER root
 # Chromium deps: minimal set for headless operation (no X11 desktop)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
+    ipmitool \
     chromium \
     fonts-liberation \
     fonts-noto-color-emoji \
