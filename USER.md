@@ -55,10 +55,18 @@ Noah is playing the overemployed game — stacking remote jobs, maximizing incom
 
 ## Background
 
+**Full Name:** Noah Patrick Kontur
+**DOB:** December 1, 1998
+
 **Education:**
-- Washington University in St. Louis — Math major, Computer Science minor
+- Washington University in St. Louis — M.S. Computer Science (GPA: 4.0)
+- Washington University in St. Louis — B.A. Mathematics, Computer Science minor (GPA: 3.96)
 - National Merit Finalist (top 1% nationally)
 - Grew up in Northfield, Ohio (parents: Chris and Patty)
+
+**Current Employment:**
+- **Nvidia DGX Cloud** — Senior DevOps Engineer (September 2024 - present)
+- Previous: **OctoAI** (June 2021 - September 2024)
 
 **NASA Experience (Glenn Research Center, Cleveland):**
 - Two summer internships working on space communications
@@ -68,10 +76,18 @@ Noah is playing the overemployed game — stacking remote jobs, maximizing incom
 - Co-authored NASA Technical Memorandum: NASA-TM-2019-219995
 
 **Technical Skills:**
+- **Languages:** Python, Go, Java, TypeScript
+- **Cloud/Infra:** AWS, Terraform, Kubernetes, Docker
 - Applied math, network simulations, systems thinking
-- Python (see GitHub: konturn — cache poisoning attacks, CI infrastructure)
 - Theoretical CS interests (complexity theory, game theory, PSPACE)
 - Security research background
+
+**Personal:**
+- **Marathon runner** — Ran a marathon in 2021 (trained up to 50 mi/week). Training for Cleveland marathon spring 2026.
+- **Ping pong** — Enjoys competitive play, the direct back-and-forth
+- Drawn to activities that test focus and endurance
+- No LinkedIn (intentional)
+- Remote only — will not relocate
 
 **Online:**
 - Website: nkontur.com
