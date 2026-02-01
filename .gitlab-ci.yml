@@ -67,28 +67,27 @@ satellite-2:validate:
 # =============================================================================
 # Deploy (main branch only) - Actual deployment
 # NOT interruptible - never cancel mid-deploy
+# Uses resource_group to ensure deploys run in order across pipelines
 # =============================================================================
 
-router:deploy:
+.deploy:
   extends: .ansible
   stage: deploy
+  resource_group: deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+router:deploy:
+  extends: .deploy
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
 
 zwave:deploy:
-  extends: .ansible
-  stage: deploy
+  extends: .deploy
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/zwave.yml
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
 
 satellite-2:deploy:
-  extends: .ansible
-  stage: deploy
+  extends: .deploy
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
