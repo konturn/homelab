@@ -9,6 +9,8 @@
 | Assured Insurance Technologies | Staff Cloud Infrastructure Engineer | 2026-01-30 | Applied | $180k-$210k | Remote, Site Reliability dept |
 | Atticus | Lead Infrastructure Engineer | 2026-01-30 | Applied | $160k-$200k | Remote, GCP/Terraform, gov benefits platform |
 | Prelude | Infrastructure Engineer | 2026-01-31 | Applied | $155k-$250k | Remote, endpoint security, AI-based contextual security, Sequoia-backed |
+| AcuityMD | Software Engineer, Infrastructure | 2026-01-31 | Applied | $180k-$210k | Remote US, Kubernetes/Terraform/CI-CD, medtech |
+| Found | Senior Software Engineer, Data Infrastructure | 2026-01-31 | Applied | $181k-$241k | Remote US, data infrastructure/ML platforms, fintech for self-employed |
 
 ## Pipeline (To Apply)
 

@@ -165,7 +165,7 @@ sessions_spawn(
 1. **Read this skill** — Understand criteria and filters
 2. **Search Hiring Cafe** — Use the search URL in Browser Workflow section, LIST VIEW ONLY
 3. **Extract job info** — For each promising job: company, role, salary range, job ID, URL
-4. **Filter** — Check against `references/blocklist.md` and `references/applied.json`
+4. **Filter** — Check against `references/blocklist.md`, `references/applied.json`, AND `references/rejected.json`
 5. **Report back** — Return structured list to main agent in this format:
 
 ```markdown
@@ -246,6 +246,8 @@ message action=send channel=telegram target=8531859108 message="🔐 CAPTCHA det
 - **Noah's Profile:** See `references/profile.md` — use for tailoring applications
 - **Tracking:** See `references/tracker.md` — human-readable status log
 - **Applied Jobs:** See `references/applied.json` — machine-readable dedup list
+- **Rejected Jobs:** See `references/rejected.json` — jobs that looked good but failed validation (wrong location, hybrid, etc.)
+- **Retry Queue:** See `references/retry-queue.json` — jobs that failed due to technical issues, awaiting nightly retry attempts
 - **Stories:** See `references/stories.md` — personal accomplishment stories for applications
 - **Resume:** `assets/Resume (Kontur, Noah).pdf` — upload this for applications
 - **Resume path on laptop:** `/home/noah/Downloads/Resume (Kontur, Noah).pdf`
@@ -455,8 +457,9 @@ Before opening any new tabs, ALWAYS:
 **Search Workflow:**
 1. Navigate directly to this EXACT URL (hardcoded, do NOT use saved searches):
    ```
-   https://hiring.cafe/?searchState=%7B%22locations%22%3A%5B%7B%22formatted_address%22%3A%22United+States%22%2C%22types%22%3A%5B%22country%22%5D%2C%22geometry%22%3A%7B%22location%22%3A%7B%22lat%22%3A%2241.3284%22%2C%22lon%22%3A%22-81.4981%22%7D%7D%2C%22id%22%3A%22user_country%22%2C%22address_components%22%3A%5B%7B%22long_name%22%3A%22United+States%22%2C%22short_name%22%3A%22US%22%2C%22types%22%3A%5B%22country%22%5D%7D%5D%2C%22options%22%3A%7B%22flexible_regions%22%3A%5B%22anywhere_in_continent%22%2C%22anywhere_in_world%22%5D%7D%2C%22workplace_types%22%3A%5B%22Remote%22%5D%7D%5D%2C%22searchQuery%22%3A%22infrastructure+engineer+cloud+engineer%22%2C%22restrictJobsToTransparentSalaries%22%3Atrue%2C%22maxCompensationLowEnd%22%3A%22200000%22%7D
+   https://hiring.cafe/?searchState=%7B%22locations%22%3A%5B%7B%22formatted_address%22%3A%22United+States%22%2C%22types%22%3A%5B%22country%22%5D%2C%22geometry%22%3A%7B%22location%22%3A%7B%22lat%22%3A%2241.3284%22%2C%22lon%22%3A%22-81.4981%22%7D%7D%2C%22id%22%3A%22user_country%22%2C%22address_components%22%3A%5B%7B%22long_name%22%3A%22United+States%22%2C%22short_name%22%3A%22US%22%2C%22types%22%3A%5B%22country%22%5D%7D%5D%2C%22options%22%3A%7B%22flexible_regions%22%3A%5B%22anywhere_in_continent%22%2C%22anywhere_in_world%22%5D%7D%2C%22workplace_types%22%3A%5B%22Remote%22%5D%7D%5D%2C%22searchQuery%22%3A%22infrastructure+engineer+cloud+engineer%22%2C%22restrictJobsToTransparentSalaries%22%3Atrue%2C%22maxCompensationLowEnd%22%3A%22200000%22%2C%22hideJobTypes%22%3A%5B%22Applied%22%2C%22Viewed%22%5D%7D
    ```
+   Note: This URL hides jobs marked as "Applied" or "Viewed" on Hiring Cafe, reducing duplicates.
 2. Wait for page load, then snapshot
 3. Results should show: Infrastructure/Cloud roles, $200k+, US, Remote ONLY, transparent salaries
 4. Filter results against blocklist and applied.json before presenting to user
@@ -965,3 +968,127 @@ Workers should **NOT**:
 - Apply to any job other than their assignment
 - Send Telegram messages directly (report to coordinator instead)
 - Ask for user confirmation before submitting (pre-approved)
+
+---
+
+## Nightly Retry System
+
+Jobs that fail due to technical issues (not criteria mismatch) go into `references/retry-queue.json` for automated retry attempts.
+
+### Retry Queue Schema
+
+```json
+{
+  "jobs": [
+    {
+      "id": "job-id-from-url",
+      "company": "Company Name",
+      "role": "Job Title",
+      "formUrl": "https://direct-link-to-application-form",
+      "lastAttempt": "2026-01-31",
+      "attempts": 1,
+      "issue": "Description of what failed",
+      "strategiesTried": ["strategy1", "strategy2"],
+      "formState": "Description of how far the form got"
+    }
+  ]
+}
+```
+
+### When to Add to Retry Queue
+
+Add jobs when:
+- Resume upload failed but form is otherwise ready
+- Workday/multi-step form timed out mid-completion
+- CAPTCHA blocked submission but form is filled
+- Any technical failure that seems solvable with different strategies
+
+Do NOT add jobs when:
+- Criteria validation failed (wrong location, salary, etc.) — these go to rejected.json
+- Company is blocklisted
+- Already applied
+
+### Nightly Retry Cron
+
+A cron job runs nightly to attempt retries. It:
+1. Picks a random job from the retry queue
+2. Spawns a retry agent with full context about the previous failure
+3. Tells the agent to try creative alternative strategies
+4. If successful: moves job to applied.json, removes from retry queue
+5. If failed: increments attempts, updates strategiesTried
+
+### Retry Agent Instructions
+
+**You are a retry agent if your task mentions "retry" and includes previous failure context.**
+
+Your mission: Solve a problem that stumped a previous worker. You have context about what failed and what was tried.
+
+**Mindset:**
+- Be creative — try unconventional approaches
+- The standard methods already failed — think outside the box
+- You have permission to experiment
+
+**Strategies to consider (beyond standard approaches):**
+1. **Different selectors** — Try aria labels, data attributes, XPath
+2. **JavaScript injection** — `browser action=act request={kind: evaluate, fn: "..."}` to manipulate DOM directly
+3. **Coordinate-based clicking** — Get element bounds, click by coordinates
+4. **Different xdotool patterns** — Try `--class`, `--name`, `--pid` for window detection
+5. **Wait longer** — Some elements need more time to become interactive
+6. **Screenshot analysis** — Take screenshot, analyze with vision, identify alternative UI paths
+7. **Form state inspection** — Check if form has hidden fields, iframes, shadow DOM
+8. **Alternative entry points** — "Enter manually" options, different upload buttons, drag-drop zones
+
+**Reporting format when you SOLVE the problem:**
+
+```
+SOLVED: <Company> - <Issue Summary>
+
+STRATEGY THAT WORKED:
+<Detailed description of what you did differently>
+
+GENERALIZES TO:
+<What types of forms/situations this strategy applies to>
+
+SUGGESTED SKILL EDIT:
+```diff
++ Add this to the ATS-specific section:
++ <specific guidance for future workers>
+```
+
+REMOVE FROM RETRY QUEUE: Yes
+ADD TO APPLIED: Yes
+```
+
+**If you still fail:**
+```
+RETRY FAILED: <Company> - <Issue Summary>
+
+NEW STRATEGIES TRIED:
+- <strategy 1>: <result>
+- <strategy 2>: <result>
+
+REMAINING IDEAS:
+- <things that might work but weren't tried>
+
+RECOMMENDATION: <continue retrying | escalate to manual | abandon>
+```
+
+### Retry Limits
+
+- **Max attempts:** 5
+- **After 5 failures:** Move to `references/abandoned.json` with full history
+- **Abandoned jobs** can be manually reviewed for patterns
+
+### Coordinator Responsibilities (Retry System)
+
+When a retry agent reports SOLVED:
+1. Review the strategy — does it generalize?
+2. Update SKILL.md with the new approach
+3. Move job from retry-queue.json to applied.json
+4. Update tracker.md
+5. Notify Noah of the win (optional, batch these)
+
+When a retry agent reports FAILED:
+1. Update retry-queue.json with new strategies tried
+2. If attempts >= 5, move to abandoned.json
+3. Look for patterns across abandoned jobs
