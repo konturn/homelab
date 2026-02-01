@@ -7,6 +7,31 @@ external_url 'https://gitlab.lab.nkontur.com'
 nginx['listen_port'] = 80
 nginx['listen_https'] = false
 
+###
+# Container Registry Configuration
+# Enables Docker container registry at gitlab-registry.lab.nkontur.com
+# SSL is terminated by external nginx proxy
+###
+registry_external_url 'https://gitlab-registry.lab.nkontur.com'
+gitlab_rails['registry_enabled'] = true
+gitlab_rails['registry_host'] = "gitlab-registry.lab.nkontur.com"
+gitlab_rails['registry_port'] = "443"
+gitlab_rails['registry_api_url'] = "http://127.0.0.1:5000"
+
+# Registry runs on port 5050, exposed to nginx proxy
+registry['enable'] = true
+registry['registry_http_addr'] = "0.0.0.0:5050"
+
+# Disable registry's built-in nginx (using external nginx)
+registry_nginx['enable'] = false
+
+# Store images in GitLab data directory
+registry['storage'] = {
+  'filesystem' => {
+    'rootdirectory' => '/var/opt/gitlab/gitlab-rails/shared/registry'
+  }
+}
+
 # Puma (web server) configuration
 # Limit workers to prevent memory exhaustion on 32-core system
 # Default is CPU cores + 2, which causes ~46GB memory usage
