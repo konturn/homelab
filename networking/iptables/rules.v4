@@ -16,7 +16,9 @@
 #   - {{ local_interface_name }}  - Local trunk (bond0)
 #   - {{ mullvad_interface_name }} - Mullvad VPN tunnel
 #   - vlanX-shim                  - Docker macvlan shim interfaces
-#   - wg0, wg1                    - WireGuard VPN tunnels
+#
+# Note: WireGuard interfaces wg0/wg1 removed in January 2025
+#       (wg0 was backup server, wg1 was VPS connection - no longer used)
 #
 # See docs/FIREWALL.md for full architecture documentation.
 # =============================================================================
@@ -87,9 +89,6 @@ COMMIT
 # Allows IoT (10.6.x.x) to reach services via WAN IP (redirects to nginx)
 -A PREROUTING -s 10.6.0.0/16 -p tcp -m set --match-set wan_ip dst -m tcp -j DNAT --to-destination {{ nginx_ip }}
 
-# WireGuard VPN - Accept without NAT (handled by WireGuard)
--A PREROUTING -i {{ inet_interface_name }} -p udp -m udp --dport 51871 -j ACCEPT
-
 # Minecraft Bedrock Edition (or secondary Java server)
 -A PREROUTING -i {{ inet_interface_name }} -p tcp -m tcp --dport 25564 -j DNAT --to-destination {{ nginx_ip }}:25564
 
@@ -148,12 +147,10 @@ COMMIT
 # Used for: IoT devices needing file shares
 -A INPUT -i {{ local_interface_name }}.6 -p tcp -m multiport --dports 111,2049 -j ACCEPT
 
-# NFS access from WireGuard VPN
--A INPUT -i wg0 -p tcp -m tcp --dport 2049 -j ACCEPT
-
-# WireGuard VPN listeners
-# wg0: Primary VPN (51871), wg1: Secondary VPN (51872)
--A INPUT -p udp -m udp -m multiport --dports 51871,51872 -j ACCEPT
+# -----------------------------------------------------------------------------
+# REMOVED: WireGuard VPN rules (wg0/wg1 deprecated January 2025)
+# -----------------------------------------------------------------------------
+# Previously: NFS access from wg0, WireGuard listeners on 51871/51872
 
 # mDNS/Bonjour from internal networks (not from internet)
 # Used for: Service discovery (Plex, AirPlay, Chromecast, etc.)
@@ -199,24 +196,12 @@ COMMIT
 # Inbound from Mullvad VPN to internal (for Deluge BitTorrent)
 -A FORWARD -i {{ mullvad_interface_name }} -o vlan3-shim -p tcp -m multiport --dports 62941 -j ACCEPT
 
-# WireGuard VPN to internal network - specific services only
-# Ports: RPC(111), HTTPS(443), iperf3(5201), NFS(2049)
--A FORWARD -i wg0 -o {{ local_interface_name }} -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -m multiport --dports 111,443,5201,2049 -m conntrack --ctstate NEW -j ACCEPT
-
-# WireGuard VPN to internal - DNS (UDP)
--A FORWARD -i wg0 -o {{ local_interface_name }} -p udp -m multiport --dports 53 -j ACCEPT
-
-# WireGuard client-to-client SSH (within wg0)
--A FORWARD -i wg0 -o wg0 -p tcp -m tcp --dport 22 -j ACCEPT
-
-# Secondary WireGuard (wg1) - Full access (trusted tunnel)
--A FORWARD -i wg1 -j ACCEPT
-
-# Internal VLAN to WireGuard (for VPN access from internal hosts)
--A FORWARD -i vlan3-shim -o wg0 -j ACCEPT
-
-# WireGuard to internal - iperf3 only
--A FORWARD -i wg0 -o vlan3-shim -p tcp -m tcp --dport 5201 -j ACCEPT
+# -----------------------------------------------------------------------------
+# REMOVED: WireGuard FORWARD rules (wg0/wg1 deprecated January 2025)
+# -----------------------------------------------------------------------------
+# Previously: wg0 access to internal services (NFS, HTTPS, iperf3, DNS)
+#             wg0 client-to-client SSH, wg1 full access
+#             Internal VLAN to wg0, wg0 to internal iperf3
 
 # External VLAN to internet
 -A FORWARD -i vlan2-shim -o {{ inet_interface_name }} -j ACCEPT
