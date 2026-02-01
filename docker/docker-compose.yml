@@ -829,7 +829,9 @@ services:
     container_name: moltbot-gateway
     restart: unless-stopped
     networks:
-      - internal
+      internal:
+      mgmt:
+        ipv4_address: 10.4.0.50
     ports:
       - "18789:18789"
     deploy:
