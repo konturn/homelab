@@ -29,7 +29,7 @@ workflow:
 variables:
   ANSIBLE_HOST_KEY_CHECKING: "False"
   ANSIBLE_PIPELINING: "True"
-  CI_IMAGE: ${CI_REGISTRY_IMAGE}/ci:1
+  CI_IMAGE: registry.lab.nkontur.com/root/homelab/ci:1
 
 # =============================================================================
 # Path-based change detection
