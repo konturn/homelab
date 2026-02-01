@@ -9,8 +9,8 @@ description: Search and apply for remote software engineering jobs. Use when sea
 
 - **Location:** Remote only, **US-based ONLY**. **Never willing to relocate.**
   - ✅ "Remote (US)" or "Remote (United States)" — good
+  - ✅ "Remote (North America)" — good (US is in North America)
   - ❌ "Remote (Canada)", "Remote (UK)", "Remote (EMEA)", etc. — **REJECT immediately**
-  - ❌ "Remote (North America)" — **REJECT** (could require Canada residency)
   - If location says just "Remote" with no country, check the job description for residency requirements
 - **Salary:** Top of range ≥ $200k (transparent salaries preferred)
 - **Roles:** Infrastructure Engineer, Cloud Engineer, DevOps, SRE, Platform Engineer
@@ -777,8 +777,8 @@ Report back when done: SUCCESS / FAILED / NEEDS_INPUT
    - Verify salary: top of range must be ≥ $200k
    - Verify location: must be Remote **AND** US-based
      - ✅ "Remote (US)" or "Remote (United States)" — proceed
+     - ✅ "Remote (North America)" — proceed (US is in NA)
      - ❌ "Remote (Canada)", "Remote (UK)", "Remote (EMEA)", etc. — REJECT
-     - ❌ "Remote (North America)" — REJECT (could require Canada)
      - Check job description for "must be located in [non-US country]" — REJECT
    - **If criteria don't match → IMMEDIATELY TERMINATE and report:**
      `SKIPPED: <Company> - <Role> - <reason: e.g. "Hybrid only" or "Max salary $180k" or "Remote Canada only">`
