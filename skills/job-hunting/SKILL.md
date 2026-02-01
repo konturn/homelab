@@ -505,6 +505,23 @@ browser action=tabs target=node node=noah-XPS-13-7390-2-in-1 profile=clawd
 - **Location field:** Combobox that shows suggestions as you type — type location, wait for dropdown, click the matching option
 - **Yes/No toggle buttons:** Often styled as toggle buttons, not radio buttons. These can be finicky — use `hover` action on the button before `click` to ensure the selection registers properly.
 
+#### Ashby React State Management Issues
+**Problem:** Ashby uses React forms where DOM manipulation doesn't update React's internal state.
+**Symptom:** Resume uploads succeed at DOM level, form fields appear filled, but validation shows "missing entry for required field."
+**Root cause:** JavaScript `input`/`change` events don't properly trigger React's state management.
+
+**Solutions (in order of preference):**
+1. **Use the Autofill feature** — Click "Upload file" in the autofill section, let Ashby parse the resume and populate fields itself. This updates React state properly.
+2. **xdotool for native interaction** — Bypass React entirely by using OS-level keyboard/mouse input.
+3. **React event dispatching** — After filling fields, dispatch multiple events:
+   ```javascript
+   field.dispatchEvent(new Event('input', {bubbles: true}));
+   field.dispatchEvent(new Event('change', {bubbles: true}));
+   field.dispatchEvent(new Event('blur', {bubbles: true}));
+   ```
+
+**If all else fails:** Flag for manual completion rather than burning tokens on repeated failures.
+
 #### Resume Upload Strategy (All ATS)
 
 **Step 1: Try browser upload action**
@@ -585,6 +602,14 @@ message action=send channel=telegram target=8531859108 message="🚨 Resume uplo
 - Leave browser tab open for manual completion
 
 ### Workday & Account-Based ATS (myworkdayjobs.com, etc.)
+
+**For unresponsive buttons (Create Account, Submit, Continue):**
+Use hover-then-click sequence — hover first activates JavaScript event handlers:
+```
+browser action=act request={"kind": "hover", "ref": "<button-ref>"}
+browser action=act request={"kind": "click", "ref": "<button-ref>"}
+```
+This solves most "button clicked but nothing happens" issues in Workday and similar React-heavy forms.
 
 Some ATS platforms require creating an account before applying. Handle these automatically:
 
@@ -765,7 +790,9 @@ sessions_spawn(
 )
 ```
 
-**Always use browser profile `job-1`** — only one worker at a time, they share the profile.
+**Always use browser profile `job-1`** — only one worker at a time.
+
+⚠️ **NEVER RUN WORKERS IN PARALLEL** — even on different profiles. Workers clobber each other on the node. Wait for each worker to complete before spawning the next.
 
 ### Handling Worker Results
 
