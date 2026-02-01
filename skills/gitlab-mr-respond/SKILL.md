@@ -16,6 +16,18 @@ Handles the feedback loop for existing merge requests:
 
 ---
 
+## Shared Library
+
+**Always source the shared GitLab library first:**
+
+```bash
+source /home/node/clawd/skills/gitlab/lib.sh
+```
+
+This provides: `wait_for_pipeline`, `push_and_wait`, `check_merge_conflicts`, `escalate`, `get_failed_job_logs`, `preflight_check`, `gitlab_api_call`
+
+---
+
 ## Infrastructure Context
 
 **GitLab Instance:** https://gitlab.lab.nkontur.com  
@@ -48,48 +60,31 @@ The MR monitoring cron spawns you with context including:
 #!/bin/bash
 set -e
 
-echo "=== Pre-Flight Validation ==="
+source /home/node/clawd/skills/gitlab/lib.sh
 
-# 1. Check GITLAB_TOKEN
-if [ -z "$GITLAB_TOKEN" ]; then
-  echo "❌ GITLAB_TOKEN not set"
-  exit 1
+# Basic environment check
+if ! preflight_check; then
+  escalate "Pre-flight validation failed"
 fi
-echo "✓ GITLAB_TOKEN present"
 
-# 2. Verify MR exists and is open
-MR_STATE=$(curl -s "https://gitlab.lab.nkontur.com/api/v4/projects/4/merge_requests/$MR_IID" \
+# Verify MR exists and is open
+MR_STATE=$(curl -s "${GITLAB_API}/projects/${PROJECT_ID}/merge_requests/$MR_IID" \
   -H "PRIVATE-TOKEN: $GITLAB_TOKEN" | jq -r '.state')
 
 if [ "$MR_STATE" != "opened" ]; then
-  echo "❌ MR !$MR_IID is not open (state: $MR_STATE)"
-  exit 1
+  escalate "MR !$MR_IID is not open (state: $MR_STATE)"
 fi
-echo "✓ MR !$MR_IID is open"
+echo "✅ MR !$MR_IID is open"
 
-# 3. Check branch exists
-BRANCH_EXISTS=$(curl -s -w "%{http_code}" -o /dev/null \
-  "https://gitlab.lab.nkontur.com/api/v4/projects/4/repository/branches/$BRANCH_NAME" \
+# Check branch exists
+BRANCH_CODE=$(curl -s -w "%{http_code}" -o /dev/null \
+  "${GITLAB_API}/projects/${PROJECT_ID}/repository/branches/$BRANCH_NAME" \
   -H "PRIVATE-TOKEN: $GITLAB_TOKEN")
 
-if [ "$BRANCH_EXISTS" != "200" ]; then
-  echo "❌ Branch $BRANCH_NAME not found"
-  exit 1
+if [ "$BRANCH_CODE" != "200" ]; then
+  escalate "Branch $BRANCH_NAME not found"
 fi
-echo "✓ Branch $BRANCH_NAME exists"
-
-# 4. Verify tracking entry exists
-TRACKING_FILE="/home/node/clawd/memory/open-mrs.json"
-if [ -f "$TRACKING_FILE" ]; then
-  TRACKED=$(jq -r --arg iid "$MR_IID" '.[$iid] // empty' "$TRACKING_FILE")
-  if [ -n "$TRACKED" ]; then
-    echo "✓ MR is tracked"
-  else
-    echo "⚠ MR not in tracking file (proceeding anyway)"
-  fi
-fi
-
-echo "=== Pre-Flight Complete ==="
+echo "✅ Branch $BRANCH_NAME exists"
 ```
 
 ---
@@ -105,16 +100,13 @@ echo "=== Pre-Flight Complete ==="
 5. **Scope creep** — Feedback asks for something beyond original MR scope
 6. **Conflict with goal** — Feedback contradicts the MR's purpose
 
-**Escalation procedure:**
+**Use the library escalate function:**
 
-```
-Use the message tool:
-- action: send
-- channel: telegram  
-- message: "🚨 MR Feedback Issue\n\nMR: !<MR_IID>\nIssue: <describe the problem>\nComment: <quote the problematic feedback>\n\nNeed guidance — stopping."
+```bash
+escalate "MR Feedback Issue\n\nMR: !$MR_IID\nIssue: <describe the problem>\nComment: <quote the problematic feedback>"
 ```
 
-**After escalating: STOP.** Do not guess. Do not keep trying. Wait for human input.
+**After escalating: STOP.** The escalate function exits automatically.
 
 ---
 
@@ -147,6 +139,8 @@ Before making changes, categorize the feedback:
 ### 1. Clone and Checkout Branch
 
 ```bash
+source /home/node/clawd/skills/gitlab/lib.sh
+
 WORK_DIR=$(mktemp -d)
 cd "$WORK_DIR"
 
@@ -164,7 +158,7 @@ git pull origin "$BRANCH_NAME"
 
 ```bash
 # Get MR details including current description
-MR_JSON=$(curl -s "https://gitlab.lab.nkontur.com/api/v4/projects/4/merge_requests/$MR_IID" \
+MR_JSON=$(curl -s "${GITLAB_API}/projects/${PROJECT_ID}/merge_requests/$MR_IID" \
   -H "PRIVATE-TOKEN: $GITLAB_TOKEN")
 
 CURRENT_DESC=$(echo "$MR_JSON" | jq -r '.description')
@@ -193,10 +187,42 @@ git commit -m "fix: address review feedback
 Responds to comment by <reviewer>"
 ```
 
-### 4. Push Changes
+### 4. Push Changes and Wait for Pipeline
+
+**Use the combined push_and_wait function:**
 
 ```bash
-git push origin "$BRANCH_NAME"
+FIX_ATTEMPTS=0
+MAX_FIX_ATTEMPTS=3
+
+while true; do
+  # Check for merge conflicts first
+  if ! check_merge_conflicts "$BRANCH_NAME"; then
+    escalate "Merge conflicts detected on $BRANCH_NAME — manual resolution needed"
+  fi
+  
+  # Push and wait for pipeline
+  if push_and_wait "$BRANCH_NAME" "$MR_IID"; then
+    echo "✅ Changes pushed and pipeline passed"
+    break
+  else
+    echo "❌ Pipeline failed — investigating..."
+    
+    FIX_ATTEMPTS=$((FIX_ATTEMPTS + 1))
+    if [ $FIX_ATTEMPTS -ge $MAX_FIX_ATTEMPTS ]; then
+      escalate "Failed to fix pipeline after $MAX_FIX_ATTEMPTS attempts\n\nMR: !$MR_IID"
+    fi
+    
+    # DIAGNOSE AND FIX based on job logs (already output by wait_for_pipeline)
+    # - Edit the relevant files
+    # - Test locally if possible
+    
+    git add -A
+    git commit -m "fix: address pipeline failure"
+    
+    echo "Fix attempt $FIX_ATTEMPTS. Retrying..."
+  fi
+done
 ```
 
 ### 5. Reply in Discussion Thread — REQUIRED
@@ -205,11 +231,13 @@ git push origin "$BRANCH_NAME"
 
 ```bash
 # DISCUSSION_ID is provided by the cron when you're spawned
-curl -s -X POST \
-  "https://gitlab.lab.nkontur.com/api/v4/projects/4/merge_requests/$MR_IID/discussions/$DISCUSSION_ID/notes" \
-  -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"body": "Done ✓\n\n<explain what you changed and why>"}'
+http_code=$(gitlab_api_call POST \
+  "/projects/${PROJECT_ID}/merge_requests/$MR_IID/discussions/$DISCUSSION_ID/notes" \
+  '{"body": "Done ✓\n\n<explain what you changed and why>"}')
+
+if [ "$http_code" != "201" ]; then
+  echo "⚠️ Failed to post reply (HTTP $http_code)"
+fi
 ```
 
 **Reply content guidelines:**
@@ -220,11 +248,9 @@ curl -s -X POST \
 
 **If asking for clarification:**
 ```bash
-curl -s -X POST \
-  "https://gitlab.lab.nkontur.com/api/v4/projects/4/merge_requests/$MR_IID/discussions/$DISCUSSION_ID/notes" \
-  -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"body": "Could you clarify what you mean by X? I want to make sure I address this correctly."}'
+gitlab_api_call POST \
+  "/projects/${PROJECT_ID}/merge_requests/$MR_IID/discussions/$DISCUSSION_ID/notes" \
+  '{"body": "Could you clarify what you mean by X? I want to make sure I address this correctly."}'
 ```
 
 Then **exit and wait** for the cron to detect their response.
@@ -242,24 +268,15 @@ $CURRENT_DESC
 EOF
 )
 
-# Update via API (with retry for 409)
-for i in 1 2 3; do
-  HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/update.json -X PUT \
-    "https://gitlab.lab.nkontur.com/api/v4/projects/4/merge_requests/$MR_IID" \
-    -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-    -H "Content-Type: application/json" \
-    -d "$(jq -n --arg desc "$NEW_DESC" '{description: $desc}')")
-  
-  if [ "$HTTP_CODE" = "200" ]; then
-    echo "✓ Updated MR description"
-    break
-  elif [ "$HTTP_CODE" = "409" ]; then
-    sleep $i
-  else
-    echo "⚠ Failed to update description (HTTP $HTTP_CODE)"
-    break
-  fi
-done
+# Update via API using the library helper
+http_code=$(gitlab_api_call PUT "/projects/${PROJECT_ID}/merge_requests/$MR_IID" \
+  "$(jq -n --arg desc "$NEW_DESC" '{description: $desc}')")
+
+if [ "$http_code" = "200" ]; then
+  echo "✅ Updated MR description"
+else
+  echo "⚠️ Failed to update description (HTTP $http_code)"
+fi
 ```
 
 ### 7. Update Tracking File
@@ -272,72 +289,7 @@ jq --arg iid "$MR_IID" \
    "$TRACKING_FILE" > tmp.json && mv tmp.json "$TRACKING_FILE"
 ```
 
-### 8. Wait for Pipeline — CRITICAL
-
-**DO NOT respond "Done" until pipeline is green.** If pipeline fails, fix it first.
-
-```bash
-echo "Waiting for pipeline..."
-MAX_ATTEMPTS=60
-ATTEMPT=0
-FIX_ATTEMPTS=0
-
-while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-  PIPELINE_JSON=$(curl -s "https://gitlab.lab.nkontur.com/api/v4/projects/4/merge_requests/$MR_IID/pipelines" \
-    -H "PRIVATE-TOKEN: $GITLAB_TOKEN" | jq -r '.[0] // empty')
-  
-  PIPELINE_STATUS=$(echo "$PIPELINE_JSON" | jq -r '.status // "pending"')
-  PIPELINE_ID=$(echo "$PIPELINE_JSON" | jq -r '.id // empty')
-  
-  case "$PIPELINE_STATUS" in
-    "success")
-      echo "✓ Pipeline passed"
-      break
-      ;;
-    "failed")
-      echo "✗ Pipeline failed — YOU MUST FIX THIS"
-      
-      # Step A: Get failed job logs
-      FAILED_JOBS=$(curl -s "https://gitlab.lab.nkontur.com/api/v4/projects/4/pipelines/$PIPELINE_ID/jobs" \
-        -H "PRIVATE-TOKEN: $GITLAB_TOKEN")
-      
-      # Step B: For each failed job, fetch and display log
-      for JOB_ID in $(echo "$FAILED_JOBS" | jq -r '.[] | select(.status == "failed") | .id'); do
-        JOB_NAME=$(echo "$FAILED_JOBS" | jq -r ".[] | select(.id == $JOB_ID) | .name")
-        echo "=== Failed job: $JOB_NAME ==="
-        curl -s "https://gitlab.lab.nkontur.com/api/v4/projects/4/jobs/$JOB_ID/trace" \
-          -H "PRIVATE-TOKEN: $GITLAB_TOKEN" | tail -80
-      done
-      
-      # Step C: Diagnose and fix the issue
-      # - Read the error message carefully
-      # - Edit the relevant files to fix
-      # - Common issues: YAML syntax, Jinja2 errors, missing vars
-      
-      # Step D: Commit and push fix
-      # git add -A
-      # git commit -m "fix: address pipeline failure"
-      # git push origin $BRANCH_NAME
-      
-      # Step E: Check attempt limit
-      FIX_ATTEMPTS=$((FIX_ATTEMPTS + 1))
-      if [ $FIX_ATTEMPTS -ge 3 ]; then
-        echo "❌ Failed 3 times — escalating to main session"
-        # Post comment explaining you're stuck, then exit
-        exit 1
-      fi
-      
-      ATTEMPT=0
-      ;;
-    *)
-      sleep 10
-      ATTEMPT=$((ATTEMPT + 1))
-      ;;
-  esac
-done
-```
-
-### 9. Cleanup and Exit
+### 8. Cleanup and Exit
 
 ```bash
 cd /
@@ -394,25 +346,24 @@ done
 
 ### GitLab Resource Locks (409 Conflict)
 
-Retry with backoff (see examples above).
+The `gitlab_api_call` helper automatically retries on 409 errors.
 
 ### Merge Conflicts
 
-```bash
-# If push fails due to conflicts
-git fetch origin "$BRANCH_NAME"
-git rebase origin/"$BRANCH_NAME"
-# Resolve conflicts manually
-git add -A
-git rebase --continue
-git push --force-with-lease origin "$BRANCH_NAME"
-```
+Use the library function to detect:
 
-**If conflicts are complex:** Escalate rather than guess.
+```bash
+if ! check_merge_conflicts "$BRANCH_NAME"; then
+  # Manual resolution needed — escalate
+  escalate "Merge conflicts on $BRANCH_NAME require manual resolution"
+fi
+```
 
 ### Pipeline Failures After Your Changes
 
-1. Check job logs: `glab ci view` or API
+The `push_and_wait` function handles this, but if you need manual control:
+
+1. Use `get_failed_job_logs $PIPELINE_ID` to see what failed
 2. If your change caused it: fix immediately
 3. If pre-existing: note in reply, proceed
 4. If unclear: escalate

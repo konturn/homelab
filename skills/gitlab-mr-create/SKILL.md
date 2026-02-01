@@ -16,6 +16,18 @@ Creates merge requests for homelab infrastructure changes:
 
 ---
 
+## Shared Library
+
+**Always source the shared GitLab library first:**
+
+```bash
+source /home/node/clawd/skills/gitlab/lib.sh
+```
+
+This provides: `wait_for_pipeline`, `push_and_wait`, `check_merge_conflicts`, `escalate`, `get_failed_job_logs`, `preflight_check`, `gitlab_api_call`
+
+---
+
 ## Infrastructure Context
 
 **GitLab Instance:** https://gitlab.lab.nkontur.com  
@@ -33,60 +45,18 @@ Creates merge requests for homelab infrastructure changes:
 
 ## Pre-Flight Validation — REQUIRED
 
-**Before starting any work, validate your environment.** Failing fast saves time.
-
 ```bash
 #!/bin/bash
 set -e
 
-echo "=== Pre-Flight Validation ==="
+source /home/node/clawd/skills/gitlab/lib.sh
 
-# 1. Check GITLAB_TOKEN exists
-if [ -z "$GITLAB_TOKEN" ]; then
-  echo "❌ GITLAB_TOKEN not set"
-  exit 1
+if ! preflight_check; then
+  escalate "Pre-flight validation failed"
 fi
-echo "✓ GITLAB_TOKEN present"
-
-# 2. Test API access
-API_TEST=$(curl -s -w "%{http_code}" -o /tmp/api_test.json \
-  "https://gitlab.lab.nkontur.com/api/v4/projects/4" \
-  -H "PRIVATE-TOKEN: $GITLAB_TOKEN")
-
-if [ "$API_TEST" != "200" ]; then
-  echo "❌ API access failed (HTTP $API_TEST)"
-  cat /tmp/api_test.json
-  exit 1
-fi
-echo "✓ API access confirmed"
-
-# 3. Verify project details
-PROJECT_NAME=$(jq -r '.path_with_namespace' /tmp/api_test.json)
-if [ "$PROJECT_NAME" != "root/homelab" ]; then
-  echo "❌ Wrong project: $PROJECT_NAME (expected root/homelab)"
-  exit 1
-fi
-echo "✓ Project: $PROJECT_NAME"
-
-# 4. Check runner status
-RUNNER_STATUS=$(curl -s "https://gitlab.lab.nkontur.com/api/v4/projects/4/runners" \
-  -H "PRIVATE-TOKEN: $GITLAB_TOKEN" | jq -r '.[0].status // "unknown"')
-echo "ℹ Runner status: $RUNNER_STATUS"
-
-# 5. Check main branch is accessible
-MAIN_CHECK=$(curl -s -w "%{http_code}" -o /dev/null \
-  "https://gitlab.lab.nkontur.com/api/v4/projects/4/repository/branches/main" \
-  -H "PRIVATE-TOKEN: $GITLAB_TOKEN")
-if [ "$MAIN_CHECK" != "200" ]; then
-  echo "❌ Cannot access main branch"
-  exit 1
-fi
-echo "✓ Main branch accessible"
-
-echo "=== Pre-Flight Complete ==="
 ```
 
-**If pre-flight fails:** Do NOT proceed. Report the error and stop.
+**If pre-flight fails:** Do NOT proceed. The escalate function will notify and exit.
 
 ---
 
@@ -99,16 +69,12 @@ echo "=== Pre-Flight Complete ==="
 3. **Repeated failures** — Same operation fails 3+ times
 4. **Pipeline stuck** — No status change for >5 minutes
 
-**Escalation procedure:**
+**Escalation is built into the library:**
 
 ```bash
-# Use the message tool to notify main session
-# action: send
-# channel: telegram
-# message: "🚨 MR Creation Stuck\n\nMR: $MR_IID\nBranch: $BRANCH\nIssue: <describe the problem>\n\nStopping to await guidance."
+# This sends Telegram notification to Noah and exits
+escalate "MR Creation Stuck\n\nMR: $MR_IID\nBranch: $BRANCH\nIssue: <describe the problem>"
 ```
-
-**After sending escalation: STOP.** Do not continue. Do not retry. Wait for human input.
 
 ---
 
@@ -208,134 +174,67 @@ How to verify this works.
 EOF
 )
 
-MR_RESPONSE=$(curl -s -X POST "https://gitlab.lab.nkontur.com/api/v4/projects/4/merge_requests" \
-     -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-     -H "Content-Type: application/json" \
-     -d "$(jq -n \
-       --arg src "$BRANCH_NAME" \
-       --arg title "$MR_TITLE" \
-       --arg desc "$MR_DESCRIPTION" \
-       '{source_branch: $src, target_branch: "main", title: $title, description: $desc}')")
+# Use the library helper for API calls with retry
+http_code=$(gitlab_api_call POST "/projects/${PROJECT_ID}/merge_requests" \
+  "$(jq -n \
+    --arg src "$BRANCH_NAME" \
+    --arg title "$MR_TITLE" \
+    --arg desc "$MR_DESCRIPTION" \
+    '{source_branch: $src, target_branch: "main", title: $title, description: $desc}')")
 
-MR_IID=$(echo "$MR_RESPONSE" | jq -r '.iid')
-MR_URL=$(echo "$MR_RESPONSE" | jq -r '.web_url')
-
-if [ "$MR_IID" = "null" ] || [ -z "$MR_IID" ]; then
-  echo "❌ MR creation failed:"
-  echo "$MR_RESPONSE" | jq .
-  # ESCALATE
-  exit 1
+if [ "$http_code" != "201" ]; then
+  echo "❌ MR creation failed (HTTP $http_code):"
+  cat /tmp/gitlab_response.json | jq .
+  escalate "MR creation failed for branch $BRANCH_NAME"
 fi
 
-echo "✓ Created MR !$MR_IID: $MR_URL"
+MR_IID=$(jq -r '.iid' /tmp/gitlab_response.json)
+MR_URL=$(jq -r '.web_url' /tmp/gitlab_response.json)
+
+echo "✅ Created MR !$MR_IID: $MR_URL"
 ```
 
 ### 5. Wait for Pipeline
 
+**Use the shared library function:**
+
 ```bash
-echo "Waiting for pipeline..."
-MAX_ATTEMPTS=60  # 10 minutes max
-ATTEMPT=0
-STUCK_START=""
-FIX_ATTEMPTS=0  # Track how many times we've tried to fix failures
+FIX_ATTEMPTS=0
+MAX_FIX_ATTEMPTS=3
 
-while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-  PIPELINE_JSON=$(curl -s "https://gitlab.lab.nkontur.com/api/v4/projects/4/merge_requests/$MR_IID/pipelines" \
-    -H "PRIVATE-TOKEN: $GITLAB_TOKEN" | jq -r '.[0] // empty')
-  
-  if [ -z "$PIPELINE_JSON" ]; then
-    echo "No pipeline yet, waiting..."
-    sleep 10
-    ATTEMPT=$((ATTEMPT + 1))
-    continue
+while true; do
+  if wait_for_pipeline "$MR_IID"; then
+    echo "✅ Pipeline passed"
+    break
+  else
+    echo "❌ Pipeline failed — investigating..."
+    
+    # The library already output the job logs, now diagnose and fix
+    # Common failures:
+    # - Ansible syntax error → fix the YAML
+    # - Docker-compose validation error → fix compose syntax
+    # - Missing variable → add the variable
+    # - Linting error → fix the style issue
+    # - Jinja2 template error → fix template syntax
+    
+    FIX_ATTEMPTS=$((FIX_ATTEMPTS + 1))
+    if [ $FIX_ATTEMPTS -ge $MAX_FIX_ATTEMPTS ]; then
+      escalate "Failed to fix pipeline after $MAX_FIX_ATTEMPTS attempts\n\nMR: !$MR_IID\nBranch: $BRANCH_NAME"
+    fi
+    
+    # MAKE THE FIX
+    # - Edit the relevant files based on error logs
+    # - Test locally if possible (ansible-lint, docker-compose config, etc.)
+    
+    # COMMIT AND PUSH THE FIX
+    git add -A
+    git commit -m "fix: address pipeline failure - <describe fix>"
+    git push origin "$BRANCH_NAME"
+    
+    echo "Fix attempt $FIX_ATTEMPTS pushed. Waiting for new pipeline..."
+    sleep 5  # Give GitLab time to register new pipeline
   fi
-  
-  PIPELINE_STATUS=$(echo "$PIPELINE_JSON" | jq -r '.status')
-  PIPELINE_ID=$(echo "$PIPELINE_JSON" | jq -r '.id')
-  
-  case "$PIPELINE_STATUS" in
-    "success")
-      echo "✓ Pipeline #$PIPELINE_ID passed"
-      break
-      ;;
-    "failed"|"canceled")
-      echo "✗ Pipeline $PIPELINE_STATUS — investigating..."
-      
-      # YOU MUST FIX THIS BEFORE CONTINUING
-      # Do NOT just reset and hope — diagnose and fix the root cause
-      
-      # Step A: Get failed job details
-      FAILED_JOBS=$(curl -s "https://gitlab.lab.nkontur.com/api/v4/projects/4/pipelines/$PIPELINE_ID/jobs" \
-        -H "PRIVATE-TOKEN: $GITLAB_TOKEN")
-      
-      # Step B: For each failed job, get the log
-      for JOB_ID in $(echo "$FAILED_JOBS" | jq -r '.[] | select(.status == "failed") | .id'); do
-        JOB_NAME=$(echo "$FAILED_JOBS" | jq -r ".[] | select(.id == $JOB_ID) | .name")
-        echo "=== Failed job: $JOB_NAME (ID: $JOB_ID) ==="
-        
-        # Fetch job log (last 100 lines usually enough)
-        JOB_LOG=$(curl -s "https://gitlab.lab.nkontur.com/api/v4/projects/4/jobs/$JOB_ID/trace" \
-          -H "PRIVATE-TOKEN: $GITLAB_TOKEN" | tail -100)
-        echo "$JOB_LOG"
-      done
-      
-      # Step C: DIAGNOSE the failure
-      # Common failures:
-      # - Ansible syntax error → fix the YAML
-      # - Docker-compose validation error → fix compose syntax
-      # - Missing variable → add the variable
-      # - Linting error → fix the style issue
-      # - Jinja2 template error → fix template syntax
-      
-      # Step D: MAKE THE FIX
-      # - Edit the relevant files
-      # - Test locally if possible (ansible-lint, docker-compose config, etc.)
-      
-      # Step E: COMMIT AND PUSH THE FIX
-      # git add -A
-      # git commit -m "fix: address pipeline failure - <describe fix>"
-      # git push origin $BRANCH_NAME
-      
-      # Step F: INCREMENT FIX COUNTER (give up after 3 attempts)
-      FIX_ATTEMPTS=$((FIX_ATTEMPTS + 1))
-      if [ $FIX_ATTEMPTS -ge 3 ]; then
-        echo "❌ Failed to fix pipeline after 3 attempts — ESCALATING"
-        # Notify via Telegram with full context of what was tried
-        exit 1
-      fi
-      
-      echo "Fix attempt $FIX_ATTEMPTS pushed. Waiting for new pipeline..."
-      ATTEMPT=0
-      STUCK_START=""
-      ;;
-    "running"|"pending")
-      # Check for stuck condition
-      if [ -z "$STUCK_START" ]; then
-        STUCK_START=$(date +%s)
-      else
-        ELAPSED=$(($(date +%s) - STUCK_START))
-        if [ $ELAPSED -gt 300 ]; then
-          echo "⚠ Pipeline stuck for >5 minutes — ESCALATING"
-          # Send escalation via Telegram
-          exit 1
-        fi
-      fi
-      echo "Pipeline $PIPELINE_STATUS (attempt $ATTEMPT)"
-      sleep 10
-      ATTEMPT=$((ATTEMPT + 1))
-      ;;
-    *)
-      echo "Unknown status: $PIPELINE_STATUS"
-      sleep 10
-      ATTEMPT=$((ATTEMPT + 1))
-      ;;
-  esac
 done
-
-if [ $ATTEMPT -ge $MAX_ATTEMPTS ]; then
-  echo "⚠ Pipeline timed out — ESCALATING"
-  exit 1
-fi
 ```
 
 ### 6. Register MR for Tracking — REQUIRED
@@ -357,7 +256,7 @@ jq --arg iid "$MR_IID" \
    '. + {($iid): {"title": $title, "branch": $branch, "goal": $goal, "description": $desc, "lastCommentId": 0, "version": 1, "activeResolutions": []}}' \
    "$TRACKING_FILE" > tmp.json && mv tmp.json "$TRACKING_FILE"
 
-echo "✓ Registered MR !$MR_IID for tracking"
+echo "✅ Registered MR !$MR_IID for tracking"
 ```
 
 **Tracking schema:**
@@ -425,26 +324,7 @@ Update this description when making follow-up changes (see gitlab-mr-respond ski
 
 ### GitLab Resource Locks (409 Conflict)
 
-```bash
-for i in 1 2 3; do
-  HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/response.json -X POST \
-    "https://gitlab.lab.nkontur.com/api/v4/projects/4/merge_requests" \
-    -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-    -H "Content-Type: application/json" \
-    -d "$PAYLOAD")
-  
-  if [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "200" ]; then
-    break
-  elif [ "$HTTP_CODE" = "409" ]; then
-    echo "Resource locked, retrying in ${i}s..."
-    sleep $i
-  else
-    echo "Error: HTTP $HTTP_CODE"
-    cat /tmp/response.json
-    break
-  fi
-done
-```
+The `gitlab_api_call` helper automatically retries on 409 errors.
 
 ### Common Pipeline Failures
 

@@ -49,6 +49,48 @@ curl -s --location-trusted "https://moltbook.com/api/v1/posts?sort=hot&limit=5" 
 
 **Note:** Token has git clone/push access but NOT API read scope. Need `api` scope added to use `glab` CLI for MR creation.
 
+### Shared Library (for ad-hoc GitLab work)
+
+For scripted GitLab operations, source the shared library:
+
+```bash
+source /home/node/clawd/skills/gitlab/lib.sh
+```
+
+**Functions available:**
+
+| Function | Description |
+|----------|-------------|
+| `preflight_check` | Validate environment (token, API access, project) |
+| `wait_for_pipeline $MR_IID` | Poll until pipeline passes/fails (10 min max). Outputs job logs on failure. Returns 0=success, 1=failure |
+| `push_and_wait $BRANCH $MR_IID` | Git push + wait_for_pipeline combined |
+| `check_merge_conflicts $BRANCH` | Check if branch conflicts with main. Returns 0=clean, 1=conflicts |
+| `get_failed_job_logs $PIPELINE_ID` | Fetch and output logs from all failed jobs |
+| `escalate $MESSAGE` | Send Telegram alert to Noah and exit 1 |
+| `gitlab_api_call $METHOD $ENDPOINT [$DATA]` | API call with 409 retry. Response in `/tmp/gitlab_response.json` |
+
+**Environment variables set by lib:**
+- `GITLAB_HOST` — gitlab.lab.nkontur.com
+- `PROJECT_ID` — 4
+- `GITLAB_API` — https://gitlab.lab.nkontur.com/api/v4
+
+**Example ad-hoc usage:**
+```bash
+source /home/node/clawd/skills/gitlab/lib.sh
+
+preflight_check || exit 1
+
+# Make changes, commit, push
+git push origin my-branch
+
+# Wait for pipeline
+if wait_for_pipeline 42; then
+  echo "Pipeline passed!"
+else
+  echo "Pipeline failed — check logs above"
+fi
+```
+
 ### Clone/Pull
 ```bash
 git clone "https://oauth2:${GITLAB_TOKEN}@gitlab.lab.nkontur.com/root/homelab.git"

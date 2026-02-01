@@ -11,6 +11,9 @@
 !.gitignore
 !*.md
 
+# Track shell libraries in skills
+!skills/**/lib.sh
+
 # Ignore homelab entirely (separate repo)
 homelab/
 
