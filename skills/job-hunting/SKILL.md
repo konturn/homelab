@@ -274,12 +274,36 @@ Example:
 
 This applies to all free-text fields, cover letters, and any written responses.
 
-**Writing style:**
+**Writing style — SPEAK LIKE A HUMAN:**
+
+The goal is to sound like a real person talking to another person, not a polished LinkedIn post.
+
+**❌ Corporate/Resume-speak (AVOID):**
+- "What draws me to X is the opportunity to..."
+- "I'm particularly excited about..."
+- "exactly the kind of high-stakes work I thrive on"
+- "I see similar parallels in X's mission to..."
+- "aligns perfectly with my experience"
+- "I'm passionate about..."
+- Any sentence that could appear on a motivational poster
+
+**✅ Human voice (USE):**
+- "Honestly? I got into infrastructure because I like building things that don't break."
+- "The API design looks like someone actually uses it."
+- "I spent way too long debugging that one."
+- "Here's what actually happened..."
+- Contractions (I'm, don't, can't, it's)
+- Starting sentences with "And" or "But" occasionally
+- Short punchy sentences. Even fragments.
+
+**The test:** Read it out loud. Would you actually say this to someone at a coffee shop? If it sounds like a press release, rewrite it.
+
+**More rules:**
 - **No em dashes (—).** Use commas, periods, or "and" instead.
-- Avoid corporate buzzwords: "synergy," "leverage," "align perfectly," "passionate about"
-- Write like a human, not a press release
-- Short sentences are fine. Don't over-connect everything.
-- Specifics over generics. Names, numbers, and concrete details beat vague claims.
+- **Don't hit every talking point.** Pick one thing and say it well.
+- **Be willing to show uncertainty.** "I'm not sure if..." or "I think..." is more human than false confidence.
+- **Specifics over generics.** Names, numbers, concrete details.
+- **Short > long.** If you can cut a sentence, cut it.
 
 ---
 
@@ -336,10 +360,17 @@ The bad example never actually answers whether you like sports. Reads as evasive
 - Em dashes (use commas, periods, or "and" instead)
 
 **Good example:**
-> I'm drawn to Render's goal of eliminating undifferentiated infrastructure work. At Nvidia, I saw how much engineering time gets lost to cloud complexity. The technical depth here is compelling, what with Kubernetes at scale, custom traffic routing, and container orchestration. I love Render's blog posts on Knative scaling and DNS dependency management. It signals a team that cares about craft.
+> Render caught my attention because of your blog post on DNS dependency management. That's the kind of problem most teams sweep under the rug. At Nvidia, I watched engineers lose days to cloud complexity that shouldn't exist. The Knative scaling work you've published shows a team that actually thinks about these problems instead of just shipping features.
 
 **Bad example:**
 > I'm excited about Render because it represents the future of cloud infrastructure, making deployment effortless so developers can focus on building. Render's approach of abstracting away cloud complexity aligns perfectly with my experience.
+
+**What makes the good example better:**
+- Starts with something specific (the blog post)
+- Uses casual language ("caught my attention", "sweep under the rug")
+- Has a real opinion ("that's the kind of problem most teams sweep under the rug")
+- Doesn't try to hit every talking point
+- Sounds like something you'd actually say
 
 **Structure:**
 1. What draws you (specific, not generic mission statement)
