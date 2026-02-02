@@ -73,7 +73,7 @@ satellite-2:validate:
 .deploy:
   extends: .ansible
   stage: deploy
-  resource_group: deploy-$CI_JOB_NAME  # Each job gets its own lock
+  resource_group: deploy  # Single lock - only one deploy job at a time globally
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
 
