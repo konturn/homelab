@@ -531,9 +531,33 @@ browser action=tabs target=node node=noah-XPS-13-7390-2-in-1 profile=clawd
 
 ### How Simplify Works
 1. When you navigate to a job application page, Simplify detects the form
-2. The Simplify panel appears with an "Autofill this page" button
-3. It fills fields from Noah's saved profile
-4. Custom/open-ended questions still need to be filled by the worker
+2. **Simplify appears as an OVERLAY PANEL on the side of the page** — it's NOT embedded in the form HTML
+3. The panel has an "Autofill this page" button
+4. It fills fields from Noah's saved profile
+5. Custom/open-ended questions still need to be filled by the worker
+
+### ⚠️ CRITICAL: Finding Simplify (Don't Confuse with Greenhouse's Native Autofill)
+
+**Simplify is an OVERLAY, not a DOM element.** Do NOT search the form HTML for "autofill" buttons — that will find Greenhouse's native "Autofill with MyGreenhouse" buttons, which are NOT Simplify.
+
+**How to detect Simplify:**
+1. **Take a screenshot** — `browser action=screenshot profile=clawd targetId=<id>`
+2. **Look visually** for a sidebar/panel on the right side of the page with:
+   - Simplify branding/logo
+   - "Autofill this page" button
+   - Purple/blue color scheme (typical Simplify colors)
+3. **If visible** — Click the "Autofill this page" button in the Simplify panel
+4. **If NOT visible after 3-5 seconds** — Simplify may not have loaded; proceed with manual fill
+
+**What Simplify looks like:**
+- Floating panel on right side of browser window
+- Contains profile preview and autofill button
+- Appears OVER the page content, not inside form elements
+
+**What is NOT Simplify:**
+- "Autofill with MyGreenhouse" — This is Greenhouse's native feature (inside form HTML)
+- "Autofill with LinkedIn" — Platform's own integration
+- Any button that appears INSIDE the form — Simplify floats OUTSIDE/OVER the form
 
 ### ⚠️ CRITICAL: Simplify Has Limitations (Greenhouse Iframe Issue)
 
