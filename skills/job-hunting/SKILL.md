@@ -531,6 +531,13 @@ browser action=tabs target=node node=noah-XPS-13-7390-2-in-1 profile=clawd
 
 No browser extensions. No autofill detection. Just reliable manual form completion.
 
+### ⚠️ STEP 0: DISMISS ANY STUCK DIALOGS (MANDATORY)
+**BEFORE navigating to ANY form, run this:**
+```
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "Escape"]
+```
+Previous workers may have left file dialogs open. This prevents getting stuck.
+
 1. **Navigate** to the application URL
 2. **Wait 3-5 seconds** for page to load
 3. **Snapshot** the page to see all form fields
@@ -687,11 +694,13 @@ nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "mousemove", "
 nodes action=run node=noah-XPS-13-7390-2-in-1 command=["sleep", "1"]
 nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "search", "--name", "Open"]
 
-# 7. Activate file picker and enter path (must complete within ~10 seconds)
+# 7. Activate file picker and enter path
+# ⚠️ CRITICAL: Type path AND press Return in rapid succession — don't stall between them!
 nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "windowactivate", "--sync", "<picker_id>"]
 nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "ctrl+l"]
 nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "ctrl+a"]
 nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "type", "--clearmodifiers", "/home/noah/Downloads/Resume (Kontur, Noah).pdf"]
+# ⚠️ IMMEDIATELY press Return after typing — no delays, no snapshots, no thinking!
 nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "Return"]
 
 # 8. CLEANUP: If any step failed, dismiss the dialog
