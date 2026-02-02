@@ -75,7 +75,8 @@ services:
     image: tecnativa/docker-socket-proxy:latest
     restart: unless-stopped
     networks:
-      - mgmt
+      mgmt:
+        ipv4_address: {{ docker_socket_proxy_ip }}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
