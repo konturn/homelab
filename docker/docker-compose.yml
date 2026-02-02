@@ -168,7 +168,7 @@ services:
         ipv4_address: {{ nginx_ip }}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost/health || exit 1"]
+      test: ["CMD-SHELL", "pgrep nginx > /dev/null || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -186,7 +186,7 @@ services:
         ipv4_address: {{ lab_nginx_ip }}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost/health || exit 1"]
+      test: ["CMD-SHELL", "pgrep nginx > /dev/null || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -203,7 +203,7 @@ services:
         ipv4_address: {{ iot_nginx_ip }}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost/health || exit 1"]
+      test: ["CMD-SHELL", "pgrep nginx > /dev/null || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
