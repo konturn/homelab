@@ -42,6 +42,25 @@ Look for `noah-XPS-13-7390-2-in-1` in the response with `"connected": true`.
 
 ---
 
+### ⚠️ ONE WORKER AT A TIME (MANDATORY PRE-FLIGHT)
+
+**Before spawning ANY job application worker, the main agent MUST run:**
+
+```
+sessions_list activeMinutes=10
+```
+
+**Check:** Is there ANY session with label starting with `jobs.` that has `totalTokens > 0`?
+
+- **If YES → DO NOT SPAWN.** Wait for the active worker to complete.
+- **If NO → Safe to spawn ONE worker.**
+
+**Why:** Multiple browser workers clobber each other on the shared node. This has caused repeated failures. There is NO exception to this rule.
+
+**This is not optional.** The main agent must execute this check, not just "know" about it.
+
+---
+
 ## Hardened Scripts
 
 These scripts handle deterministic operations. Use them instead of reimplementing the logic:
