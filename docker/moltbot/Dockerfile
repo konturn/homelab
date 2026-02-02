@@ -49,6 +49,11 @@ RUN curl -fsSL https://bun.sh/install | bash \
 # Install qmd (quick markdown search) globally
 RUN bun install -g https://github.com/tobi/qmd
 
+# Install agent-browser (Vercel Labs browser automation CLI for AI agents)
+# Uses system Chromium via PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+RUN npm install -g agent-browser \
+    && agent-browser install --skip-download
+
 # Ensure node user can access installed tools
 RUN chmod -R a+rx /usr/local/bin
 
