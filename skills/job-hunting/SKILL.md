@@ -660,7 +660,23 @@ browser action=upload profile=clawd targetId=<id> selector="input[type=file]" pa
 **DO NOT** click "Upload Resume" or "Attach File" buttons — they open the native dialog. Instead, find the hidden file input and upload to it directly.
 
 ### Step 2: Verify upload succeeded
-Snapshot the form and check for filename visible (e.g., "Resume (Kontur, Noah).pdf" with a delete/replace button).
+
+**⚠️ CRITICAL: Check the FORM, not the file picker!**
+
+After ANY upload attempt, snapshot the form and look for:
+- The filename "Resume (Kontur, Noah).pdf" visible in the resume section
+- A delete/replace/remove button next to the filename
+- The "Attach" button may have changed to show the file is attached
+
+**DO NOT** verify by searching for file picker windows — they close after upload completes. The absence of a file picker means nothing. **Only the form state matters.**
+
+```
+browser action=snapshot profile=clawd targetId=<id>
+# Look for "Resume" or "Kontur" in the snapshot output
+```
+
+If the filename appears in the form → upload succeeded, proceed to submit.
+If the form still shows "Attach" with no filename → upload failed, try next method.
 
 ### Step 3: If upload failed → Use xdotool fallback (LAST RESORT)
 
