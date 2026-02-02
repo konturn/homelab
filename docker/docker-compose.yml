@@ -70,6 +70,9 @@ networks:
   ci:
     # Bridge network for CI jobs - enables DNS resolution to docker-socket-proxy
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
 services:
   # Docker socket proxy - filtered access for CI builds
   # Only allows build/image operations, blocks exec/start/stop
@@ -78,8 +81,9 @@ services:
     image: tecnativa/docker-socket-proxy:latest
     restart: unless-stopped
     networks:
-      - mgmt
-      - ci
+      mgmt:
+      ci:
+        ipv4_address: 172.28.0.2
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
