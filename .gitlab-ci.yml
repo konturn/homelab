@@ -81,9 +81,18 @@ moltbot:build:
     - docker push registry.lab.nkontur.com/moltbot-gateway:latest
     - docker push registry.lab.nkontur.com/moltbot-gateway:$CI_COMMIT_SHORT_SHA
   rules:
+    # Auto-run on main when moltbot changes
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/moltbot/**/*
+    # Auto-run on MRs when moltbot changes
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - docker/moltbot/**/*
+    # Manual trigger on MRs (for testing)
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
 
 # =============================================================================
 # Deploy (main branch only) - Actual deployment
