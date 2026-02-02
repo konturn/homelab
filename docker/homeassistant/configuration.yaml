@@ -69,34 +69,6 @@ sensor:
       - pm25
       - pm10_est
     value_template: 'OK'
-  - platform: template
-    sensors:
-      awair_lr_score:
-        friendly_name: "Kitchen Sensor Quality Score"
-        value_template: {{ '\'{{ states.sensor.awair_kitchen_sensors.attributes["score"]}}\'' }}
-        unit_of_measurement: '%'
-      awair_lr_temp:
-        friendly_name: "Kitchen Sensor Temperature"
-        value_template: {{'\'{{ states.sensor.awair_kitchen_sensors.attributes["temp"] }}\''}}
-        device_class: temperature
-        unit_of_measurement: '°C'
-      awair_lr_humid:
-        friendly_name: "Kitchen Sensor Relative Humidity"
-        value_template: {{'\'{{ states.sensor.awair_kitchen_sensors.attributes["humid"] }}\''}}
-        device_class: humidity
-        unit_of_measurement: '%'
-      awair_lr_co2:
-        friendly_name: "Kitchen Sensor Carbon Dioxide"
-        value_template: {{'\'{{ states.sensor.awair_kitchen_sensors.attributes["co2"] }}\''}}
-        unit_of_measurement: 'ppm'
-      awair_lr_voc:
-        friendly_name: "Kitchen Sensor Total VOC"
-        value_template: {{'\'{{ states.sensor.awair_kitchen_sensors.attributes["voc"] }}\''}}
-        unit_of_measurement: 'ppb'
-      awair_lr_pm25:
-        friendly_name: "Kitchen Sensor Particulate Matter 2.5"
-        value_template: {{'\'{{ states.sensor.awair_kitchen_sensors.attributes["pm25"] }}\''}}
-        unit_of_measurement: 'μg/m³'
   - platform: rest
     name: awair_bedroom_sensors
     resource: http://AWAIR-ELEM-147AA0.lab.nkontur.com/air-data/latest
@@ -116,34 +88,6 @@ sensor:
       - pm25
       - pm10_est
     value_template: 'OK'
-  - platform: template
-    sensors:
-      bedroom_awair_lr_score:
-        friendly_name: "Bedroom Sensor Quality Score"
-        value_template: {{ '\'{{ states.sensor.awair_bedroom_sensors.attributes["score"]}}\'' }}
-        unit_of_measurement: '%'
-      bedroom_awair_lr_temp:
-        friendly_name: "Bedroom Sensor Temperature"
-        value_template: {{'\'{{ states.sensor.awair_bedroom_sensors.attributes["temp"] }}\''}}
-        device_class: temperature
-        unit_of_measurement: '°C'
-      bedroom_awair_lr_humid:
-        friendly_name: "Bedroom Sensor Relative Humidity"
-        value_template: {{'\'{{ states.sensor.awair_bedroom_sensors.attributes["humid"] }}\''}}
-        device_class: humidity
-        unit_of_measurement: '%'
-      bedroom_awair_lr_co2:
-        friendly_name: "Bedroom Sensor Carbon Dioxide"
-        value_template: {{'\'{{ states.sensor.awair_bedroom_sensors.attributes["co2"] }}\''}}
-        unit_of_measurement: 'ppm'
-      bedroom_awair_lr_voc:
-        friendly_name: "Bedroom Sensor Total VOC"
-        value_template: {{'\'{{ states.sensor.awair_bedroom_sensors.attributes["voc"] }}\''}}
-        unit_of_measurement: 'ppb'
-      bedroom_awair_lr_pm25:
-        friendly_name: "Bedroom Sensor Particulate Matter 2.5"
-        value_template: {{'\'{{ states.sensor.awair_bedroom_sensors.attributes["pm25"] }}\''}}
-        unit_of_measurement: 'μg/m³'
   - platform: history_stats
     name: "Hours of work today"
     entity_id: binary_sensor.office_sensor_home_security_motion_detection
@@ -152,15 +96,70 @@ sensor:
     start: "{{ '{{' }} now().replace(hour=0, minute=0, second=0) {{ '}}' }}"
     end: "{{ '{{' }} now() {{ '}}' }}"
 template:
-  binary_sensor:
-    - name: "Front Hallway Door Active"
-      state: >
-        {{ '{{' }} expand('binary_sensor.main_bathroom_door_sensor_access_control_window_door_is_open')
-           | selectattr('last_changed', 'gt', now()-timedelta(minutes=1))
-           | list | count + expand('binary_sensor.main_bedroom_door_sensor_access_control_window_door_is_open')
-           | selectattr('last_changed', 'gt', now()-timedelta(minutes=1))
-           | list | count + expand('binary_sensor.office_door_sensor_access_control_window_door_is_open')
-           | selectattr('last_changed', 'gt', now()-timedelta(minutes=1))
-           | list | count  + expand('binary_sensor.guest_bedroom_door_sensor_access_control_window_door_is_open')
-           | selectattr('last_changed', 'gt', now()-timedelta(minutes=1))
-           | list | count  > 0 and ( as_timestamp(now()) - as_timestamp(states('sensor.uptime'))) > 60 {{ '}}' }}
+  - sensor:
+      # Kitchen Awair Sensors (modern format)
+      - name: "Kitchen Sensor Quality Score"
+        unique_id: awair_lr_score
+        unit_of_measurement: '%'
+        state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "score") }}\'' }}
+      - name: "Kitchen Sensor Temperature"
+        unique_id: awair_lr_temp
+        device_class: temperature
+        unit_of_measurement: '°C'
+        state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "temp") }}\'' }}
+      - name: "Kitchen Sensor Relative Humidity"
+        unique_id: awair_lr_humid
+        device_class: humidity
+        unit_of_measurement: '%'
+        state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "humid") }}\'' }}
+      - name: "Kitchen Sensor Carbon Dioxide"
+        unique_id: awair_lr_co2
+        unit_of_measurement: 'ppm'
+        state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "co2") }}\'' }}
+      - name: "Kitchen Sensor Total VOC"
+        unique_id: awair_lr_voc
+        unit_of_measurement: 'ppb'
+        state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "voc") }}\'' }}
+      - name: "Kitchen Sensor Particulate Matter 2.5"
+        unique_id: awair_lr_pm25
+        unit_of_measurement: 'μg/m³'
+        state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "pm25") }}\'' }}
+      # Bedroom Awair Sensors (modern format)
+      - name: "Bedroom Sensor Quality Score"
+        unique_id: bedroom_awair_lr_score
+        unit_of_measurement: '%'
+        state: {{ '\'{{ state_attr("sensor.awair_bedroom_sensors", "score") }}\'' }}
+      - name: "Bedroom Sensor Temperature"
+        unique_id: bedroom_awair_lr_temp
+        device_class: temperature
+        unit_of_measurement: '°C'
+        state: {{ '\'{{ state_attr("sensor.awair_bedroom_sensors", "temp") }}\'' }}
+      - name: "Bedroom Sensor Relative Humidity"
+        unique_id: bedroom_awair_lr_humid
+        device_class: humidity
+        unit_of_measurement: '%'
+        state: {{ '\'{{ state_attr("sensor.awair_bedroom_sensors", "humid") }}\'' }}
+      - name: "Bedroom Sensor Carbon Dioxide"
+        unique_id: bedroom_awair_lr_co2
+        unit_of_measurement: 'ppm'
+        state: {{ '\'{{ state_attr("sensor.awair_bedroom_sensors", "co2") }}\'' }}
+      - name: "Bedroom Sensor Total VOC"
+        unique_id: bedroom_awair_lr_voc
+        unit_of_measurement: 'ppb'
+        state: {{ '\'{{ state_attr("sensor.awair_bedroom_sensors", "voc") }}\'' }}
+      - name: "Bedroom Sensor Particulate Matter 2.5"
+        unique_id: bedroom_awair_lr_pm25
+        unit_of_measurement: 'μg/m³'
+        state: {{ '\'{{ state_attr("sensor.awair_bedroom_sensors", "pm25") }}\'' }}
+  - binary_sensor:
+      - name: "Front Hallway Door Active"
+        state: >
+          {{ '{{' }} expand('binary_sensor.main_bathroom_door_sensor_access_control_window_door_is_open')
+             | selectattr('last_changed', 'gt', now()-timedelta(minutes=1))
+             | list | count + expand('binary_sensor.main_bedroom_door_sensor_access_control_window_door_is_open')
+             | selectattr('last_changed', 'gt', now()-timedelta(minutes=1))
+             | list | count + expand('binary_sensor.office_door_sensor_access_control_window_door_is_open')
+             | selectattr('last_changed', 'gt', now()-timedelta(minutes=1))
+             | list | count  + expand('binary_sensor.guest_bedroom_door_sensor_access_control_window_door_is_open')
+             | selectattr('last_changed', 'gt', now()-timedelta(minutes=1))
+             | list | count  > 0 and ( as_timestamp(now()) - as_timestamp(states('sensor.uptime'))) > 60 {{ '}}' }}
