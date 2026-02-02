@@ -502,7 +502,14 @@ browser action=tabs target=node node=noah-XPS-13-7390-2-in-1 profile=clawd
 
 ### Ashby (jobs.ashbyhq.com)
 - **Autofill:** Has "Upload file" button that auto-fills fields from resume
-- **Location field:** Combobox that shows suggestions as you type — type location, wait for dropdown, click the matching option
+- **Location field:** Combobox that shows suggestions as you type — type location, wait for dropdown, click the matching option. **If validation still fails after selection**, use JavaScript event dispatching:
+  ```javascript
+  // After typing/selecting location, dispatch events to update React state
+  const field = document.querySelector('[data-testid="location-input"]') || document.querySelector('input[placeholder*="location"]');
+  field.dispatchEvent(new Event('input', {bubbles: true}));
+  field.dispatchEvent(new Event('change', {bubbles: true}));
+  field.dispatchEvent(new Event('blur', {bubbles: true}));
+  ```
 - **Yes/No toggle buttons:** Often styled as toggle buttons, not radio buttons. These can be finicky — use `hover` action on the button before `click` to ensure the selection registers properly.
 
 #### Ashby React State Management Issues
