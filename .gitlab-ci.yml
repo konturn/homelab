@@ -1,19 +1,15 @@
 # =============================================================================
-# CI Pipeline - Optimized with Pre-built Image (<3 min target)
+# CI Pipeline - Optimized for Speed
 # =============================================================================
 # Strategy:
-# - Custom CI image with pre-baked dependencies (zero runtime installs)
 # - Parallel validation jobs using DAG (needs: [])
-# - Image rebuilds only when dependencies change
-# - Uses GitLab's built-in container registry for fast access
+# - Aggressive caching for pip packages and ansible roles
 # - Path-based rules - jobs only run when relevant files change
 # - DAG pipelines - deploy jobs start immediately after their validation
 # - Interruptible validation - new commits cancel in-progress MR pipelines
 #
 # Pipeline structure (DAG visualization):
 #
-#   [build-image] (only when deps change)
-#          │
 #   router:validate ──► router:deploy
 #   zwave:validate ───► zwave:deploy
 #   satellite-2:validate ──► satellite-2:deploy
@@ -28,10 +24,10 @@ workflow:
     on_new_commit: interruptible
 
 variables:
+  PIP_CACHE_DIR: "/cache/pip"
+  ANSIBLE_ROLES_PATH: "/cache/ansible-roles"
   ANSIBLE_HOST_KEY_CHECKING: "False"
   ANSIBLE_PIPELINING: "True"
-  # Use GitLab's built-in registry - faster than external registries
-  CI_IMAGE: ${CI_REGISTRY_IMAGE}/ci:latest
 
 # =============================================================================
 # Path-based change detection
@@ -120,46 +116,30 @@ variables:
   interruptible: true
 
 stages:
-  - build
   - validate
   - deploy
 
 # =============================================================================
-# Build Stage - Custom CI image (runs only when deps change)
-# =============================================================================
-build-image:
-  stage: build
-  image: docker:24-cli
-  services:
-    - docker:24-dind
-  variables:
-    DOCKER_TLS_CERTDIR: "/certs"
-  script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-    - docker build -t $CI_IMAGE -f ci/Dockerfile .
-    - docker push $CI_IMAGE
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      changes:
-        - ci/Dockerfile
-        - requirements.txt
-        - ansible/requirements.yml
-    - if: $CI_COMMIT_BRANCH == "main"
-      changes:
-        - ci/Dockerfile
-        - requirements.txt
-        - ansible/requirements.yml
-
-# =============================================================================
-# Base job - minimal setup (deps already in image)
+# Base job - shared setup with caching
 # =============================================================================
 .ansible:
-  image: $CI_IMAGE
+  image: willhallonline/ansible:latest
   before_script:
-    # SSH setup only - dependencies are pre-installed in the image
+    # Setup cache directories
+    - mkdir -p /cache/pip /cache/ansible-roles
+    # Install Python deps (cached)
+    - pip3 install --cache-dir /cache/pip -r requirements.txt
+    # Install Ansible roles (cached)
+    - ansible-galaxy install -r ansible/requirements.yml -p /cache/ansible-roles --force
+    # Setup SSH
     - mkdir -p ~/.ssh
     - cp ansible/known_hosts ~/.ssh/known_hosts
     - echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp && chmod 600 tmp
+  cache:
+    key: "ansible-deps-v1"
+    paths:
+      - /cache/pip
+      - /cache/ansible-roles
 
 # =============================================================================
 # Validation Stage - Parallel execution on MRs
@@ -170,9 +150,7 @@ router:validate:
     - .interruptible
     - .router_changes
   stage: validate
-  needs:
-    - job: build-image
-      optional: true
+  needs: []
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml --check --diff
 
@@ -182,9 +160,7 @@ zwave:validate:
     - .interruptible
     - .zwave_changes
   stage: validate
-  needs:
-    - job: build-image
-      optional: true
+  needs: []
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/zwave.yml --check --diff
 
@@ -194,9 +170,7 @@ satellite-2:validate:
     - .interruptible
     - .satellite2_changes
   stage: validate
-  needs:
-    - job: build-image
-      optional: true
+  needs: []
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml --check --diff
 
@@ -216,8 +190,6 @@ router:deploy:
   needs:
     - job: router:validate
       optional: true
-    - job: build-image
-      optional: true
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml
 
@@ -230,8 +202,6 @@ zwave:deploy:
   needs:
     - job: zwave:validate
       optional: true
-    - job: build-image
-      optional: true
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/zwave.yml
 
@@ -243,8 +213,6 @@ satellite-2:deploy:
   resource_group: deploy-satellite-2
   needs:
     - job: satellite-2:validate
-      optional: true
-    - job: build-image
       optional: true
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml
