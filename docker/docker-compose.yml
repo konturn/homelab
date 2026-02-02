@@ -131,7 +131,7 @@ services:
       - "-s"
     restart: unless-stopped
   nginx: 
-    image: nginx:alpine
+    image: nginx:1.27-alpine
     container_name: nginx
     networks:
       external:
@@ -149,7 +149,7 @@ services:
       - /var/log/nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   lab_nginx: 
-    image: nginx:alpine
+    image: nginx:1.27-alpine
     container_name: lab_nginx
     networks:
       internal:
@@ -166,7 +166,7 @@ services:
       - /var/log/lab_nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   iot_nginx: 
-    image: nginx:alpine
+    image: nginx:1.27-alpine
     container_name: iot_nginx
     networks:
       iot:
