@@ -124,7 +124,7 @@ sessions_spawn(
 sessions_spawn(
   label: "jobs.apply.<company>",
   model: "anthropic/claude-sonnet-4-20250514", 
-  task: "Apply to <Company> - <Role>. Job ID: <id>. URL: <url>. Browser profile: job-1. Read job-hunting skill, section WORKER INSTRUCTIONS.",
+  task: "Apply to <Company> - <Role>. Job ID: <id>. URL: <url>. Read job-hunting skill, section WORKER INSTRUCTIONS. Use Simplify for autofill.",
   runTimeoutSeconds: 1800  // 30 min per application
 )
 ```
@@ -201,16 +201,16 @@ Then **EXIT**. Main agent handles spawning workers.
 
 See WORKER INSTRUCTIONS section below for full details. Key points:
 - Apply to ONE job only
-- Use your assigned browser profile (job-1, job-2, etc.)
+- Use `profile=clawd` (Simplify is installed there)
+- Let Simplify handle autofill, fill custom questions yourself
 - Report back: SUCCESS / SKIPPED / FAILED / NEEDS_INPUT
-- Include feedback on what worked and what didn't
+- Include open-ended responses and feedback
 
 ### Resume Upload is MANDATORY
-**An application is NOT successful unless the resume has been uploaded.** If the resume upload fails:
-1. Retry with different selectors (file input, button, drag-drop area)
-2. Try JavaScript-based file injection
-3. If all attempts fail → report as **FAILED**, not SUCCESS
-4. Never submit an application without confirming the resume file was attached
+**An application is NOT successful unless the resume has been uploaded.**
+- Simplify should handle resume upload automatically
+- Verify the filename is visible before submitting
+- If Simplify fails to upload resume → report as NEEDS_INPUT with form URL
 
 ### Salary Expectations
 **When asked about salary expectations, ALWAYS provide the TOP of our target range: $250,000**
@@ -505,30 +505,17 @@ Before opening any new tabs, ALWAYS:
 
 ## Browser Connection Details
 
-**Main agent (searching/coordinating):**
+**IMPORTANT: All workers use `profile=clawd`** — this is the profile with Simplify Copilot installed.
+
 ```
 target: node
 node: noah-XPS-13-7390-2-in-1
 profile: clawd
 ```
 
-**Sub-agents (applying to jobs):**
-Each sub-agent MUST use its assigned browser profile to avoid tab conflicts.
-
-Available profiles for job applications:
-- `job-1` — port 18801
-- `job-2` — port 18802
-- `job-3` — port 18803
-- `job-4` — port 18804
-
-**Opening a new tab (main agent):**
+**Opening a new tab:**
 ```
 browser action=open target=node node=noah-XPS-13-7390-2-in-1 profile=clawd targetUrl=<url>
-```
-
-**Opening a new tab (sub-agent with assigned profile):**
-```
-browser action=open profile=<assigned-profile> targetUrl=<url>
 ```
 
 **Getting tab list:**
@@ -536,154 +523,83 @@ browser action=open profile=<assigned-profile> targetUrl=<url>
 browser action=tabs target=node node=noah-XPS-13-7390-2-in-1 profile=clawd
 ```
 
+---
+
+## Simplify Copilot Integration
+
+**Simplify Copilot** is a Chrome extension that handles form autofill, resume uploads, and React state management. It's installed on Noah's `clawd` browser profile.
+
+### How Simplify Works
+1. When you navigate to a job application page, Simplify detects the form
+2. It auto-fills standard fields (name, email, phone, resume, etc.) from Noah's saved profile
+3. It handles file uploads properly (no React state issues)
+4. Custom/open-ended questions still need to be filled by the worker
+
+### Worker Workflow with Simplify
+1. **Navigate** to the application URL
+2. **Wait 3-5 seconds** for Simplify to detect and autofill the form
+3. **Snapshot** the page to see what Simplify filled vs what's left
+4. **Fill custom questions** — "Why this company?", cover letters, etc. (use human voice!)
+5. **Verify** all required fields are filled (Simplify handles most, you handle custom)
+6. **Submit** the application
+7. **Report back** with open-ended responses and any feedback
+
+### What Simplify Handles
+- ✅ Name, email, phone
+- ✅ Resume upload (no more xdotool needed!)
+- ✅ Location fields
+- ✅ Work authorization questions
+- ✅ Standard demographic questions
+
+### What Workers Still Handle
+- ❌ "Why are you interested in this role?"
+- ❌ Custom company-specific questions
+- ❌ Cover letters
+- ❌ Technical questions about experience
+- ❌ Salary expectations (Simplify may fill but verify it says $250,000)
+
 ## ATS-Specific Patterns
 
+**Note:** With Simplify Copilot handling autofill, most ATS-specific workarounds are no longer needed. Simplify handles React state, file uploads, and form detection automatically.
+
+### General Guidance (All ATS)
+1. **Wait for Simplify** — After navigating, wait 3-5 seconds for autofill
+2. **Snapshot to verify** — Check what Simplify filled vs what's empty
+3. **Fill custom questions** — Focus on open-ended questions that need tailored responses
+4. **Verify before submit** — Make sure resume shows as uploaded, salary says $250,000
+
 ### Ashby (jobs.ashbyhq.com)
-- **Autofill:** Has "Upload file" button that auto-fills fields from resume
-- **Location field:** Combobox that shows suggestions as you type — type location, wait for dropdown, click the matching option. **If validation still fails after selection**, use JavaScript event dispatching:
-  ```javascript
-  // After typing/selecting location, dispatch events to update React state
-  const field = document.querySelector('[data-testid="location-input"]') || document.querySelector('input[placeholder*="location"]');
-  field.dispatchEvent(new Event('input', {bubbles: true}));
-  field.dispatchEvent(new Event('change', {bubbles: true}));
-  field.dispatchEvent(new Event('blur', {bubbles: true}));
-  ```
-- **Yes/No toggle buttons:** Often styled as toggle buttons, not radio buttons. These can be finicky — use `hover` action on the button before `click` to ensure the selection registers properly.
-
-#### Ashby React State Management Issues
-**Problem:** Ashby uses React forms where DOM manipulation doesn't update React's internal state.
-**Symptom:** Resume uploads succeed at DOM level, form fields appear filled, but validation shows "missing entry for required field."
-**Root cause:** JavaScript `input`/`change` events don't properly trigger React's state management.
-
-**Solutions (in order of preference):**
-1. **Use the Autofill feature** — Click "Upload file" in the autofill section, let Ashby parse the resume and populate fields itself. This updates React state properly.
-2. **xdotool for native interaction** — Bypass React entirely by using OS-level keyboard/mouse input.
-3. **React event dispatching** — After filling fields, dispatch multiple events:
-   ```javascript
-   field.dispatchEvent(new Event('input', {bubbles: true}));
-   field.dispatchEvent(new Event('change', {bubbles: true}));
-   field.dispatchEvent(new Event('blur', {bubbles: true}));
-   ```
-
-**If all else fails:** Flag for manual completion rather than burning tokens on repeated failures.
-
-#### Resume Upload Strategy (All ATS)
-
-**Step 1: Try browser upload action**
-```
-browser action=upload profile=<profile> targetId=<id> selector="input[type=file]" paths=["/home/noah/Downloads/Resume (Kontur, Noah).pdf"]
-```
-
-**Step 2: Verify upload succeeded**
-Snapshot the form and check for filename visible (e.g., "Resume (Kontur, Noah).pdf" with a delete/replace button).
-
-**Step 3: If upload failed → Use xdotool fallback**
-
-Some ATS platforms (especially Ashby with react-dropzone) don't respond to programmatic file input. Use native OS interaction via xdotool:
-
-```bash
-# 1. Find and activate the Chrome window
-xdotool search --name "Google Chrome"  # returns window ID
-xdotool windowactivate --sync <window_id>
-
-# 2. Get upload button coordinates via browser tool
-browser action=act request={"kind": "evaluate", "fn": "() => { const btns = Array.from(document.querySelectorAll('button')); const btn = btns.find(b => b.textContent.includes('Upload File') || b.textContent.includes('Replace')); if (!btn) return null; const rect = btn.getBoundingClientRect(); return { x: rect.x + rect.width/2, y: rect.y + rect.height/2 }; }"}
-
-# 3. Get window geometry to calculate screen coordinates
-xdotool getwindowgeometry <window_id>  # returns position and size
-
-# 4. Calculate screen coords: window_x + viewport_x, window_y + ~90 (chrome) + viewport_y
-# Click the upload button
-xdotool mousemove <screen_x> <screen_y> click 1
-
-# 5. Wait for file picker, then find and activate it
-xdotool search --name "Open"  # GNOME file picker
-xdotool windowactivate --sync <picker_window_id>
-
-# 6. Use Ctrl+L to open path entry, type path, press Enter
-xdotool key ctrl+l
-xdotool key ctrl+a
-xdotool type --clearmodifiers "/home/noah/Downloads/Resume (Kontur, Noah).pdf"
-xdotool key Return
-```
-
-**xdotool is available on Noah's node:**
-```
-nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "..."]
-```
-
-**Step 4: If xdotool also fails → Telegram notification**
-```
-message action=send channel=telegram target=8531859108 message="🚨 Resume upload failed for <Company>. Form is ready at <URL> - please upload manually."
-```
-
-**Always verify:** After any upload method, snapshot the form and confirm the filename is visible before submitting.
+- Simplify handles autofill well
+- Watch for Yes/No toggle buttons — may need to click them manually
+- Custom questions often appear at the bottom
 
 ### Greenhouse (boards.greenhouse.io)
-- Different structure, typically more fields
-- May require cover letter (check if optional)
-- **Phone country code:** Often has a separate "Country" dropdown specifically for phone number area code, distinct from the "In which country do you reside?" question. Easy to miss — look for it near the phone number field.
-- **reCAPTCHA:** Greenhouse often has invisible reCAPTCHA that blocks programmatic submission. If form is complete but submit fails, notify Noah via Telegram to solve CAPTCHA manually.
-
-#### Greenhouse Resume Upload (CRITICAL — Standard Upload Often Fails)
-
-**Problem:** Greenhouse's React form state doesn't update properly with browser upload actions. The upload appears to succeed but form still shows "Resume/CV is required" error.
-
-**Solution: xdotool Native Interaction** (proven to work 2026-02-01)
-
-If standard `browser action=upload` fails on Greenhouse, use this xdotool workflow:
-
-```bash
-# 1. Find Chrome windows
-nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "search", "--name", "Google Chrome"]
-# Returns window IDs like "20971524\n10485764\n"
-
-# 2. Get attach button coordinates via browser evaluate
-browser action=act profile=job-1 targetId=<id> request={"kind": "evaluate", "fn": "() => { const btns = Array.from(document.querySelectorAll('button')); const btn = btns.find(b => b.textContent.includes('Attach')); if (!btn) return null; const rect = btn.getBoundingClientRect(); return { x: rect.x + rect.width/2, y: rect.y + rect.height/2 }; }"}
-
-# 3. Get window geometry
-nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "getwindowgeometry", "<window_id>"]
-# Returns: "Window 20971524\n  Position: 892,27 (screen: 0)\n  Geometry: 980x1193"
-
-# 4. Calculate screen coordinates
-# screen_x = window_x + button_viewport_x
-# screen_y = window_y + 90 (Chrome toolbar) + button_viewport_y
-
-# 5. Activate window and click
-nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "windowactivate", "--sync", "<window_id>"]
-nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "mousemove", "<screen_x>", "<screen_y>", "click", "1"]
-
-# 6. Wait for file picker
-nodes action=run node=noah-XPS-13-7390-2-in-1 command=["sleep", "1"]
-nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "search", "--name", "Open"]
-# Returns file picker window ID
-
-# 7. Activate file picker and enter path
-nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "windowactivate", "--sync", "<picker_id>"]
-nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "ctrl+l"]
-nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "ctrl+a"]
-nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "type", "--clearmodifiers", "/home/noah/Downloads/Resume (Kontur, Noah).pdf"]
-nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "Return"]
-
-# 8. Verify upload succeeded by checking form for filename
-```
-
-**Key tips:**
-- Chrome toolbar is ~90 pixels, add to y coordinate calculation
-- Use `--clearmodifiers` with `xdotool type` to avoid modifier key interference
-- File picker window is named "Open" on GNOME
-- Always verify upload by checking if filename appears in form after upload
+- Simplify handles resume upload (no more xdotool needed!)
+- May have reCAPTCHA — if blocked, notify Noah to solve manually
+- Often has many custom questions — focus on those
 
 ### Lever (jobs.lever.co)
+- Simplify handles most fields
+- "Additional information" section often needs custom cover letter
 
-**Resume Upload:**
-- Lever's file input often doesn't respond to programmatic upload
-- **Preferred method:** Use xdotool to click the ATTACH/UPLOAD button, then use native file picker
-- The "Couldn't auto-read your resume" message is **normal and expected** — not an error. Lever just means it didn't parse fields from the PDF. Continue with the application.
+### Workday (myworkdayjobs.com)
+- Multi-step forms — Simplify should handle each page
+- May need to click "Continue" between steps
+- Account creation handled by Simplify's saved credentials
 
-**Demographic Survey:**
-- Lever's demographic questions (gender, race, veteran status, disability) are truly optional
-- You can leave them blank without selecting "Prefer not to disclose"
+### If Simplify Doesn't Autofill
+If Simplify doesn't trigger (page loads but fields stay empty):
+1. **Refresh the page** — Sometimes Simplify needs a fresh load
+2. **Click on a form field** — Can trigger Simplify's detection
+3. **Check for Simplify icon** — Should appear in the form area
+4. **Report the issue** — If Simplify consistently fails on a platform, report it so we can investigate
+
+### If All Else Fails
+If Simplify can't fill a critical field (especially resume):
+```
+message action=send channel=telegram target=8531859108 message="🚨 Simplify couldn't fill <field> for <Company>. Form is ready at <URL> - please complete manually."
+```
+Then report as NEEDS_INPUT with the form URL.
 - This is simpler than Ashby which requires explicit selection
 
 **Other notes:**
@@ -880,14 +796,14 @@ For each job in the scout's list, spawn ONE worker at a time:
 sessions_spawn(
   label: "jobs.apply.<company>",
   model: "anthropic/claude-sonnet-4-20250514",
-  task: "Apply to <Company> - <Role>. Job ID: <id>. URL: <url>. Browser profile: job-1. Read job-hunting skill at /home/node/clawd/skills/job-hunting/SKILL.md, section WORKER INSTRUCTIONS.",
+  task: "Apply to <Company> - <Role>. Job ID: <id>. URL: <url>. Read job-hunting skill at /home/node/clawd/skills/job-hunting/SKILL.md, section WORKER INSTRUCTIONS. Use Simplify for autofill, fill custom questions, verify, submit.",
   runTimeoutSeconds: 1800
 )
 ```
 
-**Always use browser profile `job-1`** — only one worker at a time.
+**All workers use `profile=clawd`** — this is where Simplify Copilot is installed.
 
-⚠️ **NEVER RUN WORKERS IN PARALLEL** — even on different profiles. Workers clobber each other on the node. Wait for each worker to complete before spawning the next.
+⚠️ **NEVER RUN WORKERS IN PARALLEL** — Workers share the same browser profile. Wait for each worker to complete before spawning the next.
 
 ### Handling Worker Results
 
@@ -950,82 +866,65 @@ Apply to this specific job:
 - Company: <name>
 - Role: <title>
 - Application URL: <url>
-- Browser Profile: job-1  ← YOUR ISOLATED BROWSER
 
-Read the job-hunting skill. Follow the application workflow.
-Use ONLY your assigned browser profile (job-1/job-2/job-3/job-4).
+Read the job-hunting skill. Use Simplify for autofill, fill custom questions, verify, submit.
 Report back when done: SUCCESS / FAILED / NEEDS_INPUT
 ```
 
-**Sub-agent workflow:**
+**Worker Workflow (with Simplify):**
 
-1. **Check node connectivity FIRST** — Run `nodes action=status` and verify `noah-XPS-13-7390-2-in-1` shows `"connected": true`. **If disconnected, IMMEDIATELY terminate** with: `BLOCKED: Node disconnected. Cannot proceed.` Do NOT attempt workarounds.
-2. **Read the skill** — Load SKILL.md for profile, resume path, persona guidance
+1. **Check node connectivity FIRST** — Run `nodes action=status` and verify `noah-XPS-13-7390-2-in-1` shows `"connected": true`. **If disconnected, IMMEDIATELY terminate** with: `BLOCKED: Node disconnected. Cannot proceed.`
+
+2. **Read the skill** — Load SKILL.md for voice guidance and standard fields
+
 3. **Validate job criteria** — Before filling anything:
    - Open the job posting and READ the full description
    - Verify salary: top of range must be ≥ $200k
    - Verify location: must be Remote **AND** US-based
-     - ✅ "Remote (US)" or "Remote (United States)" — proceed
-     - ✅ "Remote (North America)" — proceed (US is in NA)
-     - ❌ "Remote (Canada)", "Remote (UK)", "Remote (EMEA)", etc. — REJECT
-     - Check job description for "must be located in [non-US country]" — REJECT
    - **If criteria don't match → IMMEDIATELY TERMINATE and report:**
-     `SKIPPED: <Company> - <Role> - <reason: e.g. "Hybrid only" or "Max salary $180k" or "Remote Canada only">`
-   - Do NOT waste time on applications that don't meet criteria
-4. **Create checkpoint** — `in_progress/<jobId>.json` for crash recovery
-5. **Open new tab in YOUR profile** — `browser action=open profile=<assigned-profile> targetUrl=<url>`
-   - CRITICAL: Always use the profile assigned in your task
-   - Do NOT use `profile=clawd` or `target=node` — those are for the main agent
-   - Each sub-agent gets its own isolated browser instance
-6. **Fill application** — Follow standard workflow, BE Noah (first person)
-7. **Handle prompts:**
-   - Standard fields → fill from profile
-   - Stories → use stories.md, or NEEDS_INPUT if none fit
-   - "Why this company?" → research and craft response per skill guidelines
-8. **Submit** — Click submit (no user confirmation needed for sub-agents)
-9. **Verify resume upload** — Before submitting, CONFIRM the resume was attached:
-   - Check for filename visible in the form
-   - Look for upload success indicator
-   - If resume upload failed → DO NOT SUBMIT → report as FAILED
-10. **Report back** — Send result to main session:
-   - `SUCCESS: Applied to <Company> - <Role>` (ONLY if resume was uploaded)
-   - `SKIPPED: <Company> - <Role> - <reason>` (job didn't meet criteria after reading description)
-   - `FAILED: <reason>` (including "resume upload failed")
-   - `NEEDS_INPUT: <question that needs Noah's answer>`
-11. **Include open-ended responses** — If you wrote ANY free-text responses (e.g., "Why are you interested?", cover letter, personal story), include them in your report:
-   ```
-   **Open-Ended Responses:**
-   
-   Q: "Why are you interested in [Company]?"
-   A: "I'm drawn to Render's goal of eliminating undifferentiated infrastructure work. At Nvidia, I saw how much engineering time gets lost to cloud complexity..."
-   ```
-   This lets the main agent review quality and provide feedback to Noah if needed.
+     `SKIPPED: <Company> - <Role> - <reason>`
 
-12. **Include feedback** — With EVERY report (success or failure), add a `**Feedback:**` section:
-   - What worked well?
-   - What was frustrating or harder than expected?
-   - What's missing from the skill that would have helped?
-   - Any edge cases the skill doesn't cover?
-   - Suggestions for improvement?
-   
-   Example:
-   ```
-   SUCCESS: Applied to Render - Software Engineer, Infrastructure
-   
-   **Open-Ended Responses:**
-   Q: "Why are you interested in Render?"
-   A: "I'm drawn to Render's goal of eliminating undifferentiated infrastructure work..."
-   
-   **Feedback:**
-   - xdotool fallback worked great for resume upload
-   - The "Why this company?" guidance was helpful
-   - Frustration: Had to guess at button coordinates, wish there was a more reliable way
-   - Suggestion: Add guidance for handling multi-page application forms
-   ```
-13. **Clean up:**
-   - Delete checkpoint file if created
-   - **Close the browser tab on SUCCESS:** `browser action=close profile=<your-profile> targetId=<your-targetId>`
-   - This keeps browser clean for next sub-agent
+4. **Navigate to application** — `browser action=open target=node node=noah-XPS-13-7390-2-in-1 profile=clawd targetUrl=<application-url>`
+
+5. **Wait for Simplify autofill** — Wait 3-5 seconds for Simplify to detect the form and fill standard fields
+
+6. **Snapshot the form** — `browser action=snapshot` to see:
+   - What Simplify filled (should be: name, email, phone, resume, location, etc.)
+   - What's still empty (usually: custom questions, "why this company?", cover letters)
+
+7. **Fill custom questions** — For any open-ended questions:
+   - Use HUMAN voice (see Voice & Persona section)
+   - Research the company for specific details
+   - Keep responses concise and genuine
+
+8. **Verify before submit:**
+   - ✅ Resume shows as uploaded (filename visible)
+   - ✅ Salary expectation says $250,000 (not lower)
+   - ✅ All required fields are filled
+   - ✅ No validation errors visible
+
+9. **Submit** — Click the submit button
+
+10. **Report back:**
+    - `SUCCESS: Applied to <Company> - <Role>`
+    - `SKIPPED: <Company> - <Role> - <reason>`
+    - `FAILED: <reason>`
+    - `NEEDS_INPUT: <question>`
+
+11. **Include open-ended responses** — Always include what you wrote:
+    ```
+    **Open-Ended Responses:**
+    
+    Q: "Why are you interested in [Company]?"
+    A: "Render caught my attention because of your blog post on DNS dependency management..."
+    ```
+
+12. **Include feedback:**
+    - Did Simplify autofill work?
+    - What fields needed manual filling?
+    - Any issues or suggestions?
+
+13. **Clean up** — Close the browser tab: `browser action=close profile=clawd targetId=<id>`
 
 ### Continuous Improvement (Coordinator Responsibility)
 
