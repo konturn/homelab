@@ -198,6 +198,12 @@ services:
       - /etc/ssl/certs:/etc/ssl/certs
       - /etc/ssl/private:/etc/ssl/private
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3579/api/v1/Status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
   nzbget:
     image: linuxserver/nzbget
     container_name: nzbget
@@ -214,6 +220,12 @@ services:
       - /mpool/plex/Movies:/movies
       - /mpool/samba_share/nfs:/remote
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6789"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   radarr:
     image: linuxserver/radarr:6.1.0-nightly
     container_name: radarr
@@ -250,6 +262,12 @@ services:
     volumes:
       - {{ docker_persistent_data_path }}/jackett:/config
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9117/UI/Login"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   sonarr:
     image: linuxserver/sonarr
     container_name: sonarr
@@ -291,6 +309,12 @@ services:
       - /mpool/audioserve/audiobooks:/audiobooks
       - /mpool/audioserve/data:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   influxdb:
     container_name: influxdb
     ports:
@@ -381,6 +405,12 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3100/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   gitlab:
     container_name: gitlab
     ports:
@@ -424,6 +454,12 @@ services:
     volumes:
       - '{{ docker_persistent_data_path }}/deluge:/config'
       - '/mpool/samba_share/nfs:/downloads'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8112"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   bitwarden:
     container_name: bitwarden
     ports:
@@ -436,6 +472,12 @@ services:
       - '{{ docker_persistent_data_path }}/bitwarden/data/:/data/'
     env_file:
       - '{{ docker_persistent_data_path }}/bitwarden/global.override.env'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/alive"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   blog:
     image: wordpress
     container_name: wordpress
@@ -473,6 +515,12 @@ services:
       MYSQL_ROOT_PASSWORD: {{ lookup('env', 'WORDPRESS_DB_PASSWORD') }}
     volumes:
       - wordpress_db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p{{ lookup('env', 'WORDPRESS_DB_PASSWORD') }}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
   diagram:
     container_name: diagram
     ports:
@@ -481,6 +529,12 @@ services:
       internal:
     image: jgraph/drawio
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   watchtower:
     container_name: watchtower
     restart: unless-stopped
@@ -540,6 +594,12 @@ services:
     restart: unless-stopped
     devices:
       - "/dev/snd"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 1704 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   snapclient_office:
     container_name: snapclient_office
     networks:
@@ -665,6 +725,12 @@ services:
       - registry:/var/lib/registry
       - {{ docker_persistent_data_path }}/registry/auth:/auth
       - {{ docker_persistent_data_path }}/certs:/certs
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "--no-check-certificate", "https://localhost:443/v2/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   mosquitto:
     container_name: mosquitto
     image: eclipse-mosquitto
@@ -676,6 +742,12 @@ services:
       - "{{ docker_persistent_data_path }}/mqtt/conf:/mosquitto/config"
       - mosquitto:/mosquitto/data
       - "{{ docker_persistent_data_path }}/certs:/mosquitto/certs"
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1", "-W", "3"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   amcrest2mqtt:
     container_name: amcrest2mqtt
     image: registry.lab.nkontur.com/amcrest2mqtt:latest
@@ -728,6 +800,12 @@ services:
       - "{{ docker_persistent_data_path }}/zigbee2mqtt:/app/data"
     environment:
       - TZ=America/New_York
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
   paperless-ngx:
     image: lscr.io/linuxserver/paperless-ngx:latest
     container_name: paperless-ngx
@@ -748,6 +826,12 @@ services:
       - "{{ docker_persistent_data_path }}/paperless:/config"
       - "/mpool/nextcloud/paperless:/data"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
   mopidy:
     image: wernight/mopidy
     container_name: mopidy
@@ -767,6 +851,12 @@ services:
     ports:
       - "443:6680"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6680"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   nextcloud_db:
     image: mariadb
     container_name: nextcloud_database
@@ -787,6 +877,12 @@ services:
       - MYSQL_PASSWORD={{ lookup('env', 'NEXTCLOUD_DB_PASSWORD') }}
       - MYSQL_DATABASE=nextcloud
       - MYSQL_USER=nextcloud
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
   nextcloud:
     image: nextcloud:32.0.1
     container_name: nextcloud
@@ -829,6 +925,12 @@ services:
       - TZ=America/New_York
     volumes:
       - {{ docker_persistent_data_path }}/prowlarr:/config
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9696/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
   moltbot-gateway:
     build:
       context: "{{ docker_persistent_data_path }}/moltbot/build"
