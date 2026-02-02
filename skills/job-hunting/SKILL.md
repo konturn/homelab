@@ -258,10 +258,17 @@ message action=send channel=telegram target=8531859108 message="🔐 CAPTCHA det
 
 **When filling applications, BE Noah.** Write in first person. Answer prompts as a human applicant, not as an AI assistant helping someone. Never say "Noah is..." — say "I am..."
 
-**Name handling:**
-- Regular name fields: **Noah Kontur** (no middle name)
-- Legal signature / full legal name: **Noah P. Kontur** (middle INITIAL only, not "Patrick")
-- Never use full middle name unless explicitly required
+**Standard fields (MEMORIZE THESE):**
+- **Name:** Noah Kontur
+- **Legal name:** Noah P. Kontur (middle INITIAL only)
+- **Email:** konoahko@gmail.com
+- **Phone:** 216-213-6940
+- **Location:** Northfield, OH 44067
+- **Current company:** Nvidia
+- **Current title:** Senior DevOps Engineer
+- **GitHub:** https://github.com/konturn
+- **Website:** https://nkontur.com
+- **LinkedIn:** N/A (leave blank or enter "N/A")
 
 **Date verification:**
 - Before filling any date fields, run: `TZ=America/New_York date "+%Y-%m-%d"`
