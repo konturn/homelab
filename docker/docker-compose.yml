@@ -67,12 +67,6 @@ networks:
               shim2: 10.5.0.2
     driver_opts:
       parent: bond0.5
-  ci:
-    # Bridge network for CI jobs - enables DNS resolution to docker-socket-proxy
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.28.0.0/16
 services:
   # Docker socket proxy - filtered access for CI builds
   # Only allows build/image operations, blocks exec/start/stop
@@ -82,8 +76,7 @@ services:
     restart: unless-stopped
     networks:
       mgmt:
-      ci:
-        ipv4_address: 172.28.0.2
+        ipv4_address: {{ docker_socket_proxy_ip }}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:

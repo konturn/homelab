@@ -23,10 +23,9 @@ check_interval = 0
   executor = "docker"
   [runners.docker]
     image = "docker:24"
-    # Use ci bridge network for DNS resolution to docker-socket-proxy
-    network_mode = "docker_ci"
+    network_mode = "docker_mgmt"
     privileged = false
     volumes = ["/cache/gitlab-runner:/cache"]
   [runners.environment]
-    # Use docker-socket-proxy instead of direct socket
-    DOCKER_HOST = "tcp://docker-socket-proxy:2375"
+    # Use docker-socket-proxy instead of direct socket (static IP on mgmt network)
+    DOCKER_HOST = "tcp://{{ docker_socket_proxy_ip }}:2375"
