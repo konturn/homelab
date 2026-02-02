@@ -66,6 +66,7 @@ all:
     tailscale_api_token: "{{ lookup('env', 'TAILSCALE_API_TOKEN') }}"
     grafana_url: "http://grafana:3000"
     grafana_token: "{{ lookup('env', 'GRAFANA_TOKEN') }}"
+    brave_api_key: "{{ lookup('env', 'BRAVE_API_KEY') }}"
     is_satellite: false
     headway_area: "ohio-latest"
     headway_url: "https://headway.iot.lab.nkontur.com"
