@@ -72,6 +72,10 @@ satellite-2:validate:
 moltbot:build:
   stage: build
   image: docker:24
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_TLS_CERTDIR: ""  # Disable TLS for faster dind startup
   before_script:
     - echo "$DOCKER_REGISTRY_KEY" | docker login -u docker --password-stdin registry.lab.nkontur.com
   script:
