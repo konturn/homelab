@@ -203,6 +203,16 @@
   register: docker_config_copy
   loop: "{{ docker_config + (docker_config_nginx | default([])) }}"
 
+- name: Rebuild moltbot-gateway image if Dockerfile changed
+  ansible.builtin.command:
+    cmd: "docker compose -f {{ docker_compose_dest_path }}/docker-compose.yml build --no-cache moltbot-gateway"
+  when: >
+    not ansible_check_mode and
+    docker_config_copy.results | selectattr('item.name', 'equalto', 'moltbot-gateway') 
+                               | selectattr('item.src', 'search', 'Dockerfile$') 
+                               | selectattr('changed', 'equalto', true) 
+                               | list | length > 0
+
 - name: Create and start Docker services
   community.docker.docker_compose_v2:
     project_name: "{{ docker_compose_project_name | default('docker') }}"

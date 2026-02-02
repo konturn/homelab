@@ -830,6 +830,7 @@ services:
     restart: unless-stopped
     networks:
       internal:
+      iot:
       mgmt:
         ipv4_address: 10.4.0.50
     ports:
