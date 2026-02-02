@@ -233,3 +233,25 @@ Skills are shared. Your setup is yours. Keeping them apart means you can update 
 ---
 
 Add whatever helps you do your job. This is your cheat sheet.
+
+---
+
+## SSH Access (Persistent Keys)
+
+**Key location:** `/home/node/clawd/.ssh/` (persistent across restarts)
+**Symlink:** `~/.ssh → /home/node/clawd/.ssh/`
+
+**Public key (add to `~/.ssh/authorized_keys` on target machines):**
+```
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC6Zp0OU50mhMJvZmiECrSZlq9qvpss+W5gmCsRMuNi1 prometheus@moltbot
+```
+
+**After container restart, recreate symlink:**
+```bash
+ln -sf /home/node/clawd/.ssh ~/.ssh
+```
+
+**Usage:**
+```bash
+ssh user@hostname
+```
