@@ -22,12 +22,15 @@
 - name: Install minidsp-rs package
   ansible.builtin.apt:
     deb: "https://github.com/mrene/minidsp-rs/releases/download/v0.1.7/minidsp_0.1.7_{{ minidsp_arch }}.deb"
+  register: minidsp_package
 
 - name: Make sure minidsp is started and enabled
   service:
     name: minidsp
     state: started
     enabled: yes
+  # Skip in check mode if package was just installed (service won't exist yet)
+  when: not (ansible_check_mode and minidsp_package.changed)
 
 - name: Template out minidsp file
   ansible.builtin.template:
