@@ -73,21 +73,23 @@ satellite-2:validate:
 .deploy:
   extends: .ansible
   stage: deploy
-  resource_group: deploy-$CI_JOB_NAME  # Each job gets its own lock
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
 
 router:deploy:
   extends: .deploy
+  resource_group: deploy-router
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml
 
 zwave:deploy:
   extends: .deploy
+  resource_group: deploy-zwave
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/zwave.yml
 
 satellite-2:deploy:
   extends: .deploy
+  resource_group: deploy-satellite-2
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml
