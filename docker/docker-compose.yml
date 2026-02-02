@@ -68,6 +68,35 @@ networks:
     driver_opts:
       parent: bond0.5
 services:
+  # Docker socket proxy - filtered access for CI builds
+  # Only allows build/image operations, blocks exec/start/stop
+  docker-socket-proxy:
+    container_name: docker-socket-proxy
+    image: tecnativa/docker-socket-proxy:latest
+    restart: unless-stopped
+    networks:
+      - mgmt
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      # Allow build operations
+      - BUILD=1
+      - IMAGES=1
+      - COMMIT=1
+      # Allow auth for registry push
+      - AUTH=1
+      # Deny dangerous operations
+      - CONTAINERS=0
+      - EXEC=0
+      - NETWORKS=0
+      - VOLUMES=0
+      - POST=1  # Needed for build/push
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:2375/_ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   plex:
     container_name: plex
     ports:
@@ -932,10 +961,7 @@ services:
       retries: 3
       start_period: 60s
   moltbot-gateway:
-    build:
-      context: "{{ docker_persistent_data_path }}/moltbot/build"
-      dockerfile: Dockerfile
-    image: moltbot-custom:latest
+    image: registry.lab.nkontur.com/moltbot-gateway:latest
     container_name: moltbot-gateway
     restart: unless-stopped
     networks:
