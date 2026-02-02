@@ -28,6 +28,7 @@ variables:
 
 stages:
   - validate
+  - build
   - deploy
 
 # =============================================================================
@@ -63,6 +64,28 @@ satellite-2:validate:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml --check --diff
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# =============================================================================
+# Build (main branch only) - Build container images
+# =============================================================================
+
+moltbot:build:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - echo "$DOCKER_REGISTRY_KEY" | docker login -u docker --password-stdin registry.lab.nkontur.com
+  script:
+    - docker build -t registry.lab.nkontur.com/moltbot-gateway:latest -t registry.lab.nkontur.com/moltbot-gateway:$CI_COMMIT_SHORT_SHA docker/moltbot/
+    - docker push registry.lab.nkontur.com/moltbot-gateway:latest
+    - docker push registry.lab.nkontur.com/moltbot-gateway:$CI_COMMIT_SHORT_SHA
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - docker/moltbot/**/*
 
 # =============================================================================
 # Deploy (main branch only) - Actual deployment
