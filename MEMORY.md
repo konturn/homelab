@@ -127,3 +127,6 @@ When I wake up, if I see processes, skills, or md files that can be improved —
 *Last reviewed: 2026-02-01*
 -e 
 - **Native file dialogs block browser automation.** When an upload button opens the OS file picker, automation can't interact with it. Use direct file input injection (browser upload with selector) instead of clicking upload buttons. If dialog is stuck open, dismiss with `xdotool key Escape`.
+
+- **Verify the right thing.** Workers checking for file picker windows to verify resume upload was wrong — file picker closes after upload. Always verify by checking the actual form state (is filename visible?). Checking the wrong signal caused false negatives.
+- **Proactive cleanup before work.** Run cleanup commands (e.g., dismiss dialogs) BEFORE starting work, not just reactively. Previous workers may have left state that breaks the next worker.
