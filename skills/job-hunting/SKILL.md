@@ -612,19 +612,48 @@ browser action=tabs target=node node=noah-XPS-13-7390-2-in-1 profile=clawd
 
 **Resume upload is the most critical step.** If Simplify doesn't upload the resume, use these fallbacks:
 
-### Step 1: Try browser upload action
+### ⚠️ CRITICAL: Native File Dialog Problem
+
+**Browser automation CANNOT interact with native OS file dialogs.**
+
+When a "Choose File" or "Upload" button is clicked, the OS opens a native file picker (GTK/GNOME dialog on Linux). This dialog:
+- Is outside the browser's DOM — browser tools cannot see or control it
+- Blocks other page interactions while open
+- Will sit there indefinitely if not handled
+- **Causes automation failures and hangs**
+
+**If a file dialog is already open:**
+```bash
+# Dismiss it with Escape key
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "Escape"]
+```
+
+**Then use the correct approach below.**
+
+### Step 1: Try browser upload action (CORRECT APPROACH)
+
+The `browser action=upload` with `selector` targeting the `<input type="file">` element injects the file directly WITHOUT opening the native dialog:
+
 ```
 browser action=upload profile=clawd targetId=<id> selector="input[type=file]" paths=["/home/noah/Downloads/Resume (Kontur, Noah).pdf"]
 ```
 
+**DO NOT** click "Upload Resume" or "Attach File" buttons — they open the native dialog. Instead, find the hidden file input and upload to it directly.
+
 ### Step 2: Verify upload succeeded
 Snapshot the form and check for filename visible (e.g., "Resume (Kontur, Noah).pdf" with a delete/replace button).
 
-### Step 3: If upload failed → Use xdotool fallback
+### Step 3: If upload failed → Use xdotool fallback (LAST RESORT)
 
-Some ATS platforms (especially Greenhouse with React forms) don't respond to programmatic file input. Use native OS interaction via xdotool:
+Some ATS platforms (especially Greenhouse with React forms) don't respond to programmatic file input. Use native OS interaction via xdotool.
+
+**⚠️ This approach opens the native dialog intentionally and handles it — use only when Step 1 fails.**
 
 ```bash
+# 0. FIRST: Dismiss any existing file dialogs
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "Escape"]
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["sleep", "0.5"]
+
 # 1. Find Chrome windows
 nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "search", "--name", "Google Chrome"]
 
@@ -642,16 +671,24 @@ nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "getwindowgeom
 nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "windowactivate", "--sync", "<window_id>"]
 nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "mousemove", "<screen_x>", "<screen_y>", "click", "1"]
 
-# 6. Wait for file picker
+# 6. Wait for file picker to appear
 nodes action=run node=noah-XPS-13-7390-2-in-1 command=["sleep", "1"]
 nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "search", "--name", "Open"]
 
-# 7. Activate file picker and enter path
+# 7. Activate file picker and enter path (must complete within ~10 seconds)
 nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "windowactivate", "--sync", "<picker_id>"]
 nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "ctrl+l"]
 nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "ctrl+a"]
 nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "type", "--clearmodifiers", "/home/noah/Downloads/Resume (Kontur, Noah).pdf"]
 nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "Return"]
+
+# 8. CLEANUP: If any step failed, dismiss the dialog
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "Escape"]
+```
+
+**Common failure: xdotool times out or dialog stays open.** If you see the dialog is still open after automation, dismiss it:
+```bash
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "Escape"]
 ```
 
 ### Step 4: If xdotool also fails → Telegram notification

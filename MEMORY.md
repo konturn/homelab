@@ -125,3 +125,5 @@ When I wake up, if I see processes, skills, or md files that can be improved —
 ---
 
 *Last reviewed: 2026-02-01*
+-e 
+- **Native file dialogs block browser automation.** When an upload button opens the OS file picker, automation can't interact with it. Use direct file input injection (browser upload with selector) instead of clicking upload buttons. If dialog is stuck open, dismiss with `xdotool key Escape`.
