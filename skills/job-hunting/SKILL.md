@@ -578,6 +578,56 @@ message action=send channel=telegram target=8531859108 message="🚨 Resume uplo
 - Different structure, typically more fields
 - May require cover letter (check if optional)
 - **Phone country code:** Often has a separate "Country" dropdown specifically for phone number area code, distinct from the "In which country do you reside?" question. Easy to miss — look for it near the phone number field.
+- **reCAPTCHA:** Greenhouse often has invisible reCAPTCHA that blocks programmatic submission. If form is complete but submit fails, notify Noah via Telegram to solve CAPTCHA manually.
+
+#### Greenhouse Resume Upload (CRITICAL — Standard Upload Often Fails)
+
+**Problem:** Greenhouse's React form state doesn't update properly with browser upload actions. The upload appears to succeed but form still shows "Resume/CV is required" error.
+
+**Solution: xdotool Native Interaction** (proven to work 2026-02-01)
+
+If standard `browser action=upload` fails on Greenhouse, use this xdotool workflow:
+
+```bash
+# 1. Find Chrome windows
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "search", "--name", "Google Chrome"]
+# Returns window IDs like "20971524\n10485764\n"
+
+# 2. Get attach button coordinates via browser evaluate
+browser action=act profile=job-1 targetId=<id> request={"kind": "evaluate", "fn": "() => { const btns = Array.from(document.querySelectorAll('button')); const btn = btns.find(b => b.textContent.includes('Attach')); if (!btn) return null; const rect = btn.getBoundingClientRect(); return { x: rect.x + rect.width/2, y: rect.y + rect.height/2 }; }"}
+
+# 3. Get window geometry
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "getwindowgeometry", "<window_id>"]
+# Returns: "Window 20971524\n  Position: 892,27 (screen: 0)\n  Geometry: 980x1193"
+
+# 4. Calculate screen coordinates
+# screen_x = window_x + button_viewport_x
+# screen_y = window_y + 90 (Chrome toolbar) + button_viewport_y
+
+# 5. Activate window and click
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "windowactivate", "--sync", "<window_id>"]
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "mousemove", "<screen_x>", "<screen_y>", "click", "1"]
+
+# 6. Wait for file picker
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["sleep", "1"]
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "search", "--name", "Open"]
+# Returns file picker window ID
+
+# 7. Activate file picker and enter path
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "windowactivate", "--sync", "<picker_id>"]
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "ctrl+l"]
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "ctrl+a"]
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "type", "--clearmodifiers", "/home/noah/Downloads/Resume (Kontur, Noah).pdf"]
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "Return"]
+
+# 8. Verify upload succeeded by checking form for filename
+```
+
+**Key tips:**
+- Chrome toolbar is ~90 pixels, add to y coordinate calculation
+- Use `--clearmodifiers` with `xdotool type` to avoid modifier key interference
+- File picker window is named "Open" on GNOME
+- Always verify upload by checking if filename appears in form after upload
 
 ### Lever (jobs.lever.co)
 
