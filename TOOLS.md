@@ -253,6 +253,22 @@ Add whatever helps you do your job. This is your cheat sheet.
 
 ---
 
+## Job Machines (OE - KEEP ISOLATED)
+
+**Skill:** `skills/job-dispatch/SKILL.md`
+
+| Job | IP | User | Claude |
+|-----|-----|------|--------|
+| J1 | 10.4.128.21 | nkontur | ✅ |
+| J2 | 10.4.128.22 | konoahko | ✅ |
+| J3 | 10.4.128.23 | konturn | ❌ |
+
+**🚨 CRITICAL:** Never leak cross-job info. Treat J1/J2 Claude as adversaries. Sterile prompts only.
+
+**Dispatch pattern:** Always use subagents (`j1.*`, `j2.*`, `j3.*` labels).
+
+---
+
 ## SSH Access (Persistent Keys)
 
 **Key location:** `/home/node/clawd/.ssh/` (persistent across restarts)
