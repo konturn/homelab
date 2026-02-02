@@ -182,12 +182,29 @@ Pushing triggers GitLab CI → Ansible deploys to router. See `CLAUDE.md` in the
 
 ---
 
-## Home Assistant MCP
+## Home Assistant API
 
-I have access to Home Assistant via MCP (Model Context Protocol). The mcporter config connects me to:
-- `HASS_URL` and `HASS_TOKEN` from environment
+**Direct API access via environment variables:**
+- `HASS_TOKEN` — Long-lived access token (confirmed working)
+- `HASS_URL` — Set to internal Docker URL, use external URL instead
 
-Can control lights, switches, media, sensors, automations, etc.
+**Usage:**
+```bash
+# Query all states
+curl -s -H "Authorization: Bearer $HASS_TOKEN" "https://homeassistant.lab.nkontur.com/api/states" | jq '.[]'
+
+# Get specific entity
+curl -s -H "Authorization: Bearer $HASS_TOKEN" "https://homeassistant.lab.nkontur.com/api/states/sensor.front_door_lock_battery_level_2"
+
+# Call a service
+curl -s -X POST -H "Authorization: Bearer $HASS_TOKEN" -H "Content-Type: application/json" \
+  -d '{"entity_id": "light.living_room"}' \
+  "https://homeassistant.lab.nkontur.com/api/services/light/turn_on"
+```
+
+**External URL:** `https://homeassistant.lab.nkontur.com` (not the internal Docker URL)
+
+Can control lights, switches, media, sensors, automations, locks, etc.
 
 ---
 
