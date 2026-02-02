@@ -1,0 +1,16 @@
+---
+- name: daemon reload
+  systemd:
+    daemon_reload: yes
+
+- name: restart mullvad-failover
+  systemd:
+    name: mullvad-failover.service
+    state: restarted
+  ignore_errors: yes
+
+- name: enable mullvad-failover timer
+  systemd:
+    name: mullvad-failover.timer
+    state: started
+    enabled: yes

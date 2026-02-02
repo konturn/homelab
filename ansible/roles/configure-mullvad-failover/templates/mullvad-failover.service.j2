@@ -1,0 +1,19 @@
+[Unit]
+Description=Mullvad WireGuard Adaptive Failover
+Documentation=https://gitlab.lab.nkontur.com/root/homelab
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/mullvad-failover.sh
+Environment=WIREGUARD_INTERFACE={{ mullvad_wireguard_interface | default('wg-mullvad') }}
+
+# Security hardening
+NoNewPrivileges=no
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
