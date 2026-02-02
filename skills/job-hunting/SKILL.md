@@ -527,79 +527,166 @@ browser action=tabs target=node node=noah-XPS-13-7390-2-in-1 profile=clawd
 
 ## Simplify Copilot Integration
 
-**Simplify Copilot** is a Chrome extension that handles form autofill, resume uploads, and React state management. It's installed on Noah's `clawd` browser profile.
+**Simplify Copilot** is a Chrome extension that handles form autofill. It's installed on Noah's `clawd` browser profile.
 
 ### How Simplify Works
 1. When you navigate to a job application page, Simplify detects the form
-2. It auto-fills standard fields (name, email, phone, resume, etc.) from Noah's saved profile
-3. It handles file uploads properly (no React state issues)
+2. The Simplify panel appears with an "Autofill this page" button
+3. It fills fields from Noah's saved profile
 4. Custom/open-ended questions still need to be filled by the worker
 
-### Worker Workflow with Simplify
+### ⚠️ CRITICAL: Simplify Has Limitations (Greenhouse Iframe Issue)
+
+**Simplify does NOT reliably fill all fields**, especially on Greenhouse forms embedded in iframes.
+
+**What Simplify fills successfully:**
+- ✅ Dropdown/select fields (work authorization, yes/no questions)
+- ✅ Custom company-specific dropdown questions
+- ✅ EEO demographic fields
+- ✅ Some text fields (address, zip code, company name)
+
+**What Simplify often FAILS to fill (especially in Greenhouse iframes):**
+- ❌ First Name, Last Name
+- ❌ Email, Phone
+- ❌ Location/City
+- ❌ Resume upload
+- ❌ LinkedIn profile
+
+**Root cause:** Greenhouse forms use cross-origin iframes that prevent Simplify's DOM manipulation from reaching basic text input fields, even though dropdown interactions work.
+
+### Worker Workflow: Simplify + Manual Fill
+
+**The strategy is: Let Simplify do what it can, then fill anything it missed.**
+
 1. **Navigate** to the application URL
-2. **Wait 3-5 seconds** for Simplify to detect and autofill the form
-3. **Snapshot** the page to see what Simplify filled vs what's left
-4. **Fill custom questions** — "Why this company?", cover letters, etc. (use human voice!)
-5. **Verify** all required fields are filled (Simplify handles most, you handle custom)
-6. **Submit** the application
-7. **Report back** with open-ended responses and any feedback
+2. **Wait 3-5 seconds** for page to load
+3. **Trigger Simplify** — Look for and click "Autofill this page" button in Simplify panel
+4. **Wait 3-5 seconds** for Simplify to process
+5. **Snapshot** the page to see what got filled vs what's still empty
+6. **Manually fill ANY empty required fields:**
+   - First Name: `Noah`
+   - Last Name: `Kontur`
+   - Email: `konoahko@gmail.com`
+   - Phone: `216-213-6940`
+   - Location: `Northfield, OH` or `Northfield, Ohio, United States`
+   - LinkedIn: `N/A`
+7. **Handle resume upload** if Simplify didn't do it (see Resume Upload section below)
+8. **Fill custom questions** — "Why this company?", cover letters, etc. (use human voice!)
+9. **Verify** all required fields are filled, resume shows as uploaded
+10. **Submit** the application
+11. **Report back** with open-ended responses and any feedback
 
-### What Simplify Handles
-- ✅ Name, email, phone
-- ✅ Resume upload (no more xdotool needed!)
-- ✅ Location fields
-- ✅ Work authorization questions
-- ✅ Standard demographic questions
+### What Workers Handle (Always)
+- "Why are you interested in this role?"
+- Custom company-specific questions
+- Cover letters
+- Technical questions about experience
+- Salary expectations (verify it says $250,000, not lower)
+- **Any required field Simplify missed**
 
-### What Workers Still Handle
-- ❌ "Why are you interested in this role?"
-- ❌ Custom company-specific questions
-- ❌ Cover letters
-- ❌ Technical questions about experience
-- ❌ Salary expectations (Simplify may fill but verify it says $250,000)
+## Resume Upload (When Simplify Fails)
+
+**Resume upload is the most critical step.** If Simplify doesn't upload the resume, use these fallbacks:
+
+### Step 1: Try browser upload action
+```
+browser action=upload profile=clawd targetId=<id> selector="input[type=file]" paths=["/home/noah/Downloads/Resume (Kontur, Noah).pdf"]
+```
+
+### Step 2: Verify upload succeeded
+Snapshot the form and check for filename visible (e.g., "Resume (Kontur, Noah).pdf" with a delete/replace button).
+
+### Step 3: If upload failed → Use xdotool fallback
+
+Some ATS platforms (especially Greenhouse with React forms) don't respond to programmatic file input. Use native OS interaction via xdotool:
+
+```bash
+# 1. Find Chrome windows
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "search", "--name", "Google Chrome"]
+
+# 2. Get upload button coordinates via browser evaluate
+browser action=act profile=clawd targetId=<id> request={"kind": "evaluate", "fn": "() => { const btns = Array.from(document.querySelectorAll('button')); const btn = btns.find(b => b.textContent.includes('Attach') || b.textContent.includes('Upload')); if (!btn) return null; const rect = btn.getBoundingClientRect(); return { x: rect.x + rect.width/2, y: rect.y + rect.height/2 }; }"}
+
+# 3. Get window geometry
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "getwindowgeometry", "<window_id>"]
+
+# 4. Calculate screen coordinates
+# screen_x = window_x + button_viewport_x
+# screen_y = window_y + 90 (Chrome toolbar) + button_viewport_y
+
+# 5. Activate window and click
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "windowactivate", "--sync", "<window_id>"]
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "mousemove", "<screen_x>", "<screen_y>", "click", "1"]
+
+# 6. Wait for file picker
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["sleep", "1"]
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "search", "--name", "Open"]
+
+# 7. Activate file picker and enter path
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "windowactivate", "--sync", "<picker_id>"]
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "ctrl+l"]
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "ctrl+a"]
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "type", "--clearmodifiers", "/home/noah/Downloads/Resume (Kontur, Noah).pdf"]
+nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "Return"]
+```
+
+### Step 4: If xdotool also fails → Telegram notification
+```
+message action=send channel=telegram target=8531859108 message="🚨 Resume upload failed for <Company>. Form is ready at <URL> - please upload manually."
+```
+Then report as NEEDS_INPUT with the form URL.
+
+---
 
 ## ATS-Specific Patterns
 
-**Note:** With Simplify Copilot handling autofill, most ATS-specific workarounds are no longer needed. Simplify handles React state, file uploads, and form detection automatically.
-
 ### General Guidance (All ATS)
-1. **Wait for Simplify** — After navigating, wait 3-5 seconds for autofill
-2. **Snapshot to verify** — Check what Simplify filled vs what's empty
-3. **Fill custom questions** — Focus on open-ended questions that need tailored responses
-4. **Verify before submit** — Make sure resume shows as uploaded, salary says $250,000
+1. **Trigger Simplify first** — Click "Autofill this page" if the Simplify panel is visible
+2. **Wait, then snapshot** — Give Simplify 3-5 seconds, then check what it filled
+3. **Fill ALL empty required fields** — Don't assume Simplify got everything
+4. **Verify resume** — Make sure filename is visible before submitting
+5. **Verify salary** — Make sure it says $250,000, not lower
 
 ### Ashby (jobs.ashbyhq.com)
-- Simplify handles autofill well
-- Watch for Yes/No toggle buttons — may need to click them manually
+- Simplify usually handles these well
+- Watch for Yes/No toggle buttons — may need to click them manually (hover before click)
 - Custom questions often appear at the bottom
+- **React state issues:** If validation fails despite fields appearing filled, use hover-then-click on submit
 
-### Greenhouse (boards.greenhouse.io)
-- Simplify handles resume upload (no more xdotool needed!)
-- May have reCAPTCHA — if blocked, notify Noah to solve manually
-- Often has many custom questions — focus on those
+### Greenhouse (boards.greenhouse.io) ⚠️ KNOWN ISSUES
+**Greenhouse forms in iframes cause Simplify to fail on basic fields.**
+
+**What Simplify fills:** Dropdowns, yes/no questions, EEO fields
+**What Simplify FAILS to fill:** Name, email, phone, location, resume, LinkedIn
+
+**Strategy for Greenhouse:**
+1. Trigger Simplify anyway (it will fill dropdowns and custom questions)
+2. **Manually fill these fields yourself:**
+   - First Name: `Noah`
+   - Last Name: `Kontur`
+   - Email: `konoahko@gmail.com`
+   - Phone: `216-213-6940`
+   - Location: `Northfield, OH` (may need to select from autocomplete)
+   - LinkedIn: `N/A`
+3. Use xdotool fallback for resume upload
+4. May have reCAPTCHA — if blocked, notify Noah via Telegram
 
 ### Lever (jobs.lever.co)
-- Simplify handles most fields
+- Simplify usually handles most fields
 - "Additional information" section often needs custom cover letter
+- The "Couldn't auto-read your resume" message is **normal** — not an error
 
 ### Workday (myworkdayjobs.com)
-- Multi-step forms — Simplify should handle each page
-- May need to click "Continue" between steps
-- Account creation handled by Simplify's saved credentials
+- Multi-step forms — check each page
+- **For unresponsive buttons:** Use hover-then-click sequence
+- Account creation: use `konoahko@gmail.com` / `jobApplications123@`
+- **Never use Google OAuth** — always email/password
 
-### If Simplify Doesn't Autofill
-If Simplify doesn't trigger (page loads but fields stay empty):
-1. **Refresh the page** — Sometimes Simplify needs a fresh load
+### If Simplify Panel Doesn't Appear
+If Simplify doesn't show up at all:
+1. **Refresh the page** — Sometimes needs a fresh load
 2. **Click on a form field** — Can trigger Simplify's detection
-3. **Check for Simplify icon** — Should appear in the form area
-4. **Report the issue** — If Simplify consistently fails on a platform, report it so we can investigate
-
-### If All Else Fails
-If Simplify can't fill a critical field (especially resume):
-```
-message action=send channel=telegram target=8531859108 message="🚨 Simplify couldn't fill <field> for <Company>. Form is ready at <URL> - please complete manually."
-```
-Then report as NEEDS_INPUT with the form URL.
+3. **Proceed with manual fill** — You have all the info you need in this skill
 - This is simpler than Ashby which requires explicit selection
 
 **Other notes:**
