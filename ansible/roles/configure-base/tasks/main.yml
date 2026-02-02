@@ -112,10 +112,12 @@
     group: root
     mode: 0600
 
-- name: Install telegraf
+- name: Install telegraf and monitoring dependencies
   apt:
     name:
       - telegraf
+      - smartmontools
+      - lm-sensors
     state: latest
     update_cache: yes
 
