@@ -41,3 +41,4 @@
 - **High** — Strong match, apply ASAP
 - **Medium** — Good fit, apply when time permits
 - **Low** — Backup option
+| Docker | Principal Software Engineer, AI Cloud | 2026-02-02 | Applied | Remote US. Resume uploaded via xdotool fallback. |

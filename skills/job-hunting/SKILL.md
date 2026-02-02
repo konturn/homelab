@@ -582,9 +582,18 @@ browser action=tabs target=node node=noah-XPS-13-7390-2-in-1 profile=clawd
 
 **The strategy is: Let Simplify do what it can, then fill anything it missed.**
 
+## ⚠️⚠️⚠️ STEP 1 IS MANDATORY — DO NOT SKIP ⚠️⚠️⚠️
+
+**ALWAYS try Simplify FIRST before any manual field entry.** Even if you think you can fill fields faster manually, Simplify:
+- Handles dropdowns and selects correctly (React state issues)
+- May fill fields you'd miss
+- Saves tokens and time on successful pages
+
+**Only skip Simplify if:** The overlay panel doesn't appear after 5+ seconds of waiting.
+
 1. **Navigate** to the application URL
 2. **Wait 3-5 seconds** for page to load
-3. **Trigger Simplify** — Look for and click "Autofill this page" button in Simplify panel
+3. **⭐ TRIGGER SIMPLIFY FIRST ⭐** — Take a screenshot, look for the Simplify overlay panel (floating on side of page, NOT in form), click "Autofill this page"
 4. **Wait 3-5 seconds** for Simplify to process
 5. **Snapshot** the page to see what got filled vs what's still empty
 6. **Manually fill ANY empty required fields:**
@@ -607,6 +616,70 @@ browser action=tabs target=node node=noah-XPS-13-7390-2-in-1 profile=clawd
 - Technical questions about experience
 - Salary expectations (verify it says $250,000, not lower)
 - **Any required field Simplify missed**
+
+---
+
+## ⚠️ OPEN-ENDED RESPONSES MATTER — DON'T PHONE IT IN
+
+**Open-ended questions are your ONE chance to stand out.** Generic answers get skimmed and forgotten. Specific answers get remembered.
+
+### The Quality Bar
+
+Every open-ended response must pass THREE tests:
+
+1. **Competitor Test:** Could this answer work for a different company in the same space? If yes, it's too generic.
+2. **Coffee Shop Test:** Would you actually say this to someone? If it sounds like a press release, rewrite it.
+3. **Proof Test:** Does it contain at least ONE specific, verifiable detail that shows research?
+
+### What "Specific" Means
+
+**❌ VAGUE (fails all three tests):**
+> "Docker caught my attention because of the AI focus and how it's evolving beyond just containers. The engineering blog posts about handling diverse ML workloads show a team that thinks deeply about the actual problems developers face."
+
+Problems: Which blog posts? What AI focus specifically? "Thinks deeply about problems" is empty praise.
+
+**✅ SPECIFIC (passes all three tests):**
+> "I read your post on Model Runner's approach to local LLM inference and it reminded me of a GPU memory allocation problem I solved at Nvidia. We were seeing 40% waste on multi-tenant clusters because of fragmentation. The way you're handling model switching without full context reload is exactly the kind of thing I'd want to dig into."
+
+Why it works:
+- Names a specific product (Model Runner)
+- References a specific technical concept (local LLM inference, context reload)
+- Connects to a specific problem from experience (GPU memory fragmentation, 40% waste)
+- Shows genuine technical curiosity ("I'd want to dig into")
+- Could NOT be copy-pasted to another company
+
+### Research Requirements
+
+**Before writing ANY open-ended response, find at least ONE of:**
+- A specific blog post title or topic from their engineering blog
+- A GitHub repo or open-source project they maintain
+- A specific product feature or technical decision
+- A talk, podcast, or interview by someone at the company
+- A technical detail from their docs or architecture
+
+**If you can't find anything specific, say so honestly:**
+> "I'll be honest, I couldn't find much technical content about your infrastructure, but based on the job description, the distributed systems challenges around [X] are what I'd want to work on."
+
+This is better than fake enthusiasm about generic concepts.
+
+### Structure for "Why This Company?" Responses
+
+1. **Hook** — One specific thing that caught your attention (blog post, product, tech decision)
+2. **Bridge** — How it connects to something you've actually done (Nvidia, OctoAI experience preferred)
+3. **Curiosity** — What you'd want to learn more about or work on
+
+Keep it to 3-4 sentences. Tight > comprehensive.
+
+### Common Failures to Avoid
+
+- "I'm excited about [Company]'s mission..." — Everyone says this
+- "...aligns perfectly with my experience" — Meaningless corporate speak
+- "The engineering blog posts show a team that..." — Which posts? Be specific or don't mention
+- Mentioning their marketing tagline back at them — They know their tagline
+- Em dashes everywhere — Use periods. Short sentences work.
+- Trying to hit every talking point — Pick ONE thing and nail it
+
+---
 
 ## Resume Upload (When Simplify Fails)
 
