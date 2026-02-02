@@ -1024,6 +1024,8 @@ services:
       # IPMI access for server management
       - IPMI_USER={{ lookup('env', 'IPMI_USER') }}
       - IPMI_PASSWORD={{ lookup('env', 'IPMI_PASSWORD') }}
+      # Web search
+      - BRAVE_API_KEY={{ brave_api_key }}
     volumes:
       - {{ docker_persistent_data_path }}/moltbot/data:/home/node/.moltbot
       - {{ docker_persistent_data_path }}/moltbot/data:/home/node/.clawdbot
