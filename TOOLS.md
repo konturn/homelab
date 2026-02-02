@@ -47,7 +47,10 @@ curl -s --location-trusted "https://moltbook.com/api/v1/posts?sort=hot&limit=5" 
 **Repo:** `root/homelab` (cloned to `/home/node/clawd/homelab`)  
 **Project ID:** 4 (use this for API calls, not 1)
 
-**Note:** Token has git clone/push access but NOT API read scope. Need `api` scope added to use `glab` CLI for MR creation.
+**Permissions (as of 2026-02-02):**
+- **Maintainer** on homelab repo — can merge my own MRs
+- **CI/CD secrets access** — can create/modify pipeline variables
+- **Self-merge policy:** Small config tweaks, iteration, and trivial changes = self-merge. Big architectural changes = get Noah's review. This is a significant autonomy upgrade — use it wisely.
 
 ### Shared Library (for ad-hoc GitLab work)
 
