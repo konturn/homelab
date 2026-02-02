@@ -124,7 +124,7 @@ sessions_spawn(
 sessions_spawn(
   label: "jobs.apply.<company>",
   model: "anthropic/claude-sonnet-4-20250514", 
-  task: "Apply to <Company> - <Role>. Job ID: <id>. URL: <url>. Read job-hunting skill, section WORKER INSTRUCTIONS. Use Simplify for autofill.",
+  task: "Apply to <Company> - <Role>. Job ID: <id>. URL: <url>. Read job-hunting skill, section WORKER INSTRUCTIONS.",
   runTimeoutSeconds: 1800  // 30 min per application
 )
 ```
@@ -201,16 +201,16 @@ Then **EXIT**. Main agent handles spawning workers.
 
 See WORKER INSTRUCTIONS section below for full details. Key points:
 - Apply to ONE job only
-- Use `profile=clawd` (Simplify is installed there)
-- Let Simplify handle autofill, fill custom questions yourself
+- Use `profile=clawd` on Noah's laptop node
+- Fill all fields manually (no autofill extensions)
 - Report back: SUCCESS / SKIPPED / FAILED / NEEDS_INPUT
 - Include open-ended responses and feedback
 
 ### Resume Upload is MANDATORY
 **An application is NOT successful unless the resume has been uploaded.**
-- Simplify should handle resume upload automatically
+- Upload resume using xdotool method (see Resume Upload section)
 - Verify the filename is visible before submitting
-- If Simplify fails to upload resume → report as NEEDS_INPUT with form URL
+- If upload fails after retries → report as NEEDS_INPUT with form URL
 
 ### Salary Expectations
 **When asked about salary expectations, ALWAYS provide the TOP of our target range: $250,000**
@@ -505,7 +505,7 @@ Before opening any new tabs, ALWAYS:
 
 ## Browser Connection Details
 
-**IMPORTANT: All workers use `profile=clawd`** — this is the profile with Simplify Copilot installed.
+**IMPORTANT: All workers use `profile=clawd`** — this is the dedicated browser profile for job applications.
 
 ```
 target: node
@@ -525,89 +525,28 @@ browser action=tabs target=node node=noah-XPS-13-7390-2-in-1 profile=clawd
 
 ---
 
-## Simplify Copilot Integration
+## Worker Workflow: Direct Manual Fill
 
-**Simplify Copilot** is a Chrome extension that handles form autofill. It's installed on Noah's `clawd` browser profile.
+**The strategy is simple: Snapshot, fill everything manually, upload resume, submit.**
 
-### How Simplify Works
-1. When you navigate to a job application page, Simplify detects the form
-2. **Simplify appears as an OVERLAY PANEL on the side of the page** — it's NOT embedded in the form HTML
-3. The panel has an "Autofill this page" button
-4. It fills fields from Noah's saved profile
-5. Custom/open-ended questions still need to be filled by the worker
-
-### ⚠️ CRITICAL: Finding Simplify (Don't Confuse with Greenhouse's Native Autofill)
-
-**Simplify is an OVERLAY, not a DOM element.** Do NOT search the form HTML for "autofill" buttons — that will find Greenhouse's native "Autofill with MyGreenhouse" buttons, which are NOT Simplify.
-
-**How to detect Simplify:**
-1. **Take a screenshot** — `browser action=screenshot profile=clawd targetId=<id>`
-2. **Look visually** for a sidebar/panel on the right side of the page with:
-   - Simplify branding/logo
-   - "Autofill this page" button
-   - Purple/blue color scheme (typical Simplify colors)
-3. **If visible** — Click the "Autofill this page" button in the Simplify panel
-4. **If NOT visible after 3-5 seconds** — Simplify may not have loaded; proceed with manual fill
-
-**What Simplify looks like:**
-- Floating panel on right side of browser window
-- Contains profile preview and autofill button
-- Appears OVER the page content, not inside form elements
-
-**What is NOT Simplify:**
-- "Autofill with MyGreenhouse" — This is Greenhouse's native feature (inside form HTML)
-- "Autofill with LinkedIn" — Platform's own integration
-- Any button that appears INSIDE the form — Simplify floats OUTSIDE/OVER the form
-
-### ⚠️ CRITICAL: Simplify Has Limitations (Greenhouse Iframe Issue)
-
-**Simplify does NOT reliably fill all fields**, especially on Greenhouse forms embedded in iframes.
-
-**What Simplify fills successfully:**
-- ✅ Dropdown/select fields (work authorization, yes/no questions)
-- ✅ Custom company-specific dropdown questions
-- ✅ EEO demographic fields
-- ✅ Some text fields (address, zip code, company name)
-
-**What Simplify often FAILS to fill (especially in Greenhouse iframes):**
-- ❌ First Name, Last Name
-- ❌ Email, Phone
-- ❌ Location/City
-- ❌ Resume upload
-- ❌ LinkedIn profile
-
-**Root cause:** Greenhouse forms use cross-origin iframes that prevent Simplify's DOM manipulation from reaching basic text input fields, even though dropdown interactions work.
-
-### Worker Workflow: Simplify + Manual Fill
-
-**The strategy is: Let Simplify do what it can, then fill anything it missed.**
-
-## ⚠️⚠️⚠️ STEP 1 IS MANDATORY — DO NOT SKIP ⚠️⚠️⚠️
-
-**ALWAYS try Simplify FIRST before any manual field entry.** Even if you think you can fill fields faster manually, Simplify:
-- Handles dropdowns and selects correctly (React state issues)
-- May fill fields you'd miss
-- Saves tokens and time on successful pages
-
-**Only skip Simplify if:** The overlay panel doesn't appear after 5+ seconds of waiting.
+No browser extensions. No autofill detection. Just reliable manual form completion.
 
 1. **Navigate** to the application URL
 2. **Wait 3-5 seconds** for page to load
-3. **⭐ TRIGGER SIMPLIFY FIRST ⭐** — Take a screenshot, look for the Simplify overlay panel (floating on side of page, NOT in form), click "Autofill this page"
-4. **Wait 3-5 seconds** for Simplify to process
-5. **Snapshot** the page to see what got filled vs what's still empty
-6. **Manually fill ANY empty required fields:**
+3. **Snapshot** the page to see all form fields
+4. **Fill ALL required fields manually:**
    - First Name: `Noah`
    - Last Name: `Kontur`
    - Email: `konoahko@gmail.com`
    - Phone: `216-213-6940`
    - Location: `Northfield, OH` or `Northfield, Ohio, United States`
    - LinkedIn: `N/A`
-7. **Handle resume upload** if Simplify didn't do it (see Resume Upload section below)
-8. **Fill custom questions** — "Why this company?", cover letters, etc. (use human voice!)
-9. **Verify** all required fields are filled, resume shows as uploaded
-10. **Submit** the application
-11. **Report back** with open-ended responses and any feedback
+5. **Handle resume upload** (see Resume Upload section below — use xdotool method)
+6. **Fill dropdowns** — work authorization (Yes), sponsorship needed (No), etc.
+7. **Fill custom questions** — "Why this company?", cover letters, etc. (use human voice!)
+8. **Verify** all required fields are filled, resume shows as uploaded
+9. **Submit** the application
+10. **Report back** with open-ended responses and any feedback
 
 ### What Workers Handle (Always)
 - "Why are you interested in this role?"
@@ -615,7 +554,7 @@ browser action=tabs target=node node=noah-XPS-13-7390-2-in-1 profile=clawd
 - Cover letters
 - Technical questions about experience
 - Salary expectations (verify it says $250,000, not lower)
-- **Any required field Simplify missed**
+- **All required fields** (fill everything manually)
 
 ---
 
@@ -681,9 +620,9 @@ Keep it to 3-4 sentences. Tight > comprehensive.
 
 ---
 
-## Resume Upload (When Simplify Fails)
+## Resume Upload
 
-**Resume upload is the most critical step.** If Simplify doesn't upload the resume, use these fallbacks:
+**Resume upload is the most critical step.** Use these methods:
 
 ### ⚠️ CRITICAL: Native File Dialog Problem
 
@@ -775,38 +714,29 @@ Then report as NEEDS_INPUT with the form URL.
 ## ATS-Specific Patterns
 
 ### General Guidance (All ATS)
-1. **Trigger Simplify first** — Click "Autofill this page" if the Simplify panel is visible
-2. **Wait, then snapshot** — Give Simplify 3-5 seconds, then check what it filled
-3. **Fill ALL empty required fields** — Don't assume Simplify got everything
-4. **Verify resume** — Make sure filename is visible before submitting
-5. **Verify salary** — Make sure it says $250,000, not lower
+1. **Snapshot first** — See all form fields before filling
+2. **Fill ALL required fields manually** — Don't skip any
+3. **Verify resume** — Make sure filename is visible before submitting
+4. **Verify salary** — Make sure it says $250,000, not lower
+5. **Use hover-then-click** — Many React-based forms need hover to trigger JS handlers
 
 ### Ashby (jobs.ashbyhq.com)
-- Simplify usually handles these well
 - Watch for Yes/No toggle buttons — may need to click them manually (hover before click)
 - Custom questions often appear at the bottom
 - **React state issues:** If validation fails despite fields appearing filled, use hover-then-click on submit
 
-### Greenhouse (boards.greenhouse.io) ⚠️ KNOWN ISSUES
-**Greenhouse forms in iframes cause Simplify to fail on basic fields.**
-
-**What Simplify fills:** Dropdowns, yes/no questions, EEO fields
-**What Simplify FAILS to fill:** Name, email, phone, location, resume, LinkedIn
-
-**Strategy for Greenhouse:**
-1. Trigger Simplify anyway (it will fill dropdowns and custom questions)
-2. **Manually fill these fields yourself:**
+### Greenhouse (boards.greenhouse.io)
+- Fill all fields manually:
    - First Name: `Noah`
    - Last Name: `Kontur`
    - Email: `konoahko@gmail.com`
    - Phone: `216-213-6940`
    - Location: `Northfield, OH` (may need to select from autocomplete)
    - LinkedIn: `N/A`
-3. Use xdotool fallback for resume upload
-4. May have reCAPTCHA — if blocked, notify Noah via Telegram
+- Use xdotool fallback for resume upload
+- May have reCAPTCHA — if blocked, notify Noah via Telegram
 
 ### Lever (jobs.lever.co)
-- Simplify usually handles most fields
 - "Additional information" section often needs custom cover letter
 - The "Couldn't auto-read your resume" message is **normal** — not an error
 
@@ -815,12 +745,6 @@ Then report as NEEDS_INPUT with the form URL.
 - **For unresponsive buttons:** Use hover-then-click sequence
 - Account creation: use `konoahko@gmail.com` / `jobApplications123@`
 - **Never use Google OAuth** — always email/password
-
-### If Simplify Panel Doesn't Appear
-If Simplify doesn't show up at all:
-1. **Refresh the page** — Sometimes needs a fresh load
-2. **Click on a form field** — Can trigger Simplify's detection
-3. **Proceed with manual fill** — You have all the info you need in this skill
 - This is simpler than Ashby which requires explicit selection
 
 **Other notes:**
@@ -1017,12 +941,12 @@ For each job in the scout's list, spawn ONE worker at a time:
 sessions_spawn(
   label: "jobs.apply.<company>",
   model: "anthropic/claude-sonnet-4-20250514",
-  task: "Apply to <Company> - <Role>. Job ID: <id>. URL: <url>. Read job-hunting skill at /home/node/clawd/skills/job-hunting/SKILL.md, section WORKER INSTRUCTIONS. Use Simplify for autofill, fill custom questions, verify, submit.",
+  task: "Apply to <Company> - <Role>. Job ID: <id>. URL: <url>. Read job-hunting skill at /home/node/clawd/skills/job-hunting/SKILL.md, section WORKER INSTRUCTIONS.",
   runTimeoutSeconds: 1800
 )
 ```
 
-**All workers use `profile=clawd`** — this is where Simplify Copilot is installed.
+**All workers use `profile=clawd`** — the dedicated browser profile for job applications.
 
 ⚠️ **NEVER RUN WORKERS IN PARALLEL** — Workers share the same browser profile. Wait for each worker to complete before spawning the next.
 
@@ -1088,11 +1012,11 @@ Apply to this specific job:
 - Role: <title>
 - Application URL: <url>
 
-Read the job-hunting skill. Use Simplify for autofill, fill custom questions, verify, submit.
+Read the job-hunting skill. Fill all fields manually, verify, submit.
 Report back when done: SUCCESS / FAILED / NEEDS_INPUT
 ```
 
-**Worker Workflow (with Simplify):**
+**Worker Workflow:**
 
 1. **Check node connectivity FIRST** — Run `nodes action=status` and verify `noah-XPS-13-7390-2-in-1` shows `"connected": true`. **If disconnected, IMMEDIATELY terminate** with: `BLOCKED: Node disconnected. Cannot proceed.`
 
@@ -1107,32 +1031,42 @@ Report back when done: SUCCESS / FAILED / NEEDS_INPUT
 
 4. **Navigate to application** — `browser action=open target=node node=noah-XPS-13-7390-2-in-1 profile=clawd targetUrl=<application-url>`
 
-5. **Wait for Simplify autofill** — Wait 3-5 seconds for Simplify to detect the form and fill standard fields
+5. **Wait for page load** — Wait 3-5 seconds for form to render
 
-6. **Snapshot the form** — `browser action=snapshot` to see:
-   - What Simplify filled (should be: name, email, phone, resume, location, etc.)
-   - What's still empty (usually: custom questions, "why this company?", cover letters)
+6. **Snapshot the form** — `browser action=snapshot` to see all form fields
 
-7. **Fill custom questions** — For any open-ended questions:
+7. **Fill ALL fields manually:**
+   - First Name: `Noah`
+   - Last Name: `Kontur`
+   - Email: `konoahko@gmail.com`
+   - Phone: `216-213-6940`
+   - Location: `Northfield, OH`
+   - LinkedIn: `N/A`
+   - Work authorization: Yes
+   - Sponsorship needed: No
+
+8. **Upload resume** — Use xdotool method (see Resume Upload section)
+
+9. **Fill custom questions** — For any open-ended questions:
    - Use HUMAN voice (see Voice & Persona section)
    - Research the company for specific details
    - Keep responses concise and genuine
 
-8. **Verify before submit:**
-   - ✅ Resume shows as uploaded (filename visible)
-   - ✅ Salary expectation says $250,000 (not lower)
-   - ✅ All required fields are filled
-   - ✅ No validation errors visible
+10. **Verify before submit:**
+    - ✅ Resume shows as uploaded (filename visible)
+    - ✅ Salary expectation says $250,000 (not lower)
+    - ✅ All required fields are filled
+    - ✅ No validation errors visible
 
-9. **Submit** — Click the submit button
+11. **Submit** — Click the submit button
 
-10. **Report back:**
+12. **Report back:**
     - `SUCCESS: Applied to <Company> - <Role>`
     - `SKIPPED: <Company> - <Role> - <reason>`
     - `FAILED: <reason>`
     - `NEEDS_INPUT: <question>`
 
-11. **Include open-ended responses** — Always include what you wrote:
+13. **Include open-ended responses** — Always include what you wrote:
     ```
     **Open-Ended Responses:**
     
@@ -1140,12 +1074,11 @@ Report back when done: SUCCESS / FAILED / NEEDS_INPUT
     A: "Render caught my attention because of your blog post on DNS dependency management..."
     ```
 
-12. **Include feedback:**
-    - Did Simplify autofill work?
-    - What fields needed manual filling?
-    - Any issues or suggestions?
+14. **Include feedback:**
+    - What issues did you encounter?
+    - Any suggestions for the skill?
 
-13. **Clean up** — Close the browser tab: `browser action=close profile=clawd targetId=<id>`
+15. **Clean up** — Close the browser tab: `browser action=close profile=clawd targetId=<id>`
 
 ### Continuous Improvement (Coordinator Responsibility)
 
