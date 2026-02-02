@@ -75,7 +75,7 @@ moltbot:build:
   image: docker:24
   variables:
     # Connect to docker-socket-proxy (filtered access, no direct socket)
-    DOCKER_HOST: "tcp://docker-socket-proxy:2375"
+    DOCKER_HOST: "tcp://10.4.32.2:2375"
   before_script:
     - echo "$DOCKER_REGISTRY_KEY" | docker login -u docker --password-stdin registry.lab.nkontur.com
   script:
