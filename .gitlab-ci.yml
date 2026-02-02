@@ -8,6 +8,7 @@ workflow:
 variables:
   PIP_CACHE_DIR: "/cache/pip"
   ANSIBLE_ROLES_PATH: "/cache/ansible-roles"
+  MOLTBOT_IMAGE_TAG: "latest"  # Can override to deploy specific version
 
 # =============================================================================
 # Job Templates
@@ -92,6 +93,10 @@ moltbot:build:
         - docker/moltbot/**/*
     # Manual trigger on MRs (for testing)
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
+    # Manual trigger on main (for testing/rebuilds)
+    - if: $CI_COMMIT_BRANCH == "main"
       when: manual
       allow_failure: true
 

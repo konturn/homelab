@@ -962,7 +962,7 @@ services:
       retries: 3
       start_period: 60s
   moltbot-gateway:
-    image: registry.lab.nkontur.com/moltbot-gateway:latest
+    image: registry.lab.nkontur.com/moltbot-gateway:{{ moltbot_image_tag | default('latest') }}
     container_name: moltbot-gateway
     restart: unless-stopped
     networks:
