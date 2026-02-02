@@ -23,7 +23,8 @@ check_interval = 0
   executor = "docker"
   [runners.docker]
     image = "docker:24"
-    network_mode = "docker_mgmt"
+    # Use ci bridge network for DNS resolution to docker-socket-proxy
+    network_mode = "docker_ci"
     privileged = false
     volumes = ["/cache/gitlab-runner:/cache"]
   [runners.environment]

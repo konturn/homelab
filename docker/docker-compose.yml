@@ -67,6 +67,9 @@ networks:
               shim2: 10.5.0.2
     driver_opts:
       parent: bond0.5
+  ci:
+    # Bridge network for CI jobs - enables DNS resolution to docker-socket-proxy
+    driver: bridge
 services:
   # Docker socket proxy - filtered access for CI builds
   # Only allows build/image operations, blocks exec/start/stop
@@ -76,6 +79,7 @@ services:
     restart: unless-stopped
     networks:
       - mgmt
+      - ci
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
