@@ -197,6 +197,22 @@ sessions_spawn({
 })
 ```
 
+## New Job Laptop Onboarding Checklist
+
+When setting up a new job machine for remote access:
+
+- [ ] **SSH access** — Add Prometheus public key to `~/.ssh/authorized_keys`:
+  ```
+  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC6Zp0OU50mhMJvZmiECrSZlq9qvpss+W5gmCsRMuNi1 prometheus@moltbot
+  ```
+- [ ] **Claude Code** — Install and authenticate (or set `ANTHROPIC_API_KEY` in `~/.zshenv`)
+- [ ] **PATH setup** — Ensure `~/.local/bin` is in PATH via `~/.zshenv`
+- [ ] **agent-browser** — Install for browser automation capabilities
+- [ ] **Static IP** — Configure DHCP reservation in homelab (add to `privileged_access_point_N`)
+- [ ] **Document** — Add to this skill with IP, user, repos, tech stack
+
+---
+
 ## J3 Special Case
 
 J3 has no working Claude — do all work directly via SSH commands:
