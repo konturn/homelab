@@ -130,3 +130,5 @@ When I wake up, if I see processes, skills, or md files that can be improved —
 
 - **Verify the right thing.** Workers checking for file picker windows to verify resume upload was wrong — file picker closes after upload. Always verify by checking the actual form state (is filename visible?). Checking the wrong signal caused false negatives.
 - **Proactive cleanup before work.** Run cleanup commands (e.g., dismiss dialogs) BEFORE starting work, not just reactively. Previous workers may have left state that breaks the next worker.
+-e 
+- **Persist new capabilities immediately.** When I discover I have access to something (API, tool, credential), update TOOLS.md right then. Don't wait to be told. Noah called this out on 2026-02-02 when I failed to document HA API access after using it.
