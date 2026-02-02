@@ -49,39 +49,80 @@ ssh -tt -i $SSH_KEY <user>@<ip> 'zsh -l -c "claude"'
 ## Codebase Summaries
 
 ### J1 (Nvidia DGX Cloud)
-**Main repos:** `~/Documents/repos/`
-- `dgxcc` — Main monorepo: CLI, UI, services, infra IAC
-- `backend`, `apis`, `runtime` — Backend services
-- `manifests`, `manifests-templates`, `kustomize` — K8s configs
-- `infra`, `infra-terraform` — Infrastructure as code
-- `vault-agent`, `vault-config-terraform` — Secrets/Vault
-- `terraform-aws-eks`, `terraform-azure-aks` — Cloud Terraform
-- `configuration`, `deployment` — Deployment configs
 
-**Stack:** Kubernetes, Terraform, Vault, GitLab CI, Go, Azure/AWS/GCP
+Kubernetes-style IaaS platform for managing NVIDIA cloud infrastructure.
+
+**Key Repos:**
+| Repo | Purpose |
+|------|---------|
+| `dgxcc` | Main monorepo: CLI, UI, services (Go+React), Temporal workflows |
+| `apis` | Protocol Buffer definitions → generates CRDs and Go types |
+| `backend` | API machinery: dgxc-apiserver (serves CRDs), dgxc-proxy (auth/routing) |
+| `infra` | Layered controllers (L0→L1→L2) for cloud provisioning |
+| `manifests` | GitOps cluster configs, Gomplate templating, Vault secrets |
+
+**Architecture:**
+```
+CLI/UI → dgxc-proxy → dgxc-apiserver (CRDs) → Controllers (L0/L1/L2) → Cloud (AWS/GCP/Azure/OCI)
+                                                      ↓
+                                              ArgoCD ← manifests repo
+```
+
+**Stack:** Go 1.24+, Kubernetes API machinery, Temporal, NATS, PostgreSQL, Terraform, ArgoCD, Vault
 
 ### J2 (Arize)
-**Main repos:** `~/Documents/repos/`
-- `arize` — Main monorepo (Bazel-based)
-  - `arizeweb/` — Web application
-  - `adb/` — Database layer
-  - Uses Bazel build system
 
-**Stack:** Bazel, Python, ML observability platform
+ML Observability platform — monitors, debugs, and improves ML models in production.
+
+**Key Directories in `arize/`:**
+| Directory | Purpose |
+|-----------|---------|
+| `arizeweb/` | React/TypeScript frontend with Relay/GraphQL |
+| `copilot/` | AI assistant system (Python) with routing/planning |
+| `adb/` | Java-based Arrow database for segments |
+| `go/` | Go services (backend APIs, operators) |
+| `python/` | Python services (UMAP, metrics, SDK) |
+| `proto/` | Protobuf definitions (20+ services) |
+| `manifests/` | K8s deployments (90+ components) |
+| `phoenix_cloud/` | LLM tracing product (per-tenant pods) |
+
+**Data Flow:**
+```
+SDK → Receiver → Gazette (streaming) → Model Discovery → Druid Loader → Druid
+                                              ↓
+                                    Joiner → Conclusion Records
+```
+
+**Stack:** Bazel, Go 1.25, Python, Java, gRPC/Protobuf, Druid, Gazette, React/Relay, Kubernetes
 
 ### J3 (Amperon)
-**Main repos:** `~/Documents/repos/`
-- `amperon` — Main monorepo (energy forecasting platform)
-  - `app/` — Web app
-  - `forecast/` — Data science/ML forecasting
-  - `jobs/` — Background jobs
-  - `workflows/` — Argo workflows
-  - `common/`, `libs/` — Shared utilities
-- `infra`, `infra-azure` — Infrastructure
-- `ClickHouse`, `OpenMetadata` — Data stack
-- `karpenter-provider-azure` — K8s autoscaling
 
-**Stack:** Python, ClickHouse, Argo Workflows, Azure, GCP
+Energy forecasting and analytics platform.
+
+**Key Repos:**
+| Repo | Purpose |
+|------|---------|
+| `amperon` | Main app: Flask backend, ML forecasting, Argo jobs |
+| `infra` | GCP infrastructure (legacy) |
+| `infra-azure` | Azure infrastructure (primary) — Terraform + Atlantis |
+
+**Key Directories in `amperon/`:**
+| Directory | Purpose |
+|-----------|---------|
+| `app/` | Flask web app + React frontend |
+| `client/` | Next.js modern frontend |
+| `forecast/` | ML models (95+ types): LightGBM, PyTorch, TBATS |
+| `jobs/` | Background jobs: scrapers (43+), weather (32), integrations |
+| `workflows/` | Argo Workflow definitions |
+
+**Architecture:**
+```
+ingress → Flask/Next.js → MySQL/ClickHouse
+                              ↑
+                    Argo Workflows (forecast jobs, scrapers, ETL)
+```
+
+**Stack:** Python/Flask, Next.js, LightGBM/PyTorch, Argo Workflows, ClickHouse, MySQL, Terraform/Atlantis, ArgoCD
 
 ## Dispatch Pattern
 
