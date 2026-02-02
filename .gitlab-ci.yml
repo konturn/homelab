@@ -71,8 +71,6 @@ satellite-2:validate:
 
 moltbot:build:
   stage: build
-  tags:
-    - images  # Use runner with docker socket mounted
   image: docker:24
   before_script:
     - echo "$DOCKER_REGISTRY_KEY" | docker login -u docker --password-stdin registry.lab.nkontur.com
