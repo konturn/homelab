@@ -11,8 +11,9 @@ Creates merge requests for homelab infrastructure changes:
 3. **Implementation** — Make code/config changes
 4. **MR creation** — Open merge request via GitLab API
 5. **Pipeline wait** — Wait for CI to pass (or handle failures)
-6. **Registration** — Register MR for comment monitoring
-7. **Notification** — Notify via Telegram when ready
+6. **Comment check** — Verify no unresolved comments before marking ready
+7. **Registration** — Register MR for comment monitoring
+8. **Notification** — Notify via Telegram when ready
 
 ---
 
@@ -345,7 +346,54 @@ while true; do
 done
 ```
 
-### 6. Register MR for Tracking — REQUIRED
+### 6. Check for Unresolved Comments — REQUIRED
+
+**Before marking the MR as ready, verify there are no unresolved comments.**
+
+Reviewers may leave feedback while you're waiting for the pipeline. Don't mark as "ready" if there's unresolved feedback.
+
+```bash
+# Get all discussions with unresolved threads
+UNRESOLVED=$(curl -s "${GITLAB_API}/projects/${PROJECT_ID}/merge_requests/$MR_IID/discussions" \
+  -H "PRIVATE-TOKEN: $GITLAB_TOKEN" | \
+  jq '[.[] | select(.notes[0].resolvable == true and .notes[0].resolved == false)] | length')
+
+if [ "$UNRESOLVED" -gt 0 ]; then
+  echo "⚠️ Found $UNRESOLVED unresolved comment thread(s)"
+  
+  # Fetch the actual comments to address them
+  COMMENTS=$(curl -s "${GITLAB_API}/projects/${PROJECT_ID}/merge_requests/$MR_IID/discussions" \
+    -H "PRIVATE-TOKEN: $GITLAB_TOKEN" | \
+    jq -r '.[] | select(.notes[0].resolvable == true and .notes[0].resolved == false) | 
+      "Discussion \(.id):\n  \(.notes[0].body)\n"')
+  
+  echo "Unresolved comments:"
+  echo "$COMMENTS"
+  
+  # ADDRESS EACH COMMENT:
+  # 1. Read and understand the feedback
+  # 2. Make the requested changes
+  # 3. Commit and push
+  # 4. Reply to each discussion thread
+  # 5. Wait for pipeline again
+  # 6. Re-check for unresolved comments (loop)
+  
+  # Use gitlab-mr-respond patterns for addressing feedback:
+  # - Reply in the discussion thread: POST /discussions/{id}/notes
+  # - Keep commits focused on the feedback
+  # - Update after addressing all comments
+fi
+
+echo "✅ No unresolved comments"
+```
+
+**This is a loop condition.** Keep checking until:
+- Pipeline passes AND
+- No unresolved comments
+
+Only then proceed to registration and notification.
+
+### 7. Register MR for Tracking — REQUIRED
 
 ```bash
 TRACKING_FILE="/home/node/clawd/memory/open-mrs.json"
@@ -382,7 +430,7 @@ echo "✅ Registered MR !$MR_IID for tracking"
 }
 ```
 
-### 7. Notify via Telegram
+### 8. Notify via Telegram
 
 ```
 Use the message tool:
@@ -391,7 +439,7 @@ Use the message tool:
 - message: "🔀 MR Ready for Review: <title>\n\n<brief description>\n\n<MR_URL>"
 ```
 
-### 8. Cleanup and Exit
+### 9. Cleanup and Exit
 
 ```bash
 # Cleanup temp directory
