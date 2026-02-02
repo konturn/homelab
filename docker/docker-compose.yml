@@ -838,8 +838,9 @@ services:
     restart: unless-stopped
     networks:
       internal:
+      iot:
       mgmt:
-        ipv4_address: 10.4.0.50
+        ipv4_address: {{ moltbot_gateway_ip }}
     ports:
       - "18789:18789"
     deploy:

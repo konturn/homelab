@@ -203,6 +203,14 @@
   register: docker_config_copy
   loop: "{{ docker_config + (docker_config_nginx | default([])) }}"
 
+- name: Rebuild Docker images for changed Dockerfiles
+  ansible.builtin.command:
+    cmd: "docker compose -f {{ docker_compose_dest_path }}/docker-compose.yml build --no-cache {{ item.item.name }}"
+  loop: "{{ docker_config_copy.results | selectattr('item.src', 'search', 'Dockerfile$') | selectattr('changed', 'equalto', true) | list }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: not ansible_check_mode
+
 - name: Create and start Docker services
   community.docker.docker_compose_v2:
     project_name: "{{ docker_compose_project_name | default('docker') }}"
