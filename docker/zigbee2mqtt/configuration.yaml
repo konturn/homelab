@@ -6,6 +6,9 @@ mqtt:
   server: mqtts://mqtt.lab.nkontur.com:1883
   user: mosquitto
   password: {{ lookup('env', 'MQTT_PASS') }}
+  keepalive: 60
+  reject_unauthorized: true
+  version: 4
 serial:
   port: tcp://{{ zigbee_radio_address }}:7638
   adapter: zstack
@@ -15,5 +18,53 @@ advanced:
   homeassistant_legacy_entity_attributes: false
   legacy_api: false
   legacy_availability_payload: false
+  transmit_power: 20
+  channel: 25
 device_options:
   legacy: false
+availability: true
+devices:
+  '0x88571dfffe0e4b8a':
+    friendly_name: Dining Room Right Rear
+  '0x88571dfffe130b74':
+    friendly_name: Front Hallway Front
+  '0x88571dfffe7695da':
+    friendly_name: Pantry
+  '0x88571dfffe0e1ebe':
+    friendly_name: Back Hallway Rear
+  '0x88571dfffe74311e':
+    friendly_name: Dining Room Left Front
+  '0x88571dfffe766852':
+    friendly_name: Top Staircase
+  '0x88571dfffe769190':
+    friendly_name: Front Door Inside
+  '0x88571dfffe769d12':
+    friendly_name: Front Hallway Rear
+  '0x88571dfffe0e20a2':
+    friendly_name: Kitchen Left Front
+  '0x88571dfffe7b89c6':
+    friendly_name: Kitchen Right Rear
+  '0x88571dfffe6a6796':
+    friendly_name: Kitchen Left Rear
+  '0x88571dfffe0e1d2c':
+    friendly_name: Kitchen Right Front
+  '0x88571dfffe768046':
+    friendly_name: Back Hallway Front
+  '0x88571dfffe0e4d84':
+    friendly_name: Living Room Center Front
+  '0x88571dfffe76768c':
+    friendly_name: Living Room Right Rear
+  '0x88571dfffe1313fa':
+    friendly_name: Living Room Center Rear
+  '0x88571dfffe769c04':
+    friendly_name: Living Room Right Front
+  '0x88571dfffe769778':
+    friendly_name: Dining Room Left Rear
+  '0x008b43fffe1240d3':
+    friendly_name: Basement Hallway Light 1
+  '0x008b43fffe124fed':
+    friendly_name: Basement Hallway Light 2
+  '0x008b43fffe12421d':
+    friendly_name: Soffit Light 3
+blocklist:
+  - '0x88571dfffe76802a'
