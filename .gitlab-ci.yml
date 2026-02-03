@@ -8,6 +8,7 @@ workflow:
 variables:
   PIP_CACHE_DIR: "/cache/pip"
   ANSIBLE_ROLES_PATH: "/cache/ansible-roles"
+  MOLTBOT_IMAGE_TAG: "latest"  # Can override to deploy specific version
 
 # =============================================================================
 # Job Templates
@@ -74,7 +75,10 @@ moltbot:build:
   image: docker:24
   variables:
     # Connect to docker-socket-proxy (filtered access, no direct socket)
-    DOCKER_HOST: "tcp://docker-socket-proxy:2375"
+    DOCKER_HOST: "tcp://10.4.32.2:2375"
+    # Use legacy builder - buildx docker-container driver requires container creation
+    # which is blocked by docker-socket-proxy (CONTAINERS=0)
+    DOCKER_BUILDKIT: "0"
   before_script:
     - echo "$DOCKER_REGISTRY_KEY" | docker login -u docker --password-stdin registry.lab.nkontur.com
   script:
@@ -92,6 +96,10 @@ moltbot:build:
         - docker/moltbot/**/*
     # Manual trigger on MRs (for testing)
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
+    # Manual trigger on main (for testing/rebuilds)
+    - if: $CI_COMMIT_BRANCH == "main"
       when: manual
       allow_failure: true
 
