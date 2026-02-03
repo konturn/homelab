@@ -1,18 +1,20 @@
 # =============================================================================
 # CI Pipeline - Optimized for Speed
 # =============================================================================
-# Strategy:
-# - Parallel validation jobs using DAG (needs: [])
-# - Aggressive caching for pip packages and ansible roles
+# Optimizations:
+# - Shallow git clone (GIT_DEPTH: 5)
+# - DAG parallelization - all validate jobs run in parallel (needs: [])
 # - Path-based rules - jobs only run when relevant files change
-# - DAG pipelines - deploy jobs start immediately after their validation
 # - Interruptible validation - new commits cancel in-progress MR pipelines
+# - Aggressive pip/ansible caching with corruption cleanup
 #
-# Pipeline structure (DAG visualization):
+# Pipeline structure:
 #
-#   router:validate ──► router:deploy
-#   zwave:validate ───► zwave:deploy
-#   satellite-2:validate ──► satellite-2:deploy
+#   ┌──────────────┬──────────────┐
+#   │              │              │
+#   router:val  zwave:val  satellite-2:val  (parallel)
+#   │              │              │
+#   router:deploy zwave:deploy satellite-2:deploy (parallel, main only)
 #
 # =============================================================================
 
@@ -24,15 +26,15 @@ workflow:
     on_new_commit: interruptible
 
 variables:
-  PIP_CACHE_DIR: "/cache/pip"
-  ANSIBLE_ROLES_PATH: "/cache/ansible-roles"
+  GIT_DEPTH: 5
   ANSIBLE_HOST_KEY_CHECKING: "False"
   ANSIBLE_PIPELINING: "True"
+  PIP_CACHE_DIR: "/cache/pip"
+  ANSIBLE_ROLES_PATH: "/cache/ansible-roles"
 
 # =============================================================================
 # Path-based change detection
 # =============================================================================
-# Only run jobs when relevant files have changed
 
 .router_changes:
   rules:
@@ -120,26 +122,32 @@ stages:
   - deploy
 
 # =============================================================================
-# Base job - shared setup with caching
+# Base job - shared setup with aggressive caching
 # =============================================================================
 .ansible:
   image: willhallonline/ansible:latest
   before_script:
     # Setup cache directories
     - mkdir -p /cache/pip /cache/ansible-roles
-    # Install Python deps (cached)
-    - pip3 install --cache-dir /cache/pip -r requirements.txt
+    # Install Python deps (cached wheels)
+    - pip3 install -q --cache-dir /cache/pip -r requirements.txt
+    # Clean up corrupted role directories (ansible-galaxy --force doesn't handle this)
+    - |
+      for d in /cache/ansible-roles/*/; do
+        [ -d "$d" ] && [ ! -f "${d}meta/main.yml" ] && [ ! -f "${d}tasks/main.yml" ] && rm -rf "$d" 2>/dev/null
+      done
     # Install Ansible roles (cached)
-    - ansible-galaxy install -r ansible/requirements.yml -p /cache/ansible-roles --force
+    - ansible-galaxy install -r ansible/requirements.yml -p /cache/ansible-roles --force 2>/dev/null || ansible-galaxy install -r ansible/requirements.yml -p /cache/ansible-roles
     # Setup SSH
     - mkdir -p ~/.ssh
     - cp ansible/known_hosts ~/.ssh/known_hosts
     - echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp && chmod 600 tmp
   cache:
-    key: "ansible-deps-v1"
+    key: "ansible-deps-v2"
     paths:
       - /cache/pip
       - /cache/ansible-roles
+    policy: pull-push
 
 # =============================================================================
 # Validation Stage - Parallel execution on MRs
@@ -175,12 +183,8 @@ satellite-2:validate:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml --check --diff
 
 # =============================================================================
-# Deploy Stage - DAG-based parallel deployment
+# Deploy Stage - Parallel deployment (main only)
 # =============================================================================
-# Each deploy job only waits for its own validation job, not all validation.
-# Uses resource_group to ensure deploys run in order across pipelines.
-# NOT interruptible - never cancel mid-deploy.
-
 router:deploy:
   extends:
     - .ansible
