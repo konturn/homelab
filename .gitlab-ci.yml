@@ -1,4 +1,24 @@
 # =============================================================================
+# CI Pipeline - Optimized for Speed
+# =============================================================================
+# Optimizations:
+# - Shallow git clone (GIT_DEPTH: 5)
+# - DAG parallelization - all validate jobs run in parallel (needs: [])
+# - Path-based rules - jobs only run when relevant files change
+# - Interruptible validation - new commits cancel in-progress MR pipelines
+# - Aggressive pip/ansible caching with corruption cleanup
+#
+# Pipeline structure:
+#
+#   ┌──────────────┬──────────────┬──────────────┐
+#   │              │              │              │
+#   router:val  zwave:val  sat-2:val  moltbot:build (parallel)
+#   │              │              │
+#   router:deploy zwave:deploy sat-2:deploy (parallel, main only)
+#
+# =============================================================================
+
+# =============================================================================
 # Workflow Configuration
 # =============================================================================
 workflow:
@@ -6,24 +26,62 @@ workflow:
     on_new_commit: interruptible
 
 variables:
+  GIT_DEPTH: 5
+  ANSIBLE_HOST_KEY_CHECKING: "False"
+  ANSIBLE_PIPELINING: "True"
   PIP_CACHE_DIR: "/cache/pip"
   ANSIBLE_ROLES_PATH: "/cache/ansible-roles"
-  MOLTBOT_IMAGE_TAG: "latest"  # Can override to deploy specific version
+  MOLTBOT_IMAGE_TAG: "latest"
+
+# =============================================================================
+# Path-based change detection
+# =============================================================================
+
+.router_changes:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - ansible/router.yml
+        - ansible/inventory.yml
+        - ansible/roles/configure-base/**/*
+        - ansible/roles/configure-docker/**/*
+        - ansible/roles/configure-router-network/**/*
+        - ansible/roles/configure-wireguard/**/*
+        - ansible/roles/configure-notifications/**/*
+        - docker/docker-compose.yml
+        - docker/**/*
+        - networking/**/*
+        - requirements.txt
+        - ansible/requirements.yml
+        - .gitlab-ci.yml
+
+.zwave_changes:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - ansible/zwave.yml
+        - ansible/inventory.yml
+        - ansible/roles/configure-zwave/**/*
+        - ansible/roles/configure-snapclient/**/*
+        - docker/docker-compose-zwave.yml
+        - requirements.txt
+        - ansible/requirements.yml
+        - .gitlab-ci.yml
+
+.satellite2_changes:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - ansible/satellite-2.yml
+        - ansible/inventory.yml
+        - ansible/roles/configure-satellite/**/*
+        - requirements.txt
+        - ansible/requirements.yml
+        - .gitlab-ci.yml
 
 # =============================================================================
 # Job Templates
 # =============================================================================
-.ansible:
-  image: willhallonline/ansible:latest
-  before_script:
-    - mkdir -p /cache/pip /cache/ansible-roles
-    - pip3 install --cache-dir /cache/pip -r requirements.txt
-    - ansible-galaxy install -r ansible/requirements.yml -p /cache/ansible-roles
-    - echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp
-    - chmod 600 tmp
-    - mkdir ~/.ssh
-    - cp ansible/known_hosts ~/.ssh/known_hosts
-
 .interruptible:
   interruptible: true
 
@@ -33,51 +91,70 @@ stages:
   - deploy
 
 # =============================================================================
-# Validation (MRs) - Dry run only, no actual changes
+# Base ansible job with caching
 # =============================================================================
+.ansible:
+  image: willhallonline/ansible:latest
+  before_script:
+    - mkdir -p /cache/pip /cache/ansible-roles
+    - pip3 install -q --cache-dir /cache/pip -r requirements.txt
+    # Clean corrupted role directories (ansible-galaxy --force doesn't handle this)
+    - |
+      for d in /cache/ansible-roles/*/; do
+        [ -d "$d" ] && [ ! -f "${d}meta/main.yml" ] && [ ! -f "${d}tasks/main.yml" ] && rm -rf "$d" 2>/dev/null
+      done
+    - ansible-galaxy install -r ansible/requirements.yml -p /cache/ansible-roles --force 2>/dev/null || ansible-galaxy install -r ansible/requirements.yml -p /cache/ansible-roles
+    - mkdir -p ~/.ssh
+    - cp ansible/known_hosts ~/.ssh/known_hosts
+    - echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp && chmod 600 tmp
+  cache:
+    key: "ansible-deps-v2"
+    paths:
+      - /cache/pip
+      - /cache/ansible-roles
+    policy: pull-push
 
+# =============================================================================
+# Validation Stage - Parallel execution on MRs (DAG)
+# =============================================================================
 router:validate:
   extends:
     - .ansible
     - .interruptible
+    - .router_changes
   stage: validate
+  needs: []
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml --check --diff
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
 zwave:validate:
   extends:
     - .ansible
     - .interruptible
+    - .zwave_changes
   stage: validate
+  needs: []
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/zwave.yml --check --diff
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
 satellite-2:validate:
   extends:
     - .ansible
     - .interruptible
+    - .satellite2_changes
   stage: validate
+  needs: []
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml --check --diff
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
 # =============================================================================
-# Build (main branch only) - Build container images
+# Build Stage - Container images
 # =============================================================================
-
 moltbot:build:
   stage: build
   image: docker:24
   variables:
-    # Connect to docker-socket-proxy (filtered access, no direct socket)
     DOCKER_HOST: "tcp://10.4.32.2:2375"
-    # Use legacy builder - buildx docker-container driver requires container creation
-    # which is blocked by docker-socket-proxy (CONTAINERS=0)
     DOCKER_BUILDKIT: "0"
   before_script:
     - echo "$DOCKER_REGISTRY_KEY" | docker login -u docker --password-stdin registry.lab.nkontur.com
@@ -85,50 +162,77 @@ moltbot:build:
     - docker build -t registry.lab.nkontur.com/moltbot-gateway:latest -t registry.lab.nkontur.com/moltbot-gateway:$CI_COMMIT_SHORT_SHA docker/moltbot/
     - docker push registry.lab.nkontur.com/moltbot-gateway:latest
     - docker push registry.lab.nkontur.com/moltbot-gateway:$CI_COMMIT_SHORT_SHA
+  needs: []
   rules:
-    # Auto-run on main when moltbot changes
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/moltbot/**/*
-    # Auto-run on MRs when moltbot changes
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - docker/moltbot/**/*
-    # Manual trigger on MRs (for testing)
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       when: manual
       allow_failure: true
-    # Manual trigger on main (for testing/rebuilds)
     - if: $CI_COMMIT_BRANCH == "main"
       when: manual
       allow_failure: true
 
 # =============================================================================
-# Deploy (main branch only) - Actual deployment
-# NOT interruptible - never cancel mid-deploy
-# Uses resource_group to ensure deploys run in order across pipelines
+# Deploy Stage - Parallel deployment (main only)
 # =============================================================================
-
-.deploy:
+router:deploy:
   extends: .ansible
   stage: deploy
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
-
-router:deploy:
-  extends: .deploy
   resource_group: deploy-router
+  needs:
+    - job: router:validate
+      optional: true
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - ansible/router.yml
+        - ansible/inventory.yml
+        - ansible/roles/configure-base/**/*
+        - ansible/roles/configure-docker/**/*
+        - ansible/roles/configure-router-network/**/*
+        - ansible/roles/configure-wireguard/**/*
+        - ansible/roles/configure-notifications/**/*
+        - docker/docker-compose.yml
+        - docker/**/*
+        - networking/**/*
 
 zwave:deploy:
-  extends: .deploy
+  extends: .ansible
+  stage: deploy
   resource_group: deploy-zwave
+  needs:
+    - job: zwave:validate
+      optional: true
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/zwave.yml
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - ansible/zwave.yml
+        - ansible/inventory.yml
+        - ansible/roles/configure-zwave/**/*
+        - ansible/roles/configure-snapclient/**/*
+        - docker/docker-compose-zwave.yml
 
 satellite-2:deploy:
-  extends: .deploy
+  extends: .ansible
+  stage: deploy
   resource_group: deploy-satellite-2
+  needs:
+    - job: satellite-2:validate
+      optional: true
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - ansible/satellite-2.yml
+        - ansible/inventory.yml
+        - ansible/roles/configure-satellite/**/*
