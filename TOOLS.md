@@ -245,21 +245,32 @@ Once the `feature/moltbot-tooling` MR is merged and container rebuilds:
   - `qmd search "query"` (fast BM25)
   - `qmd vsearch "query"` (semantic, slow cold start)
 
-## Noah's Laptop (noah-XPS-13-7390-2-in-1)
+## Email Access
 
-### Email
-- **himalaya** — CLI email client, configured and ready to use
-  - `himalaya list` — list emails
-  - `himalaya read <id>` — read specific email
-  - `himalaya search <query>` — search emails
+### Container (Primary — no node needed)
+**Gmail IMAP via curl** — works directly from container, no dependencies.
 
-## Noah's Laptop (noah-XPS-13-7390-2-in-1)
+```bash
+# Env vars: $GMAIL_EMAIL, $GMAIL_APP_PASSWORD (already set)
 
-### Email
-- **himalaya** — CLI email client, configured and ready to use
-  - `himalaya list` — list emails
-  - `himalaya read <id>` — read specific email
-  - `himalaya search <query>` — search emails
+# Fetch recent email headers
+curl -s --url "imaps://imap.gmail.com:993/INBOX;MAILINDEX=$NUM;SECTION=HEADER.FIELDS%20(FROM%20SUBJECT%20DATE)" \
+  --user "$GMAIL_EMAIL:$GMAIL_APP_PASSWORD"
+
+# Search emails
+curl -s --url "imaps://imap.gmail.com:993/INBOX" \
+  --user "$GMAIL_EMAIL:$GMAIL_APP_PASSWORD" \
+  -X "SEARCH UNSEEN FROM greenhouse-mail.io"
+
+# Read email body
+curl -s --url "imaps://imap.gmail.com:993/INBOX;MAILINDEX=$NUM;SECTION=TEXT" \
+  --user "$GMAIL_EMAIL:$GMAIL_APP_PASSWORD"
+```
+
+### Noah's Laptop (Fallback)
+- **himalaya** — CLI email client on node
+  - `himalaya envelope list --page-size 20`
+  - `himalaya message read <id>`
 
 ---
 

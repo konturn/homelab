@@ -843,12 +843,48 @@ Then report as NEEDS_INPUT with the form URL.
    - Multiple single-character input boxes
    - "Verification code" or "Security code" text
 
-2. **Request code from Noah via Telegram:**
-   ```
-   message action=send channel=telegram target=8531859108 message="🔐 Email verification required for <Company>. Please check konoahko@gmail.com and send the 8-digit code."
+2. **Fetch the verification code from Gmail (AUTOMATED):**
+   ```bash
+   # Wait 10-15 seconds for email to arrive, then fetch recent emails
+   sleep 15
+   
+   # Search for recent unseen emails from Greenhouse/ATS
+   curl -s --url "imaps://imap.gmail.com:993/INBOX" \
+     --user "$GMAIL_EMAIL:$GMAIL_APP_PASSWORD" \
+     -X "SEARCH UNSEEN FROM greenhouse-mail.io" 2>&1
+   
+   # Fetch the most recent match (replace MSGNUM with last result)
+   curl -s --url "imaps://imap.gmail.com:993/INBOX;MAILINDEX=MSGNUM;SECTION=TEXT" \
+     --user "$GMAIL_EMAIL:$GMAIL_APP_PASSWORD" 2>/dev/null
+   
+   # Extract the code (usually 6-8 digits)
+   # Look for patterns like "Your code is: 12345678" or just a standalone number
    ```
 
-3. **Wait for response** - Use `message` tool to check for replies or use sessions_send if in subagent
+   **Common search patterns by ATS:**
+   ```bash
+   # Greenhouse
+   -X "SEARCH UNSEEN FROM greenhouse-mail.io SUBJECT security"
+   
+   # Workday
+   -X "SEARCH UNSEEN FROM workday.com SUBJECT verification"
+   
+   # Generic (last 5 minutes)
+   -X "SEARCH UNSEEN SINCE $(date -u +%d-%b-%Y)"
+   ```
+
+   **Extracting the code from email body:**
+   ```bash
+   # Fetch body and grep for code patterns
+   curl -s --url "imaps://imap.gmail.com:993/INBOX;MAILINDEX=$MSG;SECTION=TEXT" \
+     --user "$GMAIL_EMAIL:$GMAIL_APP_PASSWORD" 2>/dev/null | \
+     grep -oP '\b\d{6,8}\b' | head -1
+   ```
+
+3. **Fallback: Request code from Noah via Telegram** (only if automated fetch fails after 60s):
+   ```
+   message action=send channel=telegram target=8531859108 message="🔐 Email verification required for <Company>. Couldn't auto-fetch code. Please check konoahko@gmail.com and send the code."
+   ```
 
 4. **Enter code character by character:**
    ```
@@ -864,11 +900,36 @@ Then report as NEEDS_INPUT with the form URL.
 
 5. **Submit verification** - Look for "Verify" or "Continue" button
 
-### Future Automation Potential
+### Email Access Details
 
-**With IMAP access in container:** Could automate email fetching and code extraction. Current gap is reading konoahko@gmail.com from within the OpenClaw container.
+**IMAP access is available directly from the container.**
 
-**Recommended enhancement:** Add IMAP client (like himalaya) to container configuration for fully automated email verification.
+```bash
+# Environment variables (already configured):
+# GMAIL_EMAIL — konoahko@gmail.com
+# GMAIL_APP_PASSWORD — App-specific password
+
+# List recent emails (last 5)
+for i in $(seq $(($(curl -s --url "imaps://imap.gmail.com:993/INBOX" \
+  --user "$GMAIL_EMAIL:$GMAIL_APP_PASSWORD" \
+  -X "STATUS INBOX (MESSAGES)" 2>&1 | grep -oP 'MESSAGES \K\d+')-4)) \
+  $(curl -s --url "imaps://imap.gmail.com:993/INBOX" \
+  --user "$GMAIL_EMAIL:$GMAIL_APP_PASSWORD" \
+  -X "STATUS INBOX (MESSAGES)" 2>&1 | grep -oP 'MESSAGES \K\d+')); do
+  curl -s --url "imaps://imap.gmail.com:993/INBOX;MAILINDEX=$i;SECTION=HEADER.FIELDS%20(FROM%20SUBJECT%20DATE)" \
+    --user "$GMAIL_EMAIL:$GMAIL_APP_PASSWORD" 2>/dev/null
+  echo "---"
+done
+
+# Search emails
+curl -s --url "imaps://imap.gmail.com:993/INBOX" \
+  --user "$GMAIL_EMAIL:$GMAIL_APP_PASSWORD" \
+  -X "SEARCH FROM somecompany.com" 2>&1
+
+# Read specific email body
+curl -s --url "imaps://imap.gmail.com:993/INBOX;MAILINDEX=54288;SECTION=TEXT" \
+  --user "$GMAIL_EMAIL:$GMAIL_APP_PASSWORD" 2>/dev/null
+```
 
 ---
 
