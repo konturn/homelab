@@ -1027,8 +1027,7 @@ services:
       # Web search
       - BRAVE_API_KEY={{ brave_api_key }}
     volumes:
-      - {{ docker_persistent_data_path }}/moltbot/data:/home/node/.moltbot
-      - {{ docker_persistent_data_path }}/moltbot/data:/home/node/.clawdbot
+      - {{ docker_persistent_data_path }}/moltbot/data:/home/node/.openclaw
       - {{ docker_persistent_data_path }}/moltbot/mcporter:/home/node/.mcporter
       - {{ docker_persistent_data_path }}/moltbot/workspace:/home/node/clawd
       - /var/run/docker.sock:/var/run/docker.sock
