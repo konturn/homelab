@@ -30,9 +30,23 @@
 3. **Heavy Amazon user**: Very frequent purchases/activity
 4. **Investment activity**: Fidelity account suggests active investing beyond just 401k
 
+### Additional Discoveries:
+- **Medical emails**: 18+ emails found, indicating active healthcare engagement
+- **Insurance emails**: 20+ emails found, suggesting health/auto/home insurance activity  
+- **Dental care**: 2+ dentist-related emails found
+- **Yahoo emails**: 7+ emails from Yahoo accounts (possible friends/family on Yahoo)
+- **Strava**: Search in progress (potential running/fitness tracking)
+- **GitHub**: Search in progress (professional development)
+
+### Health & Services:
+- Active healthcare engagement with medical providers
+- Regular dental care
+- Insurance coverage (multiple types)
+
 ## Next Steps:
 - Read specific email contents to extract detailed facts
 - Investigate mortgage/house purchase emails
 - Check work-related emails for career timeline
 - Look for travel/vacation emails
-- Search for health/medical provider emails
+- Explore utility providers for Ohio area
+- Check Strava and GitHub activity
