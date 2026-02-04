@@ -67,6 +67,13 @@ curl -s "$SONARR_URL/api/v3/calendar?start=$START&end=$END" \
   -H "X-Api-Key: $SONARR_API_KEY" | jq '.[] | {seriesTitle: .series.title, episodeTitle: .title, airDate: .airDateUtc}'
 ```
 
+### Check If Series Exists
+
+```bash
+curl -s "$SONARR_URL/api/v3/series" -H "X-Api-Key: $SONARR_API_KEY" | \
+  jq --arg tvdb "$TVDB_ID" '.[] | select(.tvdbId == ($tvdb | tonumber)) | {id, title, monitored}'
+```
+
 ### Add a Series
 
 ```bash
@@ -119,6 +126,19 @@ curl -s -X POST "$SONARR_URL/api/v3/command" \
   -d '{"name": "SeasonSearch", "seriesId": 123, "seasonNumber": 1}'
 ```
 
+### Remove a Series
+
+```bash
+# Keep files (default)
+curl -s -X DELETE "$SONARR_URL/api/v3/series/{id}" \
+  -H "X-Api-Key: $SONARR_API_KEY"
+
+# Delete files too
+curl -s -X DELETE "$SONARR_URL/api/v3/series/{id}?deleteFiles=true" \
+  -H "X-Api-Key: $SONARR_API_KEY"
+```
+**⚠️ Always ask user if they want to delete files when removing!**
+
 ### History (Recent Activity)
 
 ```bash
@@ -148,12 +168,20 @@ curl -s "$SONARR_URL/api/v3/system/status" \
 
 **Batch carefully:** If searching multiple shows, do them one at a time with delays, not in parallel.
 
+## UX Guidelines
+
+**Always include TVDB links** when presenting search results to the user:
+- Format: `[Title (Year)](https://thetvdb.com/series/SLUG)`
+- Helps user verify correct show before adding
+
 ## Common Workflows
 
 ### "Add this show and download it"
 1. Search: `series/lookup?term=show+name`
-2. Get tvdbId from results
-3. POST to `/series` with `searchForMissingEpisodes: true`
+2. Present results with TVDB links for verification
+3. User picks one
+4. Get tvdbId from selection
+5. POST to `/series` with `searchForMissingEpisodes: true`
 
 ### "What's downloading?"
 1. GET `/queue` for current downloads
