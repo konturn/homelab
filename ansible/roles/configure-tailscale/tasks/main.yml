@@ -54,3 +54,18 @@
     - tailscale_binary.stat.exists
     - tailscale_status.rc != 0 or (tailscale_status.stdout | from_json).BackendState != "Running"
   no_log: true  # Hide auth key from logs
+
+- name: Configure Tailscale split DNS
+  ansible.builtin.uri:
+    url: "https://api.tailscale.com/api/v2/tailnet/{{ tailscale_tailnet }}/dns/split-dns"
+    method: PATCH
+    headers:
+      Authorization: "Bearer {{ tailscale_api_token }}"
+      Content-Type: "application/json"
+    body_format: json
+    body: "{{ tailscale_split_dns }}"
+    status_code: 200
+  when:
+    - not ansible_check_mode
+    - tailscale_split_dns is defined
+  no_log: true  # Hide API token from logs

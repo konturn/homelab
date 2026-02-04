@@ -64,6 +64,12 @@ all:
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     omapi_secret: "{{ lookup('env', 'OMAPI_SECRET') }}"
     tailscale_api_token: "{{ lookup('env', 'TAILSCALE_API_TOKEN') }}"
+    tailscale_tailnet: "tail2360f8.ts.net"
+    tailscale_split_dns:
+      lab.nkontur.com:
+        - "10.3.32.2"
+      iot.lab.nkontur.com:
+        - "10.3.32.2"
     grafana_url: "http://grafana:3000"
     grafana_token: "{{ lookup('env', 'GRAFANA_TOKEN') }}"
     brave_api_key: "{{ lookup('env', 'BRAVE_API_KEY') }}"
