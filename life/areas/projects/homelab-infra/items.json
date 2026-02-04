@@ -1,0 +1,68 @@
+{
+  "facts": [
+    {
+      "id": "homelab-001",
+      "fact": "I have GitLab access to gitlab.lab.nkontur.com with user 'moltbot'",
+      "category": "status",
+      "timestamp": "2026-01-30",
+      "source": "conversation",
+      "status": "active"
+    },
+    {
+      "id": "homelab-002",
+      "fact": "Homelab repo is at root/homelab (project ID: 4)",
+      "category": "status",
+      "timestamp": "2026-01-30",
+      "source": "conversation",
+      "status": "active"
+    },
+    {
+      "id": "homelab-003",
+      "fact": "GitLab token has both git push and API access (can create MRs)",
+      "category": "status",
+      "timestamp": "2026-01-30",
+      "source": "conversation",
+      "status": "active"
+    },
+    {
+      "id": "homelab-004",
+      "fact": "Push to repo triggers GitLab CI → Ansible deploys to router",
+      "category": "status",
+      "timestamp": "2026-01-30",
+      "source": "file",
+      "status": "active"
+    },
+    {
+      "id": "homelab-005",
+      "fact": "Created MR #2: CI dry-run validation for MRs (merged)",
+      "category": "milestone",
+      "timestamp": "2026-01-30",
+      "source": "conversation",
+      "status": "active"
+    },
+    {
+      "id": "homelab-006",
+      "fact": "Created MR #3: CI caching for faster builds",
+      "category": "milestone",
+      "timestamp": "2026-01-30",
+      "source": "conversation",
+      "status": "active"
+    },
+    {
+      "id": "homelab-007",
+      "fact": "Created MR #4: Moltbot healthcheck",
+      "category": "milestone",
+      "timestamp": "2026-01-30",
+      "source": "conversation",
+      "status": "active"
+    },
+    {
+      "id": "homelab-008",
+      "fact": "Created MR #5: Improved README documentation",
+      "category": "milestone",
+      "timestamp": "2026-01-30",
+      "source": "conversation",
+      "status": "active"
+    }
+  ]
+}

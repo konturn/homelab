@@ -1,0 +1,37 @@
+{
+  "facts": [
+    {
+      "id": "parents-001",
+      "fact": "Chris and Patty are Noah's parents",
+      "category": "relationship",
+      "timestamp": "2026-01-30",
+      "source": "USER.md",
+      "status": "active"
+    },
+    {
+      "id": "parents-002",
+      "fact": "They live in Northfield, Ohio",
+      "category": "status",
+      "timestamp": "2026-01-30",
+      "source": "USER.md",
+      "status": "active"
+    },
+    {
+      "id": "parents-003",
+      "fact": "Noah currently lives with them",
+      "category": "status",
+      "timestamp": "2026-01-30",
+      "source": "USER.md",
+      "status": "superseded",
+      "supersededBy": "parents-004"
+    },
+    {
+      "id": "parents-004",
+      "fact": "Noah owns his own house nearby at 620 W Highland Rd, Northfield, OH",
+      "category": "status",
+      "timestamp": "2026-02-01",
+      "source": "knowledge-graph/noah/items.json",
+      "status": "active"
+    }
+  ]
+}

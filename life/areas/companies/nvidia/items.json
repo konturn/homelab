@@ -1,0 +1,20 @@
+{
+  "facts": [
+    {
+      "id": "nvidia-001",
+      "fact": "Noah currently works at Nvidia DGX Cloud (infrastructure)",
+      "category": "status",
+      "timestamp": "2026-01-30",
+      "source": "USER.md",
+      "status": "active"
+    },
+    {
+      "id": "nvidia-002",
+      "fact": "Nvidia is on the job application blocklist (already applied/rejected)",
+      "category": "status",
+      "timestamp": "2025-01-27",
+      "source": "blocklist.md",
+      "status": "active"
+    }
+  ]
+}

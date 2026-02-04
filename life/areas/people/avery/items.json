@@ -1,0 +1,74 @@
+[
+  {
+    "id": "avery-001",
+    "fact": "Noah's girlfriend",
+    "category": "relationship",
+    "timestamp": "2026-02-04",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "avery-002",
+    "fact": "They started dating around early January 2026 (together ~1 month as of Feb 4)",
+    "category": "milestone",
+    "timestamp": "2026-02-04",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "avery-003",
+    "fact": "Noah knew her from high school (Northfield, OH area) — they reconnected when she was in town over Christmas 2025",
+    "category": "relationship",
+    "timestamp": "2026-02-04",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "avery-004",
+    "fact": "Lives in Arizona",
+    "category": "location",
+    "timestamp": "2026-02-04",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "avery-005",
+    "fact": "Getting her PhD at Arizona State University (ASU)",
+    "category": "education",
+    "timestamp": "2026-02-04",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "avery-006",
+    "fact": "Noah is visiting her the weekend of Feb 7-9, 2026",
+    "category": "milestone",
+    "timestamp": "2026-02-04",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "avery-007",
+    "fact": "Long-distance relationship (Ohio ↔ Arizona)",
+    "category": "status",
+    "timestamp": "2026-02-04",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "avery-008",
+    "fact": "PhD is in microbiology",
+    "category": "education",
+    "timestamp": "2026-02-04",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "avery-009",
+    "fact": "Research focus: microbial chain elongation and minimizing methane output from waste",
+    "category": "education",
+    "timestamp": "2026-02-04",
+    "source": "conversation",
+    "status": "active"
+  }
+]

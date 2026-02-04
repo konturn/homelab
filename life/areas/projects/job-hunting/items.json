@@ -1,0 +1,98 @@
+[
+  {
+    "id": "job-001",
+    "fact": "XBOW application submitted - Research Engineer / Platform Infrastructure role",
+    "category": "milestone",
+    "timestamp": "2026-01-30",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "job-002",
+    "fact": "Chainalysis application submitted - Security Engineer, Product Infrastructure ($108k-$205k) - status uncertain",
+    "category": "milestone",
+    "timestamp": "2026-01-31",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "job-003",
+    "fact": "ICMARC/Workday application in progress - discovered hover-then-click workaround for unresponsive buttons",
+    "category": "status",
+    "timestamp": "2026-01-31",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "job-004",
+    "fact": "Created MR #25 to add Chromium to moltbot container for autonomous job applications",
+    "category": "milestone",
+    "timestamp": "2026-01-31",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "job-005",
+    "fact": "Considering xvfb addition to container for xdotool compatibility and reduced captcha detection risk",
+    "category": "status",
+    "timestamp": "2026-01-31",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "job-006",
+    "fact": "AcuityMD application submitted - Software Engineer, Infrastructure ($180k-$210k) via Greenhouse",
+    "category": "milestone",
+    "timestamp": "2026-01-31",
+    "source": "session-notes",
+    "status": "active"
+  },
+  {
+    "id": "job-007",
+    "fact": "Sequen AI application submitted - Staff SWE Infrastructure ($250k-$300k) via Ashby",
+    "category": "milestone",
+    "timestamp": "2026-01-31",
+    "source": "session-notes",
+    "status": "active"
+  },
+  {
+    "id": "job-008",
+    "fact": "Found application submitted - Senior SWE Data Infrastructure ($181k-$241k) - Fintech for self-employed",
+    "category": "milestone",
+    "timestamp": "2026-01-31",
+    "source": "session-notes",
+    "status": "active"
+  },
+  {
+    "id": "job-009",
+    "fact": "Persona application submitted - Software Engineer, Compute ($130k-$220k) - Identity verification",
+    "category": "milestone",
+    "timestamp": "2026-01-31",
+    "source": "session-notes",
+    "status": "active"
+  },
+  {
+    "id": "job-010",
+    "fact": "Set up automated retry system: retry-queue.json, abandoned.json, 3 AM cron",
+    "category": "milestone",
+    "timestamp": "2026-01-31",
+    "source": "session-notes",
+    "status": "active"
+  },
+  {
+    "id": "job-011",
+    "fact": "Oscar Health, Leidos, Icmarc in retry queue",
+    "category": "status",
+    "timestamp": "2026-01-31",
+    "source": "session-notes",
+    "status": "active"
+  },
+  {
+    "id": "job-012",
+    "fact": "Set up job-search-nightly cron (2 AM) for proactive searching when laptop node is up",
+    "category": "milestone",
+    "timestamp": "2026-02-01",
+    "source": "session-notes",
+    "status": "active"
+  }
+]

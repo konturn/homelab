@@ -1,0 +1,10 @@
+[
+  {
+    "id": "fidelity-001",
+    "fact": "Noah has an account with Fidelity Investments (9+ emails found in inbox)",
+    "category": "financial",
+    "timestamp": "2026-02-04",
+    "source": "email",
+    "status": "active"
+  }
+]

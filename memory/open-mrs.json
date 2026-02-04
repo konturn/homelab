@@ -1,0 +1,10 @@
+{
+  "73": {
+    "title": "feat: Add practical Home Assistant automations",
+    "branch": "feat/ha-practical-automations",
+    "lastCommentId": 0,
+    "version": 1,
+    "issue": 4,
+    "description": "Practical HA automations: door-based lighting, movie mode, air quality alerts, goodnight routine"
+  }
+}

@@ -24,6 +24,15 @@ homelab/
 *.json
 *.log
 
+# But track knowledge graph and state JSON
+!life/**/items.json
+!memory/heartbeat-state.json
+!memory/main-pipeline-state.json
+!memory/open-mrs.json
+
 # Ignore temp and canvas directories
 tmp/
 canvas/
+
+# Ignore node_modules everywhere
+node_modules/

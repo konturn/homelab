@@ -1,0 +1,12 @@
+{
+  "facts": [
+    {
+      "id": "octoai-001",
+      "fact": "Noah previously worked at OctoAI",
+      "category": "status",
+      "timestamp": "2026-01-30",
+      "source": "USER.md",
+      "status": "active"
+    }
+  ]
+}
