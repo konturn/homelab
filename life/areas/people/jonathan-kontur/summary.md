@@ -1,13 +1,6 @@
-# Jonathan Kontur
+# Jonathan "Jono" Kontur
 
-Extended family member (cousin or relative) who stays in touch with Noah. Uses personal Gmail account and has been involved in technical discussions including Nextcloud setup.
-
-**Communication patterns:**
-- Personal Gmail account (jkon3697@gmail.com)
-- Technical communication about server/cloud infrastructure
-- File sharing via Dropbox
-
-**Relationship:** Extended family member with technical interests.
+Noah's brother. Technically inclined — runs Nextcloud, shares tech files with Noah. 
 
 ---
 *Last synthesized: 2026-02-04*

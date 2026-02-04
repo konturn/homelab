@@ -88,6 +88,54 @@
       "timestamp": "2026-02-04",
       "source": "email",
       "status": "active"
+    },
+    {
+      "id": "parents-012",
+      "fact": "Chris and Patty co-founded CPK Construction, Inc. in early 1989",
+      "category": "employment",
+      "timestamp": "2026-02-04",
+      "source": "web-research",
+      "status": "active"
+    },
+    {
+      "id": "parents-013",
+      "fact": "Chris is Founder and President of CPK Construction with 35+ years construction experience",
+      "category": "employment",
+      "timestamp": "2026-02-04",
+      "source": "web-research",
+      "status": "active"
+    },
+    {
+      "id": "parents-014",
+      "fact": "Patty provided sharp business acumen that established the business foundation",
+      "category": "employment",
+      "timestamp": "2026-02-04",
+      "source": "web-research",
+      "status": "active"
+    },
+    {
+      "id": "parents-015",
+      "fact": "Company incorporated in 1996 and evolved from carpentry to general contracting",
+      "category": "employment",
+      "timestamp": "2026-02-04",
+      "source": "web-research",
+      "status": "active"
+    },
+    {
+      "id": "parents-016",
+      "fact": "CPK Construction specializes in custom carpentry, cabinet making, and design-build projects",
+      "category": "employment",
+      "timestamp": "2026-02-04",
+      "source": "web-research",
+      "status": "active"
+    },
+    {
+      "id": "parents-017",
+      "fact": "Both sons Evan and Jonathan have joined CPK team ensuring succession planning",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "web-research",
+      "status": "active"
     }
   ]
 }

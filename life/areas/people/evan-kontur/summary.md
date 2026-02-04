@@ -1,13 +1,16 @@
 # Evan Kontur
 
-Noah's brother. Works in business operations and maintains regular communication with Noah about practical matters including home maintenance, invoices, and property management.
+Noah's brother. **Project Manager and Director of Operations** at the family business CPK Construction, Inc. (cpkus.com).
 
-**Communication patterns:**
-- Uses business email evank@cpkus.com (same domain as parents)
-- Discusses practical matters: invoices, radon mitigation, office equipment
-- Professional tone in communications
+## Professional Role
+- **Current Position:** Project Manager & Director of Operations at CPK Construction
+- **Previous Experience:** Assistant Project Manager at Town Center Construction
+- **Succession:** Part of family succession plan alongside brother Jonathan
 
-**Relationship:** Brother with ongoing involvement in family business and property matters.
+## Family Business Involvement
+Handles business operations, property management, and practical matters. Active email correspondent with Noah regarding business logistics, invoicing, radon reports, and office equipment.
+
+**Personal relationship:** Manages Noah's property at 620 West Highland Road and maintains regular business correspondence (2022-2026).
 
 ---
 *Last synthesized: 2026-02-04*

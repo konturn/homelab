@@ -761,5 +761,53 @@
     "timestamp": "2026-02-04",
     "source": "conversation",
     "status": "active"
+  },
+  {
+    "id": "noah-096",
+    "fact": "Has two brothers: Evan Kontur and Jonathan (Jono) Kontur",
+    "category": "family",
+    "timestamp": "2026-02-04",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "noah-097",
+    "fact": "Grandfather: Tom McManamon (likely maternal side)",
+    "category": "family",
+    "timestamp": "2026-02-04",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "noah-098",
+    "fact": "Previously used bazooblooface@gmail.com as a privacy-focused alternate email",
+    "category": "identity",
+    "timestamp": "2026-02-04",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "noah-099",
+    "fact": "Plays Dota \u2014 went on a Seattle Dota trip with friend Nate Sahr in 2023",
+    "category": "interest",
+    "timestamp": "2026-02-04",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "noah-100",
+    "fact": "Dating Avery \u2014 girlfriend since early Jan 2026, PhD student at ASU (microbiology)",
+    "category": "relationship",
+    "timestamp": "2026-02-04",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "noah-101",
+    "fact": "Family business uses cpkus.com domain \u2014 Evan involved in operations",
+    "category": "family",
+    "timestamp": "2026-02-04",
+    "source": "email",
+    "status": "active"
   }
 ]

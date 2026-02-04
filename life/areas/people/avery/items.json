@@ -70,5 +70,21 @@
     "timestamp": "2026-02-04",
     "source": "conversation",
     "status": "active"
+  },
+  {
+    "id": "avery-010",
+    "fact": "ASU has active microbiology PhD programs in School of Life Sciences and Biodesign Institute",
+    "category": "education",
+    "timestamp": "2026-02-04",
+    "source": "web-research",
+    "status": "active"
+  },
+  {
+    "id": "avery-011",
+    "fact": "Web research did not identify specific public information about her research",
+    "category": "status",
+    "timestamp": "2026-02-04",
+    "source": "web-research",
+    "status": "active"
   }
 ]

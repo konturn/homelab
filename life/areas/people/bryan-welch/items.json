@@ -18,7 +18,7 @@
     },
     {
       "id": "bryan-003",
-      "fact": "Long-term research collaborator with Noah on papers and abstracts",
+      "fact": "Was Noah's research collaborator during NASA internship period",
       "category": "relationship",
       "timestamp": "2026-02-04",
       "source": "email",
@@ -26,7 +26,7 @@
     },
     {
       "id": "bryan-004",
-      "fact": "Maintains professional correspondence with Noah spanning 2020-2023",
+      "fact": "Professional correspondence with Noah spanning 2020-2023",
       "category": "relationship",
       "timestamp": "2026-02-04",
       "source": "email",
@@ -34,7 +34,7 @@
     },
     {
       "id": "bryan-005",
-      "fact": "Discusses research paper updates, abstracts, and publication schedules",
+      "fact": "Co-authored research papers with Noah on DTN/space communications",
       "category": "relationship",
       "timestamp": "2026-02-04",
       "source": "email",
@@ -42,18 +42,58 @@
     },
     {
       "id": "bryan-006",
-      "fact": "Connected Noah with DataBricks.com for potential opportunities",
-      "category": "relationship",
+      "fact": "Not really in touch anymore as of 2026",
+      "category": "status",
       "timestamp": "2026-02-04",
-      "source": "email",
+      "source": "conversation",
       "status": "active"
     },
     {
       "id": "bryan-007",
-      "fact": "Professional mentor providing career guidance in aerospace research",
-      "category": "relationship",
+      "fact": "Electronics engineer in the Advanced High Frequency Branch (Code LCF) at NASA GRC",
+      "category": "employment",
       "timestamp": "2026-02-04",
-      "source": "email",
+      "source": "web-research",
+      "status": "active"
+    },
+    {
+      "id": "bryan-008",
+      "fact": "Researches GNSS (Global Navigation Satellite Systems) and space communications",
+      "category": "expertise",
+      "timestamp": "2026-02-04",
+      "source": "web-research",
+      "status": "active"
+    },
+    {
+      "id": "bryan-009",
+      "fact": "Works on Glenn Research Center Communication Analysis Suite (GCAS)",
+      "category": "expertise",
+      "timestamp": "2026-02-04",
+      "source": "web-research",
+      "status": "active"
+    },
+    {
+      "id": "bryan-010",
+      "fact": "Has published multiple NASA technical reports on space communications and spatial link coverage",
+      "category": "achievement",
+      "timestamp": "2026-02-04",
+      "source": "web-research",
+      "status": "active"
+    },
+    {
+      "id": "bryan-011",
+      "fact": "Received NASA Honor Award for outstanding leadership in Communications System Engineering and Antenna Pointing System efforts",
+      "category": "achievement",
+      "timestamp": "2026-02-04",
+      "source": "web-research",
+      "status": "active"
+    },
+    {
+      "id": "bryan-012",
+      "fact": "Has 7 research works with 79 citations according to ResearchGate",
+      "category": "achievement",
+      "timestamp": "2026-02-04",
+      "source": "web-research",
       "status": "active"
     }
   ]

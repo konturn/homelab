@@ -1,17 +1,19 @@
 # Tom McManamon
 
-Personal contact who stays in touch with Noah via email. Shares information about investment opportunities and personal updates. Appears to be an older contact who sends obituary links and financial content.
+Noah's grandfather (likely maternal — McManamon surname). **Confirmed resident of North Royalton, Ohio** (44133 zip code area) with active LinkedIn presence.
 
-**Communication patterns:**
-- Personal Yahoo email (tmcmana_44133@yahoo.com)
-- Forwards investment/financial content
-- Shares personal updates and obituary information
+## Communication Patterns
+- **Primary email:** tmcmana_44133@yahoo.com (Yahoo email with local zip code)
+- **Content shared:** Investment/financial market content, personal family updates
+- **Family updates:** Shares obituary links and personal news with Noah
 
-**Interests:**
-- Investment and financial markets
-- Stock market information and opportunities
+## Location & Background
+- **Confirmed residence:** North Royalton, Ohio (multiple LinkedIn profiles in area)
+- **ZIP code 44133:** North Royalton area (confirmed by email address)
+- **Professional presence:** Multiple LinkedIn profiles suggest active professional/social engagement
 
-**Relationship:** Personal contact with ongoing correspondence about financial topics and life updates.
+## Family Relationship
+Regular correspondent with Noah, sharing both financial interests and family news. The McManamon surname suggests maternal lineage (different from Kontur family name).
 
 ---
 *Last synthesized: 2026-02-04*

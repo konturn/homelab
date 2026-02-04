@@ -47,6 +47,38 @@
       "timestamp": "2026-02-04",
       "source": "email",
       "status": "active"
+    },
+    {
+      "id": "evan-007",
+      "fact": "Current title is Project Manager at CPK Construction, Inc.",
+      "category": "employment",
+      "timestamp": "2026-02-04",
+      "source": "web-research",
+      "status": "active"
+    },
+    {
+      "id": "evan-008",
+      "fact": "Also holds the title Director, Operations at CPK Construction",
+      "category": "employment",
+      "timestamp": "2026-02-04",
+      "source": "web-research",
+      "status": "active"
+    },
+    {
+      "id": "evan-009",
+      "fact": "Previously worked as Assistant Project Manager at Town Center Construction",
+      "category": "employment",
+      "timestamp": "2026-02-04",
+      "source": "web-research",
+      "status": "active"
+    },
+    {
+      "id": "evan-010",
+      "fact": "Part of family succession plan for CPK Construction with brother Jonathan",
+      "category": "employment",
+      "timestamp": "2026-02-04",
+      "source": "web-research",
+      "status": "active"
     }
   ]
 }

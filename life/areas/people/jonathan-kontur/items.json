@@ -2,10 +2,10 @@
   "facts": [
     {
       "id": "jonathan-001",
-      "fact": "Jonathan Kontur is Noah's extended family member (likely cousin)",
+      "fact": "Jonathan ('Jono') Kontur is Noah's brother",
       "category": "relationship",
       "timestamp": "2026-02-04",
-      "source": "email",
+      "source": "conversation",
       "status": "active"
     },
     {
@@ -34,10 +34,10 @@
     },
     {
       "id": "jonathan-005",
-      "fact": "Uses Dropbox for file sharing with Noah",
-      "category": "relationship",
+      "fact": "Nicknamed 'Jono' by Noah",
+      "category": "identity",
       "timestamp": "2026-02-04",
-      "source": "email",
+      "source": "conversation",
       "status": "active"
     }
   ]
