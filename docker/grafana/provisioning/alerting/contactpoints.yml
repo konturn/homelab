@@ -1,0 +1,28 @@
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: homelab-email-alerts
+    receivers:
+      - uid: homelab-email-alerts
+        type: email
+        settings:
+          addresses: "konoahko@gmail.com"
+          subject: "🚨 Homelab Alert: {{ .GroupLabels.alertname | title }}"
+          message: |
+            **Alert**: {{ .GroupLabels.alertname }}
+            **Severity**: {{ .CommonLabels.severity }}
+            **Summary**: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}
+            
+            **Details**:
+            {{ range .Alerts }}
+            - **Status**: {{ .Status }}
+            - **Description**: {{ .Annotations.description }}
+            - **Labels**: {{ range .Labels.SortedPairs }}{{ .Name }}={{ .Value }} {{ end }}
+            {{ if .GeneratorURL }}
+            - **Dashboard**: {{ .GeneratorURL }}
+            {{ end }}
+            {{ end }}
+            
+            Time: {{ .CommonAnnotations.startsAt }}
+        disableResolveMessage: false
