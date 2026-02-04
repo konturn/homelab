@@ -297,9 +297,13 @@ If you encounter a CAPTCHA (Cloudflare Turnstile, reCAPTCHA, hCaptcha, image sel
 5. If there's a "Verify" or "Submit" button after selection, click it
 
 **Step 2: If vision approach fails or is too slow**
-Send Telegram notification immediately:
+Add to manual queue (`references/manual-queue.json`) AND send Telegram notification:
+```json
+// Add to manual-queue.json
+{"id": "<job-id>", "company": "<Company>", "role": "<Role>", "formUrl": "<URL>", "salary": "<salary>", "issue": "CAPTCHA type: <hCaptcha/reCAPTCHA/Turnstile>", "addedAt": "YYYY-MM-DD"}
 ```
-message action=send channel=telegram target=8531859108 message="🔐 CAPTCHA detected for <Company>. Form is ready at <URL> - please solve it manually."
+```
+message action=send channel=telegram target=8531859108 message="🔐 CAPTCHA detected for <Company>. Form is ready at <URL> - please solve it manually. Added to manual queue."
 ```
 
 **Tips:**
@@ -315,6 +319,7 @@ message action=send channel=telegram target=8531859108 message="🔐 CAPTCHA det
 - **Applied Jobs:** See `references/applied.json` — machine-readable dedup list
 - **Rejected Jobs:** See `references/rejected.json` — jobs that looked good but failed validation (wrong location, hybrid, etc.)
 - **Retry Queue:** See `references/retry-queue.json` — jobs that failed due to technical issues, awaiting nightly retry attempts
+- **Manual Queue:** See `references/manual-queue.json` — jobs needing human action (CAPTCHA, spam flags). Noah handles these.
 - **Stories:** See `references/stories.md` — personal accomplishment stories for applications
 - **Resume:** `assets/Resume (Kontur, Noah).pdf` — upload this for applications
 - **Resume path on laptop:** `/home/noah/Downloads/Resume (Kontur, Noah).pdf`
@@ -1041,8 +1046,9 @@ curl -s --url "imaps://imap.gmail.com:993/INBOX;MAILINDEX=54288;SECTION=TEXT" \
 5. **Use hover-then-click** — Many React-based forms need hover to trigger JS handlers
 
 ### Ashby (jobs.ashbyhq.com)
-- **⚠️ AGGRESSIVE SPAM DETECTION** — Ashby is the most likely to flag automated submissions
-- **Extra slow here:** Target 5-8 minute form completion minimum
+- **🚨 ASHBY BLOCKS AUTOMATION — as of 2026-02-03, Ashby's spam detection flags sandbox browser submissions even with full anti-detection measures (slow typing, stealth patches, human timing). Detection is likely deeper than timing — canvas/WebGL fingerprinting, TLS fingerprint, or IP reputation.**
+- **RECOMMENDED:** Skip filling the form. Instead, immediately add to `references/manual-queue.json` and notify Noah. He can fill Ashby forms manually in ~2 minutes.
+- **If attempting anyway:** Target 5-8 minute form completion minimum
 - Watch for Yes/No toggle buttons — may need to click them manually (hover before click)
 - Custom questions often appear at the bottom
 - **React state issues:** If validation fails despite fields appearing filled, use hover-then-click on submit
@@ -1531,8 +1537,11 @@ Jobs that fail due to technical issues (not criteria mismatch) go into `referenc
 Add jobs when:
 - Resume upload failed but form is otherwise ready
 - Workday/multi-step form timed out mid-completion
-- CAPTCHA blocked submission but form is filled
-- Any technical failure that seems solvable with different strategies
+- Any technical failure that seems solvable with different automation strategies
+
+**DO NOT add to retry queue:**
+- CAPTCHA blocks → add to `references/manual-queue.json` instead (Noah solves these)
+- Spam detection flags → add to `references/manual-queue.json` instead
 
 Do NOT add jobs when:
 - Criteria validation failed (wrong location, salary, etc.) — these go to rejected.json
