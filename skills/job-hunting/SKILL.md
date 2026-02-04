@@ -590,11 +590,100 @@ browser action=snapshot target=node node=noah-XPS-13-7390-2-in-1 profile=clawd t
 
 ---
 
+## ⚡ Anti-Detection & Human Simulation
+
+**ATS platforms (especially Ashby) use spam detection that flags bot-like behavior.** Every worker MUST follow these patterns to avoid triggering them.
+
+### Core Principles
+
+1. **No instant fills.** Humans don't paste 10 fields in 2 seconds. Every field interaction needs realistic timing.
+2. **Variable, not uniform.** A 500ms delay between every action is MORE suspicious than no delay. Humans are inconsistent — vary your timing.
+3. **Engage the page.** Humans scroll, hover, pause to read. A form that goes straight to filling looks automated.
+4. **Total time matters.** A real person takes 3-7 minutes on a simple form, 8-15 on a complex one. Under 2 minutes is a red flag.
+
+### Timing Constants
+
+Use these as guidelines — vary by ±30% randomly each time:
+
+| Action | Delay | Notes |
+|--------|-------|-------|
+| Page load → first interaction | 3-8 seconds | "Read" the page first |
+| Between field fills | 1-4 seconds | Longer for unrelated fields |
+| Typing each character | 50-150ms | Use `slowly: true` on type actions |
+| After typing a field → next action | 0.5-2 seconds | Pause like you're checking what you typed |
+| Before clicking Submit | 3-6 seconds | "Review" the form |
+| Scrolling | 1-3 seconds | Pause after scrolling to "read" |
+| After dropdown selection | 1-2 seconds | Let the human "confirm" their choice |
+
+### Implementation
+
+**Typing fields (name, email, phone, etc.):**
+```
+# Use slowly:true to simulate human typing speed
+browser action=act request={"kind": "type", "ref": "<ref>", "text": "Noah", "slowly": true}
+```
+
+**Between-field delays — use `wait` actions:**
+```
+# Pause 1-3 seconds between fields (vary this!)
+browser action=act request={"kind": "wait", "timeMs": 2000}
+```
+
+**Pre-fill page engagement:**
+```
+# After page loads, scroll down to "see" the form
+browser action=act request={"kind": "hover", "ref": "<some-visible-element>"}
+browser action=act request={"kind": "wait", "timeMs": 3000}
+```
+
+**Hover-then-click on ALL buttons (not just Workday):**
+```
+# Always hover before clicking — triggers JS handlers AND looks human
+browser action=act request={"kind": "hover", "ref": "<button-ref>"}
+browser action=act request={"kind": "wait", "timeMs": 500}
+browser action=act request={"kind": "click", "ref": "<button-ref>"}
+```
+
+### Browser Fingerprint Hardening (Sandbox)
+
+**On every new page load in sandbox browser, inject stealth patches:**
+```
+browser action=act profile=sandbox targetId=<id> request={"kind": "evaluate", "fn": "() => { Object.defineProperty(navigator, 'webdriver', { get: () => undefined }); window.chrome = { runtime: {} }; Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] }); Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] }); }"}
+```
+
+Run this BEFORE any form interaction. It removes common automation signals:
+- `navigator.webdriver` → undefined (Playwright sets this to true)
+- `window.chrome` → present (headless Chrome omits this)
+- `navigator.plugins` → non-empty (headless has 0 plugins)
+- `navigator.languages` → realistic
+
+### Form Completion Time Targets
+
+| Form Type | Minimum Time | Target Time |
+|-----------|-------------|-------------|
+| Simple (name, email, resume only) | 2 min | 3-4 min |
+| Standard (+ custom questions) | 4 min | 5-8 min |
+| Complex (multi-step, long-form) | 7 min | 8-15 min |
+
+**If you're finishing faster than the minimum → add more browsing/reading time.** Scroll through the job description, hover over company links, pause between sections.
+
+### What NOT To Do
+
+- ❌ Fill all fields in rapid succession with no delays
+- ❌ Use uniform delays (e.g., exactly 1000ms between every action)
+- ❌ Skip straight to the form without any page engagement
+- ❌ Submit within 60 seconds of page load
+- ❌ Type at inhuman speed (instant fills)
+- ❌ Click submit without pausing to "review"
+
+---
+
 ## Worker Workflow: Direct Manual Fill
 
 **The strategy is simple: Snapshot, fill everything manually, upload resume, submit.**
+**But do it at HUMAN PACE with realistic timing (see Anti-Detection section above).**
 
-No browser extensions. No autofill detection. Just reliable manual form completion.
+No browser extensions. No autofill detection. Just reliable manual form completion with human-like behavior.
 
 ### ⚠️ STEP 0: DISMISS ANY STUCK DIALOGS (MANDATORY)
 **BEFORE navigating to ANY form, run this:**
@@ -604,21 +693,30 @@ nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "Escape
 Previous workers may have left file dialogs open. This prevents getting stuck.
 
 1. **Navigate** to the application URL
-2. **Wait 3-5 seconds** for page to load
-3. **Snapshot** the page to see all form fields
-4. **Fill ALL required fields manually:**
-   - First Name: `Noah`
-   - Last Name: `Kontur`
-   - Email: `konoahko@gmail.com`
-   - Phone: `216-213-6940`
+2. **Inject stealth patches** (sandbox only — see Anti-Detection section)
+3. **Wait 3-8 seconds** for page to load — simulate reading the page
+4. **Scroll through the form** — hover over a few elements before filling anything
+5. **Snapshot** the page to see all form fields
+6. **Fill ALL required fields manually WITH DELAYS between each:**
+   - First Name: `Noah` (use `slowly: true`)
+   - *(wait 1-3s)*
+   - Last Name: `Kontur` (use `slowly: true`)
+   - *(wait 1-2s)*
+   - Email: `konoahko@gmail.com` (use `slowly: true`)
+   - *(wait 2-4s — longer pause, "checking email is right")*
+   - Phone: `216-213-6940` (use `slowly: true`)
+   - *(wait 1-3s)*
    - Location: `Northfield, OH` or `Northfield, Ohio, United States`
+   - *(wait 1-2s)*
    - LinkedIn: `N/A`
-5. **Handle resume upload** (see Resume Upload section below — use xdotool method)
-6. **Fill dropdowns** — work authorization (Yes), sponsorship needed (No), etc.
-7. **Fill custom questions** — "Why this company?", cover letters, etc. (use human voice!)
-8. **Verify** all required fields are filled, resume shows as uploaded
-9. **Submit** the application
-10. **Report back** with open-ended responses and any feedback
+7. **Handle resume upload** (see Resume Upload section below)
+8. *(wait 2-3s)*
+9. **Fill dropdowns** — work authorization (Yes), sponsorship needed (No), etc. — hover before each click
+10. **Fill custom questions** — "Why this company?", cover letters, etc. (use human voice!)
+11. *(wait 3-6s — "reviewing the form")*
+12. **Verify** all required fields are filled, resume shows as uploaded
+13. **Submit** the application (hover-then-click, always)
+14. **Report back** with open-ended responses and any feedback
 
 ### What Workers Handle (Always)
 - "Why are you interested in this role?"
@@ -943,9 +1041,13 @@ curl -s --url "imaps://imap.gmail.com:993/INBOX;MAILINDEX=54288;SECTION=TEXT" \
 5. **Use hover-then-click** — Many React-based forms need hover to trigger JS handlers
 
 ### Ashby (jobs.ashbyhq.com)
+- **⚠️ AGGRESSIVE SPAM DETECTION** — Ashby is the most likely to flag automated submissions
+- **Extra slow here:** Target 5-8 minute form completion minimum
 - Watch for Yes/No toggle buttons — may need to click them manually (hover before click)
 - Custom questions often appear at the bottom
 - **React state issues:** If validation fails despite fields appearing filled, use hover-then-click on submit
+- **Typing:** Always use `slowly: true` for ALL text fields on Ashby forms
+- **Engagement:** Scroll to bottom and back up before filling, hover over job title/company name
 
 ### Greenhouse (boards.greenhouse.io)
 - Fill all fields manually:
@@ -1255,11 +1357,16 @@ Report back when done: SUCCESS / FAILED / NEEDS_INPUT
    - Sandbox: `browser action=open profile=sandbox targetUrl=<application-url>`
    - Node: `browser action=open target=node node=noah-XPS-13-7390-2-in-1 profile=clawd targetUrl=<application-url>`
 
-5. **Wait for page load** — Wait 3-5 seconds for form to render
+5. **Inject stealth patches** (sandbox only — see Anti-Detection section)
 
-6. **Snapshot the form** — `browser action=snapshot` to see all form fields
+6. **Wait for page load** — Wait 5-8 seconds, scroll the page, hover over elements (simulate reading)
 
-7. **Fill ALL fields manually:**
+7. **Snapshot the form** — `browser action=snapshot` to see all form fields
+
+8. **Fill ALL fields manually WITH HUMAN TIMING (see Anti-Detection section):**
+   - Use `slowly: true` for all text input
+   - Wait 1-4 seconds between fields (vary it!)
+   - Hover before clicking any button or dropdown
    - First Name: `Noah`
    - Last Name: `Kontur`
    - Email: `konoahko@gmail.com`
@@ -1269,22 +1376,25 @@ Report back when done: SUCCESS / FAILED / NEEDS_INPUT
    - Work authorization: Yes
    - Sponsorship needed: No
 
-8. **Upload resume** — Use appropriate method for your browser profile (see Resume Upload section)
+9. **Upload resume** — Use appropriate method for your browser profile (see Resume Upload section)
    - Sandbox: Arm-then-click method
    - Node: Direct input upload or xdotool fallback
 
-9. **Fill custom questions** — For any open-ended questions:
-   - Use HUMAN voice (see Voice & Persona section)
-   - Research the company for specific details
-   - Keep responses concise and genuine
+10. **Fill custom questions** — For any open-ended questions:
+    - Use HUMAN voice (see Voice & Persona section)
+    - Research the company for specific details
+    - Keep responses concise and genuine
+    - Add a 2-3 second pause after writing each response (simulate re-reading)
 
-10. **Verify before submit:**
+11. **Wait 3-6 seconds** — "Review" the form before submitting
+
+12. **Verify before submit:**
     - ✅ Resume shows as uploaded (filename visible)
     - ✅ Salary expectation says $250,000 (not lower)
     - ✅ All required fields are filled
     - ✅ No validation errors visible
 
-11. **Submit** — Click the submit button
+13. **Submit** — Hover over submit button, wait 1 second, then click
 
 12. **Report back:**
     - `SUCCESS: Applied to <Company> - <Role>`
