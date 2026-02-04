@@ -1,21 +1,17 @@
-# Avery
+# Avery Brewer
 
-Noah's girlfriend. **PhD student in microbiology at Arizona State University** researching microbial chain elongation and methane minimization from waste.
+Noah's girlfriend since early January 2026. They knew each other from high school in the Northfield/Cleveland area and reconnected over Christmas 2025.
 
-## Academic Background
-- **Institution:** Arizona State University (ASU), Arizona
-- **Program:** PhD in Microbiology  
-- **Research Focus:** Microbial chain elongation, minimizing methane output from waste
-- **Context:** ASU has strong microbiology programs through School of Life Sciences and Biodesign Institute
+## Academic
+- **PhD student** at ASU — Civil, Environmental and Sustainable Engineering (Ira A. Fulton School of Engineering)
+- **Graduate Research Assistant** in the Delgado Lab, Biodesign Swette Center for Environmental Biotechnology
+- **Research:** Microbial chain elongation, bioremediation systems, waste-to-product conversion, microbial kinetics — specifically minimizing methane output from waste
+- **ASU profile:** https://search.asu.edu/profile/4735945
 
-## Personal Relationship
-- **Started dating:** Early January 2026 (reconnected over Christmas 2025)
-- **History:** Knew each other from high school in Northfield, OH area
-- **Current status:** Long-distance relationship (Ohio ↔ Arizona)
-- **Upcoming visit:** Noah visiting weekend of Feb 7-9, 2026
-
-## Privacy Note
-Last name unknown. Web research of ASU microbiology departments did not yield specific public information about her research or academic profile, respecting academic privacy.
+## Personal
+- Lives in Tempe, AZ (ASU campus)
+- Long-distance with Noah (Ohio ↔ Arizona)
+- Noah visiting her weekend of Feb 7-9, 2026
 
 ---
 *Last synthesized: 2026-02-04*
