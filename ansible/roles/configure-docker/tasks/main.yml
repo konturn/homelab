@@ -219,9 +219,32 @@
     state: present
   when: not ansible_check_mode
     
+- name: Enable dnsmasq.d config loading for Pi-hole
+  ansible.builtin.replace:
+    path: "{{ docker_persistent_data_path }}/pihole/conf/pihole.toml"
+    regexp: '^\s*etc_dnsmasq_d\s*=\s*false'
+    replace: '  etc_dnsmasq_d = true'
+  register: pihole_dnsmasq_d
+  when: not ansible_check_mode
+  ignore_errors: yes
+
+- name: Set Pi-hole listening mode to ALL for cross-VLAN DNS
+  ansible.builtin.replace:
+    path: "{{ docker_persistent_data_path }}/pihole/conf/pihole.toml"
+    regexp: '^\s*listeningMode\s*=\s*"LOCAL"'
+    replace: '  listeningMode = "ALL"'
+  register: pihole_listening_mode
+  when: not ansible_check_mode
+  ignore_errors: yes
+
 - name: Restart containers if config change
   ansible.builtin.command:
     cmd: "docker restart {{ item.item.name }}"
   when: item.changed and not ansible_check_mode
   loop: "{{ docker_config_copy.results }}"
   ignore_errors: yes
+
+- name: Restart pihole if pihole.toml was modified
+  ansible.builtin.command:
+    cmd: "docker restart pihole"
+  when: (pihole_dnsmasq_d is changed or pihole_listening_mode is changed) and not ansible_check_mode
