@@ -202,6 +202,10 @@ router:deploy:
         - docker/docker-compose.yml
         - docker/**/*
         - networking/**/*
+        - .gitlab-ci.yml
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
 
 zwave:deploy:
   extends: .ansible
@@ -220,6 +224,10 @@ zwave:deploy:
         - ansible/roles/configure-zwave/**/*
         - ansible/roles/configure-snapclient/**/*
         - docker/docker-compose-zwave.yml
+        - .gitlab-ci.yml
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
 
 satellite-2:deploy:
   extends: .ansible
@@ -236,3 +244,7 @@ satellite-2:deploy:
         - ansible/satellite-2.yml
         - ansible/inventory.yml
         - ansible/roles/configure-satellite/**/*
+        - .gitlab-ci.yml
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
