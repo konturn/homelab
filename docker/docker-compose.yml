@@ -1028,6 +1028,9 @@ services:
       - BRAVE_API_KEY={{ brave_api_key }}
       # Agent platforms
       - ACLAWDEMY_API_KEY={{ lookup('env', 'ACLAWDEMY_API_KEY') }}
+      # Email access (for job application verification codes, etc.)
+      - GMAIL_EMAIL={{ lookup('env', 'GMAIL_EMAIL') }}
+      - GMAIL_APP_PASSWORD={{ lookup('env', 'GMAIL_APP_PASSWORD') }}
     volumes:
       - {{ docker_persistent_data_path }}/moltbot/data:/home/node/.openclaw
       - {{ docker_persistent_data_path }}/moltbot/mcporter:/home/node/.mcporter
