@@ -331,7 +331,7 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=America/New_York
-      - AUDIOSERVE_SHARED_SECRET=audiobooks_bepis123
+      - AUDIOSERVE_SHARED_SECRET={{ lookup('env', 'AUDIOSERVE_SECRET') }}
       - VIRTUAL_HOST=audioserve.nkontur.com
       - LETSENCRYPT_HOST=audioserve.nkontur.com
     command: /audiobooks
