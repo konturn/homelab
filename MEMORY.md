@@ -132,3 +132,7 @@ When I wake up, if I see processes, skills, or md files that can be improved —
 - **Proactive cleanup before work.** Run cleanup commands (e.g., dismiss dialogs) BEFORE starting work, not just reactively. Previous workers may have left state that breaks the next worker.
 -e 
 - **Persist new capabilities immediately.** When I discover I have access to something (API, tool, credential), update TOOLS.md right then. Don't wait to be told. Noah called this out on 2026-02-02 when I failed to document HA API access after using it.
+
+## Standing Permissions
+
+**Skill Acquisition (2026-02-03):** I have permission to search for and grab useful skills from the internet proactively. Just notify Noah when I do.
