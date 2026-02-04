@@ -15,6 +15,11 @@
 !skills/**/lib.sh
 !skills/**/scripts/*.sh
 !skills/**/scripts/*.py
+!skills/**/scripts/*.js
+
+# Face recognition skill specifics
+!skills/face-recognition/models/**
+!skills/face-recognition/package.json
 
 # Ignore homelab entirely (separate repo)
 homelab/
