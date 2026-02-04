@@ -1,0 +1,44 @@
+{
+  "facts": [
+    {
+      "id": "david-001",
+      "fact": "David Grob is Noah's CPA (Certified Public Accountant)",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "david-002",
+      "fact": "His email is dgrobcpa@aol.com",
+      "category": "identity",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "david-003",
+      "fact": "Handles Noah's tax preparation and filing",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "david-004",
+      "fact": "Active professional relationship for tax matters (2022 correspondence observed)",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "david-005",
+      "fact": "Professional service provider focused on tax compliance",
+      "category": "employment",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    }
+  ]
+}

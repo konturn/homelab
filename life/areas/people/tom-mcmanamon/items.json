@@ -1,0 +1,52 @@
+{
+  "facts": [
+    {
+      "id": "tom-001",
+      "fact": "Tom McManamon is a personal contact who corresponds with Noah via email",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "tom-002",
+      "fact": "His email is tmcmana_44133@yahoo.com",
+      "category": "identity",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "tom-003",
+      "fact": "Shares investment and financial market content with Noah",
+      "category": "interest",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "tom-004",
+      "fact": "Forwards content about stock opportunities and financial updates",
+      "category": "interest",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "tom-005",
+      "fact": "Sends personal updates including obituary links to Noah",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "tom-006",
+      "fact": "Maintains ongoing email correspondence from 2021-2021 period",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    }
+  ]
+}

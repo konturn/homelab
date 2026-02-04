@@ -32,6 +32,62 @@
       "timestamp": "2026-02-01",
       "source": "knowledge-graph/noah/items.json",
       "status": "active"
+    },
+    {
+      "id": "parents-005",
+      "fact": "Chris's primary email is chrisk@cpkus.com (business domain)",
+      "category": "identity",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "parents-006",
+      "fact": "Patty's primary email is pattyk@cpkus.com (business domain)",
+      "category": "identity",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "parents-007",
+      "fact": "Patty also uses pattykontur@gmail.com for personal communications",
+      "category": "identity",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "parents-008",
+      "fact": "The cpkus.com domain appears to be associated with their business",
+      "category": "employment",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "parents-009",
+      "fact": "Chris and Noah exchange work-related content including RCA analysis, SketchUp files, and technical projects",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "parents-010",
+      "fact": "Patty frequently shares content via Facebook and forwards emails to Noah",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "parents-011",
+      "fact": "Family maintains regular email communication across multiple years (2020-2026)",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
     }
   ]
 }

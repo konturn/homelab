@@ -1,0 +1,44 @@
+{
+  "facts": [
+    {
+      "id": "nate-001",
+      "fact": "Nate Sahr is Noah's friend with shared gaming interests",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "nate-002",
+      "fact": "His email is natesahr@gmail.com",
+      "category": "identity",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "nate-003",
+      "fact": "Organized a Seattle Dota trip with Noah in 2023",
+      "category": "interest",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "nate-004",
+      "fact": "Shares interest in Dota gaming with Noah",
+      "category": "interest",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "nate-005",
+      "fact": "Coordinates social activities and travel plans",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    }
+  ]
+}

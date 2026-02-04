@@ -1,0 +1,60 @@
+{
+  "facts": [
+    {
+      "id": "bryan-001",
+      "fact": "Bryan W. Welch is a NASA researcher at Glenn Research Center",
+      "category": "employment",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "bryan-002",
+      "fact": "His NASA email is bryan.w.welch@nasa.gov with designation GRC-LCA0",
+      "category": "identity",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "bryan-003",
+      "fact": "Long-term research collaborator with Noah on papers and abstracts",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "bryan-004",
+      "fact": "Maintains professional correspondence with Noah spanning 2020-2023",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "bryan-005",
+      "fact": "Discusses research paper updates, abstracts, and publication schedules",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "bryan-006",
+      "fact": "Connected Noah with DataBricks.com for potential opportunities",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "bryan-007",
+      "fact": "Professional mentor providing career guidance in aerospace research",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    }
+  ]
+}

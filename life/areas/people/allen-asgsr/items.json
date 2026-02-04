@@ -1,0 +1,36 @@
+{
+  "facts": [
+    {
+      "id": "allen-001",
+      "fact": "Allen is a personal contact who corresponds with Noah",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "allen-002",
+      "fact": "His email is allen_asgsr@cox.net",
+      "category": "identity",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "allen-003",
+      "fact": "Sent congratulatory messages to Noah in April 2020",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "allen-004",
+      "fact": "Part of Noah's personal or professional network with positive relationship",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "facts": [
+    {
+      "id": "jason-001",
+      "fact": "Jason Berkman is a professional photographer who has worked with Noah",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "jason-002",
+      "fact": "His business email is jasonberkmanphotography@yahoo.com",
+      "category": "identity",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "jason-003",
+      "fact": "Provides Photofeeler data analysis and photo optimization services",
+      "category": "employment",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "jason-004",
+      "fact": "Specializes in profile photography and data-driven photo analysis",
+      "category": "employment",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "jason-005",
+      "fact": "Professional service provider for Noah's photography needs",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    }
+  ]
+}

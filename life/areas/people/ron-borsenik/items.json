@@ -1,0 +1,44 @@
+{
+  "facts": [
+    {
+      "id": "ron-001",
+      "fact": "Ron Borsenik is a business contact who has worked with Noah on technology projects",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "ron-002",
+      "fact": "His business email is rborsenik@borsenik.com",
+      "category": "identity",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "ron-003",
+      "fact": "Involved in Nextiva telecommunications proposal work",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "ron-004",
+      "fact": "Operates business services under borsenik.com domain",
+      "category": "employment",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "ron-005",
+      "fact": "Professional relationship focused on telecommunications and technology services",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    }
+  ]
+}

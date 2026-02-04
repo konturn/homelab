@@ -1,0 +1,44 @@
+{
+  "facts": [
+    {
+      "id": "jonathan-001",
+      "fact": "Jonathan Kontur is Noah's extended family member (likely cousin)",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "jonathan-002",
+      "fact": "His email is jkon3697@gmail.com",
+      "category": "identity",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "jonathan-003",
+      "fact": "Shares technical files and discusses technology topics with Noah",
+      "category": "interest",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "jonathan-004",
+      "fact": "Has experience with Nextcloud server administration",
+      "category": "interest",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "jonathan-005",
+      "fact": "Uses Dropbox for file sharing with Noah",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "facts": [
+    {
+      "id": "evan-001",
+      "fact": "Evan Kontur is Noah's brother",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "evan-002",
+      "fact": "His primary email is evank@cpkus.com",
+      "category": "identity",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "evan-003",
+      "fact": "Works with the family business using cpkus.com domain",
+      "category": "employment",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "evan-004",
+      "fact": "Handles practical matters like invoicing, radon mitigation reports, and office equipment for Noah",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "evan-005",
+      "fact": "Involved in Noah's property management at 620 West Highland Road",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    },
+    {
+      "id": "evan-006",
+      "fact": "Maintains regular business communication with Noah (2022-2026)",
+      "category": "relationship",
+      "timestamp": "2026-02-04",
+      "source": "email",
+      "status": "active"
+    }
+  ]
+}
