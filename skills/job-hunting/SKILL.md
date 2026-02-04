@@ -20,25 +20,66 @@ description: Search and apply for remote software engineering jobs. Use when sea
 
 ## ⚠️ CRITICAL REQUIREMENTS
 
-### Node Availability Check (FIRST THING)
+### Browser Availability Check (FIRST THING)
 
-**Before doing ANY work, verify Noah's laptop node is connected:**
+**Before doing ANY work, verify browser availability in this order:**
 
-```
-nodes action=status
-```
+1. **FIRST: Check if sandbox browser is running:**
+   ```
+   exec command="curl -s http://127.0.0.1:9222/json/version" timeout=5
+   ```
+   
+   - If successful → Use `profile=sandbox` (headless Chromium in container)
+   - If connection refused → Try to launch sandbox browser:
+     ```
+     exec command="chromium --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --remote-debugging-port=9222 --remote-debugging-address=127.0.0.1 --window-size=1280,900 about:blank &" background=true
+     exec command="sleep 3"
+     exec command="curl -s http://127.0.0.1:9222/json/version" timeout=5
+     ```
 
-Look for `noah-XPS-13-7390-2-in-1` in the response with `"connected": true`.
+2. **FALLBACK: Check Noah's laptop node if sandbox unavailable:**
+   ```
+   nodes action=status
+   ```
+   Look for `noah-XPS-13-7390-2-in-1` in the response with `"connected": true`.
 
-**If the node is disconnected:**
+**If BOTH sandbox and node are unavailable:**
 1. **DO NOT attempt workarounds** (no web_fetch, no curl, no alternative approaches)
 2. **IMMEDIATELY terminate** with this exact report:
    ```
-   BLOCKED: Node `noah-XPS-13-7390-2-in-1` is disconnected. Cannot proceed with browser automation.
+   BLOCKED: No browser available. Sandbox browser failed to start and node `noah-XPS-13-7390-2-in-1` is disconnected. Cannot proceed with browser automation.
    ```
-3. The main agent will notify Noah and retry when the node is back online
+3. The main agent will notify Noah and retry when browser access is restored
 
-**Why this is critical:** Job applications REQUIRE browser automation on Noah's laptop. Without the node, the task is impossible. Attempting workarounds wastes tokens and produces no results.
+**Why this matters:** Job applications REQUIRE browser automation. Sandbox browser (headless Chromium in container) is preferred as it doesn't depend on Noah's laptop being online.
+
+---
+
+## Browser Connection Details
+
+**Two browser profiles are available:**
+
+### Primary: Sandbox Browser (in container)
+```
+profile=sandbox
+```
+- **Pros:** Always available, no node dependency, faster startup
+- **Cons:** Headless only (no visual debugging), limited file system access
+- **Resume path:** `/home/node/.openclaw/workspace/skills/job-hunting/assets/Resume (Kontur, Noah).pdf`
+- **Usage:** `browser action=<action> profile=sandbox`
+
+### Fallback: Node Browser (Noah's laptop)
+```
+profile=clawd
+target=node  
+node=noah-XPS-13-7390-2-in-1
+```
+- **Pros:** Full UI access, can use xdotool for complex interactions
+- **Cons:** Requires Noah's laptop to be online and connected
+- **Resume path:** `/home/noah/Downloads/Resume (Kontur, Noah).pdf`
+- **Usage:** `browser action=<action> profile=clawd target=node node=noah-XPS-13-7390-2-in-1`
+
+**Default strategy:** Always try sandbox first. Use node fallback only if sandbox browser fails to start or encounters issues that require visual debugging.
 
 ---
 
@@ -69,7 +110,7 @@ These scripts handle deterministic operations. Use them instead of reimplementin
 
 | Script | Usage | Purpose |
 |--------|-------|---------|
-| `check-node.sh` | `./scripts/check-node.sh` | Returns "connected" (exit 0) or "disconnected" (exit 1) |
+| `check-browser.sh` | `./scripts/check-browser.sh` | Returns "sandbox" (exit 0), "node" (exit 1), or "unavailable" (exit 2) |
 | `detect-ats.sh` | `./scripts/detect-ats.sh <url>` | Returns: ashby\|greenhouse\|lever\|workday\|workable\|unknown |
 | `check-applied.sh` | `./scripts/check-applied.sh <job-id>` | Exit 0 if not applied, exit 1 if already applied |
 | `check-blocklist.sh` | `./scripts/check-blocklist.sh <company>` | Exit 0 if not blocked, exit 1 if blocked |
@@ -79,8 +120,13 @@ These scripts handle deterministic operations. Use them instead of reimplementin
 
 Example worker flow:
 ```bash
-# 1. Check node (or use nodes tool directly)
-./scripts/check-node.sh || exit 1
+# 1. Check browser availability (sandbox preferred, node fallback)
+BROWSER_TYPE=$(./scripts/check-browser.sh)
+case $BROWSER_TYPE in
+  sandbox) PROFILE="sandbox" ;;
+  node) PROFILE="clawd"; TARGET="target=node node=noah-XPS-13-7390-2-in-1" ;;
+  *) echo "No browser available"; exit 1 ;;
+esac
 
 # 2. Check blocklist
 ./scripts/check-blocklist.sh "CompanyName" || { echo "SKIPPED: Blocklisted"; exit 0; }
@@ -171,10 +217,12 @@ sessions_spawn(
 ```
 
 **Scout's ONLY jobs:**
-1. Search Hiring Cafe listing page (NOT individual job pages)
+1. Search Hiring Cafe listing page using sandbox browser (NOT individual job pages)
 2. Extract job titles, companies, salaries, URLs from the LIST view
 3. Filter against blocklist and applied.json
 4. **Report structured list back to main agent and EXIT**
+
+**Scout Browser Profile:** Use `profile=sandbox` for all browser actions unless sandbox is unavailable, then fallback to node.
 
 **⚠️ BATCH LIMITS:**
 - **Max 10 jobs per search** — Quality over quantity.
@@ -506,7 +554,9 @@ When applying:
 
 **⚠️ CRITICAL: Tab Management**
 Before opening any new tabs, ALWAYS:
-1. List existing tabs: `browser action=tabs target=node node=noah-XPS-13-7390-2-in-1 profile=clawd`
+1. List existing tabs: `browser action=tabs profile=<sandbox-or-clawd>`
+   - Sandbox: `browser action=tabs profile=sandbox`
+   - Node: `browser action=tabs target=node node=noah-XPS-13-7390-2-in-1 profile=clawd`
 2. If a Hiring Cafe tab exists, use its `targetId` — do NOT open a new tab
 3. If no Hiring Cafe tab exists, open ONE tab and track its `targetId`
 4. Use that SAME `targetId` for ALL subsequent actions on that tab
@@ -522,24 +572,20 @@ Before opening any new tabs, ALWAYS:
 4. Filter results against blocklist and applied.json before presenting to user
 5. All results should be Remote — if you see Onsite/Hybrid, something is wrong
 
-## Browser Connection Details
+## Browser Profile Usage Examples
 
-**IMPORTANT: All workers use `profile=clawd`** — this is the dedicated browser profile for job applications.
-
+**Sandbox browser (primary):**
 ```
-target: node
-node: noah-XPS-13-7390-2-in-1
-profile: clawd
+browser action=open profile=sandbox targetUrl=<url>
+browser action=tabs profile=sandbox
+browser action=snapshot profile=sandbox targetId=<id>
 ```
 
-**Opening a new tab:**
+**Node browser (fallback):**
 ```
 browser action=open target=node node=noah-XPS-13-7390-2-in-1 profile=clawd targetUrl=<url>
-```
-
-**Getting tab list:**
-```
 browser action=tabs target=node node=noah-XPS-13-7390-2-in-1 profile=clawd
+browser action=snapshot target=node node=noah-XPS-13-7390-2-in-1 profile=clawd targetId=<id>
 ```
 
 ---
@@ -648,9 +694,39 @@ Keep it to 3-4 sentences. Tight > comprehensive.
 
 ## Resume Upload
 
-**Resume upload is the most critical step.** Use these methods:
+**Resume upload is the most critical step.** Use these methods in order:
 
-### ⚠️ CRITICAL: Native File Dialog Problem
+### Step 1: Sandbox Browser - Arm Then Click (PRIMARY METHOD)
+
+**For sandbox browser (`profile=sandbox`), use the arm-then-click approach:**
+
+1. **ARM the upload first** - Call upload action WITHOUT clicking any buttons:
+   ```
+   browser action=upload profile=sandbox targetId=<id> paths=["/home/node/.openclaw/workspace/skills/job-hunting/assets/Resume (Kontur, Noah).pdf"]
+   ```
+   
+2. **THEN click the Attach button** - Find and click "Attach", "Upload", or "Choose File" button:
+   ```
+   browser action=act profile=sandbox targetId=<id> request={"kind": "click", "ref": "<attach-button-ref>"}
+   ```
+
+**Why this works:** The upload action "arms" the file picker with the resume file. When you subsequently click the Attach button, it immediately uses the pre-loaded file instead of opening a native dialog.
+
+**⚠️ CRITICAL ORDER: Upload action FIRST, then click Attach. Do not reverse this.**
+
+### Step 2: Node Browser - Direct Input Upload (FALLBACK)
+
+**For node browser (`profile=clawd`), try direct input upload first:**
+
+The `browser action=upload` with `selector` targeting the `<input type="file">` element injects the file directly WITHOUT opening the native dialog:
+
+```
+browser action=upload profile=clawd target=node node=noah-XPS-13-7390-2-in-1 selector="input[type=file]" paths=["/home/noah/Downloads/Resume (Kontur, Noah).pdf"]
+```
+
+**DO NOT** click "Upload Resume" or "Attach File" buttons first — they open the native dialog. Instead, find the hidden file input and upload to it directly.
+
+### ⚠️ CRITICAL: Native File Dialog Problem (Node Only)
 
 **Browser automation CANNOT interact with native OS file dialogs.**
 
@@ -666,19 +742,7 @@ When a "Choose File" or "Upload" button is clicked, the OS opens a native file p
 nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "Escape"]
 ```
 
-**Then use the correct approach below.**
-
-### Step 1: Try browser upload action (CORRECT APPROACH)
-
-The `browser action=upload` with `selector` targeting the `<input type="file">` element injects the file directly WITHOUT opening the native dialog:
-
-```
-browser action=upload profile=clawd targetId=<id> selector="input[type=file]" paths=["/home/noah/Downloads/Resume (Kontur, Noah).pdf"]
-```
-
-**DO NOT** click "Upload Resume" or "Attach File" buttons — they open the native dialog. Instead, find the hidden file input and upload to it directly.
-
-### Step 2: Verify upload succeeded
+### Step 3: Verify upload succeeded
 
 **⚠️ CRITICAL: Check the FORM, not the file picker!**
 
@@ -690,18 +754,20 @@ After ANY upload attempt, snapshot the form and look for:
 **DO NOT** verify by searching for file picker windows — they close after upload completes. The absence of a file picker means nothing. **Only the form state matters.**
 
 ```
-browser action=snapshot profile=clawd targetId=<id>
+browser action=snapshot profile=<sandbox-or-clawd> targetId=<id>
 # Look for "Resume" or "Kontur" in the snapshot output
 ```
 
 If the filename appears in the form → upload succeeded, proceed to submit.
 If the form still shows "Attach" with no filename → upload failed, try next method.
 
-### Step 3: If upload failed → Use xdotool fallback (LAST RESORT)
+### Step 4: Node Browser Only - xdotool fallback (LAST RESORT)
+
+**⚠️ USE ONLY FOR NODE BROWSER when direct upload methods fail.**
 
 Some ATS platforms (especially Greenhouse with React forms) don't respond to programmatic file input. Use native OS interaction via xdotool.
 
-**⚠️ This approach opens the native dialog intentionally and handles it — use only when Step 1 fails.**
+**⚠️ This approach opens the native dialog intentionally and handles it — use only when previous steps fail.**
 
 ```bash
 # 0. FIRST: Dismiss any existing file dialogs
@@ -747,11 +813,62 @@ nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "Escape
 nodes action=run node=noah-XPS-13-7390-2-in-1 command=["xdotool", "key", "Escape"]
 ```
 
-### Step 4: If xdotool also fails → Telegram notification
+### Step 5: If all methods fail → Telegram notification
 ```
 message action=send channel=telegram target=8531859108 message="🚨 Resume upload failed for <Company>. Form is ready at <URL> - please upload manually."
 ```
 Then report as NEEDS_INPUT with the form URL.
+
+---
+
+## Email Verification / OTP Codes
+
+**Many ATS platforms (especially Greenhouse) now require email verification codes.**
+
+### OTP Input Pattern Recognition
+
+**Character-by-Character Inputs (Greenhouse):**
+- 8 individual text inputs with `maxLength=1`
+- Each input auto-advances focus to the next after entering a character
+- **MUST use individual `press` key actions (NOT `type`)**
+
+**Single Input Field:**
+- One text field expecting the full code
+- Use `type` action with the complete code
+
+### Handling Email Verification Flow
+
+1. **Recognize verification prompt** - Look for:
+   - "Enter the code sent to konoahko@gmail.com"
+   - Multiple single-character input boxes
+   - "Verification code" or "Security code" text
+
+2. **Request code from Noah via Telegram:**
+   ```
+   message action=send channel=telegram target=8531859108 message="🔐 Email verification required for <Company>. Please check konoahko@gmail.com and send the 8-digit code."
+   ```
+
+3. **Wait for response** - Use `message` tool to check for replies or use sessions_send if in subagent
+
+4. **Enter code character by character:**
+   ```
+   # Click first input
+   browser action=act profile=<sandbox-or-clawd> request={"kind": "click", "ref": "<first-input-ref>"}
+   
+   # Press each character (for code "12345678"):
+   browser action=act profile=<sandbox-or-clawd> request={"kind": "press", "key": "1"}
+   browser action=act profile=<sandbox-or-clawd> request={"kind": "press", "key": "2"}
+   browser action=act profile=<sandbox-or-clawd> request={"kind": "press", "key": "3"}
+   # ... continue for all 8 characters
+   ```
+
+5. **Submit verification** - Look for "Verify" or "Continue" button
+
+### Future Automation Potential
+
+**With IMAP access in container:** Could automate email fetching and code extraction. Current gap is reading konoahko@gmail.com from within the OpenClaw container.
+
+**Recommended enhancement:** Add IMAP client (like himalaya) to container configuration for fully automated email verification.
 
 ---
 
@@ -990,7 +1107,7 @@ sessions_spawn(
 )
 ```
 
-**All workers use `profile=clawd`** — the dedicated browser profile for job applications.
+**Workers use `profile=sandbox` by default, with `profile=clawd` as fallback** — sandbox browser provides better reliability and doesn't require node connectivity.
 
 ⚠️ **NEVER RUN WORKERS IN PARALLEL** — Workers share the same browser profile. Wait for each worker to complete before spawning the next.
 
@@ -1062,7 +1179,7 @@ Report back when done: SUCCESS / FAILED / NEEDS_INPUT
 
 **Worker Workflow:**
 
-1. **Check node connectivity FIRST** — Run `nodes action=status` and verify `noah-XPS-13-7390-2-in-1` shows `"connected": true`. **If disconnected, IMMEDIATELY terminate** with: `BLOCKED: Node disconnected. Cannot proceed.`
+1. **Check browser availability FIRST** — Follow the Browser Availability Check section to determine if sandbox or node browser is available. **If both unavailable, IMMEDIATELY terminate** with: `BLOCKED: No browser available. Cannot proceed.`
 
 2. **Read the skill** — Load SKILL.md for voice guidance and standard fields
 
@@ -1073,7 +1190,9 @@ Report back when done: SUCCESS / FAILED / NEEDS_INPUT
    - **If criteria don't match → IMMEDIATELY TERMINATE and report:**
      `SKIPPED: <Company> - <Role> - <reason>`
 
-4. **Navigate to application** — `browser action=open target=node node=noah-XPS-13-7390-2-in-1 profile=clawd targetUrl=<application-url>`
+4. **Navigate to application** — Use appropriate browser profile:
+   - Sandbox: `browser action=open profile=sandbox targetUrl=<application-url>`
+   - Node: `browser action=open target=node node=noah-XPS-13-7390-2-in-1 profile=clawd targetUrl=<application-url>`
 
 5. **Wait for page load** — Wait 3-5 seconds for form to render
 
@@ -1089,7 +1208,9 @@ Report back when done: SUCCESS / FAILED / NEEDS_INPUT
    - Work authorization: Yes
    - Sponsorship needed: No
 
-8. **Upload resume** — Use xdotool method (see Resume Upload section)
+8. **Upload resume** — Use appropriate method for your browser profile (see Resume Upload section)
+   - Sandbox: Arm-then-click method
+   - Node: Direct input upload or xdotool fallback
 
 9. **Fill custom questions** — For any open-ended questions:
    - Use HUMAN voice (see Voice & Persona section)
@@ -1122,7 +1243,27 @@ Report back when done: SUCCESS / FAILED / NEEDS_INPUT
     - What issues did you encounter?
     - Any suggestions for the skill?
 
-15. **Clean up** — Close the browser tab: `browser action=close profile=clawd targetId=<id>`
+15. **Clean up** — Close the browser tab:
+    - Sandbox: `browser action=close profile=sandbox targetId=<id>`
+    - Node: `browser action=close profile=clawd target=node node=noah-XPS-13-7390-2-in-1 targetId=<id>`
+
+### Node Fallback Scenarios
+
+**Use node browser (`profile=clawd`) as fallback when:**
+- Sandbox browser fails to start or crashes
+- Complex interactions need visual debugging
+- xdotool automation is required for uploads
+- CAPTCHA needs to be solved manually
+- Site has unusual behavior in headless mode
+
+**Switching to node mid-application:**
+1. Note current progress and form state
+2. Close sandbox tab if open
+3. Check node connectivity: `nodes action=status`
+4. Open new tab in node browser
+5. Navigate back to form URL
+6. Re-fill form based on saved state
+7. Continue with node-specific methods
 
 ### Continuous Improvement (Coordinator Responsibility)
 
