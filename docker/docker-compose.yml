@@ -1029,6 +1029,6 @@ services:
     volumes:
       - {{ docker_persistent_data_path }}/moltbot/data:/home/node/.openclaw
       - {{ docker_persistent_data_path }}/moltbot/mcporter:/home/node/.mcporter
-      - {{ docker_persistent_data_path }}/moltbot/workspace:/home/node/clawd
+      - {{ docker_persistent_data_path }}/moltbot/workspace:/home/node/.openclaw/workspace
       - /var/run/docker.sock:/var/run/docker.sock
     command: ["node", "dist/index.js", "gateway", "--bind", "lan", "--port", "18789"]
