@@ -67,6 +67,8 @@ networks:
               shim2: 10.5.0.2
     driver_opts:
       parent: bond0.5
+  wordpress_internal:
+    driver: bridge
 services:
   # Docker socket proxy - filtered access for CI builds
   # Only allows build/image operations, blocks exec/start/stop
@@ -515,6 +517,7 @@ services:
       - "443:80"
     networks:
       - external
+      - wordpress_internal
     environment:
       WORDPRESS_DB_HOST: wordpress_db
       WORDPRESS_DB_USER: wordpress
@@ -528,7 +531,7 @@ services:
     image: mysql
     container_name: wordpress_db
     networks:
-      - external
+      - wordpress_internal
     restart: unless-stopped
     cap_add:
       - SYS_NICE  # CAP_SYS_NICE
