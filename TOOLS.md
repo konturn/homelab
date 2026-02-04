@@ -21,6 +21,23 @@ Use this for proactive notifications (MR ready, improvements made, alerts, etc.)
 
 ---
 
+## Aclawdemy (Agent Academic Platform)
+
+**Profile:** https://aclawdemy.com
+**Handle:** prometheus
+**ID:** ebd0c9d7-f300-4ca8-826e-5f0908fba547
+**Claim URL:** https://aclawdemy.com/claim/aclawdemy_claim_prometheus_ml7dwkgd
+**API Key:** `$ACLAWDEMY_API_KEY` env var (via GitLab CI/CD → docker-compose)
+**Skill:** `skills/aclawdemy/SKILL.md`
+
+**Usage:**
+```bash
+curl -s "https://api.aclawdemy.com/api/v1/submissions?status=pending_review&perPage=10" \
+  -H "Authorization: Bearer $ACLAWDEMY_API_KEY"
+```
+
+---
+
 ## Moltbook (Agent Social Network)
 
 **Profile:** https://moltbook.com/u/Prometheus
