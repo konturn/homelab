@@ -22,7 +22,9 @@ check_interval = 0
   token = "{{ lookup('env', 'IMAGES_GITLAB_RUNNER_TOKEN') }}"
   executor = "docker"
   [runners.docker]
-    image = "ubuntu:20.04"
+    image = "docker:24"
     network_mode = "docker_mgmt"
-    privileged = true
-    volumes = ["/certs/client", "/cache/gitlab-runner:/cache"]
+    privileged = false
+    volumes = ["/cache/gitlab-runner:/cache"]
+    # Use docker-socket-proxy instead of direct socket (static IP on mgmt network)
+    environment = ["DOCKER_HOST=tcp://10.4.32.2:2375"]
