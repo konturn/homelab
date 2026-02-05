@@ -746,8 +746,8 @@ services:
       mgmt:
         ipv4_address: {{ registry_address }}
     environment:
-      REGISTRY_HTTP_TLS_CERTIFICATE: /certs/nkontur.com/live/iot.lab.nkontur.com-0003/cert.pem
-      REGISTRY_HTTP_TLS_KEY: /certs/nkontur.com/live/iot.lab.nkontur.com-0003/privkey.pem
+      REGISTRY_HTTP_TLS_CERTIFICATE: /certs/nkontur.com/live/iot.lab.nkontur.com/cert.pem
+      REGISTRY_HTTP_TLS_KEY: /certs/nkontur.com/live/iot.lab.nkontur.com/privkey.pem
       REGISTRY_AUTH: htpasswd
       REGISTRY_AUTH_HTPASSWD_PATH: /auth/htpasswd
       REGISTRY_AUTH_HTPASSWD_REALM: Registry Realm
@@ -800,8 +800,8 @@ services:
       HOME_ASSISTANT: "true"
       MQTT_TLS_ENABLED: "true"
       MQTT_TLS_CA_CERT: "/etc/ssl/certs/ca-cert-ISRG_Root_X1.pem"
-      MQTT_TLS_CERT: "/certs/nkontur.com/live/iot.lab.nkontur.com-0003/cert.pem"
-      MQTT_TLS_KEY: "/certs/nkontur.com/live/iot.lab.nkontur.com-0003/privkey.pem"
+      MQTT_TLS_CERT: "/certs/nkontur.com/live/iot.lab.nkontur.com/cert.pem"
+      MQTT_TLS_KEY: "/certs/nkontur.com/live/iot.lab.nkontur.com/privkey.pem"
       STORAGE_POLL_INTERVAL: 0
 
   ambientweather:
