@@ -12,7 +12,7 @@
 #
 #   ┌──────────────┬──────────────┬──────────────┐
 #   │              │              │              │
-#   router:val  zwave:val  sat-2:val  moltbot:build (parallel)
+#   router:val  zwave:val  sat-2:val  moltbot:build  amcrest2mqtt:build (parallel)
 #   │              │              │
 #   router:deploy zwave:deploy sat-2:deploy (parallel, main only)
 #
@@ -180,6 +180,26 @@ moltbot:build:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - docker/moltbot/**/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
+
+amcrest2mqtt:build:
+  extends: .docker_build
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE/amcrest2mqtt:latest -t $CI_REGISTRY_IMAGE/amcrest2mqtt:$CI_COMMIT_SHORT_SHA docker/images/amcrest2mqtt/
+    - docker push $CI_REGISTRY_IMAGE/amcrest2mqtt:latest
+    - docker push $CI_REGISTRY_IMAGE/amcrest2mqtt:$CI_COMMIT_SHORT_SHA
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - docker/images/amcrest2mqtt/**/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - docker/images/amcrest2mqtt/**/*
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       when: manual
       allow_failure: true

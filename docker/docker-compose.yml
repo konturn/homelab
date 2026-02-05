@@ -942,7 +942,7 @@ services:
       start_period: 30s
   amcrest2mqtt:
     container_name: amcrest2mqtt
-    image: dchesterton/amcrest2mqtt:latest
+    image: "gitlab-registry.lab.nkontur.com:443/root/homelab/amcrest2mqtt:latest"
     depends_on:
       - mosquitto
     restart: unless-stopped
@@ -955,10 +955,12 @@ services:
     environment:
       AMCREST_HOST: 10.6.128.9
       AMCREST_PASSWORD: {{ lookup('env', 'DOORBELL_PASS') }}
-      MQTT_HOST: mosquitto
+      MQTT_HOST: "mqtt.lab.nkontur.com"
       MQTT_USERNAME: mosquitto
       MQTT_PASSWORD: {{ lookup('env', 'MQTT_PASS') }}
       HOME_ASSISTANT: "true"
+      MQTT_TLS_ENABLED: "true"
+      MQTT_TLS_CA_CERT: "/etc/ssl/certs/ca-cert-ISRG_Root_X1.pem"
       STORAGE_POLL_INTERVAL: 0
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f amcrest2mqtt || exit 1"]
