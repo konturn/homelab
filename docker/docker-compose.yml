@@ -522,6 +522,7 @@ services:
       - '{{ docker_persistent_data_path }}/gitlab/config:/etc/gitlab'
       - '{{ docker_persistent_data_path }}/gitlab/logs:/var/log/gitlab'
       - '{{ docker_persistent_data_path }}/gitlab/data:/var/opt/gitlab'
+      - '{{ docker_persistent_data_path }}/gitlab/license_encryption_key.pub:/opt/gitlab/embedded/service/gitlab-rails/.license_encryption_key.pub:ro'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/-/health"]
       interval: 60s

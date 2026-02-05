@@ -136,6 +136,9 @@ all:
         - src: "docker/gitlab/gitlab.rb"
           dest: "{{ docker_persistent_data_path }}/gitlab/config/gitlab.rb"
           name: "gitlab"
+        - src: "docker/gitlab/license_encryption_key.pub"
+          dest: "{{ docker_persistent_data_path }}/gitlab/license_encryption_key.pub"
+          name: "gitlab"
       docker_data_dirs:
         - path: "{{ docker_persistent_data_path }}/loki/data"
           owner: "10001"
