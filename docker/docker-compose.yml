@@ -259,7 +259,7 @@ services:
       retries: 3
       start_period: 30s
   radarr:
-    image: linuxserver/radarr:6.1.0-nightly
+    image: linuxserver/radarr:latest
     container_name: radarr
     ports:
       - "443:7878"
