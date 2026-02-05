@@ -7,9 +7,9 @@
 # - Secret migration from environment variables
 
 # File storage backend
-# Data stored in /data/vault (Docker volume: vault_data)
+# Data stored in /vault/file (standard Vault container path, chowned by entrypoint)
 storage "file" {
-  path = "/data/vault"
+  path = "/vault/file"
 }
 
 # Listener configuration
