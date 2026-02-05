@@ -120,7 +120,7 @@ Pipeline caches pip and ansible-galaxy dependencies for faster subsequent runs.
 ## Maintenance
 
 ```bash
-# Update all containers (via Watchtower, runs hourly)
+# Image updates are checked nightly via cron (creates MRs for available updates)
 # Manual: docker compose pull && docker compose up -d
 
 # Check service status
