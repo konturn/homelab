@@ -32,12 +32,14 @@
     path: /etc/apt/keyrings
     state: directory
     mode: '0755'
+  check_mode: no
 
 - name: Download Docker GPG key
   ansible.builtin.get_url:
     url: https://download.docker.com/linux/ubuntu/gpg
     dest: /etc/apt/keyrings/docker.asc
     mode: '0644'
+  check_mode: no
 
 - name: Add docker repository to apt
   apt_repository:
@@ -60,6 +62,7 @@
     dest: /etc/apt/keyrings/nvidia-docker.asc
     mode: '0644'
   when: nvidia_container_runtime
+  check_mode: no
 
 - name: Add the NVIDIA Docker repository to APT sources
   apt_repository:
