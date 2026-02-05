@@ -69,6 +69,12 @@
   become: yes
   when: iptables.changed or ipset.changed or netfilter.changed
 
+- name: Restart Docker to restore iptables chains after netfilter reload
+  ansible.builtin.service:
+    name: docker
+    state: restarted
+  when: iptables.changed or ipset.changed or netfilter.changed
+
 - name: Setup cron script directory
   ansible.builtin.file:
     path: /root/cron
