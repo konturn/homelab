@@ -104,7 +104,7 @@ stages:
       for d in /cache/ansible-roles/*/; do
         [ -d "$d" ] && [ ! -f "${d}meta/main.yml" ] && [ ! -f "${d}tasks/main.yml" ] && rm -rf "$d" 2>/dev/null
       done
-    - ansible-galaxy install -r ansible/requirements.yml -p /cache/ansible-roles --force 2>/dev/null || ansible-galaxy install -r ansible/requirements.yml -p /cache/ansible-roles
+    - ansible-galaxy install -r ansible/requirements.yml -p /cache/ansible-roles --force 2>/dev/null || true
     - mkdir -p ~/.ssh
     - cp ansible/known_hosts ~/.ssh/known_hosts
     - echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp && chmod 600 tmp

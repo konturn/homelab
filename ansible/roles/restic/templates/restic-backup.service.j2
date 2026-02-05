@@ -1,0 +1,41 @@
+[Unit]
+Description=Restic backup
+
+[Service]
+Type=oneshot
+User={{ restic_user }}
+
+CPUQuota={{ 25 * ansible_processor_vcpus }}%
+
+{% if restic_ssh_enabled %}
+Environment="RESTIC_REPOSITORY=sftp:{{ restic_ssh_host }}:{{ restic_repository_name }}"
+{% else %}
+Environment="RESTIC_REPOSITORY={{ restic_repository }}"
+{% endif -%}
+Environment="RESTIC_PASSWORD={{ restic_password}}"
+
+{% if restic_aws_access_key_id is defined and restic_aws_secret_access_key is defined %}
+Environment="AWS_ACCESS_KEY_ID={{ restic_aws_access_key_id}}"
+Environment="AWS_SECRET_ACCESS_KEY={{ restic_aws_secret_access_key}}"
+{% endif %}
+
+{% if restic_check %}
+ExecStartPre={{ restic_path }} check
+{% endif -%}
+
+{% for folder in restic_folders_combined %}
+ExecStart={{ restic_path }} backup --verbose {{ folder.path }} {% if folder.exclude is defined %}--exclude {{ folder.exclude }}{% endif %}
+
+{% endfor -%}
+
+{% for database in restic_databases %}
+ExecStart=/bin/sh -c "{{ database.dump_command }} {{ '| pigz |' if restic_dump_compression_enabled else '|' }} {{ restic_path }} backup --verbose --stdin --stdin-filename {{ database.name }}{{ '.dump.gz' if restic_dump_compression_enabled else '.dump' }}"
+{% endfor -%}
+
+{% if restic_forget %}
+ExecStartPost={{ restic_path }} forget --keep-within {{ restic_forget_keep_within }}
+{% endif -%}
+
+{% if restic_prune %}
+ExecStartPost={{ restic_path }} prune
+{% endif -%}
