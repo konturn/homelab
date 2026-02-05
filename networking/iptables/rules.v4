@@ -130,9 +130,13 @@ COMMIT
 # INPUT CHAIN - Traffic destined to the router itself
 # =============================================================================
 
-# SSH access to router — restricted to mgmt VLAN, Tailscale, and WAN
-# mgmt VLAN (10.4.0.0/16): trusted infrastructure management network
-# Tailscale (100.64.0.0/10): CGNAT range used by Tailscale mesh VPN
+# Loopback — always accept (standard practice, required for local services
+# including GitLab CI runner which runs on the router itself)
+-A INPUT -i lo -j ACCEPT
+
+# SSH access to router — restricted to trusted sources
+# mgmt VLAN (10.4.0.0/16): infrastructure management network
+# Tailscale (100.64.0.0/10): mesh VPN
 # WAN: out-of-band access when Tailscale is down (key-only auth)
 -A INPUT -s 10.4.0.0/16 -p tcp -m tcp --dport 22 -j ACCEPT
 -A INPUT -s 100.64.0.0/10 -p tcp -m tcp --dport 22 -j ACCEPT
