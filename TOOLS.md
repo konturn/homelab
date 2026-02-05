@@ -290,7 +290,7 @@ Add whatever helps you do your job. This is your cheat sheet.
 
 | Job | IP | User | Claude |
 |-----|-----|------|--------|
-| J1 | 10.4.128.21 | nkontur | ✅ |
+| J1 | 10.4.128.21 | nkontur | ❌ (asks approval on every bash cmd) |
 | J2 | 10.4.128.22 | konoahko | ✅ |
 | J3 | 10.4.128.23 | konturn | ❌ |
 

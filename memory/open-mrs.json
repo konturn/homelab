@@ -1,1 +1,8 @@
-{}
+{
+  "80": {
+    "title": "fix: ensure all containers use Loki log driver after daemon.json changes",
+    "branch": "fix/loki-logging-daemon-restart",
+    "lastCommentId": 0,
+    "version": 1
+  }
+}
