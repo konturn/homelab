@@ -3,7 +3,7 @@ volumes:
   wordpress_db:
   ombi:
   fifos:
-  registry:
+  # registry volume removed - using GitLab registry instead
   mosquitto:
   nextcloud:
     driver: local
@@ -618,7 +618,7 @@ services:
     networks:
       iot:
         ipv4_address: {{ snapserver_address }}
-    image: "registry.lab.nkontur.com/snapcast"
+    image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapcast:latest"
     volumes:
       - "{{ docker_persistent_data_path }}/snapserver/snapserver.conf:/etc/snapserver.conf"
       - "{{ docker_persistent_data_path }}/snapserver/server.json:/root/.config/snapserver/server.json"
@@ -637,7 +637,7 @@ services:
     container_name: snapclient_office
     networks:
       iot:
-    image: "registry.lab.nkontur.com/snapclient"
+    image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
     restart: unless-stopped
     devices:
       - "/dev/snd"
@@ -652,7 +652,7 @@ services:
     container_name: snapclient_global
     networks:
       iot:
-    image: "registry.lab.nkontur.com/snapclient"
+    image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
     restart: unless-stopped
     devices:
       - "/dev/snd"
@@ -667,7 +667,7 @@ services:
     container_name: snapclient_kitchen
     networks:
       iot:
-    image: "registry.lab.nkontur.com/snapclient"
+    image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
     restart: unless-stopped
     devices:
       - "/dev/snd"
@@ -682,7 +682,7 @@ services:
     container_name: snapclient_main_bedroom
     networks:
       iot:
-    image: "registry.lab.nkontur.com/snapclient"
+    image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
     restart: unless-stopped
     devices:
       - "/dev/snd"
@@ -697,7 +697,7 @@ services:
     container_name: snapclient_main_bathroom
     networks:
       iot:
-    image: "registry.lab.nkontur.com/snapclient"
+    image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
     restart: unless-stopped
     devices:
       - "/dev/snd"
@@ -712,7 +712,7 @@ services:
     container_name: snapclient_guest_bathroom
     networks:
       iot:
-    image: "registry.lab.nkontur.com/snapclient"
+    image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
     restart: unless-stopped
     devices:
       - "/dev/snd"
@@ -727,7 +727,7 @@ services:
     container_name: snapclient_guest_bedroom
     networks:
       iot:
-    image: "registry.lab.nkontur.com/snapclient"
+    image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
     restart: unless-stopped
     devices:
       - "/dev/snd"
@@ -738,32 +738,8 @@ services:
       - "plughw:CARD=Guest_Bedroom,DEV=0"
       - "--hostID"
       - "guest_bedroom"
-  registry:
-    container_name: registry
-    restart: unless-stopped
-    image: registry:2
-    networks:
-      mgmt:
-        ipv4_address: {{ registry_address }}
-    environment:
-      REGISTRY_HTTP_TLS_CERTIFICATE: /certs/nkontur.com/live/iot.lab.nkontur.com/cert.pem
-      REGISTRY_HTTP_TLS_KEY: /certs/nkontur.com/live/iot.lab.nkontur.com/privkey.pem
-      REGISTRY_AUTH: htpasswd
-      REGISTRY_AUTH_HTPASSWD_PATH: /auth/htpasswd
-      REGISTRY_AUTH_HTPASSWD_REALM: Registry Realm
-      REGISTRY_HTTP_ADDR: "0.0.0.0:443"
-      VIRTUAL_HOST: registry.lab.nkontur.com
-      LETSENCRYPT_HOST: registry.lab.nkontur.com
-    volumes:
-      - registry:/var/lib/registry
-      - {{ docker_persistent_data_path }}/registry/auth:/auth
-      - {{ docker_persistent_data_path }}/certs:/certs
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "--quiet", "--no-check-certificate", "https://localhost:443/v2/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+  # Private registry container removed - using GitLab's built-in registry instead
+  # Images now pulled from: gitlab-registry.lab.nkontur.com:443/root/homelab/<image>
   mosquitto:
     container_name: mosquitto
     image: eclipse-mosquitto
@@ -783,7 +759,7 @@ services:
       start_period: 30s
   amcrest2mqtt:
     container_name: amcrest2mqtt
-    image: registry.lab.nkontur.com/amcrest2mqtt:latest
+    image: dchesterton/amcrest2mqtt:latest
     depends_on:
       - mosquitto
     restart: unless-stopped
@@ -965,7 +941,7 @@ services:
       retries: 3
       start_period: 60s
   moltbot-gateway:
-    image: registry.lab.nkontur.com/moltbot-gateway:{{ moltbot_image_tag | default('latest') }}
+    image: gitlab-registry.lab.nkontur.com:443/root/homelab/moltbot:{{ moltbot_image_tag | default('latest') }}
     container_name: moltbot-gateway
     restart: unless-stopped
     networks:

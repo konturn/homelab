@@ -24,7 +24,7 @@ all:
     privileged_access_point_2_address: 10.4.128.22
     privileged_access_point_3_mac: 80:a9:97:12:5b:30
     privileged_access_point_3_address: 10.4.128.23
-    registry_address: 10.4.32.1
+    # registry_address removed - using GitLab built-in registry
     docker_socket_proxy_ip: 10.4.32.2
     denon_mac: 00:06:78:84:0e:d8
     denon_address: 10.6.128.3
@@ -148,6 +148,7 @@ all:
         use_onboard_audio: true
       hosts:
         zwave.lab.nkontur.com:
+          gitlab_registry_login: false
           location: "Movie Room"
           docker_config: []
           docker_compose_file_names: 
@@ -163,6 +164,7 @@ all:
             - soundcard: "plughw:CARD=b1,DEV=0"
               name: "movie"
         satellite-2.lab.nkontur.com:
+          gitlab_registry_login: false
           docker_config: []
           nginx_config:
             - dest: "/root/nginx"
