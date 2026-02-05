@@ -123,10 +123,10 @@
     mode: 0600
   register: docker_conf
 
-- name: Reload Docker to pick up daemon config changes
+- name: Restart Docker to pick up daemon config changes
   ansible.builtin.systemd:
     name: docker
-    state: reloaded
+    state: restarted
   when: docker_conf.changed and not ansible_check_mode
 
 #- name: ensure required pip-packages are installed on host

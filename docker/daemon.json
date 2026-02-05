@@ -12,7 +12,6 @@
     },
 {% endif %}
     "storage-driver": "overlay2",
-    "dns": ["10.3.32.2", "8.8.8.8"],
     "runtimes": {
       "nvidia": {
         "path": "/usr/bin/nvidia-container-runtime"
