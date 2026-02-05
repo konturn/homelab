@@ -107,6 +107,8 @@ stages:
     - mkdir -p ~/.ssh
     - cp ansible/known_hosts ~/.ssh/known_hosts
     - echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp && chmod 600 tmp
+  after_script:
+    - rm -f tmp
   cache:
     key: "ansible-deps-v2"
     paths:

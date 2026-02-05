@@ -11,7 +11,7 @@
     dest: /etc/wireguard/{{ wireguard_interface_name }}.conf
     owner: root
     group: root
-    mode: '0755'
+    mode: '0600'
   register: wireguard
 
 - name: Make sure wireguard is started and enabled
