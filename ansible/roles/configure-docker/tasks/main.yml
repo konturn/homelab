@@ -115,6 +115,7 @@
     username: "{{ lookup('env', 'CI_REGISTRY_USER') }}"
     password: "{{ lookup('env', 'CI_REGISTRY_PASSWORD') }}"
     registry_url: "https://gitlab-registry.lab.nkontur.com:443"
+  when: gitlab_registry_login | default(true)
 
 - name: Template out compose file to ansible state directory on host
   ansible.builtin.template:

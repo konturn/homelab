@@ -148,6 +148,7 @@ all:
         use_onboard_audio: true
       hosts:
         zwave.lab.nkontur.com:
+          gitlab_registry_login: false
           location: "Movie Room"
           docker_config: []
           docker_compose_file_names: 
@@ -163,6 +164,7 @@ all:
             - soundcard: "plughw:CARD=b1,DEV=0"
               name: "movie"
         satellite-2.lab.nkontur.com:
+          gitlab_registry_login: false
           docker_config: []
           nginx_config:
             - dest: "/root/nginx"
