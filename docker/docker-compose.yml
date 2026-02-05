@@ -952,19 +952,13 @@ services:
       resources:
         limits:
           memory: 256M
-    volumes:
-      - "{{ docker_persistent_data_path }}/certs:/certs"
     environment:
       AMCREST_HOST: 10.6.128.9
       AMCREST_PASSWORD: {{ lookup('env', 'DOORBELL_PASS') }}
-      MQTT_HOST: "mqtt.lab.nkontur.com"
+      MQTT_HOST: mosquitto
       MQTT_USERNAME: mosquitto
       MQTT_PASSWORD: {{ lookup('env', 'MQTT_PASS') }}
       HOME_ASSISTANT: "true"
-      MQTT_TLS_ENABLED: "true"
-      MQTT_TLS_CA_CERT: "/etc/ssl/certs/ca-cert-ISRG_Root_X1.pem"
-      MQTT_TLS_CERT: "/certs/nkontur.com/live/iot.lab.nkontur.com/cert.pem"
-      MQTT_TLS_KEY: "/certs/nkontur.com/live/iot.lab.nkontur.com/privkey.pem"
       STORAGE_POLL_INTERVAL: 0
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f amcrest2mqtt || exit 1"]
