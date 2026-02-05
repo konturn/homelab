@@ -7,6 +7,7 @@
         "loki-url": "http://{{ loki_ip }}:3100/loki/api/v1/push",
         "loki-retries": "5",
         "loki-batch-size": "400",
+        "loki-no-verify": "true",
         "mode": "non-blocking",
         "max-buffer-size": "4m"
     },
