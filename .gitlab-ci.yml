@@ -159,7 +159,7 @@ satellite-2:validate:
 
 .docker_build:
   stage: build
-  image: docker:24
+  image: docker:27
   variables:
     DOCKER_HOST: "tcp://10.4.32.2:2375"
     DOCKER_BUILDKIT: "0"
