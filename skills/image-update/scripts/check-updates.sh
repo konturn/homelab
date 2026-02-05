@@ -146,8 +146,8 @@ classify_update() {
 cd "$REPO_DIR"
 git pull origin main --quiet 2>/dev/null || true
 
-suppressed=$(jq -r '.suppressedImages[]' "$STATE_FILE" 2>/dev/null)
-never_auto_merge=$(jq -r '.neverAutoMerge[]' "$STATE_FILE" 2>/dev/null)
+suppressed=$(jq -r '(.suppressedImages // [])[]' "$STATE_FILE" 2>/dev/null)
+never_auto_merge=$(jq -r '(.neverAutoMerge // [])[]' "$STATE_FILE" 2>/dev/null)
 updates="[]"
 
 while IFS= read -r image_ref; do
