@@ -85,9 +85,11 @@ COMMIT
 # Inbound connections from Mullvad tunnel to Deluge container
 -A PREROUTING -i {{ mullvad_interface_name }} -p tcp -m tcp --dport 62941 -j DNAT --to-destination {{ deluge_ip }}
 
-# Hairpin NAT - IoT devices accessing external services via public IP
-# Allows IoT (10.6.x.x) to reach services via WAN IP (redirects to nginx)
+# Hairpin NAT - Internal devices accessing external services via public IP
+# Allows IoT (10.6.x.x), Internal (10.3.x.x), and Mgmt (10.4.x.x) to reach services via WAN IP
 -A PREROUTING -s 10.6.0.0/16 -p tcp -m set --match-set wan_ip dst -m tcp -j DNAT --to-destination {{ nginx_ip }}
+-A PREROUTING -s 10.3.0.0/16 -p tcp -m set --match-set wan_ip dst -m tcp -j DNAT --to-destination {{ nginx_ip }}
+-A PREROUTING -s 10.4.0.0/16 -p tcp -m set --match-set wan_ip dst -m tcp -j DNAT --to-destination {{ nginx_ip }}
 
 # Minecraft Bedrock Edition (or secondary Java server)
 -A PREROUTING -i {{ inet_interface_name }} -p tcp -m tcp --dport 25564 -j DNAT --to-destination {{ nginx_ip }}:25564
@@ -105,6 +107,12 @@ COMMIT
 # Hairpin NAT - Guest network accessing nginx
 # Required so return traffic goes back through router
 -A POSTROUTING -s 10.5.0.0/16 -d {{ nginx_ip }}/32 -o {{ local_interface_name }} -p tcp -m tcp -j SNAT --to-source 10.5.0.1
+
+# Hairpin NAT - Internal network accessing nginx
+-A POSTROUTING -s 10.3.0.0/16 -d {{ nginx_ip }}/32 -o {{ local_interface_name }} -p tcp -m tcp -j SNAT --to-source 10.3.0.1
+
+# Hairpin NAT - Mgmt network accessing nginx
+-A POSTROUTING -s 10.4.0.0/16 -d {{ nginx_ip }}/32 -o {{ local_interface_name }} -p tcp -m tcp -j SNAT --to-source 10.4.0.1
 
 # Hairpin NAT - IoT network accessing nginx
 -A POSTROUTING -s 10.6.0.0/16 -d {{ nginx_ip }}/32 -o {{ local_interface_name }} -p tcp -m tcp -j SNAT --to-source 10.6.0.1
