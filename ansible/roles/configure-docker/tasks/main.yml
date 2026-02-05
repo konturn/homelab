@@ -27,14 +27,23 @@
     state: present
     update_cache: yes
 
-- name: Add Docker GPG apt Key
-  apt_key:
+- name: Create keyrings directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+  check_mode: no
+
+- name: Download Docker GPG key
+  ansible.builtin.get_url:
     url: https://download.docker.com/linux/ubuntu/gpg
-    state: present
+    dest: /etc/apt/keyrings/docker.asc
+    mode: '0644'
+  check_mode: no
 
 - name: Add docker repository to apt
   apt_repository:
-    repo: deb https://download.docker.com/linux/ubuntu bionic stable
+    repo: "deb [signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
     state: present
 
 - name: Install docker
@@ -47,17 +56,18 @@
     state: latest
     update_cache: yes
 
-- name: Add Nvidia Docker GPG apt Key
-  apt_key:
+- name: Download Nvidia Docker GPG key
+  ansible.builtin.get_url:
     url: https://nvidia.github.io/nvidia-docker/gpgkey
-    state: present
+    dest: /etc/apt/keyrings/nvidia-docker.asc
+    mode: '0644'
   when: nvidia_container_runtime
+  check_mode: no
 
 - name: Add the NVIDIA Docker repository to APT sources
-  ansible.builtin.lineinfile:
-    path: /etc/apt/sources.list.d/nvidia-docker.list
-    line: "deb https://nvidia.github.io/nvidia-docker/ubuntu18.04/amd64 /"
-    create: yes
+  apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/nvidia-docker.asc] https://nvidia.github.io/nvidia-docker/ubuntu{{ ansible_distribution_version }}/amd64 /"
+    state: present
   when: nvidia_container_runtime
 
 - name: Update APT cache
