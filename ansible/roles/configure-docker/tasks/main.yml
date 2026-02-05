@@ -110,11 +110,11 @@
 #      - PyYAML
 #      - docker-compose
 
-- name: Log in to private docker repo
+- name: Log in to GitLab container registry
   docker_login:
-    username: docker
-    password: "{{ lookup('env', 'DOCKER_REGISTRY_KEY') }}"
-    registry_url: "https://registry.lab.nkontur.com"
+    username: "{{ lookup('env', 'GITLAB_REGISTRY_USER') }}"
+    password: "{{ lookup('env', 'GITLAB_REGISTRY_PASSWORD') }}"
+    registry_url: "https://gitlab-registry.lab.nkontur.com:443"
 
 - name: Template out compose file to ansible state directory on host
   ansible.builtin.template:

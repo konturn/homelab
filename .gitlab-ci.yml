@@ -148,21 +148,28 @@ satellite-2:validate:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml --check --diff
 
 # =============================================================================
-# Build Stage - Container images
+# Build Stage - Container images (GitLab Registry)
 # =============================================================================
-moltbot:build:
+# All images are built and pushed to GitLab's built-in container registry.
+# Registry URL: gitlab-registry.lab.nkontur.com:443/root/homelab/<image>
+# CI variables: $CI_REGISTRY, $CI_REGISTRY_USER, $CI_REGISTRY_PASSWORD, $CI_REGISTRY_IMAGE
+
+.docker_build:
   stage: build
   image: docker:24
   variables:
     DOCKER_HOST: "tcp://10.4.32.2:2375"
     DOCKER_BUILDKIT: "0"
   before_script:
-    - echo "$DOCKER_REGISTRY_KEY" | docker login -u docker --password-stdin registry.lab.nkontur.com
-  script:
-    - docker build -t registry.lab.nkontur.com/moltbot-gateway:latest -t registry.lab.nkontur.com/moltbot-gateway:$CI_COMMIT_SHORT_SHA docker/moltbot/
-    - docker push registry.lab.nkontur.com/moltbot-gateway:latest
-    - docker push registry.lab.nkontur.com/moltbot-gateway:$CI_COMMIT_SHORT_SHA
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   needs: []
+
+moltbot:build:
+  extends: .docker_build
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE/moltbot:latest -t $CI_REGISTRY_IMAGE/moltbot:$CI_COMMIT_SHORT_SHA docker/moltbot/
+    - docker push $CI_REGISTRY_IMAGE/moltbot:latest
+    - docker push $CI_REGISTRY_IMAGE/moltbot:$CI_COMMIT_SHORT_SHA
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
@@ -170,6 +177,46 @@ moltbot:build:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - docker/moltbot/**/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
+
+snapcast:build:
+  extends: .docker_build
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE/snapcast:latest -t $CI_REGISTRY_IMAGE/snapcast:$CI_COMMIT_SHORT_SHA docker/images/snapcast/
+    - docker push $CI_REGISTRY_IMAGE/snapcast:latest
+    - docker push $CI_REGISTRY_IMAGE/snapcast:$CI_COMMIT_SHORT_SHA
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - docker/images/snapcast/**/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - docker/images/snapcast/**/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
+
+snapclient:build:
+  extends: .docker_build
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE/snapclient:latest -t $CI_REGISTRY_IMAGE/snapclient:$CI_COMMIT_SHORT_SHA docker/images/snapclient/
+    - docker push $CI_REGISTRY_IMAGE/snapclient:latest
+    - docker push $CI_REGISTRY_IMAGE/snapclient:$CI_COMMIT_SHORT_SHA
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - docker/images/snapclient/**/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - docker/images/snapclient/**/*
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       when: manual
       allow_failure: true

@@ -10,7 +10,7 @@
 {{ kitchen_qual_address }} AWAIR-ELEM-14B541.lab.nkontur.com
 {{ bedroom_qual_address }} AWAIR-ELEM-147AA0.lab.nkontur.com
 {{ satellite_2_address }} satellite-2.lab.nkontur.com
-{{ registry_address }} registry.lab.nkontur.com
+# Private registry removed - using GitLab registry at gitlab-registry.lab.nkontur.com
 {{ snapserver_address }} snapserver.lab.nkontur.com
 {{ amp_address }} amp.lab.nkontur.com
 {{ mosquitto_address }} mqtt.lab.nkontur.com
