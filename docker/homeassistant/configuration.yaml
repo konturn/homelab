@@ -17,18 +17,6 @@ media_player:
 automation: !include automations.yaml
 script: !include scripts.yaml
 scene: !include scenes.yaml
-
-# Input booleans for automation controls
-input_boolean:
-  movie_mode:
-    name: "Movie Mode"
-    icon: mdi:movie-play
-  goodnight_mode:
-    name: "Goodnight Mode"
-    icon: mdi:sleep
-  bass_boost:
-    name: "Bass Boost"
-    icon: mdi:volume-high
 http:
   use_x_forwarded_for: true
   trusted_proxies:
