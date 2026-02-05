@@ -130,11 +130,13 @@ COMMIT
 # INPUT CHAIN - Traffic destined to the router itself
 # =============================================================================
 
-# SSH access to router — restricted to mgmt VLAN and Tailscale only
+# SSH access to router — restricted to mgmt VLAN, Tailscale, and WAN
 # mgmt VLAN (10.4.0.0/16): trusted infrastructure management network
 # Tailscale (100.64.0.0/10): CGNAT range used by Tailscale mesh VPN
+# WAN: out-of-band access when Tailscale is down (key-only auth)
 -A INPUT -s 10.4.0.0/16 -p tcp -m tcp --dport 22 -j ACCEPT
 -A INPUT -s 100.64.0.0/10 -p tcp -m tcp --dport 22 -j ACCEPT
+-A INPUT -i {{ inet_interface_name }} -p tcp -m tcp --dport 22 -j ACCEPT
 
 # Allow ICMP (ping) for diagnostics
 -A INPUT -p icmp -j ACCEPT
