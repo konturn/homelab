@@ -551,13 +551,18 @@ services:
       - vault_data:/vault/file
       - '{{ docker_persistent_data_path }}/vault/config:/vault/config:ro'
       - '{{ docker_persistent_data_path }}/certs:/vault/certs:ro'
+      - '{{ docker_persistent_data_path }}/vault/scripts/auto-unseal.sh:/vault/scripts/auto-unseal.sh:ro'
+      - '{{ docker_persistent_data_path }}/vault/unseal:/vault/unseal:ro'
     environment:
       - VAULT_ADDR=https://127.0.0.1:8200
       - VAULT_API_ADDR=https://{{ vault_ip }}:8200
       - VAULT_CACERT=/vault/certs/nkontur.com/live/iot.lab.nkontur.com-0003/chain.pem
       # Skip TLS verify for healthcheck using loopback
       - VAULT_SKIP_VERIFY=true
-    command: server
+      # Path to unseal keys file inside the container
+      - VAULT_UNSEAL_KEYS_FILE=/vault/unseal/unseal-keys
+    entrypoint: /bin/sh
+    command: ["/vault/scripts/auto-unseal.sh"]
     healthcheck:
       test: ["CMD", "sh", "-c", "vault status -address=https://127.0.0.1:8200; [ $? -le 2 ]"]
       interval: 30s
