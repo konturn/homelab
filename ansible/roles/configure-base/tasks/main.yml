@@ -20,6 +20,7 @@
     content: "{{ lookup('env', 'LUKS_PASSWORD_BASE64') | b64decode }}"
     dest: '/etc/password_file.txt'
     owner: root
+  no_log: true
     group: root
     mode: 0600
 
@@ -129,6 +130,7 @@
     owner: telegraf
     group: telegraf
     mode: 0600
+  no_log: true
   register: telegraf
 
 - name: Reload telegraf to pick up changes
