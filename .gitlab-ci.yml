@@ -51,6 +51,7 @@ variables:
         - docker/docker-compose.yml
         - docker/**/*
         - networking/**/*
+        - base/**/*
         - requirements.txt
         - ansible/requirements.yml
         - .gitlab-ci.yml
@@ -240,21 +241,6 @@ router:deploy:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
-      changes:
-        - ansible/router.yml
-        - ansible/inventory.yml
-        - ansible/roles/configure-base/**/*
-        - ansible/roles/configure-docker/**/*
-        - ansible/roles/configure-router-network/**/*
-        - ansible/roles/configure-wireguard/**/*
-        - ansible/roles/configure-notifications/**/*
-        - docker/docker-compose.yml
-        - docker/**/*
-        - networking/**/*
-        - .gitlab-ci.yml
-    - if: $CI_COMMIT_BRANCH == "main"
-      when: manual
-      allow_failure: true
 
 zwave:deploy:
   extends: .ansible
@@ -267,16 +253,6 @@ zwave:deploy:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/zwave.yml
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
-      changes:
-        - ansible/zwave.yml
-        - ansible/inventory.yml
-        - ansible/roles/configure-zwave/**/*
-        - ansible/roles/configure-snapclient/**/*
-        - docker/docker-compose-zwave.yml
-        - .gitlab-ci.yml
-    - if: $CI_COMMIT_BRANCH == "main"
-      when: manual
-      allow_failure: true
 
 satellite-2:deploy:
   extends: .ansible
@@ -289,11 +265,3 @@ satellite-2:deploy:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
-      changes:
-        - ansible/satellite-2.yml
-        - ansible/inventory.yml
-        - ansible/roles/configure-satellite/**/*
-        - .gitlab-ci.yml
-    - if: $CI_COMMIT_BRANCH == "main"
-      when: manual
-      allow_failure: true
