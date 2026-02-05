@@ -233,8 +233,4 @@ COMMIT
 # Snapserver - Allow all inbound
 # Used for: Multi-room audio clients connecting to server
 -A FORWARD -d {{ snapserver_address }} -j ACCEPT
-
-# Docker registry access from IoT VLAN (bond0.6)
-# Used for: Satellites pulling custom container images
--A FORWARD -i bond0.6 -d {{ registry_address }} -j ACCEPT
 COMMIT
