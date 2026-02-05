@@ -258,3 +258,20 @@
   ansible.builtin.command:
     cmd: "docker restart pihole"
   when: (pihole_dnsmasq_d is changed or pihole_listening_mode is changed) and not ansible_check_mode
+
+# Deluge cache fix: reduce libtorrent disk cache to prevent excessive RAM usage.
+# Default cache_size of 512 pieces causes 28GB+ memory consumption with large torrents.
+# Setting to 128 pieces keeps usage under 2GB.
+- name: Reduce Deluge libtorrent cache_size to prevent excessive RAM usage
+  ansible.builtin.replace:
+    path: "{{ docker_persistent_data_path }}/deluge/core.conf"
+    regexp: '"cache_size":\s*\d+'
+    replace: '"cache_size": 128'
+  register: deluge_cache_fix
+  when: not ansible_check_mode
+  ignore_errors: yes
+
+- name: Restart deluge if cache config was modified
+  ansible.builtin.command:
+    cmd: "docker restart deluge"
+  when: deluge_cache_fix is changed and not ansible_check_mode

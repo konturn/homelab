@@ -119,9 +119,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 16G
+          memory: 6G
         reservations:
-          memory: 4G
+          memory: 2G
     environment:
       - TZ=America/New_York
       # - NVIDIA_VISIBLE_DEVICES=all
@@ -248,7 +248,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 768M
     environment:
       - PUID=1000
       - PGID=1000
@@ -301,7 +301,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 1G
     environment:
       - PUID=1000
       - PGID=1000
@@ -351,7 +351,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 2G
     environment:
       - PUID=1000
       - PGID=1000
@@ -513,9 +513,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 24G
+          memory: 14G
         reservations:
-          memory: 8G
+          memory: 4G
     volumes:
       - '{{ docker_persistent_data_path }}/gitlab/config:/etc/gitlab'
       - '{{ docker_persistent_data_path }}/gitlab/logs:/var/log/gitlab'
@@ -541,7 +541,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 768M
     cap_add:
       - IPC_LOCK  # Required for Vault to lock memory and prevent secrets from being swapped
     volumes:
@@ -567,10 +567,13 @@ services:
     networks:
       internal:
         ipv4_address: {{ deluge_ip }}
+    # Memory limit set to 2G after reducing libtorrent disk cache.
+    # Default cache_size (512 pieces) causes 28GB+ RAM usage with large torrents.
+    # Reduced to 128 pieces via core.conf — see configure-docker ansible role.
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 2G
     volumes:
       - '{{ docker_persistent_data_path }}/deluge:/config'
       - '/mpool/samba_share/nfs:/downloads'
@@ -640,9 +643,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 8G
-        reservations:
-          memory: 2G
+          memory: 768M
     environment:
       MYSQL_DATABASE: wordpress
       MYSQL_USER: wordpress
@@ -667,7 +668,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 768M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080"]
       interval: 30s
@@ -715,9 +716,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 8G
-        reservations:
           memory: 2G
+        reservations:
+          memory: 512M
     volumes:
       - "{{ docker_persistent_data_path }}/homeassistant:/config"
       - /etc/localtime:/etc/localtime:ro
@@ -1044,9 +1045,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 8G
-        reservations:
-          memory: 2G
+          memory: 768M
     environment:
       - PUID=1000
       - PGID=1000
@@ -1183,9 +1182,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 16G
+          memory: 3G
         reservations:
-          memory: 4G
+          memory: 1G
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:18789/health"]
       interval: 30s
