@@ -242,7 +242,6 @@
     dest: "{{ docker_persistent_data_path }}/nginx/webroot/nkontur.com/"
     delete: yes
     recursive: yes
-  delegate_to: "{{ inventory_hostname }}"
   when: "'external' in (nginx_config | default([]) | map(attribute='network') | list)"
 
 - name: Copy docker configuration files
