@@ -18,18 +18,16 @@
     group: root
     mode: '0644'
 
-- name: Add nfs config to fstab
-  ansible.builtin.lineinfile:
-    path: /etc/fstab
-    line: 10.6.0.1:/mpool/nextcloud/paperless/consume /mnt nfs rw,hard,intr,rsize=8192,wsize=8192,timeo=14 0 0
-    create: yes
-
 - name: Mount nfs
   mount:
     path: /mnt
     src: 10.6.0.1:/mpool/nextcloud/paperless/consume
     fstype: nfs
-    state: mounted
+    opts: rw,hard,intr,rsize=8192,wsize=8192,timeo=14
+    state: present
+    # state: present adds to fstab without mounting immediately,
+    # so deploy won't fail if NFS server is temporarily unreachable
+    # (replaces separate lineinfile + mounted tasks — mount module manages fstab directly)
 
 - name: Git checkout sane-scan-pdf
   ansible.builtin.git:
