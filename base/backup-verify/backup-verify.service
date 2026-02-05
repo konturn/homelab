@@ -1,0 +1,11 @@
+[Unit]
+Description=Verify restic backup freshness and integrity
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/default/restic-env
+ExecStart=/usr/local/bin/backup-verify.sh
+StandardOutput=journal
+StandardError=journal

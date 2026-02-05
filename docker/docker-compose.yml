@@ -80,6 +80,10 @@ services:
     networks:
       mgmt:
         ipv4_address: {{ docker_socket_proxy_ip }}
+    deploy:
+      resources:
+        limits:
+          memory: 128M
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
@@ -140,6 +144,10 @@ services:
     networks:
       internal:
         ipv4_address: {{ pihole_ip }}
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     environment:
       TZ: America/New_York
       WEBPASSWORD: {{ lookup('env', 'PIHOLE_PASSWORD') }}
@@ -160,6 +168,10 @@ services:
       - "5201/tcp"
     networks:
       - internal
+    deploy:
+      resources:
+        limits:
+          memory: 128M
     command:
       - "-s"
     restart: unless-stopped
@@ -170,6 +182,10 @@ services:
       external:
         ipv4_address: {{ nginx_ip }}
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     healthcheck:
       test: ["CMD-SHELL", "pgrep nginx > /dev/null || exit 1"]
       interval: 30s
@@ -188,6 +204,10 @@ services:
       internal:
         ipv4_address: {{ lab_nginx_ip }}
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     healthcheck:
       test: ["CMD-SHELL", "pgrep nginx > /dev/null || exit 1"]
       interval: 30s
@@ -205,6 +225,10 @@ services:
       iot:
         ipv4_address: {{ iot_nginx_ip }}
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     healthcheck:
       test: ["CMD-SHELL", "pgrep nginx > /dev/null || exit 1"]
       interval: 30s
@@ -221,6 +245,10 @@ services:
     networks:
       - external
       - internal
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     environment:
       - PUID=1000
       - PGID=1000
@@ -244,6 +272,10 @@ services:
       - "6789:6789"
     networks:
       - internal
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     environment:
       - PUID=1000
       - PGID=1000
@@ -266,6 +298,10 @@ services:
       - "443:7878"
     networks:
       - internal
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     environment:
       - PUID=1000
       - PGID=1000
@@ -288,6 +324,10 @@ services:
       - "443:9117"
     networks:
       - internal
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     environment:
       - PUID=1000
       - PGID=1000
@@ -308,6 +348,10 @@ services:
       - "443:8989"
     networks:
     - internal
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     environment:
       - PUID=1000
       - PGID=1000
@@ -330,6 +374,10 @@ services:
       - "443:3000"
     networks:
       - external
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     environment:
       - PUID=1000
       - PGID=1000
@@ -428,6 +476,10 @@ services:
       internal:
         ipv4_address: {{ loki_ip }}
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
     volumes:
       - {{ docker_persistent_data_path }}/loki/data:/loki
       - {{ docker_persistent_data_path }}/loki/local-config.yaml:/etc/loki/local-config.yaml:ro
@@ -453,7 +505,6 @@ services:
       - internal
     image: 'gitlab/gitlab-ee:latest'
     restart: unless-stopped
-    privileged: true
     ulimits:
       nofile:
         soft: 65536
@@ -487,6 +538,10 @@ services:
         ipv4_address: {{ vault_ip }}
     ports:
       - "8200:8200"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     cap_add:
       - IPC_LOCK  # Required for Vault to lock memory and prevent secrets from being swapped
     volumes:
@@ -512,6 +567,10 @@ services:
     networks:
       internal:
         ipv4_address: {{ deluge_ip }}
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     volumes:
       - '{{ docker_persistent_data_path }}/deluge:/config'
       - '/mpool/samba_share/nfs:/downloads'
@@ -529,6 +588,10 @@ services:
     restart: unless-stopped
     networks:
       - external
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     volumes:
       - '{{ docker_persistent_data_path }}/bitwarden/data/:/data/'
     env_file:
@@ -547,6 +610,10 @@ services:
     networks:
       - external
       - wordpress_internal
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     environment:
       WORDPRESS_DB_HOST: wordpress_db
       WORDPRESS_DB_USER: wordpress
@@ -556,6 +623,12 @@ services:
       - {{ docker_persistent_data_path }}/wordpress/html:/var/www/html
       - {{ docker_persistent_data_path }}/wordpress/config:/etc/wordpress
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
   wordpress_db:
     image: mysql
     container_name: wordpress_db
@@ -591,6 +664,10 @@ services:
       internal:
     image: jgraph/drawio
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080"]
       interval: 30s
@@ -603,9 +680,22 @@ services:
     networks:
       internal:
     image: containrrr/watchtower
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    command: --interval 3600
+    environment:
+      - WATCHTOWER_NOTIFICATIONS=shoutrrr
+      - WATCHTOWER_NOTIFICATION_URL={{ lookup('env', 'WATCHTOWER_NOTIFICATION_URL') }}
+    command: --interval 3600 --monitor-only
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep watchtower | grep -v grep || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   homeassistant:
     container_name: homeassistant
     networks:
@@ -648,6 +738,10 @@ services:
       iot:
         ipv4_address: {{ snapserver_address }}
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapcast:latest"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     volumes:
       - "{{ docker_persistent_data_path }}/snapserver/snapserver.conf:/etc/snapserver.conf"
       - "{{ docker_persistent_data_path }}/snapserver/server.json:/root/.config/snapserver/server.json"
@@ -668,6 +762,10 @@ services:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     devices:
       - "/dev/snd"
     command:
@@ -677,12 +775,22 @@ services:
       - "plughw:CARD=Office,DEV=0"
       - "--hostID"
       - "office"
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep snapclient || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
   snapclient_global:
     container_name: snapclient_global
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     devices:
       - "/dev/snd"
     command:
@@ -692,12 +800,22 @@ services:
       - "plughw:CARD=Global,DEV=0"
       - "--hostID"
       - "global"
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep snapclient || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
   snapclient_kitchen:
     container_name: snapclient_kitchen
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     devices:
       - "/dev/snd"
     command:
@@ -707,12 +825,22 @@ services:
       - "plughw:CARD=Kitchen,DEV=0"
       - "--hostID"
       - "kitchen"
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep snapclient || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
   snapclient_main_bedroom:
     container_name: snapclient_main_bedroom
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     devices:
       - "/dev/snd"
     command:
@@ -722,12 +850,22 @@ services:
       - "plughw:CARD=Main_Bedroom,DEV=0"
       - "--hostID"
       - "main_bedroom"
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep snapclient || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
   snapclient_main_bathroom:
     container_name: snapclient_main_bathroom
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     devices:
       - "/dev/snd"
     command:
@@ -737,12 +875,22 @@ services:
       - "plughw:CARD=Main_Bathroom,DEV=0"
       - "--hostID"
       - "main_bathroom"
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep snapclient || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
   snapclient_guest_bathroom:
     container_name: snapclient_guest_bathroom
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     devices:
       - "/dev/snd"
     command:
@@ -752,12 +900,22 @@ services:
       - "plughw:CARD=Guest_Bathroom,DEV=0"
       - "--hostID"
       - "guest_bathroom"
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep snapclient || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
   snapclient_guest_bedroom:
     container_name: snapclient_guest_bedroom
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     devices:
       - "/dev/snd"
     command:
@@ -767,6 +925,12 @@ services:
       - "plughw:CARD=Guest_Bedroom,DEV=0"
       - "--hostID"
       - "guest_bedroom"
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep snapclient || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
   # Private registry container removed - using GitLab's built-in registry instead
   # Images now pulled from: gitlab-registry.lab.nkontur.com:443/root/homelab/<image>
   mosquitto:
@@ -776,6 +940,10 @@ services:
     networks:
       iot:
         ipv4_address: {{ mosquitto_address }}
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     volumes:
       - "{{ docker_persistent_data_path }}/mqtt/conf:/mosquitto/config"
       - mosquitto:/mosquitto/data
@@ -794,6 +962,10 @@ services:
     restart: unless-stopped
     networks:
       iot:
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     volumes:
       - "{{ docker_persistent_data_path }}/certs:/certs"
     environment:
@@ -808,6 +980,12 @@ services:
       MQTT_TLS_CERT: "/certs/nkontur.com/live/iot.lab.nkontur.com/cert.pem"
       MQTT_TLS_KEY: "/certs/nkontur.com/live/iot.lab.nkontur.com/privkey.pem"
       STORAGE_POLL_INTERVAL: 0
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f amcrest2mqtt || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   ambientweather:
     image: ghcr.io/neilenns/ambientweather2mqtt:latest
@@ -816,6 +994,10 @@ services:
     networks:
       iot:
         ipv4_address: {{ weather_mqtt_bridge_ip }}
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     environment:
       STATION_MAC_ADDRESS: {{ weather_station_mac }}
       MQTT_SERVER: "mqtts://mqtt.lab.nkontur.com:1883"
@@ -824,6 +1006,12 @@ services:
       MQTT_USERNAME: mosquitto
       MQTT_PASSWORD: {{ lookup('env', 'MQTT_PASS') }}
       MQTT_REJECT_UNAUTHORIZED: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   zigbee2mqtt:
     container_name: zigbee2mqtt
     restart: unless-stopped
@@ -834,6 +1022,10 @@ services:
       iot:
     ports:
       - 8081:8080
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     volumes:
       - "{{ docker_persistent_data_path }}/zigbee2mqtt:/app/data"
     environment:
@@ -876,6 +1068,10 @@ services:
     networks:
       iot:
         ipv4_address: {{ mopidy_address }}
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     environment:
       - TZ=America/New_York
     volumes:
@@ -957,6 +1153,10 @@ services:
       - "443:7878"
     networks:
       - internal
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     environment:
       - PUID=1000
       - PGID=1000
