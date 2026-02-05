@@ -130,16 +130,16 @@ COMMIT
 # INPUT CHAIN - Traffic destined to the router itself
 # =============================================================================
 
+# Loopback — always accept (standard practice, required for local services
+# including GitLab CI runner which runs on the router itself)
+-A INPUT -i lo -j ACCEPT
+
 # SSH access to router — restricted to trusted sources
 # mgmt VLAN (10.4.0.0/16): infrastructure management network
 # Tailscale (100.64.0.0/10): mesh VPN
 # WAN: out-of-band access when Tailscale is down (key-only auth)
-# Internal VLAN (10.3.0.0/16): GitLab runner deploys via SSH
-# Docker bridges (172.16.0.0/12): containers on the router (CI runner)
 -A INPUT -s 10.4.0.0/16 -p tcp -m tcp --dport 22 -j ACCEPT
 -A INPUT -s 100.64.0.0/10 -p tcp -m tcp --dport 22 -j ACCEPT
--A INPUT -s 10.3.0.0/16 -p tcp -m tcp --dport 22 -j ACCEPT
--A INPUT -s 172.16.0.0/12 -p tcp -m tcp --dport 22 -j ACCEPT
 -A INPUT -i {{ inet_interface_name }} -p tcp -m tcp --dport 22 -j ACCEPT
 
 # Allow ICMP (ping) for diagnostics

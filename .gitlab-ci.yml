@@ -97,17 +97,6 @@ stages:
 .ansible:
   image: willhallonline/ansible:latest
   before_script:
-    # --- DEBUG: Discover runner's network identity for iptables fix ---
-    - echo "=== RUNNER NETWORK DEBUG ==="
-    - echo "--- hostname -I ---" && hostname -I || true
-    - echo "--- ip addr show ---" && ip addr show || true
-    - echo "--- ip route ---" && ip route || true
-    - echo "--- /etc/hosts (router entries) ---" && grep -i router /etc/hosts || true
-    - echo "--- getent hosts router.lab.nkontur.com ---" && getent hosts router.lab.nkontur.com || true
-    - echo "--- getent hosts zwave.lab.nkontur.com ---" && getent hosts zwave.lab.nkontur.com || true
-    - echo "--- getent hosts satellite-2.lab.nkontur.com ---" && getent hosts satellite-2.lab.nkontur.com || true
-    - echo "=== END RUNNER NETWORK DEBUG ==="
-    # --- END DEBUG ---
     - mkdir -p /cache/pip /cache/ansible-roles
     - pip3 install -q --cache-dir /cache/pip -r requirements.txt
     # Clean corrupted role directories (ansible-galaxy --force doesn't handle this)
