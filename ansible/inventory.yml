@@ -8,6 +8,7 @@ all:
     deluge_ip: 10.3.32.3
     loki_ip: 10.3.32.4
     influxdb_ip: 10.3.32.5
+    vault_ip: 10.3.32.6
     docker_persistent_data_path: /persistent_data/application
     docker_compose_version: '3.9'
     movie_switch_mac: 8c:3b:ad:6f:0e:d0
@@ -117,6 +118,9 @@ all:
         - src: "docker/zigbee2mqtt/configuration.yaml"
           dest: "{{ docker_persistent_data_path }}/zigbee2mqtt/configuration.yaml"
           name: "zigbee2mqtt"
+        - src: "docker/vault/config.hcl"
+          dest: "{{ docker_persistent_data_path }}/vault/config/config.hcl"
+          name: "vault"
         - src: "docker/moltbot/mcporter/mcporter.json"
           dest: "{{ docker_persistent_data_path }}/moltbot/mcporter/mcporter.json"
           name: "moltbot-gateway"

@@ -5,6 +5,7 @@ volumes:
   fifos:
   # registry volume removed - using GitLab registry instead
   mosquitto:
+  vault_data:
   nextcloud:
     driver: local
     driver_opts:
@@ -474,6 +475,34 @@ services:
       timeout: 10s
       retries: 3
       start_period: 300s
+
+  # HashiCorp Vault - Secrets Management
+  # Initial setup uses file storage; will be configured for GitLab JWT auth in future MR
+  vault:
+    container_name: vault
+    image: hashicorp/vault:latest
+    restart: unless-stopped
+    networks:
+      internal:
+        ipv4_address: {{ vault_ip }}
+    ports:
+      - "8200:8200"
+    cap_add:
+      - IPC_LOCK  # Required for Vault to lock memory and prevent secrets from being swapped
+    volumes:
+      - vault_data:/data/vault
+      - '{{ docker_persistent_data_path }}/vault/config:/vault/config:ro'
+    environment:
+      - VAULT_ADDR=http://127.0.0.1:8200
+      - VAULT_API_ADDR=http://{{ vault_ip }}:8200
+    command: server
+    healthcheck:
+      test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   deluge:
     container_name: deluge
     ports:

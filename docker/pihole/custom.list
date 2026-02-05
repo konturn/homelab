@@ -14,4 +14,5 @@
 {{ snapserver_address }} snapserver.lab.nkontur.com
 {{ amp_address }} amp.lab.nkontur.com
 {{ mosquitto_address }} mqtt.lab.nkontur.com
+{{ vault_ip }} vault.lab.nkontur.com
 10.6.0.1 router.lab.nkontur.com
