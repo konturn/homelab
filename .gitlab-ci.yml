@@ -31,7 +31,6 @@ variables:
   ANSIBLE_PIPELINING: "True"
   PIP_CACHE_DIR: "/cache/pip"
   ANSIBLE_ROLES_PATH: "/cache/ansible-roles"
-  MOLTBOT_IMAGE_TAG: "latest"
 
 # =============================================================================
 # Path-based change detection
@@ -87,7 +86,6 @@ variables:
 
 stages:
   - validate
-  - build
   - deploy
 
 # =============================================================================
@@ -148,38 +146,10 @@ satellite-2:validate:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml --check --diff
 
 # =============================================================================
-# Build Stage - Container images
-# =============================================================================
-moltbot:build:
-  stage: build
-  image: docker:24
-  variables:
-    DOCKER_HOST: "tcp://10.4.32.2:2375"
-    DOCKER_BUILDKIT: "0"
-  before_script:
-    - echo "$DOCKER_REGISTRY_KEY" | docker login -u docker --password-stdin registry.lab.nkontur.com
-  script:
-    - docker build -t registry.lab.nkontur.com/moltbot-gateway:latest -t registry.lab.nkontur.com/moltbot-gateway:$CI_COMMIT_SHORT_SHA docker/moltbot/
-    - docker push registry.lab.nkontur.com/moltbot-gateway:latest
-    - docker push registry.lab.nkontur.com/moltbot-gateway:$CI_COMMIT_SHORT_SHA
-  needs: []
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
-      changes:
-        - docker/moltbot/**/*
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      changes:
-        - docker/moltbot/**/*
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      when: manual
-      allow_failure: true
-    - if: $CI_COMMIT_BRANCH == "main"
-      when: manual
-      allow_failure: true
-
-# =============================================================================
 # Deploy Stage - Parallel deployment (main only)
 # =============================================================================
+# Note: moltbot-gateway is now built locally during deployment via docker-compose
+# (build directive in docker-compose.yml) instead of via private registry.
 router:deploy:
   extends: .ansible
   stage: deploy

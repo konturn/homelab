@@ -110,12 +110,6 @@
 #      - PyYAML
 #      - docker-compose
 
-- name: Log in to private docker repo
-  docker_login:
-    username: docker
-    password: "{{ lookup('env', 'DOCKER_REGISTRY_KEY') }}"
-    registry_url: "https://registry.lab.nkontur.com"
-
 - name: Template out compose file to ansible state directory on host
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/' + item }}"
