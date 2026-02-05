@@ -70,6 +70,8 @@ networks:
       parent: bond0.5
   wordpress_internal:
     driver: bridge
+  nextcloud_internal:
+    driver: bridge
 services:
   # Docker socket proxy - filtered access for CI builds
   # Only allows build/image operations, blocks exec/start/stop
@@ -547,12 +549,16 @@ services:
     volumes:
       - vault_data:/vault/file
       - '{{ docker_persistent_data_path }}/vault/config:/vault/config:ro'
+      - '{{ docker_persistent_data_path }}/certs:/vault/certs:ro'
     environment:
-      - VAULT_ADDR=http://127.0.0.1:8200
-      - VAULT_API_ADDR=http://{{ vault_ip }}:8200
+      - VAULT_ADDR=https://127.0.0.1:8200
+      - VAULT_API_ADDR=https://{{ vault_ip }}:8200
+      - VAULT_CACERT=/vault/certs/nkontur.com/live/iot.lab.nkontur.com-0003/chain.pem
+      # Skip TLS verify for healthcheck using loopback
+      - VAULT_SKIP_VERIFY=true
     command: server
     healthcheck:
-      test: ["CMD", "sh", "-c", "vault status -address=http://127.0.0.1:8200; [ $? -le 2 ]"]
+      test: ["CMD", "sh", "-c", "vault status -address=https://127.0.0.1:8200; [ $? -le 2 ]"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -652,7 +658,7 @@ services:
     volumes:
       - wordpress_db:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p{{ lookup('env', 'WORDPRESS_DB_PASSWORD') }}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -1074,7 +1080,7 @@ services:
     command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
     restart: unless-stopped
     networks:
-      - external
+      - nextcloud_internal
     deploy:
       resources:
         limits:
@@ -1099,6 +1105,7 @@ services:
     container_name: nextcloud
     networks:
       - external
+      - nextcloud_internal
     hostname: nkontur.com
     ports:
       - "443:80"
@@ -1220,5 +1227,4 @@ services:
       - {{ docker_persistent_data_path }}/moltbot/data:/home/node/.openclaw
       - {{ docker_persistent_data_path }}/moltbot/mcporter:/home/node/.mcporter
       - {{ docker_persistent_data_path }}/moltbot/workspace:/home/node/.openclaw/workspace
-      - /var/run/docker.sock:/var/run/docker.sock
     command: ["node", "dist/index.js", "gateway", "--bind", "lan", "--port", "18789"]
