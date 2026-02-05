@@ -112,8 +112,8 @@
 
 - name: Log in to GitLab container registry
   docker_login:
-    username: "{{ lookup('env', 'GITLAB_REGISTRY_USER') }}"
-    password: "{{ lookup('env', 'GITLAB_REGISTRY_PASSWORD') }}"
+    username: "{{ lookup('env', 'CI_REGISTRY_USER') }}"
+    password: "{{ lookup('env', 'CI_REGISTRY_PASSWORD') }}"
     registry_url: "https://gitlab-registry.lab.nkontur.com:443"
 
 - name: Template out compose file to ansible state directory on host
