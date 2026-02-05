@@ -294,6 +294,11 @@
 # Deluge cache fix: reduce libtorrent disk cache to prevent excessive RAM usage.
 # Default cache_size of 512 pieces causes 28GB+ memory consumption with large torrents.
 # Repo-managed core.conf sets cache_size to 128, keeping usage under 2GB.
+- name: Check if deluge data directory exists
+  ansible.builtin.stat:
+    path: "{{ docker_persistent_data_path }}/deluge"
+  register: deluge_dir
+
 - name: Deploy Deluge core.conf (managed cache_size)
   ansible.builtin.copy:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/deluge/core.conf' }}"
@@ -302,9 +307,9 @@
     group: root
     mode: '0644'
   register: deluge_config
-  when: not ansible_check_mode
+  when: deluge_dir.stat.exists and not ansible_check_mode
 
 - name: Restart deluge if config was modified
   ansible.builtin.command:
     cmd: "docker restart deluge"
-  when: deluge_config is changed and not ansible_check_mode
+  when: deluge_dir.stat.exists and deluge_config is changed and not ansible_check_mode
