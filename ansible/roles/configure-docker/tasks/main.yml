@@ -41,15 +41,6 @@
     mode: '0644'
   check_mode: no
 
-- name: Set Docker apt release name
-  set_fact:
-    docker_release: "{{ ansible_distribution_release }}"
-  when: ansible_distribution_release != 'bullseye'
-
-# Bullseye hosts already have Docker installed. Bookworm packages require
-# libc6 >= 2.34 which Bullseye doesn't have, so we skip repo/install entirely.
-# They will be upgraded when the OS moves to Bookworm.
-
 - name: Remove incorrect bookworm Docker repo from Bullseye hosts
   apt_repository:
     repo: "deb [signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable"
@@ -58,9 +49,8 @@
 
 - name: Add docker repository to apt
   apt_repository:
-    repo: "deb [signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ docker_release }} stable"
+    repo: "deb [signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
     state: present
-  when: ansible_distribution_release != 'bullseye'
 
 - name: Install docker
   apt:
@@ -71,7 +61,6 @@
       - docker-compose-plugin
     state: latest
     update_cache: yes
-  when: ansible_distribution_release != 'bullseye'
 
 - name: Remove legacy NVIDIA Docker GPG key
   ansible.builtin.file:
