@@ -1,4 +1,20 @@
-- cronvar:
+- name: Deploy msmtp configuration
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/msmtp/msmtprc' }}"
+    dest: /etc/msmtprc
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Set msmtp as default MTA
+  ansible.builtin.file:
+    src: /usr/bin/msmtp
+    dest: /usr/sbin/sendmail
+    state: link
+    force: yes
+
+- name: Set MAILTO for borgmatic cron
+  cronvar:
     name: MAILTO
-    value: noah@nkontur.com
+    value: konoahko@gmail.com
     cron_file: borgmatic

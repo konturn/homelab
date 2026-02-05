@@ -21,7 +21,7 @@ set -euo pipefail
 INFLUXDB_URL="${INFLUXDB_URL:-http://localhost:8086}"
 INFLUXDB_ORG="${INFLUXDB_ORG:-homelab}"
 INFLUXDB_BUCKET="${INFLUXDB_BUCKET:-metrics}"
-NOTIFICATION_EMAIL="${NOTIFICATION_EMAIL:-noah@nkontur.com}"
+NOTIFICATION_EMAIL="${NOTIFICATION_EMAIL:-konoahko@gmail.com}"
 MAX_BACKUP_AGE_HOURS="${MAX_BACKUP_AGE_HOURS:-26}"
 LOG_FILE="/var/log/backup-verify.log"
 

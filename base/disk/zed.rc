@@ -15,14 +15,14 @@
 # Email will only be sent if ZED_EMAIL_ADDR is defined.
 # Disabled by default; uncomment to enable.
 #
-ZED_EMAIL_ADDR="noah@nkontur.com"
+ZED_EMAIL_ADDR="konoahko@gmail.com"
 
 ##
 # Name or path of executable responsible for sending notifications via email;
 #   the mail program must be capable of reading a message body from stdin.
 # Email will only be sent if ZED_EMAIL_ADDR is defined.
 #
-#ZED_EMAIL_PROG="mail"
+ZED_EMAIL_PROG="mail"
 
 ##
 # Command-line options for ZED_EMAIL_PROG.
@@ -31,7 +31,7 @@ ZED_EMAIL_ADDR="noah@nkontur.com"
 #   this should be protected with quotes to prevent word-splitting.
 # Email will only be sent if ZED_EMAIL_ADDR is defined.
 #
-#ZED_EMAIL_OPTS="-s '@SUBJECT@' @ADDRESS@"
+ZED_EMAIL_OPTS="-s '@SUBJECT@' @ADDRESS@"
 
 ##
 # Default directory for zed lock files.
