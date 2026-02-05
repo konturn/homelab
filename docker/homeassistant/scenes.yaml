@@ -1,0 +1,115 @@
+# Home Assistant Scenes
+# Predefined lighting and device states
+
+# Reading scene - comfortable lighting for reading
+- name: "Reading Time"
+  id: reading_time
+  entities:
+    light.living_room:
+      state: on
+      brightness: 200
+      color_temp: 250
+    light.main_bedroom:
+      state: on  
+      brightness: 180
+      color_temp: 250
+    light.office:
+      state: on
+      brightness: 255
+      color_temp: 200  # Cool white for focus
+    light.kitchen:
+      state: off
+    light.hallway:
+      state: on
+      brightness: 100
+
+# Relaxation scene - warm, dim lighting
+- name: "Relax Mode"
+  id: relax_mode
+  entities:
+    light.living_room:
+      state: on
+      brightness: 120
+      color_temp: 400  # Very warm
+    light.kitchen:
+      state: on
+      brightness: 80
+      color_temp: 400
+    light.main_bedroom:
+      state: on
+      brightness: 60
+      color_temp: 450
+    light.office:
+      state: off
+    light.guest_bedroom:
+      state: off
+    light.hallway:
+      state: on
+      brightness: 50
+
+# Work from home scene - bright, focused lighting
+- name: "Work Mode"
+  id: work_mode
+  entities:
+    light.office:
+      state: on
+      brightness: 255
+      color_temp: 200  # Cool white
+    light.kitchen:
+      state: on
+      brightness: 200
+      color_temp: 250
+    light.living_room:
+      state: on
+      brightness: 150
+      color_temp: 250
+    light.hallway:
+      state: on
+      brightness: 120
+    light.main_bedroom:
+      state: off
+    light.guest_bedroom:
+      state: off
+
+# Movie night scene - used by movie mode automation
+- name: "Movie Night"
+  id: movie_night
+  entities:
+    light.living_room:
+      state: on
+      brightness: 25  # Very dim
+      color_temp: 500  # Very warm
+    light.kitchen:
+      state: on
+      brightness: 25
+      color_temp: 500
+    light.office:
+      state: off
+    light.main_bedroom:
+      state: off
+    light.guest_bedroom:
+      state: off
+    light.main_bathroom:
+      state: off
+    light.hallway:
+      state: on
+      brightness: 20
+
+# All off scene
+- name: "All Lights Off"
+  id: all_off
+  entities:
+    light.living_room:
+      state: off
+    light.kitchen:
+      state: off
+    light.main_bedroom:
+      state: off
+    light.office:
+      state: off
+    light.guest_bedroom:
+      state: off
+    light.main_bathroom:
+      state: off
+    light.hallway:
+      state: off

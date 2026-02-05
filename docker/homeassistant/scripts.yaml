@@ -1,0 +1,73 @@
+# Home Assistant Scripts
+# Reusable scripts for common tasks
+
+# Quick light scenes for different times of day
+morning_lights:
+  alias: "Morning Lights"
+  description: "Turn on lights for morning routine"
+  sequence:
+    - service: light.turn_on
+      target:
+        entity_id:
+          - light.kitchen
+          - light.main_bathroom
+      data:
+        brightness: 255
+        color_temp: 250  # Warm white
+
+evening_lights:
+  alias: "Evening Lights" 
+  description: "Turn on lights for evening"
+  sequence:
+    - service: light.turn_on
+      target:
+        entity_id:
+          - light.living_room
+          - light.kitchen
+          - light.hallway
+      data:
+        brightness: 200
+        color_temp: 300  # Warmer white
+
+# Audio control scripts
+play_doorbell_all_speakers:
+  alias: "Play Doorbell - All Speakers"
+  description: "Play doorbell sound on all Snapcast speakers"
+  sequence:
+    - service: shell_command.sound_doorbell
+
+# Air quality check script
+check_air_quality:
+  alias: "Check Air Quality"
+  description: "Get current air quality readings for both sensors"
+  sequence:
+    - service: notify.persistent_notification
+      data:
+        title: "Air Quality Report"
+        message: |
+          Kitchen: CO2 {{ states('sensor.kitchen_sensor_carbon_dioxide') }}ppm, PM2.5 {{ states('sensor.kitchen_sensor_particulate_matter_2_5') }}μg/m³
+          Bedroom: CO2 {{ states('sensor.bedroom_sensor_carbon_dioxide') }}ppm, PM2.5 {{ states('sensor.bedroom_sensor_particulate_matter_2_5') }}μg/m³
+
+# Quick power down script for leaving home
+away_mode:
+  alias: "Away Mode"
+  description: "Turn off unnecessary devices when leaving home"
+  sequence:
+    - service: light.turn_off
+      target:
+        entity_id: all
+    - service: media_player.turn_off
+      target:
+        entity_id:
+          - media_player.projector_lab_nkontur_com
+          - media_player.denon_avr_x2700h
+          - media_player.mopidy
+    - service: switch.turn_off
+      target:
+        entity_id: switch.wake_on_lan
+    - service: input_boolean.turn_off
+      target:
+        entity_id:
+          - input_boolean.movie_mode
+          - input_boolean.bass_boost
+          - input_boolean.goodnight_mode
