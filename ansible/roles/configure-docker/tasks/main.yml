@@ -97,11 +97,11 @@
     mode: 0600
   register: docker_conf
 
-#- name: Reload Docker to pick up changes
-#  ansible.builtin.systemd:
-#    name: docker
-#    state: restarted
-#  when: docker_conf.changed
+- name: Reload Docker to pick up daemon config changes
+  ansible.builtin.systemd:
+    name: docker
+    state: reloaded
+  when: docker_conf.changed and not ansible_check_mode
 
 #- name: ensure required pip-packages are installed on host
 #  pip:
@@ -218,7 +218,16 @@
     files: "{{ docker_compose_file_names }}"
     state: present
   when: not ansible_check_mode
-    
+
+- name: Force recreate containers after daemon config change
+  community.docker.docker_compose_v2:
+    project_name: "{{ docker_compose_project_name | default('docker') }}"
+    project_src: "{{ docker_compose_dest_path }}/"
+    files: "{{ docker_compose_file_names }}"
+    state: present
+    recreate: always
+  when: docker_conf.changed and not ansible_check_mode
+
 - name: Enable dnsmasq.d config loading for Pi-hole
   ansible.builtin.replace:
     path: "{{ docker_persistent_data_path }}/pihole/conf/pihole.toml"
