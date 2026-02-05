@@ -152,7 +152,7 @@ services:
           memory: 512M
     environment:
       TZ: America/New_York
-      WEBPASSWORD: {{ lookup('env', 'PIHOLE_PASSWORD') }}
+      WEBPASSWORD: {{ vault_pihole_password }}
     volumes:
       - {{ docker_persistent_data_path }}/pihole/conf:/etc/pihole
       - {{ docker_persistent_data_path }}/pihole/dnsmasq:/etc/dnsmasq.d
@@ -384,7 +384,7 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=America/New_York
-      - AUDIOSERVE_SHARED_SECRET={{ lookup('env', 'AUDIOSERVE_SECRET') }}
+      - AUDIOSERVE_SHARED_SECRET={{ vault_audioserve_secret }}
       - VIRTUAL_HOST=audioserve.nkontur.com
       - LETSENCRYPT_HOST=audioserve.nkontur.com
     command: /audiobooks
@@ -419,10 +419,10 @@ services:
     environment:
       - DOCKER_INFLUXDB_INIT_MODE=setup
       - DOCKER_INFLUXDB_INIT_USERNAME=admin
-      - DOCKER_INFLUXDB_INIT_PASSWORD={{ lookup('env', 'INFLUXDB_PASSWORD') }}
+      - DOCKER_INFLUXDB_INIT_PASSWORD={{ vault_influxdb_password }}
       - DOCKER_INFLUXDB_INIT_ORG=homelab
       - DOCKER_INFLUXDB_INIT_BUCKET=metrics
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN={{ lookup('env', 'INFLUXDB_ADMIN_TOKEN') }}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN={{ vault_influxdb_admin_token }}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
       interval: 30s
@@ -448,15 +448,15 @@ services:
       - {{ docker_persistent_data_path }}/grafana/provisioning:/etc/grafana/provisioning
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD={{ lookup('env', 'GRAFANA_ADMIN_PASSWORD') }}
+      - GF_SECURITY_ADMIN_PASSWORD={{ vault_grafana_admin_password }}
       - GF_SERVER_ROOT_URL=https://grafana.lab.nkontur.com
       - GF_USERS_ALLOW_SIGN_UP=false
-      - INFLUXDB_TOKEN={{ lookup('env', 'INFLUXDB_ADMIN_TOKEN') }}
+      - INFLUXDB_TOKEN={{ vault_influxdb_admin_token }}
       # SMTP for email alerts
       - GF_SMTP_ENABLED=true
       - GF_SMTP_HOST=smtp.gmail.com:587
       - GF_SMTP_USER=konoahko@gmail.com
-      - GF_SMTP_PASSWORD={{ lookup('env', 'GRAFANA_SMTP_PASSWORD') }}
+      - GF_SMTP_PASSWORD={{ vault_grafana_smtp_password }}
       - GF_SMTP_FROM_ADDRESS=konoahko@gmail.com
       - GF_SMTP_FROM_NAME=Grafana Homelab
       - GF_SMTP_STARTTLS_POLICY=MandatoryStartTLS
@@ -627,7 +627,7 @@ services:
     environment:
       WORDPRESS_DB_HOST: wordpress_db
       WORDPRESS_DB_USER: wordpress
-      WORDPRESS_DB_PASSWORD: {{ lookup('env', 'WORDPRESS_DB_PASSWORD') }}
+      WORDPRESS_DB_PASSWORD: {{ vault_wordpress_db_password }}
       WORDPRESS_DB_NAME: wordpress
     volumes:
       - {{ docker_persistent_data_path }}/wordpress/html:/var/www/html
@@ -654,8 +654,8 @@ services:
     environment:
       MYSQL_DATABASE: wordpress
       MYSQL_USER: wordpress
-      MYSQL_PASSWORD: {{ lookup('env', 'WORDPRESS_DB_PASSWORD') }}
-      MYSQL_ROOT_PASSWORD: {{ lookup('env', 'WORDPRESS_DB_PASSWORD') }}
+      MYSQL_PASSWORD: {{ vault_wordpress_db_password }}
+      MYSQL_ROOT_PASSWORD: {{ vault_wordpress_db_password }}
     volumes:
       - wordpress_db:/var/lib/mysql
     healthcheck:
@@ -956,10 +956,10 @@ services:
       - "{{ docker_persistent_data_path }}/certs:/certs"
     environment:
       AMCREST_HOST: 10.6.128.9
-      AMCREST_PASSWORD: {{ lookup('env', 'DOORBELL_PASS') }}
+      AMCREST_PASSWORD: {{ vault_doorbell_pass }}
       MQTT_HOST: "mqtt.lab.nkontur.com"
       MQTT_USERNAME: mosquitto
-      MQTT_PASSWORD: {{ lookup('env', 'MQTT_PASS') }}
+      MQTT_PASSWORD: {{ vault_mqtt_pass }}
       HOME_ASSISTANT: "true"
       MQTT_TLS_ENABLED: "true"
       MQTT_TLS_CA_CERT: "/etc/ssl/certs/ca-cert-ISRG_Root_X1.pem"
@@ -990,7 +990,7 @@ services:
       TZ: America/New_York
       PORT: 8080
       MQTT_USERNAME: mosquitto
-      MQTT_PASSWORD: {{ lookup('env', 'MQTT_PASS') }}
+      MQTT_PASSWORD: {{ vault_mqtt_pass }}
       MQTT_REJECT_UNAUTHORIZED: "false"
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:8080 || exit 1"]
@@ -1091,8 +1091,8 @@ services:
     volumes:
       - nextcloud_db:/var/lib/mysql
     environment:
-      - MYSQL_ROOT_PASSWORD={{ lookup('env', 'NEXTCLOUD_DB_PASSWORD') }}
-      - MYSQL_PASSWORD={{ lookup('env', 'NEXTCLOUD_DB_PASSWORD') }}
+      - MYSQL_ROOT_PASSWORD={{ vault_nextcloud_db_password }}
+      - MYSQL_PASSWORD={{ vault_nextcloud_db_password }}
       - MYSQL_DATABASE=nextcloud
       - MYSQL_USER=nextcloud
     healthcheck:
@@ -1180,50 +1180,50 @@ services:
     environment:
       - TZ=America/New_York
       # Core moltbot configuration
-      - OPENAI_API_KEY={{ lookup('env', 'OPENAI_API_KEY') }}
-      - CLAWDBOT_GATEWAY_TOKEN={{ lookup('env', 'MOLTBOT_GATEWAY_TOKEN') }}
-      - TELEGRAM_BOT_TOKEN={{ lookup('env', 'MOLTBOT_TELEGRAM_TOKEN') }}
+      - OPENAI_API_KEY={{ vault_openai_api_key }}
+      - CLAWDBOT_GATEWAY_TOKEN={{ vault_moltbot_gateway_token }}
+      - TELEGRAM_BOT_TOKEN={{ vault_moltbot_telegram_token }}
       - HASS_URL=http://homeassistant:8123
-      - HASS_TOKEN={{ lookup('env', 'HASS_TOKEN') }}
-      - GITLAB_TOKEN={{ lookup('env', 'MOLTBOT_GITLAB_TOKEN') }}
+      - HASS_TOKEN={{ vault_hass_token }}
+      - GITLAB_TOKEN={{ vault_moltbot_gitlab_token }}
       # Media management APIs (internal network)
       - RADARR_URL=http://radarr:7878
-      - RADARR_API_KEY={{ lookup('env', 'RADARR_API_KEY') }}
+      - RADARR_API_KEY={{ vault_radarr_api_key }}
       - SONARR_URL=http://sonarr:8989
-      - SONARR_API_KEY={{ lookup('env', 'SONARR_API_KEY') }}
+      - SONARR_API_KEY={{ vault_sonarr_api_key }}
       - PROWLARR_URL=http://prowlarr:9696
-      - PROWLARR_API_KEY={{ lookup('env', 'PROWLARR_API_KEY') }}
+      - PROWLARR_API_KEY={{ vault_prowlarr_api_key }}
       - PLEX_URL=http://plex:32400
-      - PLEX_TOKEN={{ lookup('env', 'PLEX_TOKEN') }}
+      - PLEX_TOKEN={{ vault_plex_token }}
       - OMBI_URL=http://ombi:3579
-      - OMBI_API_KEY={{ lookup('env', 'OMBI_API_KEY') }}
+      - OMBI_API_KEY={{ vault_ombi_api_key }}
       # Download clients
       - NZBGET_URL=http://nzbget:6789
-      - NZBGET_USERNAME={{ lookup('env', 'NZBGET_USERNAME') }}
-      - NZBGET_PASSWORD={{ lookup('env', 'NZBGET_PASSWORD') }}
+      - NZBGET_USERNAME={{ vault_nzbget_username }}
+      - NZBGET_PASSWORD={{ vault_nzbget_password }}
       - DELUGE_URL=http://deluge:8112
-      - DELUGE_PASSWORD={{ lookup('env', 'DELUGE_PASSWORD') }}
+      - DELUGE_PASSWORD={{ vault_deluge_password }}
       # Document management
       - PAPERLESS_URL=http://paperless-ngx:8000
-      - PAPERLESS_TOKEN={{ lookup('env', 'PAPERLESS_TOKEN') }}
+      - PAPERLESS_TOKEN={{ vault_paperless_token }}
       # Metrics/monitoring
       - INFLUXDB_URL=http://influxdb:8086
-      - INFLUXDB_TOKEN={{ lookup('env', 'INFLUXDB_TOKEN') }}
+      - INFLUXDB_TOKEN={{ vault_influxdb_token }}
       # Grafana API access
       - GRAFANA_URL={{ grafana_url }}
       - GRAFANA_TOKEN={{ grafana_token }}
       # Tailscale API access
-      - TAILSCALE_API_TOKEN={{ lookup('env', 'TAILSCALE_API_TOKEN') }}
+      - TAILSCALE_API_TOKEN={{ vault_tailscale_api_token }}
       # IPMI access for server management
-      - IPMI_USER={{ lookup('env', 'IPMI_USER') }}
-      - IPMI_PASSWORD={{ lookup('env', 'IPMI_PASSWORD') }}
+      - IPMI_USER={{ vault_ipmi_user }}
+      - IPMI_PASSWORD={{ vault_ipmi_password }}
       # Web search
       - BRAVE_API_KEY={{ brave_api_key }}
       # Agent platforms
-      - ACLAWDEMY_API_KEY={{ lookup('env', 'ACLAWDEMY_API_KEY') }}
+      - ACLAWDEMY_API_KEY={{ vault_aclawdemy_api_key }}
       # Email access (for job application verification codes, etc.)
-      - GMAIL_EMAIL={{ lookup('env', 'GMAIL_EMAIL') }}
-      - GMAIL_APP_PASSWORD={{ lookup('env', 'GMAIL_APP_PASSWORD') }}
+      - GMAIL_EMAIL={{ vault_gmail_email }}
+      - GMAIL_APP_PASSWORD={{ vault_gmail_app_password }}
     volumes:
       - {{ docker_persistent_data_path }}/moltbot/data:/home/node/.openclaw
       - {{ docker_persistent_data_path }}/moltbot/mcporter:/home/node/.mcporter

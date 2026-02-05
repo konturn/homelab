@@ -25,8 +25,8 @@ http:
     - {{ iot_nginx_ip }}
     - 127.0.0.1
 spotcast:
-  sp_dc: "{{ lookup('env', 'SPOTIFY_DC') }}"
-  sp_key: "{{ lookup('env', 'SPOTIFY_KEY') }}"
+  sp_dc: "{{ vault_spotify_dc }}"
+  sp_key: "{{ vault_spotify_key }}"
 
 shell_command:
   sound_doorbell: cat /config/sounds/doorbell-1.wav | nc {{ snapserver_address }} 80

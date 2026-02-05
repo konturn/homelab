@@ -1,4 +1,6 @@
 - hosts: satellite-2.lab.nkontur.com
+  vars_files:
+    - vault_vars.yml
   roles:
     - configure-scanner
     - configure-docker

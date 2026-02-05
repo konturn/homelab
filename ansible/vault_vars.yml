@@ -1,0 +1,186 @@
+# =============================================================================
+# Vault Secret Lookups
+# =============================================================================
+# All secrets are fetched from HashiCorp Vault KV v2 engine.
+# Vault address and token are provided via environment variables:
+#   VAULT_ADDR - URL of the Vault server
+#   VAULT_TOKEN - Authentication token
+#
+# Secrets are organized under the 'homelab' mount point:
+#   homelab/infrastructure/* - LUKS, IPMI, SNMP, router keys, etc.
+#   homelab/networking/*     - Cloudflare, Namesilo, Wireguard, Mullvad
+#   homelab/docker/*         - Per-service secrets (influxdb, grafana, etc.)
+#   homelab/backup/*         - Backblaze, Restic, Borg
+#   homelab/mqtt/*           - MQTT broker credentials
+#   homelab/cameras/*        - Camera passwords
+#   homelab/email/*          - Gmail, SMTP, DKIM
+#   homelab/api-keys/*       - External API keys
+#   homelab/moltbot/*        - Moltbot service tokens
+#   homelab/gitlab/*         - GitLab runner tokens
+# =============================================================================
+
+# Vault connection settings
+vault_addr: "{{ lookup('env', 'VAULT_ADDR') | default('http://10.3.32.6:8200', true) }}"
+
+# Helper macro for vault lookups - all use the same pattern
+# Usage: {{ vault_secrets.<category>.<key> }}
+
+# --- Infrastructure secrets ---
+_vault_infrastructure_luks: "{{ lookup('community.hashi_vault.vault_kv2_get', 'infrastructure/luks', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_infrastructure_router: "{{ lookup('community.hashi_vault.vault_kv2_get', 'infrastructure/router', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_infrastructure_ipmi: "{{ lookup('community.hashi_vault.vault_kv2_get', 'infrastructure/ipmi', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_infrastructure_snmp: "{{ lookup('community.hashi_vault.vault_kv2_get', 'infrastructure/snmp', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_infrastructure_vrrp: "{{ lookup('community.hashi_vault.vault_kv2_get', 'infrastructure/vrrp', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_infrastructure_omapi: "{{ lookup('community.hashi_vault.vault_kv2_get', 'infrastructure/omapi', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_infrastructure_rndc: "{{ lookup('community.hashi_vault.vault_kv2_get', 'infrastructure/rndc', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_infrastructure_aruba: "{{ lookup('community.hashi_vault.vault_kv2_get', 'infrastructure/aruba', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_infrastructure_docker_registry: "{{ lookup('community.hashi_vault.vault_kv2_get', 'infrastructure/docker-registry', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_infrastructure_tailscale: "{{ lookup('community.hashi_vault.vault_kv2_get', 'infrastructure/tailscale', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_infrastructure_pihole: "{{ lookup('community.hashi_vault.vault_kv2_get', 'infrastructure/pihole', engine_mount_point='homelab', url=vault_addr) }}"
+
+# --- Networking secrets ---
+_vault_networking_cloudflare: "{{ lookup('community.hashi_vault.vault_kv2_get', 'networking/cloudflare', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_networking_namesilo: "{{ lookup('community.hashi_vault.vault_kv2_get', 'networking/namesilo', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_networking_wireguard: "{{ lookup('community.hashi_vault.vault_kv2_get', 'networking/wireguard', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_networking_mullvad: "{{ lookup('community.hashi_vault.vault_kv2_get', 'networking/mullvad', engine_mount_point='homelab', url=vault_addr) }}"
+
+# --- Docker service secrets ---
+_vault_docker_influxdb: "{{ lookup('community.hashi_vault.vault_kv2_get', 'docker/influxdb', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_docker_grafana: "{{ lookup('community.hashi_vault.vault_kv2_get', 'docker/grafana', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_docker_plex: "{{ lookup('community.hashi_vault.vault_kv2_get', 'docker/plex', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_docker_radarr: "{{ lookup('community.hashi_vault.vault_kv2_get', 'docker/radarr', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_docker_sonarr: "{{ lookup('community.hashi_vault.vault_kv2_get', 'docker/sonarr', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_docker_prowlarr: "{{ lookup('community.hashi_vault.vault_kv2_get', 'docker/prowlarr', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_docker_deluge: "{{ lookup('community.hashi_vault.vault_kv2_get', 'docker/deluge', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_docker_nzbget: "{{ lookup('community.hashi_vault.vault_kv2_get', 'docker/nzbget', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_docker_nextcloud: "{{ lookup('community.hashi_vault.vault_kv2_get', 'docker/nextcloud', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_docker_ombi: "{{ lookup('community.hashi_vault.vault_kv2_get', 'docker/ombi', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_docker_paperless: "{{ lookup('community.hashi_vault.vault_kv2_get', 'docker/paperless', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_docker_compreface: "{{ lookup('community.hashi_vault.vault_kv2_get', 'docker/compreface', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_docker_audioserve: "{{ lookup('community.hashi_vault.vault_kv2_get', 'docker/audioserve', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_docker_wordpress: "{{ lookup('community.hashi_vault.vault_kv2_get', 'docker/wordpress', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_docker_spotify: "{{ lookup('community.hashi_vault.vault_kv2_get', 'docker/spotify', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_docker_homeassistant: "{{ lookup('community.hashi_vault.vault_kv2_get', 'docker/homeassistant', engine_mount_point='homelab', url=vault_addr) }}"
+
+# --- Backup secrets ---
+_vault_backup_backblaze: "{{ lookup('community.hashi_vault.vault_kv2_get', 'backup/backblaze', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_backup_restic: "{{ lookup('community.hashi_vault.vault_kv2_get', 'backup/restic', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_backup_borg: "{{ lookup('community.hashi_vault.vault_kv2_get', 'backup/borg', engine_mount_point='homelab', url=vault_addr) }}"
+
+# --- MQTT secrets ---
+_vault_mqtt: "{{ lookup('community.hashi_vault.vault_kv2_get', 'mqtt/mosquitto', engine_mount_point='homelab', url=vault_addr) }}"
+
+# --- Camera secrets ---
+_vault_cameras_doorbell: "{{ lookup('community.hashi_vault.vault_kv2_get', 'cameras/doorbell', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_cameras_rear: "{{ lookup('community.hashi_vault.vault_kv2_get', 'cameras/rear', engine_mount_point='homelab', url=vault_addr) }}"
+
+# --- Email secrets ---
+_vault_email_gmail: "{{ lookup('community.hashi_vault.vault_kv2_get', 'email/gmail', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_email_smtp: "{{ lookup('community.hashi_vault.vault_kv2_get', 'email/smtp', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_email_dkim: "{{ lookup('community.hashi_vault.vault_kv2_get', 'email/dkim', engine_mount_point='homelab', url=vault_addr) }}"
+
+# --- API key secrets ---
+_vault_apikeys_anthropic: "{{ lookup('community.hashi_vault.vault_kv2_get', 'api-keys/anthropic', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_apikeys_openai: "{{ lookup('community.hashi_vault.vault_kv2_get', 'api-keys/openai', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_apikeys_brave: "{{ lookup('community.hashi_vault.vault_kv2_get', 'api-keys/brave', engine_mount_point='homelab', url=vault_addr) }}"
+_vault_apikeys_aclawdemy: "{{ lookup('community.hashi_vault.vault_kv2_get', 'api-keys/aclawdemy', engine_mount_point='homelab', url=vault_addr) }}"
+
+# --- Moltbot secrets ---
+_vault_moltbot: "{{ lookup('community.hashi_vault.vault_kv2_get', 'moltbot/tokens', engine_mount_point='homelab', url=vault_addr) }}"
+
+# --- GitLab secrets ---
+_vault_gitlab: "{{ lookup('community.hashi_vault.vault_kv2_get', 'gitlab/runners', engine_mount_point='homelab', url=vault_addr) }}"
+
+# =============================================================================
+# Friendly variable aliases - these are what templates actually reference
+# =============================================================================
+
+# Infrastructure
+vault_luks_password_base64: "{{ _vault_infrastructure_luks.secret.password_base64 }}"
+vault_router_private_key_base64: "{{ _vault_infrastructure_router.secret.private_key_base64 }}"
+vault_ipmi_user: "{{ _vault_infrastructure_ipmi.secret.user }}"
+vault_ipmi_password: "{{ _vault_infrastructure_ipmi.secret.password }}"
+vault_snmp_password: "{{ _vault_infrastructure_snmp.secret.password }}"
+vault_vrrp_password: "{{ _vault_infrastructure_vrrp.secret.password }}"
+vault_omapi_secret: "{{ _vault_infrastructure_omapi.secret.secret }}"
+vault_rndc_key: "{{ _vault_infrastructure_rndc.secret.key }}"
+vault_aruba_password: "{{ _vault_infrastructure_aruba.secret.password }}"
+vault_aruba_config_secret: "{{ _vault_infrastructure_aruba.secret.config_secret }}"
+vault_docker_registry_key: "{{ _vault_infrastructure_docker_registry.secret.key }}"
+vault_tailscale_api_token: "{{ _vault_infrastructure_tailscale.secret.api_token }}"
+vault_tailscale_auth_key: "{{ _vault_infrastructure_tailscale.secret.auth_key }}"
+vault_pihole_password: "{{ _vault_infrastructure_pihole.secret.password }}"
+
+# Networking
+vault_cloudflare_api_key: "{{ _vault_networking_cloudflare.secret.api_key }}"
+vault_cloudflare_zone_id: "{{ _vault_networking_cloudflare.secret.zone_id }}"
+vault_namesilo_api_key: "{{ _vault_networking_namesilo.secret.api_key }}"
+vault_wireguard_private_key: "{{ _vault_networking_wireguard.secret.private_key }}"
+vault_wireguard_private_key_backup: "{{ _vault_networking_wireguard.secret.private_key_backup }}"
+vault_wireguard_private_key_vps: "{{ _vault_networking_wireguard.secret.private_key_vps }}"
+vault_mullvad_account_number: "{{ _vault_networking_mullvad.secret.account_number }}"
+vault_mullvad_private_key: "{{ _vault_networking_mullvad.secret.private_key }}"
+
+# Docker services
+vault_influxdb_password: "{{ _vault_docker_influxdb.secret.password }}"
+vault_influxdb_admin_token: "{{ _vault_docker_influxdb.secret.admin_token }}"
+vault_influxdb_telegraf_token: "{{ _vault_docker_influxdb.secret.telegraf_token }}"
+vault_influxdb_token: "{{ _vault_docker_influxdb.secret.token }}"
+vault_grafana_admin_password: "{{ _vault_docker_grafana.secret.admin_password }}"
+vault_grafana_smtp_password: "{{ _vault_docker_grafana.secret.smtp_password }}"
+vault_grafana_token: "{{ _vault_docker_grafana.secret.token }}"
+vault_plex_token: "{{ _vault_docker_plex.secret.token }}"
+vault_radarr_api_key: "{{ _vault_docker_radarr.secret.api_key }}"
+vault_sonarr_api_key: "{{ _vault_docker_sonarr.secret.api_key }}"
+vault_prowlarr_api_key: "{{ _vault_docker_prowlarr.secret.api_key }}"
+vault_deluge_password: "{{ _vault_docker_deluge.secret.password }}"
+vault_nzbget_username: "{{ _vault_docker_nzbget.secret.username }}"
+vault_nzbget_password: "{{ _vault_docker_nzbget.secret.password }}"
+vault_nextcloud_db_password: "{{ _vault_docker_nextcloud.secret.db_password }}"
+vault_nextcloud_secret: "{{ _vault_docker_nextcloud.secret.secret }}"
+vault_ombi_api_key: "{{ _vault_docker_ombi.secret.api_key }}"
+vault_paperless_token: "{{ _vault_docker_paperless.secret.token }}"
+vault_compreface_key: "{{ _vault_docker_compreface.secret.key }}"
+vault_compreface_postgres_pass: "{{ _vault_docker_compreface.secret.postgres_password }}"
+vault_audioserve_secret: "{{ _vault_docker_audioserve.secret.secret }}"
+vault_wordpress_db_password: "{{ _vault_docker_wordpress.secret.db_password }}"
+vault_spotify_dc: "{{ _vault_docker_spotify.secret.dc }}"
+vault_spotify_key: "{{ _vault_docker_spotify.secret.key }}"
+vault_spotify_password: "{{ _vault_docker_spotify.secret.password }}"
+vault_hass_token: "{{ _vault_docker_homeassistant.secret.token }}"
+vault_haas_token: "{{ _vault_docker_homeassistant.secret.haas_token }}"
+
+# Backup
+vault_backblaze_access_key_id: "{{ _vault_backup_backblaze.secret.access_key_id }}"
+vault_backblaze_secret_access_key: "{{ _vault_backup_backblaze.secret.secret_access_key }}"
+vault_restic_password: "{{ _vault_backup_restic.secret.password }}"
+vault_borg_passphrase_base64: "{{ _vault_backup_borg.secret.encryption_passphrase_base64 }}"
+
+# MQTT
+vault_mqtt_pass: "{{ _vault_mqtt.secret.password }}"
+
+# Cameras
+vault_doorbell_pass: "{{ _vault_cameras_doorbell.secret.password }}"
+vault_rear_camera_pass: "{{ _vault_cameras_rear.secret.password }}"
+
+# Email
+vault_gmail_email: "{{ _vault_email_gmail.secret.email }}"
+vault_gmail_app_password: "{{ _vault_email_gmail.secret.app_password }}"
+vault_smtp_password: "{{ _vault_email_smtp.secret.password }}"
+vault_dkim_private_key: "{{ _vault_email_dkim.secret.private_key }}"
+
+# API Keys
+vault_anthropic_api_key: "{{ _vault_apikeys_anthropic.secret.api_key }}"
+vault_openai_api_key: "{{ _vault_apikeys_openai.secret.api_key }}"
+vault_brave_api_key: "{{ _vault_apikeys_brave.secret.api_key }}"
+vault_aclawdemy_api_key: "{{ _vault_apikeys_aclawdemy.secret.api_key }}"
+
+# Moltbot
+vault_moltbot_gateway_token: "{{ _vault_moltbot.secret.gateway_token }}"
+vault_moltbot_gitlab_token: "{{ _vault_moltbot.secret.gitlab_token }}"
+vault_moltbot_telegram_token: "{{ _vault_moltbot.secret.telegram_token }}"
+vault_claude_code_oauth_token: "{{ _vault_moltbot.secret.claude_code_oauth_token }}"
+
+# GitLab
+vault_gitlab_runner_token: "{{ _vault_gitlab.secret.runner_token }}"
+vault_images_gitlab_runner_token: "{{ _vault_gitlab.secret.images_runner_token }}"

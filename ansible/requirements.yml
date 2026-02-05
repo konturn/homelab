@@ -1,4 +1,6 @@
 # Ansible Galaxy requirements
 # Roles that were previously installed from Galaxy/git are now vendored
 # into ansible/roles/ for reliability (see ansible/roles/restic/).
-[]
+collections:
+  - name: community.hashi_vault
+    version: ">=6.0.0"

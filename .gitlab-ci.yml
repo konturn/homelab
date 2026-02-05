@@ -31,6 +31,8 @@ variables:
   ANSIBLE_PIPELINING: "True"
   PIP_CACHE_DIR: "/cache/pip"
   ANSIBLE_ROLES_PATH: "/cache/ansible-roles"
+  ANSIBLE_COLLECTIONS_PATH: "/cache/ansible-collections"
+  VAULT_ADDR: "http://10.3.32.6:8200"
   MOLTBOT_IMAGE_TAG: "latest"
 
 # =============================================================================
@@ -54,6 +56,7 @@ variables:
         - base/**/*
         - requirements.txt
         - ansible/requirements.yml
+        - ansible/vault_vars.yml
         - .gitlab-ci.yml
 
 .zwave_changes:
@@ -67,6 +70,7 @@ variables:
         - docker/docker-compose-zwave.yml
         - requirements.txt
         - ansible/requirements.yml
+        - ansible/vault_vars.yml
         - .gitlab-ci.yml
 
 .satellite2_changes:
@@ -78,6 +82,7 @@ variables:
         - ansible/roles/configure-satellite/**/*
         - requirements.txt
         - ansible/requirements.yml
+        - ansible/vault_vars.yml
         - .gitlab-ci.yml
 
 # =============================================================================
@@ -97,7 +102,7 @@ stages:
 .ansible:
   image: willhallonline/ansible:latest
   before_script:
-    - mkdir -p /cache/pip /cache/ansible-roles
+    - mkdir -p /cache/pip /cache/ansible-roles /cache/ansible-collections
     - pip3 install -q --cache-dir /cache/pip -r requirements.txt
     # Clean corrupted role directories (ansible-galaxy --force doesn't handle this)
     - |
@@ -105,16 +110,18 @@ stages:
         [ -d "$d" ] && [ ! -f "${d}meta/main.yml" ] && [ ! -f "${d}tasks/main.yml" ] && rm -rf "$d" 2>/dev/null
       done
     - ansible-galaxy install -r ansible/requirements.yml -p /cache/ansible-roles --force 2>/dev/null || true
+    - ansible-galaxy collection install -r ansible/requirements.yml -p /cache/ansible-collections --force 2>/dev/null || true
     - mkdir -p ~/.ssh
     - cp ansible/known_hosts ~/.ssh/known_hosts
     - echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp && chmod 600 tmp
   after_script:
     - rm -f tmp
   cache:
-    key: "ansible-deps-v2"
+    key: "ansible-deps-v3"
     paths:
       - /cache/pip
       - /cache/ansible-roles
+      - /cache/ansible-collections
     policy: pull-push
 
 # =============================================================================

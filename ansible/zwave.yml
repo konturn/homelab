@@ -1,4 +1,6 @@
 - hosts: zwave.lab.nkontur.com
+  vars_files:
+    - vault_vars.yml
   roles:
   - configure-zwave
   - configure-snapclient

@@ -63,8 +63,8 @@ all:
     mopidy_address: 10.6.32.7
     moltbot_gateway_ip: 10.4.0.50
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
-    omapi_secret: "{{ lookup('env', 'OMAPI_SECRET') }}"
-    tailscale_api_token: "{{ lookup('env', 'TAILSCALE_API_TOKEN') }}"
+    omapi_secret: "{{ vault_omapi_secret }}"
+    tailscale_api_token: "{{ vault_tailscale_api_token }}"
     tailscale_tailnet: "tail2360f8.ts.net"
     tailscale_split_dns:
       lab.nkontur.com:
@@ -72,8 +72,8 @@ all:
       iot.lab.nkontur.com:
         - "10.3.32.2"
     grafana_url: "http://grafana:3000"
-    grafana_token: "{{ lookup('env', 'GRAFANA_TOKEN') }}"
-    brave_api_key: "{{ lookup('env', 'BRAVE_API_KEY') }}"
+    grafana_token: "{{ vault_grafana_token }}"
+    brave_api_key: "{{ vault_brave_api_key }}"
     is_satellite: false
   hosts:
     router.lab.nkontur.com:
