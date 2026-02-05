@@ -20,9 +20,9 @@
     content: "{{ lookup('env', 'LUKS_PASSWORD_BASE64') | b64decode }}"
     dest: '/etc/password_file.txt'
     owner: root
-  no_log: true
     group: root
     mode: 0600
+  no_log: true
 
 - name: Set max memory per process for non-root users
   community.general.pam_limits:
