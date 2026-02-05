@@ -1,7 +1,7 @@
 {
-  "80": {
-    "title": "fix: ensure all containers use Loki log driver after daemon.json changes",
-    "branch": "fix/loki-logging-daemon-restart",
+  "92": {
+    "title": "fix: reliability improvements — monitoring, resource limits, healthchecks, DNS",
+    "branch": "fix/reliability-improvements",
     "lastCommentId": 0,
     "version": 1
   }

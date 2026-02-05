@@ -160,3 +160,5 @@ When I wake up, if I see processes, skills, or md files that can be improved —
 ## Standing Permissions
 
 **Skill Acquisition (2026-02-03):** I have permission to search for and grab useful skills from the internet proactively. Just notify Noah when I do.
+-e 
+- **I have browser access in sandbox.** Chromium and agent-browser are available. Use `browser` tool with sandbox target for screenshots and automation. Don't claim I can't render things.

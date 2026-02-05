@@ -2,7 +2,7 @@
 # mr-comment-check.sh - Fast check for new MR comments
 # Returns JSON: {"dispatch": [...], "cleanup": [...], "skipped": [...]}
 
-TRACKING_FILE="/home/node/clawd/memory/open-mrs.json"
+TRACKING_FILE="${TRACKING_FILE:-/home/node/.openclaw/workspace/memory/open-mrs.json}"
 GITLAB_API="https://gitlab.lab.nkontur.com/api/v4"
 PROJECT_ID="4"
 LOCK_EXPIRY_MS=3600000  # 1 hour
