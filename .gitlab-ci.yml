@@ -141,7 +141,8 @@ router:bootstrap:
     - |
       ROUTER_KEY_SET=false
       if [ -n "${VAULT_ID_TOKEN:-}" ]; then
-        apk add --no-cache curl jq >/dev/null 2>&1 || true
+        # Only install curl/jq if not already present (avoid upgrading libcrypto which breaks ssh)
+        command -v curl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 || apk add --no-cache curl jq >/dev/null 2>&1 || true
         VAULT_ADDR="https://vault.lab.nkontur.com:8200"
         # Try ci-deploy role first (main branch), then vault-read (any branch)
         for ROLE in ci-deploy vault-read; do
