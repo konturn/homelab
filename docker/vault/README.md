@@ -20,38 +20,21 @@ Vault automatically unseals on container startup using a wrapper entrypoint scri
 4. If sealed, applies unseal keys from a mounted file
 5. Waits on the Vault process (keeps container running)
 
-### Unseal Keys File
+### Unseal Keys
 
-The unseal keys are stored at:
+The unseal keys are managed via the `VAULT_UNSEAL_KEYS` CI/CD variable (protected). During deployment, Ansible writes them to:
 ```
 /persistent_data/application/vault/unseal/unseal-keys
 ```
 
-This file contains hex-encoded unseal keys, one per line. Only 3 keys (the threshold) are needed, though all 5 can be stored. The directory is created by Ansible with mode `0700` (root only).
+This file contains hex-encoded unseal keys, one per line. Only 3 keys (the threshold) are needed. The directory is created by Ansible with mode `0700` (root only), and the file with mode `0600`.
 
-**Important:** The unseal keys file is NOT stored in git. It must be placed manually on the router:
-
-```bash
-# SSH to router
-ssh root@router.lab.nkontur.com
-
-# Create the unseal keys file (use your actual keys)
-mkdir -p /persistent_data/application/vault/unseal
-cat > /persistent_data/application/vault/unseal/unseal-keys << 'EOF'
-<hex-encoded-unseal-key-1>
-<hex-encoded-unseal-key-2>
-<hex-encoded-unseal-key-3>
-EOF
-
-# Lock down permissions
-chmod 600 /persistent_data/application/vault/unseal/unseal-keys
-chmod 700 /persistent_data/application/vault/unseal
-```
+The keys are automatically deployed on every CI/CD pipeline run. No manual placement is needed.
 
 ### Security Considerations
 
-- The unseal keys file is on the same machine as Vault. This is a pragmatic tradeoff for a homelab: it protects against network attackers and accidental container restarts, but not against root compromise of the host.
-- The file is readable only by root (mode 0600 in a 0700 directory).
+- The unseal keys are stored as a protected CI/CD variable (only available on protected branches).
+- On disk, the file is readable only by root (mode 0600 in a 0700 directory).
 - The keys are mounted read-only into the container.
 - For production environments, use Transit auto-unseal or a Cloud KMS instead.
 
@@ -77,14 +60,14 @@ ssh root@router.lab.nkontur.com
 docker exec vault vault operator init
 
 # Save the unseal keys and root token securely!
-# Then place 3+ keys in the unseal-keys file (see above)
+# Then add 3+ hex keys to the VAULT_UNSEAL_KEYS CI/CD variable (newline-separated)
 ```
 
 ## Configuration
 
 - **Config file:** `docker/vault/config.hcl` (deployed by Ansible)
 - **Auto-unseal script:** `docker/vault/auto-unseal.sh` (deployed by Ansible)
-- **Unseal keys:** `/persistent_data/application/vault/unseal/unseal-keys` (manual placement)
+- **Unseal keys:** `VAULT_UNSEAL_KEYS` CI/CD variable → deployed to `/persistent_data/application/vault/unseal/unseal-keys`
 
 ## File Storage
 
