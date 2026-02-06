@@ -325,3 +325,27 @@
   ansible.builtin.command:
     cmd: "docker restart deluge"
   when: deluge_dir.stat.exists and deluge_config is changed and not ansible_check_mode
+
+### Transcript credential scrubbing cron
+# Deploys a script that redacts secrets from OpenClaw session transcripts
+# and purges archived sub-agent transcripts older than 7 days.
+- name: Deploy transcript scrub script
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/moltbot/scripts/scrub-transcripts.sh' }}"
+    dest: "/usr/local/bin/scrub-transcripts.sh"
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Set up transcript scrub cron job (every 10 minutes)
+  ansible.builtin.cron:
+    name: "Scrub credentials from moltbot transcripts"
+    minute: "*/10"
+    job: >-
+      docker run --rm
+      --name scrub-transcripts
+      --log-opt tag=scrub-transcripts
+      -v /usr/local/bin/scrub-transcripts.sh:/scrub.sh:ro
+      -v {{ docker_persistent_data_path }}/moltbot-gateway/agents/main/sessions:/transcripts
+      -v /var/log/scrub-transcripts:/var/log/scrub-transcripts
+      bash:5 bash /scrub.sh /transcripts
