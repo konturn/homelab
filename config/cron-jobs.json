@@ -32,7 +32,7 @@
       "name": "mr-comment-monitor",
       "enabled": true,
       "createdAtMs": 1769814703178,
-      "updatedAtMs": 1770363600001,
+      "updatedAtMs": 1770364800001,
       "schedule": {
         "kind": "cron",
         "expr": "*/10 * * * *",
@@ -45,10 +45,10 @@
         "message": "MR Comment Monitor (SCRIPT-BASED):\n\n1. Run the check script:\n```bash\noutput=$(/home/node/clawd/skills/gitlab/scripts/mr-comment-check.sh)\necho \"$output\"\n```\n\n2. Parse the JSON output:\n   - `dispatch`: MRs with new comments - spawn sub-agent for each\n   - `cleanup`: MRs that are merged/closed - remove from tracking file\n   - `skipped`: MRs skipped (locked or pipeline running) - ignore\n\n3. For each item in `dispatch`:\n   - Set lock in tracking file\n   - Spawn sub-agent (see skills/gitlab-mr/SKILL.md for reference)\n\n4. For each item in `cleanup`:\n   - Remove the MR from /home/node/clawd/memory/open-mrs.json\n\n5. If dispatch is empty and cleanup is empty, reply HEARTBEAT_OK\n\nDo NOT make API calls yourself - the script already did that efficiently."
       },
       "state": {
-        "nextRunAtMs": 1770364200000,
-        "lastRunAtMs": 1770363600001,
+        "nextRunAtMs": 1770365400000,
+        "lastRunAtMs": 1770364800001,
         "lastStatus": "ok",
-        "lastDurationMs": 34989
+        "lastDurationMs": 34645
       }
     },
     {
@@ -134,7 +134,7 @@
       "name": "main-pipeline-fix",
       "enabled": true,
       "createdAtMs": 1769927834157,
-      "updatedAtMs": 1770363000004,
+      "updatedAtMs": 1770364800001,
       "schedule": {
         "kind": "cron",
         "expr": "*/30 * * * *",
@@ -147,10 +147,10 @@
         "message": "Main Pipeline Monitor:\n\n1. Fetch latest main pipeline: GET /projects/4/pipelines?ref=main&per_page=1\n2. Read /home/node/clawd/memory/main-pipeline-state.json\n3. If pipeline status == 'failed' AND pipelineId != lastFixedPipelineId:\n   a. Check activeFix - if set and timestamp < 60 min ago, SKIP (already being fixed)\n   b. If activeFix is null or expired (>60 min):\n      - Set activeFix = {pipelineId, timestamp: Date.now(), sessionLabel}\n      - Write state file IMMEDIATELY before spawning\n      - Spawn sub-agent labeled 'gitlab.main.pipeline.<id>.fix' (see skills/gitlab-mr/SKILL.md)\n      - Sub-agent MUST: clear activeFix and set lastFixedPipelineId when done\n4. If pipeline status == 'success', clear activeFix if set\n\nState file format:\n{\"lastCheckedPipelineId\": N, \"lastFixedPipelineId\": N, \"activeFix\": {pipelineId, timestamp, sessionLabel}}\n\nExit silently if pipeline is green or already being fixed."
       },
       "state": {
-        "nextRunAtMs": 1770364800000,
-        "lastRunAtMs": 1770363309353,
+        "nextRunAtMs": 1770366600000,
+        "lastRunAtMs": 1770364834655,
         "lastStatus": "ok",
-        "lastDurationMs": 10685
+        "lastDurationMs": 7441
       }
     },
     {
@@ -187,7 +187,7 @@
       "name": "MR Health Check",
       "enabled": true,
       "createdAtMs": 1769961241972,
-      "updatedAtMs": 1770278400000,
+      "updatedAtMs": 1770364800001,
       "schedule": {
         "kind": "cron",
         "expr": "0 3 * * *",
@@ -201,10 +201,10 @@
         "timeoutSeconds": 900
       },
       "state": {
-        "nextRunAtMs": 1770364800000,
-        "lastRunAtMs": 1770278416455,
+        "nextRunAtMs": 1770451200000,
+        "lastRunAtMs": 1770364842105,
         "lastStatus": "ok",
-        "lastDurationMs": 64165
+        "lastDurationMs": 27970
       }
     },
     {
