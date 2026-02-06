@@ -326,6 +326,85 @@ vault:configure:
       changes:
         - terraform/vault/**/*
 
+vault:rotate-approle:
+  stage: configure
+  image: alpine:3.19
+  needs:
+    - job: router:deploy
+      optional: true
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: https://vault.lab.nkontur.com:8200
+  variables:
+    VAULT_ADDR: "https://vault.lab.nkontur.com:8200"
+    VAULT_SKIP_VERIFY: "true"
+  when: manual
+  allow_failure: true
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    - |
+      echo "=== Authenticating to Vault via JWT ==="
+      JWT_RESPONSE=$(curl -sk --max-time 10 \
+        --request POST \
+        --data "{\"role\": \"vault-admin\", \"jwt\": \"${VAULT_ID_TOKEN}\"}" \
+        "${VAULT_ADDR}/v1/auth/jwt/login" 2>/dev/null) || true
+
+      VAULT_TOKEN=$(echo "$JWT_RESPONSE" | jq -r '.auth.client_token // empty' 2>/dev/null)
+
+      if [ -z "$VAULT_TOKEN" ]; then
+        echo "JWT authentication failed"
+        echo "$JWT_RESPONSE" | jq -r '.errors[]' 2>/dev/null
+        exit 1
+      fi
+      echo "JWT authentication succeeded"
+
+      echo "=== Generating new AppRole secret_id ==="
+      SECRET_RESPONSE=$(curl -sk -X POST \
+        -H "X-Vault-Token: $VAULT_TOKEN" \
+        "${VAULT_ADDR}/v1/auth/approle/role/moltbot/secret-id")
+
+      NEW_SECRET_ID=$(echo "$SECRET_RESPONSE" | jq -r '.data.secret_id // empty')
+
+      if [ -z "$NEW_SECRET_ID" ]; then
+        echo "Failed to generate secret_id"
+        echo "$SECRET_RESPONSE" | jq -r '.errors[]' 2>/dev/null
+        exit 1
+      fi
+      echo "New secret_id generated"
+
+      echo "=== Verifying new credentials ==="
+      ROLE_ID="${VAULT_APPROLE_ROLE_ID}"
+      LOGIN_TEST=$(curl -sk -X POST \
+        -d "{\"role_id\":\"$ROLE_ID\",\"secret_id\":\"$NEW_SECRET_ID\"}" \
+        "${VAULT_ADDR}/v1/auth/approle/login")
+
+      if echo "$LOGIN_TEST" | jq -e '.auth.client_token' > /dev/null 2>&1; then
+        echo "Login verification passed"
+      else
+        echo "Login verification FAILED — aborting rotation"
+        exit 1
+      fi
+
+      echo "=== Updating CI variable ==="
+      HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
+        "https://gitlab.lab.nkontur.com/api/v4/projects/${CI_PROJECT_ID}/variables/VAULT_APPROLE_SECRET_ID" \
+        -H "PRIVATE-TOKEN: ${MOLTBOT_GITLAB_TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d "{\"value\":\"$NEW_SECRET_ID\",\"protected\":true,\"masked\":true}")
+
+      if [ "$HTTP_CODE" = "200" ]; then
+        echo "CI variable updated successfully"
+      else
+        echo "Failed to update CI variable (HTTP $HTTP_CODE)"
+        exit 1
+      fi
+
+      echo "=== Rotation complete ==="
+      echo "Next moltbot deploy will pick up the new secret_id"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
 vault:validate:
   extends: .interruptible
   stage: validate
