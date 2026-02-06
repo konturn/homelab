@@ -34,6 +34,7 @@ homelab/
 !memory/heartbeat-state.json
 !memory/main-pipeline-state.json
 !memory/open-mrs.json
+!config/cron-jobs.json
 
 # Ignore temp and canvas directories
 tmp/
