@@ -24,6 +24,9 @@ if [[ ! -d "$TRANSCRIPT_DIR" ]]; then
 fi
 
 # Structured logging function
+# Writes JSON to log file AND human-readable to both stdout and stderr.
+# Stderr ensures output is captured by the container's log driver / syslog
+# even when the log file volume isn't monitored by Promtail.
 log_event() {
   local level="$1"
   local event="$2"
@@ -32,7 +35,7 @@ log_event() {
   ts=$(date -Iseconds)
   local entry="{\"ts\":\"${ts}\",\"level\":\"${level}\",\"event\":\"${event}\",\"details\":\"${details}\"}"
   echo "$entry" >> "$LOG_FILE"
-  echo "[$ts] $level: $event $details"
+  echo "[$ts] $level: $event $details" | tee /dev/stderr
 }
 
 # Rotate log if > 10MB
