@@ -306,10 +306,18 @@ vault:configure:
     - wget -q "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip"
     - unzip -o "terraform_${TF_VERSION}_linux_amd64.zip" -d /usr/local/bin/
     - chmod +x /usr/local/bin/terraform
-    - mkdir -p /opt/terraform/vault
   script:
     - cd terraform/vault
-    - terraform init
+    - |
+      terraform init \
+        -backend-config="address=https://gitlab.lab.nkontur.com/api/v4/projects/${CI_PROJECT_ID}/terraform/state/vault" \
+        -backend-config="lock_address=https://gitlab.lab.nkontur.com/api/v4/projects/${CI_PROJECT_ID}/terraform/state/vault/lock" \
+        -backend-config="unlock_address=https://gitlab.lab.nkontur.com/api/v4/projects/${CI_PROJECT_ID}/terraform/state/vault/lock" \
+        -backend-config="lock_method=POST" \
+        -backend-config="unlock_method=DELETE" \
+        -backend-config="username=gitlab-ci-token" \
+        -backend-config="password=${CI_JOB_TOKEN}" \
+        -backend-config="retry_wait_min=5"
     - terraform validate
     - terraform plan -var="vault_addr=${VAULT_ADDR}" -var="vault_token=${VAULT_TOKEN}" -out=tfplan
     - terraform apply tfplan

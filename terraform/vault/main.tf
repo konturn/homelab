@@ -8,10 +8,10 @@ terraform {
     }
   }
 
-  # Local state stored on the runner (router)
-  # State persists at /opt/terraform/vault/terraform.tfstate
-  backend "local" {
-    path = "/opt/terraform/vault/terraform.tfstate"
+  # State stored in GitLab's built-in Terraform state backend
+  # Accessible at: Settings > Infrastructure > Terraform states
+  # Auth via CI_JOB_TOKEN in pipelines, or TF_HTTP_USERNAME/PASSWORD locally
+  backend "http" {
   }
 }
 
