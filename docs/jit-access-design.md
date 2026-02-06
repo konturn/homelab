@@ -2404,3 +2404,166 @@ If agent receives "approved" for a canary:
 
 **Conclusion:** No failure mode creates an unbounded credential exposure. The worst case is always "agent has reduced access until services recover." This is by design — fail-closed, not fail-open.
 
+
+---
+
+## 15. Request Lifecycle and Crash Recovery
+
+### 15.1 Request State Machine
+
+```
+                    ┌─────────────────────────────────┐
+                    │                                 │
+Created ──[agent polls]──▶ Pending ──[human taps]──▶ Approved
+   │                         │                         │
+   │                    [no poll for                [mint token]
+   │                     30 seconds]                   │
+   │                         │                    ┌────▼────┐
+   │                         ▼                    │ Minted  │──[TTL]──▶ Expired
+   │                    Expired                   └────┬────┘          (revoke if
+   │                    (agent gone)                   │               Model B)
+   │                                              [agent polls,
+   │                                               gets token]
+   │                                                   │
+   │                                              ┌────▼────┐
+   │                                              │ Claimed  │──[TTL]──▶ Expired
+   │                                              └─────────┘
+   │
+   └──[human taps deny]──▶ Denied ──▶ Closed
+```
+
+### 15.2 Poll-Based Keepalive
+
+The agent must actively poll to keep a request alive. This provides a trust-free mechanism for tracking agent liveness — the broker doesn't need any OpenClaw integration.
+
+```
+Agent polling loop:
+  while true:
+    response = GET /api/v1/request/{id}
+    if response.status == "approved" or "minted":
+      use token
+      break
+    if response.status == "denied" or "expired":
+      give up
+      break
+    sleep 15s    # poll interval
+
+Broker-side keepalive tracking:
+  on each poll:
+    request.last_poll_at = now()
+  
+  background reaper (every 10s):
+    for each request where status == "pending":
+      if now() - last_poll_at > 30s:
+        mark expired
+        update Telegram message: "⏰ Expired (agent stopped waiting)"
+```
+
+**Properties:**
+- Agent session dies → polling stops → request expires within 30s
+- No trust in the agent required — broker just observes silence
+- Works for both sub-agent sessions (short-lived) and main session (long-lived)
+- Agent can't keep a request alive without actively polling (no fire-and-forget)
+
+### 15.3 Durable Request Store (SQLite)
+
+Requests must survive broker restarts. SQLite is the simplest durable store.
+
+```sql
+CREATE TABLE requests (
+  id              TEXT PRIMARY KEY,     -- req-{uuid}
+  requester       TEXT NOT NULL,        -- "prometheus"
+  resource        TEXT NOT NULL,        -- "ssh:router"
+  tier            INTEGER NOT NULL,     -- 2
+  reason          TEXT NOT NULL,
+  capabilities    TEXT,                 -- JSON, optional fine-grained scope
+  status          TEXT NOT NULL,        -- pending|approved|minted|claimed|denied|expired
+  ttl_minutes     INTEGER NOT NULL,    -- requested TTL for the credential
+  created_at      TIMESTAMP NOT NULL,
+  last_poll_at    TIMESTAMP NOT NULL,
+  approved_at     TIMESTAMP,
+  token           TEXT,                 -- null until minted
+  token_expires_at TIMESTAMP,
+  telegram_msg_id TEXT,                -- for updating the approval message
+  signature       TEXT,                -- Ed25519 signature of the grant
+  revoked         BOOLEAN DEFAULT 0
+);
+
+CREATE INDEX idx_status ON requests(status);
+CREATE INDEX idx_last_poll ON requests(last_poll_at);
+```
+
+### 15.4 Crash Recovery (Broker Startup Sequence)
+
+On every broker startup:
+
+```
+1. EXPIRE stale pending requests:
+   UPDATE requests SET status='expired'
+   WHERE status='pending' AND last_poll_at < now() - 30s
+
+2. COMPLETE interrupted approvals:
+   SELECT * FROM requests WHERE status='approved' AND token IS NULL
+   For each:
+     if created_at + ttl_minutes < now():
+       mark expired (too late, don't mint stale tokens)
+     else:
+       mint Vault token, update status to 'minted'
+
+3. REVOKE orphaned tokens:
+   SELECT * FROM requests WHERE status IN ('minted','claimed')
+     AND token_expires_at < now() AND revoked = 0
+   For each:
+     call service-specific revocation
+     mark revoked = 1
+
+4. FETCH missed Telegram callbacks:
+   Use long polling (getUpdates) to retrieve any callbacks
+   received while broker was down (Telegram holds for 24h)
+   Process each callback normally
+```
+
+### 15.5 Telegram Integration Details
+
+**Long polling over webhooks.** Reasons:
+- Telegram holds unprocessed updates for 24 hours
+- Broker restart automatically picks up missed callbacks
+- No need for HTTPS endpoint or certificate management
+- Simpler deployment (no inbound routing through nginx)
+
+**Message lifecycle:**
+
+```
+Request created:
+  🔐 JIT Access Request [req-a1b2c3]
+  Resource: SSH → router
+  Tier: 2 | TTL: 15 min
+  Reason: Fix iptables rule for Tailscale DNS
+  Status: ⏳ Pending
+  [✅ Approve] [❌ Deny]
+
+Request approved:
+  (edit message)
+  ✅ Approved [req-a1b2c3]
+  Resource: SSH → router | TTL: 15 min
+  Approved at: 03:20 EST
+  Token expires: 03:35 EST
+
+Request expired (agent stopped polling):
+  (edit message)
+  ⏰ Expired [req-a1b2c3]
+  Resource: SSH → router
+  Reason: Agent stopped waiting
+
+Request denied:
+  (edit message)
+  ❌ Denied [req-a1b2c3]
+  Resource: SSH → router
+
+Token expired (post-use notification):
+  (new message)
+  🔒 Token expired [req-a1b2c3]
+  Resource: SSH → router
+  Used for: 12 min of 15 min TTL
+```
+
