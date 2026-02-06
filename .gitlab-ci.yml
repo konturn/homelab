@@ -139,6 +139,7 @@ router:bootstrap:
     - cp ansible/known_hosts ~/.ssh/known_hosts
     # Write SSH key from CI variable (always available, no dependencies)
     - echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp && chmod 600 tmp
+    - echo "DEBUG key file size:$(wc -c < tmp) ssh:$(ssh -V 2>&1) openssl:$(openssl version 2>&1) head:$(head -1 tmp)"
   after_script:
     - rm -f tmp
   cache:
