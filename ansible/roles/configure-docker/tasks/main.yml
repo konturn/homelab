@@ -341,11 +341,13 @@
   ansible.builtin.cron:
     name: "Scrub credentials from moltbot transcripts"
     minute: "*/10"
+    # Runs every 10 minutes. The --rm container's stdout vanishes on exit,
+    # so we pipe all output through logger to land in syslog, which Promtail
+    # already scrapes via the syslog job → Loki.
     job: >-
       docker run --rm
       --name scrub-transcripts
-      --log-opt tag=scrub-transcripts
       -v /usr/local/bin/scrub-transcripts.sh:/scrub.sh:ro
       -v {{ docker_persistent_data_path }}/moltbot-gateway/agents/main/sessions:/transcripts
       -v /var/log/scrub-transcripts:/var/log/scrub-transcripts
-      bash:5 bash /scrub.sh /transcripts
+      bash:5 bash /scrub.sh /transcripts 2>&1 | logger -t scrub-transcripts
