@@ -71,11 +71,13 @@ source /home/node/clawd/skills/gitlab/lib.sh  # Always source first
 
 3. **409 Conflict errors** — `gitlab_api_call` handles retry automatically.
 
-4. **Pipeline stages:** lint → validate → deploy (deploy only on main)
+4. **Pipeline stages:** validate → build → deploy → configure → bootstrap (deploy+ main only)
 
-5. **No runner tags** — jobs use default runner, don't specify tags.
+5. **Every MR must update relevant docs.** Changed pipeline structure → update ASCII diagram in `.gitlab-ci.yml` header. New secrets/auth → update `docs/SECRET_ROTATION.md`. Network rules → update `docs/FIREWALL.md`. New services → update `docs/DISASTER_RECOVERY.md`. Code without doc updates will be sent back.
 
-6. **Git identity:**
+6. **No runner tags** — jobs use default runner, don't specify tags.
+
+7. **Git identity:**
    ```bash
    git config user.email "moltbot@nkontur.com"
    git config user.name "Moltbot"
