@@ -26,6 +26,23 @@ docker_config:
     name: "myservice"
 ```
 
+## Docker Image Pinning
+
+All third-party Docker images are pinned to SHA256 digests for reproducible deploys. Format: `image:tag@sha256:xxxx`.
+
+**Exceptions (NOT pinned):**
+- `gitlab-registry.lab.nkontur.com` images (snapcast, snapclient, amcrest2mqtt, moltbot) — built in CI, pinning would break deploys
+- Images using Jinja2 template variables (e.g., `{{ moltbot_image_tag }}`)
+
+**When adding a new service:**
+1. Find the amd64 digest: `docker manifest inspect <image> | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest'`
+2. Pin in compose: `image: name:tag@sha256:xxxxx`
+
+**When updating an image version:**
+1. Change the tag
+2. Fetch the new digest for the new tag
+3. Update the `@sha256:` portion
+
 ## Secrets
 
 - Never commit cleartext secrets
