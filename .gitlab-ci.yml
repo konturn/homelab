@@ -137,40 +137,8 @@ router:bootstrap:
     - ansible-galaxy install -r ansible/requirements.yml -p /cache/ansible-roles --force 2>/dev/null || true
     - mkdir -p ~/.ssh
     - cp ansible/known_hosts ~/.ssh/known_hosts
-    # Fetch router SSH key: Vault JWT > CI variable fallback
-    - |
-      ROUTER_KEY_SET=false
-      if [ -n "${VAULT_ID_TOKEN:-}" ]; then
-        # Only install curl/jq if not already present (avoid upgrading libcrypto which breaks ssh)
-        command -v curl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 || apk add --no-cache curl jq >/dev/null 2>&1 || true
-        VAULT_ADDR="https://vault.lab.nkontur.com:8200"
-        # Try ci-deploy role first (main branch), then vault-read (any branch)
-        for ROLE in ci-deploy vault-read; do
-          JWT_RESP=$(curl -sk --max-time 10 \
-            --request POST \
-            --data "{\"role\": \"$ROLE\", \"jwt\": \"${VAULT_ID_TOKEN}\"}" \
-            "${VAULT_ADDR}/v1/auth/jwt/login" 2>/dev/null) || true
-          V_TOKEN=$(echo "$JWT_RESP" | jq -r '.auth.client_token // empty' 2>/dev/null)
-          if [ -n "$V_TOKEN" ]; then
-            echo "Vault JWT auth succeeded (role: $ROLE)"
-            SECRET_RESP=$(curl -sk --max-time 10 \
-              -H "X-Vault-Token: $V_TOKEN" \
-              "${VAULT_ADDR}/v1/homelab/data/infrastructure/router" 2>/dev/null) || true
-            ROUTER_KEY=$(echo "$SECRET_RESP" | jq -r '.data.data.private_key_base64 // empty' 2>/dev/null)
-            if [ -n "$ROUTER_KEY" ]; then
-              echo "Router key fetched from Vault"
-              echo "$ROUTER_KEY" | base64 -d > tmp && chmod 600 tmp
-              ROUTER_KEY_SET=true
-            fi
-            break
-          fi
-        done
-        unset V_TOKEN JWT_RESP SECRET_RESP ROUTER_KEY
-      fi
-      if [ "$ROUTER_KEY_SET" != "true" ]; then
-        echo "Vault key unavailable — using ROUTER_PRIVATE_KEY_BASE64 env var"
-        echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp && chmod 600 tmp
-      fi
+    # Write SSH key from CI variable (always available, no dependencies)
+    - echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp && chmod 600 tmp
   after_script:
     - rm -f tmp
   cache:
