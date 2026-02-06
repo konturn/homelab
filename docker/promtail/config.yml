@@ -1,0 +1,55 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # System logs
+  - job_name: syslog
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: syslog
+          host: router
+          __path__: /var/log/syslog
+
+  # Auth logs (SSH, sudo)
+  - job_name: auth
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: auth
+          host: router
+          __path__: /var/log/auth.log
+
+  # Kernel messages
+  - job_name: kernel
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: kernel
+          host: router
+          __path__: /var/log/kern.log
+
+  # Cron logs
+  - job_name: cron
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: cron
+          host: router
+          __path__: /var/log/cron.log
+
+  # Credential scrubber audit log
+  - job_name: scrub-transcripts
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: scrub-transcripts
+          host: router
+          __path__: /var/log/scrub-transcripts/*.log

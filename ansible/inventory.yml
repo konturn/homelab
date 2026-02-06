@@ -9,6 +9,7 @@ all:
     loki_ip: 10.3.32.4
     influxdb_ip: 10.3.32.5
     vault_ip: 10.3.32.6
+    promtail_ip: 10.3.32.7
     docker_persistent_data_path: /persistent_data/application
     docker_compose_version: '3.9'
     movie_switch_mac: 8c:3b:ad:6f:0e:d0
@@ -111,6 +112,7 @@ all:
         - "{{ amp_address }} amp.lab.nkontur.com"
         - "{{ mosquitto_address }} mqtt.lab.nkontur.com"
         - "{{ vault_ip }} vault.lab.nkontur.com"
+        - "{{ promtail_ip }} promtail.lab.nkontur.com"
         - "10.6.0.1 router.lab.nkontur.com"
       docker_config: 
         - src: "docker/pihole/custom.conf"
@@ -152,6 +154,9 @@ all:
         - src: "docker/loki/local-config.yaml"
           dest: "{{ docker_persistent_data_path }}/loki/local-config.yaml"
           name: "loki"
+        - src: "docker/promtail/config.yml"
+          dest: "{{ docker_persistent_data_path }}/promtail/config.yml"
+          name: "promtail"
         - src: "docker/gitlab/gitlab.rb"
           dest: "{{ docker_persistent_data_path }}/gitlab/config/gitlab.rb"
           name: "gitlab"
@@ -162,6 +167,9 @@ all:
         - path: "{{ docker_persistent_data_path }}/loki/data"
           owner: "10001"
           group: "10001"
+        - path: "{{ docker_persistent_data_path }}/promtail"
+          owner: "root"
+          group: "root"
         - path: "{{ docker_persistent_data_path }}/vault/unseal"
           owner: "root"
           group: "root"
