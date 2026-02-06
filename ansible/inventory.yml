@@ -73,7 +73,7 @@ all:
       iot.lab.nkontur.com:
         - "10.3.32.2"
     grafana_url: "http://grafana:3000"
-    grafana_token: "{{ lookup('env', 'GRAFANA_TOKEN') }}"
+    grafana_token: "{{ (vault_grafana_token | default(lookup('env', 'GRAFANA_TOKEN'))) | trim }}"
     brave_api_key: "{{ (vault_brave_api_key | default(lookup('env', 'BRAVE_API_KEY'))) | trim }}"
     is_satellite: false
   hosts:
