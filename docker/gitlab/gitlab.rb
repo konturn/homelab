@@ -59,10 +59,11 @@ postgresql['effective_cache_size'] = "4GB"
 postgresql['log_min_duration_statement'] = 500
 
 ###
-# Redis
-# Note: maxmemory/maxmemory_policy are not valid Omnibus keys.
-# Redis memory config requires a custom redis config file if needed.
+# Redis - Cache tuning with LRU eviction
+# These ARE valid Omnibus keys per docs.gitlab.com/omnibus/settings/redis/
 ###
+redis['maxmemory'] = "512mb"
+redis['maxmemory_policy'] = "allkeys-lru"
 
 ###
 # Disable built-in monitoring (using external Telegraf + InfluxDB + Grafana)
