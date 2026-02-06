@@ -43,9 +43,9 @@ puma['min_threads'] = 4
 puma['max_threads'] = 8
 
 ###
-# Sidekiq (background jobs) - Reduced concurrency
+# Sidekiq (background jobs) - High concurrency for pipeline bursts
 ###
-sidekiq['concurrency'] = 10
+sidekiq['concurrency'] = 20
 
 ###
 # PostgreSQL - Right-sized for small instance
