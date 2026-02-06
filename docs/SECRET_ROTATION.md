@@ -141,8 +141,12 @@ To remove CI variable fallback (after Vault is proven stable):
 | `SNMP_PASSWORD` | `infrastructure/snmp` | `password` | Telegraf |
 | `LUKS_PASSWORD_BASE64` | `infrastructure/luks` | `password_base64` | configure-base role |
 | `OMAPI_SECRET` | `infrastructure/omapi` | `secret` | DHCP OMAPI |
+| `CLOUDFLARE_API_KEY` | `networking/cloudflare` | `api_key` | DDNS cron |
 | `CLOUDFLARE_ZONE_ID` | `networking/cloudflare` | `zone_id` | DDNS cron |
 | `NAMESILO_API_KEY` | `networking/namesilo` | `api_key` | SSL renewal cron |
+| `GRAFANA_TOKEN` | `docker/grafana` | `token` | moltbot-gateway |
+| `SPOTIFY_DC` | `infrastructure/spotify` | `sp_dc` | Home Assistant spotcast |
+| `SPOTIFY_KEY` | `infrastructure/spotify` | `sp_key` | Home Assistant spotcast |
 | `BACKBLAZE_ACCESS_KEY_ID` | `backup/backblaze` | `access_key_id` | Restic backups |
 | `BACKBLAZE_SECRET_ACCESS_KEY` | `backup/backblaze` | `secret_access_key` | Restic backups |
 | `RESTIC_PASSWORD` | `backup/restic` | `password` | Restic backups |
@@ -155,8 +159,7 @@ To remove CI variable fallback (after Vault is proven stable):
 | `VAULT_APPROLE_SECRET_ID` | Circular dependency — needed to auth to Vault |
 | `VAULT_UNSEAL_KEYS` | Break-glass secret — must not depend on Vault |
 | `ROUTER_PRIVATE_KEY_BASE64` | CI `before_script` fallback — Vault JWT fetch attempted first |
-| `GRAFANA_TOKEN` | Non-sensitive service token, kept in inventory |
-| `CLOUDFLARE_API_KEY` | Used in cron job via `lookup('env', ...)` (not yet in Vault) |
+| `SMTP_PASSWORD` | Appears unused — candidate for deletion |
 
 ---
 
@@ -438,8 +441,9 @@ The job:
 ## Future Improvements
 
 - [ ] Remove CI env var fallbacks once Vault proves stable (~1 month)
-- [ ] Move CLOUDFLARE_API_KEY to Vault
+- [x] Move CLOUDFLARE_API_KEY to Vault
 - [ ] Implement secret scanning in CI pipeline
 - [ ] Set up pipeline schedule for automatic AppRole rotation
 - [ ] Add Vault token expiry monitoring to Grafana
-- [ ] Add GRAFANA_TOKEN to Vault
+- [x] Add GRAFANA_TOKEN to Vault
+- [ ] Delete unused SMTP_PASSWORD CI variable

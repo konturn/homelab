@@ -41,6 +41,7 @@ vault_secret_paths:
     fields:
       vault_grafana_admin_password: "admin_password"
       vault_grafana_smtp_password: "smtp_password"
+      vault_grafana_token: "token"
   - path: "docker/homeassistant"
     fields:
       vault_hass_token: "token"
@@ -139,7 +140,14 @@ vault_secret_paths:
   # Networking secrets
   - path: "networking/cloudflare"
     fields:
+      vault_cloudflare_api_key: "api_key"
       vault_cloudflare_zone_id: "zone_id"
   - path: "networking/namesilo"
     fields:
       vault_namesilo_api_key: "api_key"
+
+  # Spotify credentials (used by Home Assistant spotcast)
+  - path: "infrastructure/spotify"
+    fields:
+      vault_spotify_dc: "sp_dc"
+      vault_spotify_key: "sp_key"

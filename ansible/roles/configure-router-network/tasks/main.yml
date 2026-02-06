@@ -115,7 +115,7 @@
     minute: "*/5"
     job: >-
       {{ ('/usr/bin/python3 /root/cron/ddns.py -k '
-      + (lookup('env', 'CLOUDFLARE_API_KEY') | trim)
+      + ((vault_cloudflare_api_key | default(lookup('env', 'CLOUDFLARE_API_KEY'))) | trim)
       + ' -z '
       + ((vault_cloudflare_zone_id | default(lookup('env', 'CLOUDFLARE_ZONE_ID'))) | trim)
       + " -d nkontur.com -r '' '*' -e konoahko@gmail.com >> /root/cron/logs/ddns.log 2>&1")
