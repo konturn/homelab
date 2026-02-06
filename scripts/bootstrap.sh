@@ -162,6 +162,110 @@ install_runner() {
 }
 
 # ---------------------------------------------------------------------------
+# Step 7: Optional data restore from Backblaze B2
+# ---------------------------------------------------------------------------
+install_restic() {
+  if command -v restic &>/dev/null; then
+    log "restic already installed: $(restic version)"
+    return
+  fi
+
+  log "Installing restic..."
+  apt-get update -qq
+  apt-get install -y -qq restic
+  log "restic installed: $(restic version)"
+}
+
+restore_from_backup() {
+  log ""
+  log "=== Optional: Restore Data from Backblaze B2 ==="
+  log ""
+  log "If this is a fresh install, you may need to restore persistent data"
+  log "(GitLab data, configs, databases) before GitLab can serve the repo."
+  log ""
+
+  read -rp "[bootstrap] Restore data from Backblaze B2 backup? [y/N] " answer
+  if [[ ! "$answer" =~ ^[Yy]$ ]]; then
+    log "Skipping restore."
+    return
+  fi
+
+  install_restic
+
+  # Prompt for credentials if not already set
+  if [[ -z "${B2_ACCOUNT_ID:-}" ]]; then
+    read -rp "[bootstrap] B2_ACCOUNT_ID: " B2_ACCOUNT_ID
+    export B2_ACCOUNT_ID
+  fi
+  if [[ -z "${B2_ACCOUNT_KEY:-}" ]]; then
+    read -rsp "[bootstrap] B2_ACCOUNT_KEY: " B2_ACCOUNT_KEY
+    echo
+    export B2_ACCOUNT_KEY
+  fi
+  if [[ -z "${RESTIC_REPOSITORY:-}" ]]; then
+    read -rp "[bootstrap] RESTIC_REPOSITORY [s3:s3.us-east-005.backblazeb2.com/nkontur-homelab]: " RESTIC_REPOSITORY
+    RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-s3:s3.us-east-005.backblazeb2.com/nkontur-homelab}"
+    export RESTIC_REPOSITORY
+  fi
+  if [[ -z "${RESTIC_PASSWORD:-}" ]]; then
+    read -rsp "[bootstrap] RESTIC_PASSWORD: " RESTIC_PASSWORD
+    echo
+    export RESTIC_PASSWORD
+  fi
+
+  # B2 uses S3-compatible API for restic
+  export AWS_ACCESS_KEY_ID="${B2_ACCOUNT_ID}"
+  export AWS_SECRET_ACCESS_KEY="${B2_ACCOUNT_KEY}"
+
+  log "Connecting to backup repository..."
+  if ! restic snapshots --latest 5; then
+    err "Failed to connect to backup repository. Check credentials."
+    return 1
+  fi
+
+  log ""
+  log "The following restore paths are available (in recommended order):"
+  log "  1. /persistent_data/application  — Service configs (GitLab, HA, Vault, etc.)"
+  log "  2. /persistent_data/docker/volumes — Docker volumes (databases)"
+  log "  3. /mpool/nextcloud              — Nextcloud data (large)"
+  log "  4. /mpool/plex/config            — Plex metadata"
+  log "  5. /mpool/plex/Photos            — Photos (large, optional)"
+  log "  6. /mpool/plex/Family            — Family videos (large, optional)"
+  log ""
+  warn "This will OVERWRITE existing files at the restore paths."
+  read -rp "[bootstrap] Restore /persistent_data/application (service configs)? [y/N] " answer
+  if [[ "$answer" =~ ^[Yy]$ ]]; then
+    log "Restoring /persistent_data/application..."
+    restic restore latest --target / --include /persistent_data/application
+    log "Done."
+  fi
+
+  read -rp "[bootstrap] Restore /persistent_data/docker/volumes (databases)? [y/N] " answer
+  if [[ "$answer" =~ ^[Yy]$ ]]; then
+    log "Restoring /persistent_data/docker/volumes..."
+    restic restore latest --target / --include /persistent_data/docker/volumes
+    log "Done."
+  fi
+
+  read -rp "[bootstrap] Restore /mpool/nextcloud (Nextcloud data)? [y/N] " answer
+  if [[ "$answer" =~ ^[Yy]$ ]]; then
+    log "Restoring /mpool/nextcloud (this may take a while)..."
+    restic restore latest --target / --include /mpool/nextcloud
+    log "Done."
+  fi
+
+  read -rp "[bootstrap] Restore /mpool/plex (config + media metadata)? [y/N] " answer
+  if [[ "$answer" =~ ^[Yy]$ ]]; then
+    log "Restoring /mpool/plex/config..."
+    restic restore latest --target / --include /mpool/plex/config
+    log "Done."
+  fi
+
+  log "Restore complete. Restart containers to pick up restored data:"
+  log "  cd ${PERSISTENT_DATA}/ansible_state && docker compose down && docker compose up -d"
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 main() {
@@ -172,6 +276,10 @@ main() {
   install_docker
   install_compose
   create_networks
+
+  # Offer restore before starting GitLab — restored data includes GitLab config
+  restore_from_backup
+
   start_gitlab
   wait_for_gitlab
   install_runner

@@ -11,30 +11,35 @@ Complete guide to recovering the homelab from bare metal.
 ```
 Layer 0 — scripts/bootstrap.sh (manual, on router)
   Ubuntu + Docker + GitLab + Runner
+  Optional: restore data from Backblaze B2 (interactive prompt)
 
 Layer 1 — router:bootstrap CI job (manual trigger)
   Vault, Pi-hole, nginx, switch config
 
+Layer 1.5 — router:restore CI job (manual trigger)
+  Restore persistent data from Backblaze B2 restic backups
+
 Layer 2 — Normal CI deploy pipeline
   Full stack (all containers, networking, configs)
-
-Layer 3 — Data restore
-  restic from Backblaze B2
 ```
 
-Each layer depends on the one below it. Work bottom-up.
+Layers 0 → 1 → 1.5 → 2. Data restore (1.5) can also happen during Layer 0 if
+GitLab data itself needs recovery.
 
 ---
 
 ## What You Need (Store Offsite)
 
-| Secret | Purpose |
-|--------|---------|
-| Backblaze B2 access key + key ID | Access backup storage |
-| Restic repository password | Decrypt backups |
-| Vault unseal keys (3 of 5 needed) | Unseal Vault for secrets |
-| LUKS password | Decrypt data drives |
-| GitLab CI variable export | All other secrets |
+These 6 values are everything needed for full recovery:
+
+| Secret | CI Variable | Purpose |
+|--------|-------------|---------|
+| Backblaze B2 key ID | `B2_ACCOUNT_ID` | Access backup storage |
+| Backblaze B2 access key | `B2_ACCOUNT_KEY` | Access backup storage |
+| Restic repository URL | `RESTIC_REPOSITORY` | Locate backup repo |
+| Restic repository password | `RESTIC_PASSWORD` | Decrypt backups |
+| Vault unseal keys (3 of 5) | `VAULT_UNSEAL_KEYS` | Unseal Vault |
+| LUKS password | — | Decrypt data drives |
 
 **Where to keep these:** Encrypted file in cloud storage (1Password, Google Drive, etc.) or printed in a safe deposit box. Do NOT rely solely on GitLab CI variables — they live on the router you're recovering.
 
@@ -104,6 +109,9 @@ bash scripts/bootstrap.sh
 ```
 
 This installs Docker, creates networks, starts GitLab, and installs gitlab-runner.
+The script will also prompt to restore data from Backblaze B2 — say **yes** if this is a
+fresh install and you need GitLab data/configs back. You'll need `B2_ACCOUNT_ID`,
+`B2_ACCOUNT_KEY`, `RESTIC_REPOSITORY`, and `RESTIC_PASSWORD`.
 
 ### After bootstrap.sh completes:
 
@@ -155,58 +163,54 @@ This runs `ansible/bootstrap.yml` which:
 
 ---
 
-## Phase 4: Layer 2 — Full Deploy
+## Phase 4: Data Restore (~1–4 hours)
 
-Once Layer 1 is healthy, run the normal CI pipeline:
+Data restore can happen at two points depending on your situation:
 
-1. Push a commit (or re-run the pipeline)
-2. The `router:deploy` job runs the full Ansible playbook
-3. All remaining services come up
+**Option A: During bootstrap.sh (Phase 2)**
+The bootstrap script prompts to restore from Backblaze B2 before starting GitLab.
+Use this when GitLab data itself needs recovery.
 
----
+**Option B: Via CI job (after Phase 3)**
+Trigger the `router:restore` manual job in the bootstrap stage. This restores
+`/persistent_data/application` and `/persistent_data/docker/volumes` automatically.
 
-## Phase 5: Layer 3 — Data Restore (~1–4 hours)
+Required CI variables for `router:restore`:
+- `RESTIC_REPOSITORY` — e.g. `s3:s3.us-east-005.backblazeb2.com/nkontur-homelab`
+- `RESTIC_PASSWORD` — Repository encryption password
+- `B2_ACCOUNT_ID` — Backblaze B2 application key ID
+- `B2_ACCOUNT_KEY` — Backblaze B2 application key
+
+For large data (Nextcloud, Plex), restore manually on the router:
 
 ```bash
-export AWS_ACCESS_KEY_ID="<backblaze-key-id>"
-export AWS_SECRET_ACCESS_KEY="<backblaze-access-key>"
-export RESTIC_PASSWORD="<restic-password>"
+export AWS_ACCESS_KEY_ID="<B2_ACCOUNT_ID>"
+export AWS_SECRET_ACCESS_KEY="<B2_ACCOUNT_KEY>"
 export RESTIC_REPOSITORY="s3:s3.us-east-005.backblazeb2.com/nkontur-homelab"
-```
+export RESTIC_PASSWORD="<restic-password>"
 
-### Check available snapshots
-
-```bash
-restic snapshots
-```
-
-### Restore in order
-
-```bash
-# 1. Service configs (GitLab, Home Assistant, Bitwarden, etc.)
-restic restore latest --target / --include /persistent_data/application
-
-# 2. Docker volumes (databases)
-restic restore latest --target / --include /persistent_data/docker/volumes
-
-# 3. Nextcloud data (largest)
 restic restore latest --target / --include /mpool/nextcloud
-
-# 4. Media metadata
 restic restore latest --target / --include /mpool/plex/config
-
-# 5. Photos and family videos (optional, large)
 restic restore latest --target / --include /mpool/plex/Photos
 restic restore latest --target / --include /mpool/plex/Family
 ```
 
-### Restart services after restore
+After any restore, restart services:
 
 ```bash
 cd /persistent_data/application/ansible_state
-docker compose down
-docker compose up -d
+docker compose down && docker compose up -d
 ```
+
+---
+
+## Phase 5: Layer 2 — Full Deploy
+
+Once core services and data are restored, run the normal CI pipeline:
+
+1. Push a commit (or re-run the pipeline)
+2. The `router:deploy` job runs the full Ansible playbook
+3. All remaining services come up
 
 ---
 
@@ -242,11 +246,11 @@ systemctl status restic-backup.timer
 1. Install Ubuntu 22.04 on boot drive
 2. Minimal netplan (WAN DHCP + bond0)
 3. Unlock LUKS, import ZFS pools
-4. Run scripts/bootstrap.sh
+4. Run scripts/bootstrap.sh (will offer to restore from B2)
 5. Set GitLab password, create project, register runner
-6. Push repo, set CI variables
+6. Push repo, set CI variables (including B2_ACCOUNT_ID, B2_ACCOUNT_KEY, RESTIC_*)
 7. Trigger router:bootstrap CI job
-8. Run normal deploy pipeline
-9. Restore data with restic
+8. Trigger router:restore CI job (if data not already restored in step 4)
+9. Run normal deploy pipeline
 10. Verify: docker ps, DNS, Vault, external access
 ```
