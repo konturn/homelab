@@ -331,16 +331,38 @@ vault:validate:
   stage: validate
   image: alpine:3.19
   needs: []
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: https://vault.lab.nkontur.com:8200
   variables:
     TF_VERSION: "1.7.5"
     VAULT_ADDR: "https://vault.lab.nkontur.com:8200"
+    VAULT_SKIP_VERIFY: "true"
   before_script:
-    - apk add --no-cache wget unzip
+    - apk add --no-cache wget unzip curl jq
     - wget -q "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip"
     - unzip -o "terraform_${TF_VERSION}_linux_amd64.zip" -d /usr/local/bin/
     - chmod +x /usr/local/bin/terraform
   script:
     - cd terraform/vault
+    - |
+      echo "Attempting JWT authentication with vault-read role..."
+      JWT_RESPONSE=$(curl -sk --max-time 10 \
+        --request POST \
+        --data "{\"role\": \"vault-read\", \"jwt\": \"${VAULT_ID_TOKEN}\"}" \
+        "${VAULT_ADDR}/v1/auth/jwt/login" 2>/dev/null) || true
+
+      JWT_TOKEN=$(echo "$JWT_RESPONSE" | jq -r '.auth.client_token // empty' 2>/dev/null)
+
+      if [ -n "$JWT_TOKEN" ]; then
+        echo "JWT authentication succeeded — using scoped vault-read token"
+        export VAULT_TOKEN="$JWT_TOKEN"
+      elif [ -n "${VAULT_TOKEN:-}" ]; then
+        echo "JWT auth failed — falling back to VAULT_TOKEN variable (bootstrap mode)"
+      else
+        echo "ERROR: No authentication method available"
+        exit 1
+      fi
     - |
       terraform init \
         -backend-config="address=https://gitlab.lab.nkontur.com/api/v4/projects/${CI_PROJECT_ID}/terraform/state/vault" \

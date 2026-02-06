@@ -76,3 +76,111 @@ resource "vault_policy" "moltbot_ops" {
     }
   EOT
 }
+
+# =============================================================================
+# Policy: vault-admin
+# =============================================================================
+# Scoped administrative access for Terraform-driven Vault configuration.
+# Used by CI/CD (vault:configure job) to manage auth backends, policies,
+# mounts, and secrets engines — without full root access.
+#
+# Explicitly EXCLUDES dangerous seal/rekey/root-generation operations.
+
+resource "vault_policy" "vault_admin" {
+  name = "vault-admin"
+
+  policy = <<-EOT
+    # Manage auth backends (JWT, AppRole, etc.)
+    path "auth/*" {
+      capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+    }
+
+    # Manage policies
+    path "sys/policies/*" {
+      capabilities = ["create", "read", "update", "delete", "list"]
+    }
+    path "sys/policy/*" {
+      capabilities = ["create", "read", "update", "delete", "list"]
+    }
+
+    # Manage secret mounts
+    path "sys/mounts/*" {
+      capabilities = ["create", "read", "update", "delete", "list"]
+    }
+    path "sys/mounts" {
+      capabilities = ["read", "list"]
+    }
+
+    # Read health and seal status (monitoring, not control)
+    path "sys/health" {
+      capabilities = ["read"]
+    }
+    path "sys/seal-status" {
+      capabilities = ["read"]
+    }
+
+    # Full access to the homelab secrets engine
+    path "homelab/*" {
+      capabilities = ["create", "read", "update", "delete", "list"]
+    }
+
+    # -------------------------------------------------------------------------
+    # DENY dangerous operations — defense in depth
+    # -------------------------------------------------------------------------
+    path "sys/seal" {
+      capabilities = ["deny"]
+    }
+    path "sys/step-down" {
+      capabilities = ["deny"]
+    }
+    path "sys/rekey*" {
+      capabilities = ["deny"]
+    }
+    path "sys/generate-root*" {
+      capabilities = ["deny"]
+    }
+  EOT
+}
+
+# =============================================================================
+# Policy: vault-read
+# =============================================================================
+# Read-only access for MR pipeline validation (terraform plan).
+# Can read secrets and auth config but cannot modify anything.
+
+resource "vault_policy" "vault_read" {
+  name = "vault-read"
+
+  policy = <<-EOT
+    # Read secrets for terraform plan
+    path "homelab/*" {
+      capabilities = ["read", "list"]
+    }
+
+    # Read auth configuration for plan
+    path "auth/*" {
+      capabilities = ["read", "list"]
+    }
+
+    # Read policies for plan
+    path "sys/policies/*" {
+      capabilities = ["read", "list"]
+    }
+    path "sys/policy/*" {
+      capabilities = ["read", "list"]
+    }
+
+    # Read mounts for plan
+    path "sys/mounts" {
+      capabilities = ["read", "list"]
+    }
+    path "sys/mounts/*" {
+      capabilities = ["read"]
+    }
+
+    # Health check
+    path "sys/health" {
+      capabilities = ["read"]
+    }
+  EOT
+}
