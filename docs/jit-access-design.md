@@ -2567,3 +2567,94 @@ Token expired (post-use notification):
   Used for: 12 min of 15 min TTL
 ```
 
+
+---
+
+## 16. Credential Isolation from LLM Context
+
+### 16.1 The Problem
+
+When the agent polls for an approved credential and receives it via HTTP response, the credential enters the LLM's context window. OpenClaw persists the full session transcript to disk as JSONL. This means every JIT credential that passes through the LLM ends up in a transcript file — defeating the purpose of short TTLs.
+
+Even if the credential expires in 15 minutes, the plaintext sits in the transcript file permanently until the scrub cron catches it.
+
+### 16.2 Current Mitigation: Aggressive Scrub Cron
+
+A host-level cron job runs every 10 minutes scanning all transcript files for 14+ credential patterns and redacting matches in-place. Emits structured JSON audit logs to `/var/log/scrub-transcripts/scrub.log` for auditability.
+
+**Properties:**
+- Maximum credential exposure window: ~10 minutes on disk after session write
+- Credentials in active LLM context (in-memory) are not affected by scrub
+- Scrub patterns may miss novel credential formats
+- Defense in depth — not the primary protection
+
+**See:** MR !127 for implementation.
+
+### 16.3 Future: Sidecar Execution Container (Phase 5+)
+
+The definitive solution is to ensure credentials never enter the LLM context at all.
+
+**Architecture: "Separate the brain from the hands"**
+
+```
+┌─────────────────────┐     ┌──────────────────────┐
+│  Agent (moltbot)     │     │  JIT Sidecar         │
+│                      │     │  (separate container) │
+│  LLM decides WHAT:   │     │                      │
+│  "Check iptables on  │────▶│  Handles HOW:        │
+│   router"            │     │  1. Polls approval   │
+│                      │     │     svc for token    │
+│  Receives RESULT:    │◀────│  2. Authenticates    │
+│  "Here are the       │     │  3. Executes command │
+│   iptables rules..." │     │  4. Returns stdout   │
+│                      │     │  5. Destroys token   │
+│  Token NEVER enters  │     │                      │
+│  LLM context or      │     │  Token lives and     │
+│  transcript          │     │  dies in sidecar     │
+│                      │     │  process memory only  │
+└──────────────────────┘     └──────────────────────┘
+```
+
+**API:**
+```
+POST /jit-sidecar/exec
+{
+  "resource": "ssh:router",
+  "command": "cat /etc/iptables/rules.v4",
+  "reason": "Verify firewall rules for audit",
+  "ttl_minutes": 5
+}
+
+Response (after approval):
+{
+  "exit_code": 0,
+  "stdout": "<iptables rules>",
+  "stderr": "",
+  "duration_ms": 1200,
+  "request_id": "req-abc"
+}
+```
+
+**Why this works:**
+- The LLM sees the command and the output, never the credential
+- The sidecar is a dumb execution proxy — no LLM, no transcript
+- Credential exists only in sidecar process memory during execution
+- Even a full transcript dump reveals zero credentials
+
+**Why defer to Phase 5+:**
+- Requires another container and API surface
+- The sidecar needs to support multiple execution types (SSH, HTTP API, DB)
+- The 10-minute scrub cron is adequate for current risk level
+- Complexity should be proportional to threat model
+
+### 16.4 Defense in Depth Stack
+
+| Layer | Protection | Coverage | Phase |
+|-------|-----------|----------|-------|
+| Scrub cron (10 min) | Redacts credentials from transcript files on disk | Files at rest | Phase 1 (MR !127) |
+| Agent discipline | Avoid echoing credentials in responses | In-session | Now (behavioral) |
+| Shared volume (no LLM) | Credentials written to file, read by scripts, never in LLM context | In-session | Phase 3 |
+| Sidecar container | Credentials never leave sidecar process memory | Complete | Phase 5+ |
+
+Each layer addresses a smaller attack surface than the last. The scrub cron is the floor; the sidecar is the ceiling.
+
