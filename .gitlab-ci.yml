@@ -137,41 +137,39 @@ router:bootstrap:
     - ansible-galaxy install -r ansible/requirements.yml -p /cache/ansible-roles --force 2>/dev/null || true
     - mkdir -p ~/.ssh
     - cp ansible/known_hosts ~/.ssh/known_hosts
-    # Fetch router SSH key from Vault via JWT, fall back to CI variable
+    # Fetch router SSH key: Vault JWT > CI variable fallback
     - |
-      ROUTER_KEY=""
+      ROUTER_KEY_SET=false
       if [ -n "${VAULT_ID_TOKEN:-}" ]; then
         apk add --no-cache curl jq >/dev/null 2>&1 || true
         VAULT_ADDR="https://vault.lab.nkontur.com:8200"
-        JWT_RESP=$(curl -sk --max-time 10 \
-          --request POST \
-          --data "{\"role\": \"ci-deploy\", \"jwt\": \"${VAULT_ID_TOKEN}\"}" \
-          "${VAULT_ADDR}/v1/auth/jwt/login" 2>/dev/null) || true
-        V_TOKEN=$(echo "$JWT_RESP" | jq -r '.auth.client_token // empty' 2>/dev/null)
-        if [ -n "$V_TOKEN" ]; then
-          echo "Vault JWT auth succeeded — fetching router key"
-          SECRET_RESP=$(curl -sk --max-time 10 \
-            -H "X-Vault-Token: $V_TOKEN" \
-            "${VAULT_ADDR}/v1/homelab/data/infrastructure/router" 2>/dev/null) || true
-          ROUTER_KEY=$(echo "$SECRET_RESP" | jq -r '.data.data.private_key_base64 // empty' 2>/dev/null)
-          if [ -n "$ROUTER_KEY" ]; then
-            echo "Router key fetched from Vault"
-          else
-            echo "WARN: Vault read succeeded but key field empty — falling back to CI var"
+        # Try ci-deploy role first (main branch), then vault-read (any branch)
+        for ROLE in ci-deploy vault-read; do
+          JWT_RESP=$(curl -sk --max-time 10 \
+            --request POST \
+            --data "{\"role\": \"$ROLE\", \"jwt\": \"${VAULT_ID_TOKEN}\"}" \
+            "${VAULT_ADDR}/v1/auth/jwt/login" 2>/dev/null) || true
+          V_TOKEN=$(echo "$JWT_RESP" | jq -r '.auth.client_token // empty' 2>/dev/null)
+          if [ -n "$V_TOKEN" ]; then
+            echo "Vault JWT auth succeeded (role: $ROLE)"
+            SECRET_RESP=$(curl -sk --max-time 10 \
+              -H "X-Vault-Token: $V_TOKEN" \
+              "${VAULT_ADDR}/v1/homelab/data/infrastructure/router" 2>/dev/null) || true
+            ROUTER_KEY=$(echo "$SECRET_RESP" | jq -r '.data.data.private_key_base64 // empty' 2>/dev/null)
+            if [ -n "$ROUTER_KEY" ]; then
+              echo "Router key fetched from Vault"
+              echo "$ROUTER_KEY" | base64 -d > tmp && chmod 600 tmp
+              ROUTER_KEY_SET=true
+            fi
+            break
           fi
-        else
-          echo "WARN: Vault JWT auth failed — falling back to CI variable"
-        fi
+        done
+        unset V_TOKEN JWT_RESP SECRET_RESP ROUTER_KEY
       fi
-      if [ -z "$ROUTER_KEY" ]; then
-        ROUTER_KEY="${ROUTER_PRIVATE_KEY_BASE64:-}"
+      if [ "$ROUTER_KEY_SET" != "true" ]; then
+        echo "Vault key unavailable — using ROUTER_PRIVATE_KEY_BASE64 env var"
+        echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp && chmod 600 tmp
       fi
-      if [ -z "$ROUTER_KEY" ]; then
-        echo "ERROR: No router private key available from Vault or CI variable"
-        exit 1
-      fi
-      echo "$ROUTER_KEY" | base64 -d > tmp && chmod 600 tmp
-      unset ROUTER_KEY V_TOKEN JWT_RESP SECRET_RESP
   after_script:
     - rm -f tmp
   cache:
