@@ -14,6 +14,8 @@
 #   │              │              │              │              │
 #   router:val  zwave:val  sat-2:val  vault:val  moltbot:build  amcrest2mqtt:build (parallel)
 #   │              │              │
+#   router:boot (manual, optional — one-time setup / disaster recovery)
+#   │              │              │
 #   router:deploy zwave:deploy sat-2:deploy (parallel, main only)
 #   │
 #   vault:configure (main only, after deploy)
@@ -91,6 +93,7 @@ variables:
 stages:
   - validate
   - build
+  - bootstrap     # Manual-only — one-time setup / disaster recovery (see ansible/BOOTSTRAP.md)
   - deploy
   - configure
 
@@ -249,6 +252,27 @@ snapclient:build:
     - if: $CI_COMMIT_BRANCH == "main"
       when: manual
       allow_failure: true
+
+# =============================================================================
+# Bootstrap Stage - Manual one-time setup (main only)
+# =============================================================================
+# Handles initial infrastructure provisioning: Vault init, unseal key deployment,
+# KV v2 engine setup, core service health checks.
+# Never runs automatically — click the play button in GitLab CI to trigger.
+# Safe to run multiple times (idempotent). See ansible/BOOTSTRAP.md.
+router:bootstrap:
+  extends: .ansible
+  stage: bootstrap
+  when: manual
+  allow_failure: true   # Don't block the pipeline
+  resource_group: deploy-router  # Same lock as deploy — can't run both at once
+  needs:
+    - job: router:validate
+      optional: true
+  script:
+    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/bootstrap.yml
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
 
 # =============================================================================
 # Deploy Stage - Parallel deployment (main only)

@@ -1,0 +1,346 @@
+# =============================================================================
+# Bootstrap Playbook - One-Time Infrastructure Setup
+# =============================================================================
+#
+# Called by the router:bootstrap CI job (manual trigger).
+# Handles initial provisioning that only needs to run once or during DR.
+#
+# NOT run automatically — only when someone clicks the play button in GitLab CI.
+# Safe to run multiple times (fully idempotent).
+#
+# See BOOTSTRAP.md for full documentation.
+# =============================================================================
+
+- name: Bootstrap Infrastructure
+  hosts: router.lab.nkontur.com
+  gather_facts: true
+  vars:
+    vault_addr: "https://{{ vault_ip }}:8200"
+    vault_unseal_keys_content: "{{ lookup('env', 'VAULT_UNSEAL_KEYS') | default('', true) }}"
+
+  tasks:
+    # =========================================================================
+    # Phase 1: Base Infrastructure Verification
+    # =========================================================================
+    - name: "Phase 1 - Verify Docker is installed and running"
+      ansible.builtin.service_facts:
+
+    - name: "Phase 1 - Fail if Docker is not running"
+      ansible.builtin.assert:
+        that:
+          - "'docker.service' in services"
+          - "services['docker.service'].state == 'running'"
+        fail_msg: >
+          Docker is not installed or not running.
+          Run the normal deploy first (router.yml) to install Docker,
+          or install it manually before running bootstrap.
+        success_msg: "Docker is running"
+
+    - name: "Phase 1 - Verify docker compose is available"
+      ansible.builtin.command:
+        cmd: docker compose version
+      changed_when: false
+
+    # =========================================================================
+    # Phase 2: Core Services Up
+    # =========================================================================
+    - name: "Phase 2 - Ensure compose file exists"
+      ansible.builtin.stat:
+        path: "{{ docker_compose_dest_path }}/docker-compose.yml"
+      register: compose_file
+
+    - name: "Phase 2 - Fail if compose file not deployed"
+      ansible.builtin.assert:
+        that:
+          - compose_file.stat.exists
+        fail_msg: >
+          docker-compose.yml not found at {{ docker_compose_dest_path }}.
+          Run the normal deploy (router.yml) first to template and deploy configs.
+        success_msg: "Compose file found"
+
+    - name: "Phase 2 - Ensure vault data directories exist"
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner | default('root') }}"
+        group: "{{ item.group | default('root') }}"
+        mode: "{{ item.mode | default('0755') }}"
+      loop:
+        - path: "{{ docker_persistent_data_path }}/vault/unseal"
+          owner: root
+          group: root
+          mode: "0700"
+        - path: "{{ docker_persistent_data_path }}/vault/config"
+        - path: "{{ docker_persistent_data_path }}/vault/scripts"
+
+    - name: "Phase 2 - Start core services (vault, pihole, nginx)"
+      ansible.builtin.command:
+        cmd: >
+          docker compose
+          -f {{ docker_compose_dest_path }}/docker-compose.yml
+          -p {{ docker_compose_project_name | default('docker') }}
+          up -d vault pihole nginx lab_nginx iot_nginx
+      register: compose_up
+      changed_when: "'Started' in compose_up.stderr or 'Created' in compose_up.stderr"
+
+    - name: "Phase 2 - Wait for containers to be running"
+      ansible.builtin.command:
+        cmd: "docker inspect --format '{%raw%}{{.State.Running}}{%endraw%}' {{ item }}"
+      register: container_status
+      until: container_status.stdout == 'true'
+      retries: 10
+      delay: 5
+      changed_when: false
+      loop:
+        - vault
+        - pihole
+        - nginx
+
+    # =========================================================================
+    # Phase 3: Vault Bootstrap
+    # =========================================================================
+
+    # --- Deploy unseal keys from CI variable ---
+    - name: "Phase 3 - Deploy Vault unseal keys"
+      ansible.builtin.copy:
+        content: "{{ vault_unseal_keys_content }}"
+        dest: "{{ docker_persistent_data_path }}/vault/unseal/unseal-keys"
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+      when: vault_unseal_keys_content | length > 0
+
+    - name: "Phase 3 - Check if unseal keys file exists on host"
+      ansible.builtin.stat:
+        path: "{{ docker_persistent_data_path }}/vault/unseal/unseal-keys"
+      register: unseal_keys_file
+
+    - name: "Phase 3 - Warn if no unseal keys available"
+      ansible.builtin.debug:
+        msg: >
+          WARNING: No unseal keys file found and none provided via VAULT_UNSEAL_KEYS.
+          Vault will need to be manually initialized and unsealed.
+      when: not unseal_keys_file.stat.exists
+
+    # --- Check Vault initialization status ---
+    - name: "Phase 3 - Check Vault health status"
+      ansible.builtin.uri:
+        url: "{{ vault_addr }}/v1/sys/health"
+        method: GET
+        validate_certs: false
+        # Vault health endpoint status codes:
+        # 200 = initialized, unsealed, active
+        # 429 = unsealed, standby
+        # 472 = data recovery mode
+        # 473 = performance standby
+        # 501 = not initialized
+        # 503 = sealed
+        status_code: [200, 429, 472, 473, 501, 503]
+      register: vault_health
+      retries: 5
+      delay: 5
+      until: vault_health.status is defined
+
+    - name: "Phase 3 - Display Vault health status"
+      ansible.builtin.debug:
+        msg: >
+          Vault — HTTP {{ vault_health.status }},
+          initialized={{ vault_health.json.initialized | default('unknown') }},
+          sealed={{ vault_health.json.sealed | default('unknown') }},
+          version={{ vault_health.json.version | default('unknown') }}
+
+    # --- Initialize Vault if needed ---
+    - name: "Phase 3 - Initialize Vault"
+      ansible.builtin.uri:
+        url: "{{ vault_addr }}/v1/sys/init"
+        method: PUT
+        body_format: json
+        body:
+          secret_shares: 5
+          secret_threshold: 3
+        validate_certs: false
+        status_code: [200]
+      register: vault_init
+      when: vault_health.status == 501
+      no_log: true
+
+    - name: "Phase 3 - CRITICAL — Save init credentials"
+      ansible.builtin.debug:
+        msg: |
+          !! VAULT INITIALIZED — SAVE THESE CREDENTIALS IMMEDIATELY !!
+
+          Root Token: {{ vault_init.json.root_token }}
+
+          Unseal Keys (need {{ vault_init.json.keys_threshold }} of {{ vault_init.json.keys | length }}):
+          {% for key in vault_init.json.keys %}
+            Key {{ loop.index }}: {{ key }}
+          {% endfor %}
+
+          !! STORE THESE SECURELY — THEY CANNOT BE RECOVERED !!
+          !! Update the VAULT_UNSEAL_KEYS CI variable with the keys above !!
+      when: vault_init is not skipped and vault_init is succeeded
+
+    - name: "Phase 3 - Write new unseal keys to host"
+      ansible.builtin.copy:
+        content: "{{ vault_init.json.keys | join('\n') }}\n"
+        dest: "{{ docker_persistent_data_path }}/vault/unseal/unseal-keys"
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+      when: vault_init is not skipped and vault_init is succeeded
+
+    - name: "Phase 3 - Set unseal keys from init output"
+      ansible.builtin.set_fact:
+        vault_unseal_keys_list: "{{ vault_init.json.keys }}"
+        vault_root_token: "{{ vault_init.json.root_token }}"
+      when: vault_init is not skipped and vault_init is succeeded
+      no_log: true
+
+    # --- Unseal Vault if sealed ---
+    - name: "Phase 3 - Re-check Vault health after init"
+      ansible.builtin.uri:
+        url: "{{ vault_addr }}/v1/sys/health"
+        method: GET
+        validate_certs: false
+        status_code: [200, 429, 472, 473, 501, 503]
+      register: vault_health_post_init
+      when: vault_init is not skipped
+
+    - name: "Phase 3 - Set effective health status"
+      ansible.builtin.set_fact:
+        vault_sealed: "{{ (vault_health_post_init.json.sealed | default(vault_health.json.sealed)) | bool }}"
+        vault_initialized: "{{ (vault_health_post_init.json.initialized | default(vault_health.json.initialized)) | bool }}"
+
+    - name: "Phase 3 - Read unseal keys from file for unsealing"
+      ansible.builtin.slurp:
+        src: "{{ docker_persistent_data_path }}/vault/unseal/unseal-keys"
+      register: unseal_keys_raw
+      when:
+        - vault_sealed | bool
+        - vault_initialized | bool
+        - vault_unseal_keys_list is not defined
+        - unseal_keys_file.stat.exists
+      no_log: true
+
+    - name: "Phase 3 - Parse unseal keys from file"
+      ansible.builtin.set_fact:
+        vault_unseal_keys_list: "{{ (unseal_keys_raw.content | b64decode).split('\n') | select | list }}"
+      when:
+        - unseal_keys_raw is not skipped
+        - unseal_keys_raw is succeeded
+      no_log: true
+
+    - name: "Phase 3 - Unseal Vault"
+      ansible.builtin.uri:
+        url: "{{ vault_addr }}/v1/sys/unseal"
+        method: PUT
+        body_format: json
+        body:
+          key: "{{ item }}"
+        validate_certs: false
+        status_code: [200]
+      loop: "{{ vault_unseal_keys_list[:3] | default([]) }}"
+      loop_control:
+        label: "unseal key {{ ansible_loop.index }}"
+        extended: true
+      when:
+        - vault_sealed | bool
+        - vault_initialized | bool
+        - vault_unseal_keys_list is defined
+        - vault_unseal_keys_list | length > 0
+      no_log: true
+
+    - name: "Phase 3 - Verify Vault is unsealed"
+      ansible.builtin.uri:
+        url: "{{ vault_addr }}/v1/sys/health"
+        method: GET
+        validate_certs: false
+        status_code: [200, 429]
+      register: vault_health_final
+      retries: 5
+      delay: 3
+      until: vault_health_final.status in [200, 429]
+      when: vault_initialized | bool
+
+    # --- Enable KV v2 secrets engine ---
+    - name: "Phase 3 - Determine Vault token for KV setup"
+      ansible.builtin.set_fact:
+        vault_setup_token: "{{ vault_root_token | default(lookup('env', 'VAULT_TOKEN'), true) | default('', true) }}"
+      no_log: true
+
+    - name: "Phase 3 - Check if KV v2 engine is already mounted"
+      ansible.builtin.uri:
+        url: "{{ vault_addr }}/v1/sys/mounts"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ vault_setup_token }}"
+        validate_certs: false
+        status_code: [200, 403]
+      register: vault_mounts
+      when:
+        - vault_setup_token | length > 0
+        - vault_initialized | bool
+      no_log: true
+
+    - name: "Phase 3 - Enable KV v2 engine at homelab/"
+      ansible.builtin.uri:
+        url: "{{ vault_addr }}/v1/sys/mounts/homelab"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_setup_token }}"
+        body_format: json
+        body:
+          type: kv
+          options:
+            version: "2"
+          description: "Homelab secrets — KV v2"
+        validate_certs: false
+        status_code: [200, 204]
+      when:
+        - vault_setup_token | length > 0
+        - vault_initialized | bool
+        - vault_mounts is succeeded
+        - "'homelab/' not in (vault_mounts.json | default({})).keys() | list"
+
+    # =========================================================================
+    # Phase 4: Verification
+    # =========================================================================
+    - name: "Phase 4 - Vault health check"
+      ansible.builtin.uri:
+        url: "{{ vault_addr }}/v1/sys/health"
+        method: GET
+        validate_certs: false
+        status_code: [200, 429]
+      register: vault_verify
+
+    - name: "Phase 4 - Pi-hole DNS check"
+      ansible.builtin.command:
+        cmd: docker exec pihole dig +short +norecurse +retry=0 @127.0.0.1 pi.hole
+      register: pihole_verify
+      changed_when: false
+      failed_when: pihole_verify.rc != 0
+
+    - name: "Phase 4 - Nginx health check"
+      ansible.builtin.command:
+        cmd: docker exec nginx pgrep nginx
+      register: nginx_verify
+      changed_when: false
+      failed_when: nginx_verify.rc != 0
+
+    # =========================================================================
+    # Summary
+    # =========================================================================
+    - name: "Bootstrap Complete"
+      ansible.builtin.debug:
+        msg: |
+          === BOOTSTRAP COMPLETE ===
+          Vault:   {{ 'ACTIVE' if vault_verify.status == 200 else 'STANDBY' }} (v{{ vault_verify.json.version }}, initialized={{ vault_verify.json.initialized }}, sealed={{ vault_verify.json.sealed }})
+          Pi-hole: HEALTHY (DNS resolving)
+          Nginx:   HEALTHY (process running)
+          {% if vault_init is not skipped and vault_init is succeeded %}
+
+          !! New Vault initialized — save credentials from job log above !!
+          !! Update VAULT_UNSEAL_KEYS CI variable with the unseal keys  !!
+          {% endif %}

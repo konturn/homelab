@@ -1,3 +1,6 @@
+# Vault unseal key deployment is in bootstrap.yml (router:bootstrap CI job, manual trigger).
+# This playbook handles ongoing deploys only. For first-time setup or disaster
+# recovery, trigger the router:bootstrap job in the GitLab CI pipeline.
 - hosts: router.lab.nkontur.com
   roles:
   - configure-base
