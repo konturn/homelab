@@ -153,6 +153,21 @@ Assume I'm compromised. Find vulnerabilities in Noah's infrastructure — privil
 
 ---
 
+## Cron Config Sync (every 6 hours)
+
+**Status:** Active 🔄
+
+Copy `/home/node/.openclaw/cron/jobs.json` to `config/cron-jobs.json` and commit if changed.
+
+```bash
+cp /home/node/.openclaw/cron/jobs.json /home/node/.openclaw/workspace/config/cron-jobs.json
+cd /home/node/.openclaw/workspace && git diff --quiet config/cron-jobs.json || (git add config/cron-jobs.json && git commit -m "config: sync cron jobs" && git push origin master)
+```
+
+**Track:** Check `memory/heartbeat-state.json` for `lastCronSync` timestamp. Run if >6 hours.
+
+---
+
 ## Fact Extraction (every heartbeat)
 
 **Status:** Active 🧠
