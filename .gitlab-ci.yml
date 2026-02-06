@@ -300,7 +300,7 @@ vault:configure:
       optional: true
   variables:
     TF_VERSION: "1.7.5"
-    VAULT_ADDR: "https://127.0.0.1:8200"
+    VAULT_ADDR: "https://vault.lab.nkontur.com:8200"
   before_script:
     - apk add --no-cache wget unzip
     - wget -q "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip"
@@ -320,7 +320,7 @@ vault:configure:
         -backend-config="retry_wait_min=5"
     - terraform validate
     - terraform plan -var="vault_addr=${VAULT_ADDR}" -var="vault_token=${VAULT_TOKEN}" -out=tfplan
-    - terraform apply tfplan
+    - terraform apply -parallelism=1 tfplan
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
@@ -333,7 +333,7 @@ vault:validate:
   needs: []
   variables:
     TF_VERSION: "1.7.5"
-    VAULT_ADDR: "https://127.0.0.1:8200"
+    VAULT_ADDR: "https://vault.lab.nkontur.com:8200"
   before_script:
     - apk add --no-cache wget unzip
     - wget -q "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip"
