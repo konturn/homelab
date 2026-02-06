@@ -66,7 +66,9 @@ redis['maxmemory'] = "512mb"
 redis['maxmemory_policy'] = "allkeys-lru"
 
 ###
-# Disable built-in monitoring (using external Telegraf + InfluxDB + Grafana)
+# Monitoring - External Telegraf + InfluxDB + Grafana pipeline
+# Full Prometheus server and heavyweight exporters are disabled (MR !111)
+# but we expose the built-in /-/metrics endpoint for Telegraf to scrape
 ###
 prometheus_monitoring['enable'] = false
 alertmanager['enable'] = false
@@ -74,6 +76,10 @@ node_exporter['enable'] = false
 redis_exporter['enable'] = false
 postgres_exporter['enable'] = false
 gitlab_exporter['enable'] = false
+
+# Allow /-/metrics endpoint access from internal networks
+# This exposes Puma/Sidekiq/GC metrics without the full Prometheus stack
+gitlab_rails['monitoring_whitelist'] = ['10.3.0.0/16', '10.6.0.0/16', '10.4.0.0/16', '127.0.0.0/8', '172.16.0.0/12']
 
 ###
 # Disable unused features to reduce memory and background worker load
