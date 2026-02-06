@@ -142,6 +142,10 @@ COMMIT
 -A INPUT -s 100.64.0.0/10 -p tcp -m tcp --dport 22 -j ACCEPT
 -A INPUT -i {{ inet_interface_name }} -p tcp -m tcp --dport 22 -j ACCEPT
 
+# Tailscale — allow DNS from tailnet clients to router (Pi-hole)
+-A INPUT -s 100.64.0.0/10 -p udp -m udp --dport 53 -j ACCEPT
+-A INPUT -s 100.64.0.0/10 -p tcp -m tcp --dport 53 -j ACCEPT
+
 # Allow ICMP (ping) for diagnostics
 -A INPUT -p icmp -j ACCEPT
 
@@ -181,6 +185,16 @@ COMMIT
 
 # Allow established/related connections (stateful firewall)
 -A FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
+
+# Tailscale — allow tailnet clients to reach internal services
+# DNS to Pi-hole
+-A FORWARD -s 100.64.0.0/10 -d {{ pihole_ip }} -p udp -m udp --dport 53 -j ACCEPT
+-A FORWARD -s 100.64.0.0/10 -d {{ pihole_ip }} -p tcp -m tcp --dport 53 -j ACCEPT
+# HTTP/HTTPS to internal services (via lab_nginx reverse proxy)
+-A FORWARD -s 100.64.0.0/10 -p tcp -m tcp --dport 80 -j ACCEPT
+-A FORWARD -s 100.64.0.0/10 -p tcp -m tcp --dport 443 -j ACCEPT
+# ICMP (ping) for diagnostics
+-A FORWARD -s 100.64.0.0/10 -p icmp -j ACCEPT
 
 # Management VLAN (bond0.4) - Full access to all networks
 # Trusted infrastructure management network
