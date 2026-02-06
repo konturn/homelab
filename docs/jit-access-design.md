@@ -26,7 +26,7 @@
 
 ## 1. Executive Summary
 
-Prometheus (moltbot) currently operates with ~20 static credentials baked into environment variables at container startup. These credentials are long-lived, broadly-scoped, and never expire. If the agent is compromised (via prompt injection, tool abuse, or container escape), every credential is immediately available to the attacker.
+Prometheus (moltbot) currently operates with ~20 credentials injected as environment variables at container startup. As of MR !126, these are sourced from **HashiCorp Vault** during Ansible deployment (with CI env var fallback), but they are still **long-lived, broadly-scoped, and never expire at runtime**. The Vault migration centralized secret storage and rotation, but the agent still has all credentials available simultaneously from the moment its container starts. If the agent is compromised (via prompt injection, tool abuse, or container escape), every credential is immediately available to the attacker.
 
 This document designs a **Just-In-Time (JIT) Privileged Access Management** system where:
 
@@ -45,7 +45,7 @@ The system is built on **HashiCorp Vault** (already running at `vault.lab.nkontu
 1. **Defense in depth** — approval flow + short TTLs + scoped policies + audit logging
 2. **Minimal friction for Noah** — one tap to approve, enough context to decide in 2 seconds
 3. **Graceful degradation** — if approval times out or Vault is down, the agent continues with reduced capability
-4. **Incremental migration** — static creds are replaced one-by-one, not all at once
+4. **Incremental migration** — runtime credentials are replaced one-by-one with JIT-issued ones
 5. **Practical over perfect** — this is a homelab, not a bank. Security proportional to risk.
 
 ---
@@ -54,35 +54,36 @@ The system is built on **HashiCorp Vault** (already running at `vault.lab.nkontu
 
 ### Current State
 
-The moltbot container starts with static credentials injected via Ansible from GitLab CI/CD variables:
+As of MR !126, all secrets are managed in **HashiCorp Vault** and fetched during Ansible deployment. The compose template uses Vault-first with env var fallback:
 
 ```yaml
-# From docker-compose.yml (Jinja2 templated)
+# From docker-compose.yml (Jinja2 templated) — current state
 environment:
-  - GITLAB_TOKEN={{ lookup('env', 'MOLTBOT_GITLAB_TOKEN') }}
-  - HASS_TOKEN={{ lookup('env', 'HASS_TOKEN') }}
-  - RADARR_API_KEY={{ lookup('env', 'RADARR_API_KEY') }}
-  - SONARR_API_KEY={{ lookup('env', 'SONARR_API_KEY') }}
-  - PLEX_TOKEN={{ lookup('env', 'PLEX_TOKEN') }}
-  - TAILSCALE_API_TOKEN={{ lookup('env', 'TAILSCALE_API_TOKEN') }}
-  - IPMI_USER={{ lookup('env', 'IPMI_USER') }}
-  - IPMI_PASSWORD={{ lookup('env', 'IPMI_PASSWORD') }}
-  - GMAIL_EMAIL={{ lookup('env', 'GMAIL_EMAIL') }}
-  - GMAIL_APP_PASSWORD={{ lookup('env', 'GMAIL_APP_PASSWORD') }}
-  # ... 10+ more
+  - GITLAB_TOKEN={{ vault_moltbot_gitlab_token | default(lookup('env', 'MOLTBOT_GITLAB_TOKEN')) }}
+  - HASS_TOKEN={{ vault_hass_token | default(lookup('env', 'HASS_TOKEN')) }}
+  - RADARR_API_KEY={{ vault_radarr_api_key | default(lookup('env', 'RADARR_API_KEY')) }}
+  - SONARR_API_KEY={{ vault_sonarr_api_key | default(lookup('env', 'SONARR_API_KEY')) }}
+  - PLEX_TOKEN={{ vault_plex_token | default(lookup('env', 'PLEX_TOKEN')) }}
+  - GMAIL_EMAIL={{ vault_gmail_email | default(lookup('env', 'GMAIL_EMAIL')) }}
+  - GMAIL_APP_PASSWORD={{ vault_gmail_app_password | default(lookup('env', 'GMAIL_APP_PASSWORD')) }}
+  # ... 20+ more, all following vault_var | default(env_var) pattern
 ```
 
-### Problems
+**What Vault migration solved:** Secrets are centralized in Vault KV v2, fetched via JWT (CI) or AppRole (moltbot) auth during deploy. Rotation is centralized. Secrets aren't scattered across GitLab CI/CD variables as the sole source of truth.
 
-| Problem | Risk | Likelihood |
-|---------|------|------------|
-| All credentials available at all times | Agent can access anything immediately if compromised | Medium |
-| No TTL or expiry | Stolen creds work forever until rotated | High |
-| No approval flow | Agent acts autonomously on all services | By design |
-| No audit trail of credential usage | Can't distinguish normal from malicious access | Medium |
-| Prompt injection could trigger actions | External content (emails, web pages) could manipulate the agent | Medium |
-| Static SSH key on disk | Persistent access to all SSH-enabled hosts | Low |
-| Container restart = full credential refresh | No degradation, always full access | By design |
+**What Vault migration did NOT solve:** At runtime, the container still has every credential baked into its environment. The deploy-time Vault fetch is a storage/rotation improvement, not a runtime access control improvement. This is where JIT comes in.
+
+### Remaining Problems (post-Vault migration)
+
+| Problem | Risk | Likelihood | Vault Migration Status |
+|---------|------|------------|----------------------|
+| All credentials available at runtime | Agent can access anything immediately if compromised | Medium | ❌ Not addressed — still env vars |
+| No TTL or expiry at runtime | Stolen creds work until next rotation | High | ⚠️ Partially — Vault enables rotation, but creds don't auto-expire |
+| No approval flow | Agent acts autonomously on all services | By design | ❌ Not addressed |
+| No audit trail of credential usage | Can't distinguish normal from malicious access | Medium | ⚠️ Vault audit logs cover deploy-time reads, not runtime usage |
+| Prompt injection could trigger actions | External content (emails, web pages) could manipulate the agent | Medium | ❌ Not addressed |
+| Static SSH key on disk | Persistent access to all SSH-enabled hosts | Low | ❌ Not addressed |
+| Container restart = full credential refresh | No degradation, always full access | By design | ❌ Not addressed |
 
 ### Desired State
 
@@ -843,7 +844,7 @@ step 3 of 5 in the audit checklist.
 | DNS/domain management | External-facing, long propagation |
 | Certificate management | Could break TLS for all services |
 
-**These credentials are never stored in Vault's JIT paths.** They remain as protected CI/CD variables accessible only during pipeline execution, or are managed directly by Noah.
+**These credentials are never exposed to the agent at all.** They exist in Vault KV but are only fetched during pipeline execution by the `fetch-vault-secrets` Ansible role (MR !126). The agent's AppRole policy (`moltbot-ops`) does not grant access to these paths. Noah manages them directly.
 
 ### Tier Decision Matrix
 
@@ -1392,27 +1393,30 @@ If an attacker gains access to Noah's Telegram account:
 4. **Notification on unusual approvals** — If tier 3 access is approved outside normal hours (23:00-08:00), send a secondary notification (email? phone call?)
 5. **Revocation capability** — Noah can send `/jit revoke-all` to immediately revoke all active JIT credentials
 
-### 8.4 Static Credential Migration Path
+### 8.4 Runtime Credential Migration Path
 
-The migration from static to JIT credentials must be **incremental and reversible**.
+**Prerequisite (DONE):** All secrets centralized in Vault KV v2. Ansible deploy fetches from Vault with env var fallback (MR !126). This provides the infrastructure for JIT — secrets are already in Vault, we just need to change *when* and *how* the agent accesses them.
 
-**Strategy: Shadow Mode**
+The migration from deploy-time-injected to JIT credentials must be **incremental and reversible**.
 
-1. **Phase A (Shadow):** Both static env vars AND Vault JIT exist. Agent uses static creds by default but logs "would have requested JIT" events. Validates that Vault is configured correctly.
+**Strategy: Shadow → JIT → Strip**
 
-2. **Phase B (JIT-Primary):** Agent prefers JIT but falls back to static creds if Vault is unreachable or approval times out. This is the safety net.
+1. **Phase A (Shadow):** Agent has env vars as today AND the JIT approval flow exists. Agent uses env vars by default but logs "would have requested JIT for X" events. Validates approval UX and Vault dynamic backends.
 
-3. **Phase C (JIT-Only):** Static creds removed from container env. Agent must use JIT. Vault is the single source of truth.
+2. **Phase B (JIT-Primary):** Agent prefers JIT for Tier 2+ operations but falls back to env vars if Vault is unreachable or approval times out. Env vars are the safety net.
 
-4. **Phase D (Credential Rotation):** Old static creds are rotated/invalidated. Only Vault-managed credentials exist.
+3. **Phase C (JIT-Only):** Tier 2+ env vars removed from docker-compose.yml. Agent must use JIT. Tier 0-1 credentials (read-only APIs) remain as env vars permanently.
+
+4. **Phase D (Credential Rotation):** Old static credentials rotated/invalidated. Vault dynamic backends (SSH CA, database engine) replace static secrets entirely where possible.
 
 ```
 Phase A          Phase B          Phase C          Phase D
 ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
-│ Static ✓ │    │ Static ○ │    │          │    │          │
-│ JIT (log)│    │ JIT ✓    │    │ JIT ✓    │    │ JIT ✓    │
-│          │    │ Fallback │    │ No       │    │ Old creds│
-│          │    │ to static│    │ fallback │    │ rotated  │
+│ Env ✓    │    │ Env ○    │    │ Tier 0-1 │    │ Tier 0-1 │
+│ JIT (log)│    │ JIT ✓    │    │ only     │    │ only     │
+│          │    │ Fallback │    │ JIT ✓    │    │ JIT ✓    │
+│          │    │ to env   │    │ No T2+   │    │ Old creds│
+│          │    │          │    │ fallback │    │ rotated  │
 └──────────┘    └──────────┘    └──────────┘    └──────────┘
    Week 1        Week 2-3        Week 4+         Week 6+
 ```
@@ -1451,29 +1455,37 @@ Request tier 3 access with reason "Emergency security patch required."
 
 ## 9. Implementation Phases
 
-### Phase 1: Core Approval Flow (Telegram Buttons → Vault)
+### Phase 1: Core Approval Flow (External Approval Service → Vault)
 
 **Goal:** Prove the end-to-end flow works with one credential type.
 
-**Scope:**
-- Set up Vault AppRole auth for Prometheus
-- Create the JIT client library (`skills/jit/lib.sh`)
-- Implement Telegram inline button request/approval flow
-- Issue a single Vault token (KV read) as the first credential type
-- Migrate ONE service (e.g., GitLab token) to Vault KV
+**Prerequisites (DONE):**
+- ✅ Vault deployed and running (`vault.lab.nkontur.com:8200`)
+- ✅ All ~47 secrets populated in Vault KV v2
+- ✅ AppRole auth configured for moltbot (`moltbot-ops` policy, read-only)
+- ✅ JWT auth configured for CI runners (`vault-admin`, `vault-read` roles)
+- ✅ Ansible `fetch-vault-secrets` role deployed (MR !126)
+- ✅ Vault Terraform config-as-code (policies, auth, mounts)
+- ✅ AppRole rotation CI job (MR !123)
+
+**Remaining Scope:**
+- Build the external approval service (Go, separate container, separate Telegram bot)
+- Create the JIT client library (`skills/jit/lib.sh`) for agent-side request/poll
+- Wire Vault dynamic credential issuance on approval
+- Implement credential isolation (shared volume or sidecar, see Section 16)
 - Agent-side audit logging
 
 **MR candidates:**
-1. `feature/vault-approle-prometheus` — Configure Vault AppRole for the agent
-2. `feature/jit-approval-flow` — JIT client library + Telegram button handling
-3. `feature/vault-kv-gitlab` — Migrate GitLab token to Vault KV
+1. `feature/jit-approval-service` — Go approval service + Telegram bot + Dockerfile
+2. `feature/jit-client-library` — Agent-side JIT request/poll library
+3. `feature/vault-jit-policies` — Vault policies for dynamic credential issuance
 
 **Estimated effort:** 2-3 MRs, 1-2 weeks
 
 **Success criteria:**
-- Agent can request GitLab API access via Telegram button
-- Noah approves with one tap
-- Agent receives scoped Vault token, reads GitLab cred from KV
+- Agent can request GitLab API access via approval service
+- Noah approves with one Telegram button tap
+- Approval service mints scoped Vault token → credential delivered to agent
 - Token expires after TTL
 - Audit log shows the full lifecycle
 
@@ -1525,9 +1537,9 @@ Request tier 3 access with reason "Emergency security patch required."
 
 **Dependencies:** Phase 1
 
-### Phase 4: Migration from Static to JIT
+### Phase 4: Strip Runtime Env Vars (Static → JIT)
 
-**Goal:** Remove static credentials from container environment.
+**Goal:** Remove Tier 2+ credentials from container environment variables. Vault KV already has all secrets (MR !126); this phase removes the agent's ability to access them without JIT approval.
 
 **Scope:**
 - Migrate all tier 1 service tokens to Vault KV
@@ -1538,10 +1550,9 @@ Request tier 3 access with reason "Emergency security patch required."
 - Rotate old credentials
 
 **MR candidates:**
-1. `feature/vault-kv-all-services` — Move all service tokens to Vault KV
-2. `feature/jit-tier1-auto` — Auto-issuance for tier 1
-3. `feature/remove-static-creds` — Remove env vars from docker-compose
-4. `feature/rotate-old-creds` — Rotate all old static credentials
+1. `feature/jit-tier1-auto` — Auto-issuance for tier 1 (no approval needed, just audit)
+2. `feature/remove-tier2-env-vars` — Remove Tier 2+ env vars from docker-compose
+3. `feature/rotate-old-creds` — Rotate all old static credentials (Vault values become the only copy)
 
 **Estimated effort:** 4 MRs, 3-4 weeks (including soak time)
 
@@ -1569,17 +1580,17 @@ Request tier 3 access with reason "Emergency security patch required."
 
 **Dependencies:** Phase 1+
 
-### Phase 6 (Future): Vault-Side Gating
+### Phase 6 (Future): Sidecar Credential Isolation
 
-**Goal:** Move approval enforcement from agent to Vault.
+**Goal:** Complete credential isolation from LLM context (see Section 16).
 
 **Scope:**
-- Deploy an approval webhook service (small Go/Node.js app)
-- Webhook receives Telegram callback, issues approval token
-- Agent's base AppRole can no longer issue tier 2+ credentials
-- Agent must present both AppRole token + approval token
+- Build a sidecar container that handles all credential operations
+- Agent sends intent ("SSH to router, run X"), sidecar authenticates and executes
+- Credentials never enter LLM context or session transcripts
+- Replaces the scrub cron (Section 16.2) as primary defense
 
-This phase is not needed immediately but addresses the "compromised agent bypass" concern in the security analysis.
+Note: The external approval service is already in Phase 1 (Section 11), not deferred to Phase 6. This phase is purely about the execution sidecar for credential isolation.
 
 ### Phase Summary
 
@@ -1588,9 +1599,9 @@ This phase is not needed immediately but addresses the "compromised agent bypass
 | 1 | Core approval flow + Vault KV | 1-2 weeks | None |
 | 2 | SSH certificates | 1-2 weeks | Phase 1 |
 | 3 | Database credentials | 1 week | Phase 1 |
-| 4 | Static → JIT migration | 3-4 weeks | Phases 1-3 |
+| 4 | Strip runtime env vars (Tier 2+) | 3-4 weeks | Phases 1-3 |
 | 5 | Audit dashboard | 1 week | Phase 1+ |
-| 6 | Vault-side gating | 2-3 weeks | Phase 4 |
+| 6 | Sidecar credential isolation | 2-3 weeks | Phase 4 |
 
 **Total estimated timeline:** 8-12 weeks (can parallelize phases 2/3)
 
@@ -1830,28 +1841,34 @@ path "ssh-client-signer/config/ca" {
 
 ### C. Docker Compose Changes for JIT
 
+Vault connection is already available via AppRole credentials (MR !126). The JIT changes are about *removing* runtime env vars, not adding Vault access:
+
 ```yaml
-# Additions to moltbot-gateway service
+# moltbot-gateway service — Phase C target state
 environment:
-  # Vault connection (replaces most other env vars over time)
+  # Vault connection (already deployed via MR !126)
   - VAULT_ADDR=https://vault.lab.nkontur.com:8200
-  - VAULT_CACERT=/vault/certs/ca.pem
-  - VAULT_ROLE_ID={{ lookup('env', 'VAULT_PROMETHEUS_ROLE_ID') }}
-  - VAULT_SECRET_ID={{ lookup('env', 'VAULT_PROMETHEUS_SECRET_ID') }}
+  - VAULT_ROLE_ID={{ vault_approle_role_id }}
+  - VAULT_SECRET_ID={{ vault_approle_secret_id }}
   
-  # Tier 0: Always available (no Vault needed)
+  # Tier 0-1: Always available (read-only, low-risk)
   - TZ=America/New_York
-  - BRAVE_API_KEY={{ brave_api_key }}
+  - BRAVE_API_KEY={{ vault_brave_api_key | default(lookup('env', 'BRAVE_API_KEY')) }}
+  - RADARR_API_KEY={{ vault_radarr_api_key | default(lookup('env', 'RADARR_API_KEY')) }}
+  - SONARR_API_KEY={{ vault_sonarr_api_key | default(lookup('env', 'SONARR_API_KEY')) }}
+  - PLEX_TOKEN={{ vault_plex_token | default(lookup('env', 'PLEX_TOKEN')) }}
+  # ... other read-only API keys
   
-  # REMOVE THESE (migrate to Vault in phases):
-  # - GITLAB_TOKEN (Phase 1)
-  # - HASS_TOKEN (Phase 4)
-  # - RADARR_API_KEY (Phase 4)
-  # ... etc
+  # REMOVED in Phase C (now JIT-only):
+  # - HASS_TOKEN (Tier 2 — write access to smart home)
+  # - GITLAB_TOKEN (Tier 2 — write access to repos)
+  # - GMAIL_APP_PASSWORD (Tier 3 — private communications)
+  # - IPMI_PASSWORD (Tier 3 — hardware control)
+  # - SSH keys (Tier 3 — replaced by Vault SSH CA)
 
 volumes:
-  # Add Vault CA cert
-  - {{ docker_persistent_data_path }}/certs/vault-ca.pem:/vault/certs/ca.pem:ro
+  # Shared volume for JIT credential handoff (Phase 3+)
+  - jit_creds:/jit-creds
 ```
 
 ### D. Request ID Format
@@ -1883,7 +1900,7 @@ Our system is simpler because it's purpose-built for a single AI agent in a home
 
 ### F. Open Questions
 
-1. **Should Vault AppRole secret_id rotate?** Yes, but how often? Monthly? On container restart? Rotation requires updating the CI/CD variable.
+1. **Should Vault AppRole secret_id rotate?** Yes, but how often? Monthly? On container restart? MR !123 adds a `vault:rotate-approle` manual CI job for this. Monthly rotation via pipeline schedule is the current plan.
 
 2. **Should we use Vault Agent sidecar?** Not in Phase 1. Revisit in Phase 4 when managing many credentials.
 
@@ -2126,7 +2143,7 @@ jit-approval-svc:
 | 2 | Vault SSH certificate engine + tier 2 SSH policy | 1 week |
 | 3 | Integrate into Prometheus (jit_request shell function, skill update) | 1 week |
 | 4 | Dynamic database credentials | 1 week |
-| 5 | Migrate from static to JIT credentials (strip static access) | 2-3 weeks |
+| 5 | Strip Tier 2+ runtime env vars (Vault KV migration already done via MR !126) | 2-3 weeks |
 | 6 | Audit dashboard (Grafana) + request history | 1 week |
 
 ### 11.7 Open Questions
