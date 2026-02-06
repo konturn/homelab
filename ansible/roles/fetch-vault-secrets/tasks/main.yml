@@ -1,0 +1,125 @@
+# =============================================================================
+# Fetch secrets from HashiCorp Vault
+# =============================================================================
+# Authenticates via JWT (CI pipeline) or AppRole (moltbot), then reads all
+# secrets into Ansible variables. Falls back to CI environment variables if
+# Vault is unreachable — deploys must never break due to Vault downtime.
+#
+# All secret-handling tasks use no_log to prevent credential leakage in CI logs.
+# =============================================================================
+
+- name: Initialize Vault state
+  ansible.builtin.set_fact:
+    _vault_url: "{{ vault_addr }}/v1"
+    _vault_token: ""
+    _vault_available: false
+    _vault_secrets: {}
+  no_log: true
+
+# ---------------------------------------------------------------------------
+# Step 1: Authenticate to Vault
+# ---------------------------------------------------------------------------
+
+- name: Attempt JWT authentication (CI pipeline)
+  when: vault_jwt_token | length > 0
+  block:
+    - name: Authenticate to Vault via JWT
+      ansible.builtin.uri:
+        url: "{{ _vault_url }}/auth/jwt/login"
+        method: POST
+        body_format: json
+        body:
+          role: "{{ vault_jwt_role }}"
+          jwt: "{{ vault_jwt_token }}"
+        validate_certs: "{{ not vault_skip_verify }}"
+        timeout: "{{ vault_timeout }}"
+        status_code: [200]
+      register: _vault_jwt_response
+      no_log: true
+
+    - name: Store JWT Vault token
+      ansible.builtin.set_fact:
+        _vault_token: "{{ _vault_jwt_response.json.auth.client_token }}"
+        _vault_available: true
+      no_log: true
+
+  rescue:
+    - name: JWT authentication failed
+      ansible.builtin.debug:
+        msg: "Vault JWT auth failed — will try AppRole or fall back to env vars"
+
+- name: Attempt AppRole authentication (non-CI or JWT failure)
+  when:
+    - not _vault_available
+    - vault_approle_role_id | length > 0
+    - vault_approle_secret_id | length > 0
+  block:
+    - name: Authenticate to Vault via AppRole
+      ansible.builtin.uri:
+        url: "{{ _vault_url }}/auth/approle/login"
+        method: POST
+        body_format: json
+        body:
+          role_id: "{{ vault_approle_role_id }}"
+          secret_id: "{{ vault_approle_secret_id }}"
+        validate_certs: "{{ not vault_skip_verify }}"
+        timeout: "{{ vault_timeout }}"
+        status_code: [200]
+      register: _vault_approle_response
+      no_log: true
+
+    - name: Store AppRole Vault token
+      ansible.builtin.set_fact:
+        _vault_token: "{{ _vault_approle_response.json.auth.client_token }}"
+        _vault_available: true
+      no_log: true
+
+  rescue:
+    - name: AppRole authentication failed
+      ansible.builtin.debug:
+        msg: "Vault AppRole auth failed — falling back to CI environment variables"
+
+- name: Report Vault authentication status
+  ansible.builtin.debug:
+    msg: >-
+      Vault {{ 'authenticated successfully' if _vault_available
+      else 'unavailable — all secrets will use CI env var fallback' }}
+
+# ---------------------------------------------------------------------------
+# Step 2: Fetch secrets from Vault KV v2
+# ---------------------------------------------------------------------------
+
+- name: Fetch and extract secrets from Vault
+  when: _vault_available
+  block:
+    - name: Read each secret path from Vault
+      ansible.builtin.uri:
+        url: "{{ _vault_url }}/{{ vault_kv_mount }}/data/{{ item.path }}"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ _vault_token }}"
+        validate_certs: "{{ not vault_skip_verify }}"
+        timeout: "{{ vault_timeout }}"
+        status_code: [200]
+      register: _vault_raw_responses
+      loop: "{{ vault_secret_paths }}"
+      loop_control:
+        label: "{{ item.path }}"
+      no_log: true
+
+    - name: Map Vault responses to Ansible variable names
+      ansible.builtin.include_tasks: extract_secret.yml
+      loop: "{{ _vault_raw_responses.results }}"
+      loop_control:
+        loop_var: _vault_response
+        label: "{{ _vault_response.item.path }}"
+      no_log: true
+
+  rescue:
+    - name: Vault secret fetch failed
+      ansible.builtin.debug:
+        msg: "Failed to fetch one or more secrets from Vault — falling back to CI env vars"
+
+    - name: Mark Vault as unavailable after fetch failure
+      ansible.builtin.set_fact:
+        _vault_available: false

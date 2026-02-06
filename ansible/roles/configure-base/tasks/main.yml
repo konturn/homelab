@@ -17,7 +17,7 @@
 
 - name: write to LUKS password file
   ansible.builtin.copy:
-    content: "{{ lookup('env', 'LUKS_PASSWORD_BASE64') | b64decode }}"
+    content: "{{ (vault_luks_password_base64 | default(lookup('env', 'LUKS_PASSWORD_BASE64'))) | b64decode }}"
     dest: '/etc/password_file.txt'
     owner: root
     group: root

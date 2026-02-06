@@ -4,10 +4,39 @@ This document lists all secrets used in the homelab infrastructure, how to rotat
 
 ## Overview
 
-Secrets are stored in two places:
+Secrets are managed through a **Vault-first** architecture with CI environment variable fallback:
 
-1. **HashiCorp Vault** at `vault.lab.nkontur.com:8200` — canonical source of truth for all secrets, organized under the `homelab/` KV v2 mount.
-2. **GitLab CI/CD variables** — currently used by the deploy pipeline via Ansible's `lookup('env', ...)`. These mirror Vault and will eventually be replaced by direct Vault reads.
+1. **HashiCorp Vault** at `vault.lab.nkontur.com:8200` — canonical source of truth, organized under the `homelab/` KV v2 mount.
+2. **GitLab CI/CD variables** — fallback when Vault is unreachable. These mirror Vault values.
+
+### How Secrets Flow
+
+```
+┌─────────────┐     JWT auth      ┌───────────┐
+│  GitLab CI  │ ────────────────► │   Vault   │
+│  Pipeline   │ ◄──────────────── │  KV v2    │
+│             │   secrets (JSON)  │           │
+└──────┬──────┘                   └───────────┘
+       │                                │
+       │ Ansible: fetch-vault-secrets   │ AppRole auth
+       │ role runs FIRST                │
+       ▼                                ▼
+┌─────────────┐                   ┌───────────┐
+│  Ansible    │                   │  Moltbot  │
+│  Variables  │                   │ (runtime) │
+└──────┬──────┘                   └───────────┘
+       │
+       │ Jinja2 template with
+       │ vault_var | default(lookup('env', 'CI_VAR'))
+       ▼
+┌─────────────┐
+│ Templated   │
+│ Compose +   │
+│ Configs     │
+└─────────────┘
+```
+
+**If Vault is down:** Every secret reference uses `| default(lookup('env', 'CI_VAR'))`, so CI environment variables serve as automatic fallback. Deploys never break due to Vault downtime.
 
 **Vault UI:** `https://vault.lab.nkontur.com:8200/ui`
 **GitLab CI Variables:** Settings → CI/CD → Variables (Project: root/homelab)
@@ -16,8 +45,8 @@ Secrets are stored in two places:
 
 | Method | Role | Policy | Used By |
 |--------|------|--------|---------|
-| JWT (GitLab OIDC) | `vault-admin` | `vault-admin` | `vault:configure` job (main only) |
-| JWT (GitLab OIDC) | `vault-read` | `vault-read` | `vault:validate` job (any branch) |
+| JWT (GitLab OIDC) | `vault-admin` | `vault-admin` | `vault:configure`, `vault:rotate-approle` (main only) |
+| JWT (GitLab OIDC) | `vault-read` | `vault-read` | `vault:validate`, `router:validate`, `router:deploy` (any/main) |
 | AppRole | `moltbot` | `moltbot-ops` | Moltbot container (scoped read-only) |
 
 ### Vault Secret Layout
@@ -36,26 +65,97 @@ homelab/
 └── networking/      # Cloudflare, Mullvad, Namesilo, Wireguard
 ```
 
+### Ansible Vault Integration
+
+The `fetch-vault-secrets` role runs as the **first role** in every playbook. It:
+
+1. Authenticates to Vault via JWT (CI pipeline) or AppRole (moltbot)
+2. Reads all secret paths from `homelab/` KV v2 mount
+3. Sets each secret as an Ansible fact (e.g., `vault_pihole_password`)
+4. If Vault is unreachable, secrets remain unset and the `| default(lookup('env', ...))` fallback activates
+
+**Secret variable naming convention:** `vault_<lowercase_ci_var_name>`
+
+Example in docker-compose.yml template:
+```yaml
+WEBPASSWORD: {{ vault_pihole_password | default(lookup('env', 'PIHOLE_PASSWORD')) }}
+```
+
+### Rotation Procedure (Vault-First)
+
+To rotate a secret:
+
+1. **Update in Vault** (UI or CLI) — this is the source of truth
+2. **Update GitLab CI variable** — keeps fallback in sync
+3. **Trigger deploy** — push to main or run pipeline manually
+4. Vault value is used immediately; CI variable is backup
+
+To remove CI variable fallback (after Vault is proven stable):
+1. Remove the `| default(lookup('env', ...))` from templates
+2. Delete the CI variable
+3. Update this document
+
 ---
 
 ## Secret Inventory
 
-| Secret | Used By | Rotation Complexity | Recommended Schedule |
-|--------|---------|---------------------|---------------------|
-| `PIHOLE_PASSWORD` | Pi-hole | 🟢 Easy | Annually |
-| `INFLUXDB_PASSWORD` | InfluxDB | 🟡 Medium | Annually |
-| `INFLUXDB_ADMIN_TOKEN` | InfluxDB, Grafana | 🔴 Hard | Annually |
-| `GRAFANA_ADMIN_PASSWORD` | Grafana | 🟢 Easy | Annually |
-| `WORDPRESS_DB_PASSWORD` | WordPress, MySQL | 🔴 Hard | Annually |
-| `DOORBELL_PASS` | amcrest2mqtt | 🟡 Medium | When compromised |
-| `MQTT_PASS` | mosquitto, amcrest2mqtt, ambientweather | 🔴 Hard | Annually |
-| `NEXTCLOUD_DB_PASSWORD` | Nextcloud, MariaDB | 🔴 Hard | Annually |
-| `OPENAI_API_KEY` | moltbot-gateway | 🟢 Easy | When compromised |
-| `MOLTBOT_GATEWAY_TOKEN` | moltbot-gateway | 🟢 Easy | When compromised |
-| `MOLTBOT_TELEGRAM_TOKEN` | moltbot-gateway | 🟡 Medium | When compromised |
-| `HASS_TOKEN` | moltbot-gateway | 🟢 Easy | Annually |
-| `MOLTBOT_GITLAB_TOKEN` | moltbot-gateway | 🟢 Easy | Annually |
-| `ROUTER_PRIVATE_KEY_BASE64` | GitLab CI | 🔴 Hard | Annually |
+| Secret | Vault Path | Field | Used By |
+|--------|-----------|-------|---------|
+| `PIHOLE_PASSWORD` | `infrastructure/pihole` | `password` | Pi-hole |
+| `INFLUXDB_PASSWORD` | `docker/influxdb` | `password` | InfluxDB |
+| `INFLUXDB_ADMIN_TOKEN` | `docker/influxdb` | `admin_token` | InfluxDB, Grafana |
+| `INFLUXDB_TOKEN` | `docker/influxdb` | `token` | moltbot-gateway |
+| `INFLUXDB_TELEGRAF_TOKEN` | `docker/influxdb` | `telegraf_token` | Telegraf |
+| `GRAFANA_ADMIN_PASSWORD` | `docker/grafana` | `admin_password` | Grafana |
+| `GRAFANA_SMTP_PASSWORD` | `docker/grafana` | `smtp_password` | Grafana |
+| `WORDPRESS_DB_PASSWORD` | `docker/wordpress` | `db_password` | WordPress, MySQL |
+| `NEXTCLOUD_DB_PASSWORD` | `docker/nextcloud` | `db_password` | Nextcloud, MariaDB |
+| `DOORBELL_PASS` | `cameras/doorbell` | `password` | amcrest2mqtt |
+| `MQTT_PASS` | `mqtt/mosquitto` | `password` | amcrest2mqtt, ambientweather |
+| `AUDIOSERVE_SECRET` | `docker/audioserve` | `secret` | audioserve |
+| `OPENAI_API_KEY` | `api-keys/openai` | `api_key` | moltbot-gateway |
+| `ANTHROPIC_API_KEY` | `api-keys/anthropic` | `api_key` | moltbot (future) |
+| `BRAVE_API_KEY` | `api-keys/brave` | `api_key` | moltbot-gateway |
+| `ACLAWDEMY_API_KEY` | `api-keys/aclawdemy` | `api_key` | moltbot-gateway |
+| `MOLTBOT_GATEWAY_TOKEN` | `moltbot/tokens` | `gateway_token` | moltbot-gateway |
+| `MOLTBOT_TELEGRAM_TOKEN` | `moltbot/tokens` | `telegram_token` | moltbot-gateway |
+| `MOLTBOT_GITLAB_TOKEN` | `moltbot/tokens` | `gitlab_token` | moltbot-gateway |
+| `HASS_TOKEN` | `docker/homeassistant` | `token` | moltbot-gateway |
+| `PLEX_TOKEN` | `docker/plex` | `token` | moltbot-gateway |
+| `RADARR_API_KEY` | `docker/radarr` | `api_key` | moltbot-gateway |
+| `SONARR_API_KEY` | `docker/sonarr` | `api_key` | moltbot-gateway |
+| `PROWLARR_API_KEY` | `docker/prowlarr` | `api_key` | moltbot-gateway |
+| `OMBI_API_KEY` | `docker/ombi` | `api_key` | moltbot-gateway |
+| `NZBGET_USERNAME` | `docker/nzbget` | `username` | moltbot-gateway |
+| `NZBGET_PASSWORD` | `docker/nzbget` | `password` | moltbot-gateway |
+| `DELUGE_PASSWORD` | `docker/deluge` | `password` | moltbot-gateway |
+| `PAPERLESS_TOKEN` | `docker/paperless` | `token` | moltbot-gateway |
+| `TAILSCALE_API_TOKEN` | `infrastructure/tailscale` | `api_token` | moltbot-gateway |
+| `TAILSCALE_AUTH_KEY` | `infrastructure/tailscale` | `auth_key` | configure-tailscale role |
+| `IPMI_USER` | `infrastructure/ipmi` | `user` | moltbot-gateway |
+| `IPMI_PASSWORD` | `infrastructure/ipmi` | `password` | moltbot-gateway |
+| `GMAIL_EMAIL` | `email/gmail` | `email` | moltbot-gateway |
+| `GMAIL_APP_PASSWORD` | `email/gmail` | `app_password` | moltbot-gateway |
+| `ROUTER_PRIVATE_KEY_BASE64` | `infrastructure/router` | `private_key_base64` | GitLab CI pipeline |
+| `SNMP_PASSWORD` | `infrastructure/snmp` | `password` | Telegraf |
+| `LUKS_PASSWORD_BASE64` | `infrastructure/luks` | `password_base64` | configure-base role |
+| `OMAPI_SECRET` | `infrastructure/omapi` | `secret` | DHCP OMAPI |
+| `CLOUDFLARE_ZONE_ID` | `networking/cloudflare` | `zone_id` | DDNS cron |
+| `NAMESILO_API_KEY` | `networking/namesilo` | `api_key` | SSL renewal cron |
+| `BACKBLAZE_ACCESS_KEY_ID` | `backup/backblaze` | `access_key_id` | Restic backups |
+| `BACKBLAZE_SECRET_ACCESS_KEY` | `backup/backblaze` | `secret_access_key` | Restic backups |
+| `RESTIC_PASSWORD` | `backup/restic` | `password` | Restic backups |
+
+### Secrets NOT in Vault (CI-only)
+
+| Secret | Reason |
+|--------|--------|
+| `VAULT_APPROLE_ROLE_ID` | Circular dependency — needed to auth to Vault |
+| `VAULT_APPROLE_SECRET_ID` | Circular dependency — needed to auth to Vault |
+| `VAULT_UNSEAL_KEYS` | Break-glass secret — must not depend on Vault |
+| `ROUTER_PRIVATE_KEY_BASE64` | Used in CI `before_script` before Ansible runs |
+| `GRAFANA_TOKEN` | Non-sensitive service token, kept in inventory |
+| `CLOUDFLARE_API_KEY` | Used in cron job via `lookup('env', ...)` (not yet in Vault) |
 
 ---
 
@@ -69,11 +169,10 @@ homelab/
 - `pihole` container (environment variable `WEBPASSWORD`)
 
 **How to rotate:**
-1. Update the variable in GitLab CI/CD settings
-2. Trigger a deployment (push to main or manually run pipeline)
-3. Pi-hole will pick up the new password on container restart
-
-**What breaks if not updated everywhere:** Nothing — only used in one place.
+1. Update in Vault: `homelab/infrastructure/pihole` → `password`
+2. Update GitLab CI variable `PIHOLE_PASSWORD` (fallback)
+3. Trigger a deployment (push to main or manually run pipeline)
+4. Pi-hole picks up the new password on container restart
 
 **Complexity:** 🟢 Easy
 
@@ -90,9 +189,8 @@ homelab/
 1. This password is only used during initial InfluxDB setup
 2. After first run, InfluxDB stores credentials internally
 3. To change: use InfluxDB admin UI or CLI to update the user password
-4. Update GitLab variable for future fresh deployments
-
-**What breaks if not updated everywhere:** None for running instances (password already in InfluxDB). Fresh deployments would use new password.
+4. Update in Vault: `homelab/docker/influxdb` → `password`
+5. Update GitLab CI variable for fallback
 
 **Complexity:** 🟡 Medium
 
@@ -108,34 +206,12 @@ homelab/
 
 **How to rotate:**
 1. Generate new token in InfluxDB UI (Data → API Tokens)
-2. Update `INFLUXDB_ADMIN_TOKEN` in GitLab CI/CD variables
-3. Redeploy both `influxdb` and `grafana` containers
-4. Verify Grafana dashboards still load data
-
-**What breaks if not updated everywhere:**
-- If only InfluxDB updated: Grafana loses access to metrics
-- Dashboards show "No data" errors
+2. Update in Vault: `homelab/docker/influxdb` → `admin_token`
+3. Update GitLab CI variable `INFLUXDB_ADMIN_TOKEN`
+4. Redeploy both `influxdb` and `grafana` containers
+5. Verify Grafana dashboards still load data
 
 **Complexity:** 🔴 Hard (multi-service dependency)
-
----
-
-### GRAFANA_ADMIN_PASSWORD
-
-**Description:** Admin password for Grafana web UI.
-
-**Used by:**
-- `grafana` container (`GF_SECURITY_ADMIN_PASSWORD`)
-
-**How to rotate:**
-1. Update the variable in GitLab CI/CD settings
-2. Trigger deployment
-3. Note: Grafana may not pick up new password if admin user already exists in database
-4. To force: use Grafana CLI or reset via API
-
-**What breaks if not updated everywhere:** Nothing — only used in one place.
-
-**Complexity:** 🟢 Easy (but may need manual Grafana CLI intervention)
 
 ---
 
@@ -155,12 +231,9 @@ homelab/
    ALTER USER 'root'@'%' IDENTIFIED BY 'newpassword';
    FLUSH PRIVILEGES;
    ```
-3. Update `WORDPRESS_DB_PASSWORD` in GitLab CI/CD variables
-4. Redeploy both containers
-
-**What breaks if not updated everywhere:**
-- WordPress cannot connect to database
-- Site shows "Error establishing database connection"
+3. Update in Vault: `homelab/docker/wordpress` → `db_password`
+4. Update GitLab CI variable `WORDPRESS_DB_PASSWORD`
+5. Redeploy both containers
 
 **Complexity:** 🔴 Hard (requires MySQL command execution + coordinated update)
 
@@ -176,12 +249,9 @@ homelab/
 **How to rotate:**
 1. Log into Amcrest camera web UI (10.6.128.9)
 2. Change the admin password
-3. Update `DOORBELL_PASS` in GitLab CI/CD variables
-4. Redeploy amcrest2mqtt container
-
-**What breaks if not updated everywhere:**
-- amcrest2mqtt fails to connect to camera
-- Doorbell events stop appearing in Home Assistant
+3. Update in Vault: `homelab/cameras/doorbell` → `password`
+4. Update GitLab CI variable `DOORBELL_PASS`
+5. Redeploy amcrest2mqtt container
 
 **Complexity:** 🟡 Medium (requires camera web UI access)
 
@@ -195,7 +265,7 @@ homelab/
 - `amcrest2mqtt` container (`MQTT_PASSWORD`)
 - `ambientweather` container (`MQTT_PASSWORD`)
 - Mosquitto config (stored in `{{ docker_persistent_data_path }}/mqtt/conf/`)
-- Home Assistant (likely configured in HA's configuration)
+- Home Assistant (configured in HA's configuration)
 - Zigbee2MQTT (configured in its data directory)
 
 **How to rotate:**
@@ -203,17 +273,12 @@ homelab/
    ```bash
    docker exec mosquitto mosquitto_passwd -b /mosquitto/config/passwd mosquitto newpassword
    ```
-2. Update `MQTT_PASS` in GitLab CI/CD variables
-3. Redeploy: amcrest2mqtt, ambientweather
-4. Update Home Assistant MQTT integration configuration
-5. Update Zigbee2MQTT configuration
-6. Restart all affected services
-
-**What breaks if not updated everywhere:**
-- amcrest2mqtt: Doorbell events stop
-- ambientweather: Weather station data stops
-- Home Assistant: All MQTT devices go unavailable
-- Zigbee2MQTT: Zigbee devices go unavailable
+2. Update in Vault: `homelab/mqtt/mosquitto` → `password`
+3. Update GitLab CI variable `MQTT_PASS`
+4. Redeploy: amcrest2mqtt, ambientweather
+5. Update Home Assistant MQTT integration configuration
+6. Update Zigbee2MQTT configuration
+7. Restart all affected services
 
 **Complexity:** 🔴 Hard (affects many services, some with external configs)
 
@@ -229,122 +294,29 @@ homelab/
 
 **How to rotate:**
 1. Stop Nextcloud container
-2. Connect to MariaDB and change password:
-   ```sql
-   ALTER USER 'nextcloud'@'%' IDENTIFIED BY 'newpassword';
-   ALTER USER 'root'@'%' IDENTIFIED BY 'newpassword';
-   FLUSH PRIVILEGES;
-   ```
+2. Connect to MariaDB and change password
 3. Update Nextcloud's `config/config.php` with new password
-4. Update `NEXTCLOUD_DB_PASSWORD` in GitLab CI/CD variables
-5. Redeploy both containers
-
-**What breaks if not updated everywhere:**
-- Nextcloud shows database connection error
-- File sync stops for all users
+4. Update in Vault: `homelab/docker/nextcloud` → `db_password`
+5. Update GitLab CI variable `NEXTCLOUD_DB_PASSWORD`
+6. Redeploy both containers
 
 **Complexity:** 🔴 Hard (requires DB commands + Nextcloud config update)
 
 ---
 
-### OPENAI_API_KEY
+### MOLTBOT_GATEWAY_TOKEN / MOLTBOT_TELEGRAM_TOKEN / MOLTBOT_GITLAB_TOKEN
 
-**Description:** API key for OpenAI services (used by Moltbot).
+**Description:** Tokens for Moltbot gateway API, Telegram Bot API, and GitLab access.
 
-**Used by:**
-- `moltbot-gateway` container
-
-**How to rotate:**
-1. Generate new key at https://platform.openai.com/api-keys
-2. Update `OPENAI_API_KEY` in GitLab CI/CD variables
-3. Redeploy moltbot-gateway container
-4. Optionally revoke old key in OpenAI dashboard
-
-**What breaks if not updated everywhere:** Nothing — only used in one place.
-
-**Complexity:** 🟢 Easy
-
----
-
-### MOLTBOT_GATEWAY_TOKEN
-
-**Description:** Authentication token for Moltbot gateway API.
-
-**Used by:**
-- `moltbot-gateway` container (`CLAWDBOT_GATEWAY_TOKEN`)
-- Any external clients connecting to the gateway
+**Vault path:** `homelab/moltbot/tokens`
 
 **How to rotate:**
-1. Generate new token (any secure random string)
-2. Update `MOLTBOT_GATEWAY_TOKEN` in GitLab CI/CD variables
-3. Update any external clients using this token
+1. Generate new token (varies by service)
+2. Update in Vault: `homelab/moltbot/tokens` → relevant field
+3. Update GitLab CI variable
 4. Redeploy moltbot-gateway container
 
-**What breaks if not updated everywhere:**
-- External clients lose gateway access
-
-**Complexity:** 🟢 Easy (unless external clients exist)
-
----
-
-### MOLTBOT_TELEGRAM_TOKEN
-
-**Description:** Telegram Bot API token.
-
-**Used by:**
-- `moltbot-gateway` container
-
-**How to rotate:**
-1. Talk to @BotFather on Telegram
-2. Use `/revoke` to invalidate old token
-3. Use `/token` to generate new token
-4. Update `MOLTBOT_TELEGRAM_TOKEN` in GitLab CI/CD variables
-5. Redeploy moltbot-gateway container
-
-**What breaks if not updated everywhere:** Nothing — only used in one place. Old token stops working immediately when revoked.
-
-**Complexity:** 🟡 Medium (requires Telegram BotFather interaction)
-
----
-
-### HASS_TOKEN
-
-**Description:** Home Assistant long-lived access token.
-
-**Used by:**
-- `moltbot-gateway` container
-
-**How to rotate:**
-1. Log into Home Assistant
-2. Go to Profile → Long-Lived Access Tokens
-3. Create new token, copy it
-4. Update `HASS_TOKEN` in GitLab CI/CD variables
-5. Redeploy moltbot-gateway container
-6. Delete old token in Home Assistant
-
-**What breaks if not updated everywhere:** Nothing — only used in one place.
-
-**Complexity:** 🟢 Easy
-
----
-
-### MOLTBOT_GITLAB_TOKEN
-
-**Description:** GitLab personal access token for Moltbot to create MRs.
-
-**Used by:**
-- `moltbot-gateway` container
-
-**How to rotate:**
-1. Go to GitLab → User Settings → Access Tokens
-2. Create new token with required scopes (api, read_repository, write_repository)
-3. Update `MOLTBOT_GITLAB_TOKEN` in GitLab CI/CD variables
-4. Redeploy moltbot-gateway container
-5. Revoke old token in GitLab
-
-**What breaks if not updated everywhere:** Nothing — only used in one place.
-
-**Complexity:** 🟢 Easy
+**Complexity:** 🟢-🟡 Easy to Medium
 
 ---
 
@@ -352,29 +324,18 @@ homelab/
 
 **Description:** Base64-encoded SSH private key for Ansible deployments.
 
+**Note:** This secret is used in the CI `.ansible` template's `before_script` (before Ansible runs), so it **cannot** use the Vault integration. It remains CI-only.
+
 **Used by:**
 - GitLab CI pipeline (all ansible playbook runs)
 
 **How to rotate:**
-1. Generate new SSH keypair:
-   ```bash
-   ssh-keygen -t ed25519 -f new_deploy_key -N ""
-   ```
-2. Add public key to authorized_keys on:
-   - router.lab.nkontur.com
-   - zwave.lab.nkontur.com
-   - satellite-2.lab.nkontur.com
-3. Base64 encode the private key:
-   ```bash
-   base64 -w0 new_deploy_key > new_deploy_key.b64
-   ```
+1. Generate new SSH keypair
+2. Add public key to authorized_keys on all deploy targets
+3. Base64 encode the private key
 4. Update `ROUTER_PRIVATE_KEY_BASE64` in GitLab CI/CD variables
 5. Test deployment with a dummy commit
 6. Remove old public key from all hosts
-
-**What breaks if not updated everywhere:**
-- All CI/CD deployments fail
-- Changes cannot be automatically deployed
 
 **Complexity:** 🔴 Hard (requires access to multiple hosts)
 
@@ -383,16 +344,6 @@ homelab/
 ## Secrets NOT in GitLab CI
 
 These secrets are stored elsewhere and managed differently:
-
-### Registry htpasswd
-
-**Location:** `{{ docker_persistent_data_path }}/registry/auth/htpasswd`
-
-**How to rotate:**
-```bash
-docker run --rm -it httpd:2.4 htpasswd -Bn username > htpasswd
-# Copy to router and restart registry container
-```
 
 ### Bitwarden Configuration
 
@@ -413,6 +364,7 @@ Contains MQTT credentials. Update when rotating MQTT_PASS.
 | Frequency | Secrets |
 |-----------|---------|
 | **When Compromised** | OPENAI_API_KEY, MOLTBOT_GATEWAY_TOKEN, MOLTBOT_TELEGRAM_TOKEN, DOORBELL_PASS |
+| **Monthly** | VAULT_APPROLE_SECRET_ID (via `vault:rotate-approle` CI job) |
 | **Annually** | All others |
 | **After Employee Offboarding** | All secrets they had access to |
 
@@ -427,6 +379,7 @@ Before rotating any secret:
 3. [ ] Have rollback plan (keep old secret value temporarily)
 4. [ ] Test in off-hours if possible
 5. [ ] Verify services after rotation
+6. [ ] Update BOTH Vault and GitLab CI variable
 
 ---
 
@@ -434,11 +387,12 @@ Before rotating any secret:
 
 If a secret is compromised:
 
-1. **Immediately** update the GitLab CI/CD variable
-2. **Immediately** redeploy affected containers
-3. For ROUTER_PRIVATE_KEY_BASE64: also remove old public key from hosts
-4. Check logs for unauthorized access during exposure window
-5. Document the incident
+1. **Immediately** update the secret in Vault (UI or CLI)
+2. **Immediately** update the GitLab CI/CD variable (fallback)
+3. **Immediately** redeploy affected containers
+4. For ROUTER_PRIVATE_KEY_BASE64: also remove old public key from hosts
+5. Check logs for unauthorized access during exposure window
+6. Document the incident
 
 ---
 
@@ -473,24 +427,13 @@ The job:
 2. Set cron: `0 4 1 * *` (4 AM on the 1st of each month)
 3. Target branch: main
 
-**Manual rotation (if CI job unavailable):**
-```bash
-# Authenticate to Vault (need admin/root token)
-export VAULT_ADDR="https://vault.lab.nkontur.com:8200"
-
-# Generate new secret_id
-curl -sk -X POST -H "X-Vault-Token: $VAULT_TOKEN" \
-  "$VAULT_ADDR/v1/auth/approle/role/moltbot/secret-id"
-
-# Update CI variable with the new secret_id value
-# Then redeploy moltbot
-```
-
 ---
 
 ## Future Improvements
 
-- [ ] Migrate deploy pipeline from CI env vars to direct Vault reads
+- [ ] Remove CI env var fallbacks once Vault proves stable (~1 month)
+- [ ] Move CLOUDFLARE_API_KEY to Vault
 - [ ] Implement secret scanning in CI pipeline
 - [ ] Set up pipeline schedule for automatic AppRole rotation
 - [ ] Add Vault token expiry monitoring to Grafana
+- [ ] Add GRAFANA_TOKEN to Vault
