@@ -137,9 +137,15 @@ router:bootstrap:
     - ansible-galaxy install -r ansible/requirements.yml -p /cache/ansible-roles --force 2>/dev/null || true
     - mkdir -p ~/.ssh
     - cp ansible/known_hosts ~/.ssh/known_hosts
-    # Write SSH key from CI variable (always available, no dependencies)
+    # Write SSH key from CI variable (protected — only available on main branch)
     - echo ${ROUTER_PRIVATE_KEY_BASE64}|base64 -d > tmp && chmod 600 tmp
-    - echo "DEBUG key file size:$(wc -c < tmp) ssh:$(ssh -V 2>&1) openssl:$(openssl version 2>&1) head:$(head -1 tmp)"
+    - |
+      if [ ! -s tmp ]; then
+        echo "WARN: SSH key is empty (protected variable unavailable on feature branches)"
+        export ANSIBLE_SSH_KEY_AVAILABLE=false
+      else
+        export ANSIBLE_SSH_KEY_AVAILABLE=true
+      fi
   after_script:
     - rm -f tmp
   cache:
@@ -163,7 +169,14 @@ router:validate:
       aud: https://vault.lab.nkontur.com:8200
   needs: []
   script:
-    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml --check --diff
+    - |
+      if [ "$ANSIBLE_SSH_KEY_AVAILABLE" = "true" ]; then
+        echo "SSH key available — running full check mode"
+        ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml --check --diff
+      else
+        echo "SSH key unavailable — running syntax check only"
+        ansible-playbook -i ansible/inventory.yml ansible/router.yml --syntax-check
+      fi
 
 zwave:validate:
   extends:
@@ -173,7 +186,14 @@ zwave:validate:
   stage: validate
   needs: []
   script:
-    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/zwave.yml --check --diff
+    - |
+      if [ "$ANSIBLE_SSH_KEY_AVAILABLE" = "true" ]; then
+        echo "SSH key available — running full check mode"
+        ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/zwave.yml --check --diff
+      else
+        echo "SSH key unavailable — running syntax check only"
+        ansible-playbook -i ansible/inventory.yml ansible/zwave.yml --syntax-check
+      fi
 
 satellite-2:validate:
   extends:
@@ -183,7 +203,14 @@ satellite-2:validate:
   stage: validate
   needs: []
   script:
-    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml --check --diff
+    - |
+      if [ "$ANSIBLE_SSH_KEY_AVAILABLE" = "true" ]; then
+        echo "SSH key available — running full check mode"
+        ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml --check --diff
+      else
+        echo "SSH key unavailable — running syntax check only"
+        ansible-playbook -i ansible/inventory.yml ansible/satellite-2.yml --syntax-check
+      fi
 
 # =============================================================================
 # Build Stage - Container images (GitLab Registry)
