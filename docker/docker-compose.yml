@@ -77,7 +77,7 @@ services:
   # Only allows build/image operations, blocks exec/start/stop
   docker-socket-proxy:
     container_name: docker-socket-proxy
-    image: tecnativa/docker-socket-proxy:latest
+    image: tecnativa/docker-socket-proxy:latest@sha256:bd2241b3bec83abcff25927a0a7ae518e0c5bef624b3cc247dcb31e68b53f417
     restart: unless-stopped
     networks:
       mgmt:
@@ -111,7 +111,7 @@ services:
     container_name: plex
     ports:
       - "32400/tcp"
-    image: plexinc/pms-docker
+    image: plexinc/pms-docker:latest@sha256:f42deee6fad8c0d3e40ac52163ca8f6acf520bafda617f845ad7970dc35fe128
     networks:
       - external
       - internal
@@ -140,7 +140,7 @@ services:
       start_period: 120s
   pihole:
     container_name: pihole
-    image: pihole/pihole:2025.11.1
+    image: pihole/pihole:2025.11.1@sha256:848cf5af61397e6976e2fc356aa00aaa3d3a53b2ac90a956675779ff1f4bdf34
     ports:
       - "443:80"
     networks:
@@ -165,7 +165,7 @@ services:
       start_period: 30s
   iperf3:
     container_name: iperf3
-    image: networkstatic/iperf3
+    image: networkstatic/iperf3:latest@sha256:993080f3167738f4155d6b2749b8b95ba6da5d44fe1c02e36b6e03a6d544c922
     ports:
       - "5201/tcp"
     networks:
@@ -178,7 +178,7 @@ services:
       - "-s"
     restart: unless-stopped
   nginx: 
-    image: nginx:1.27-alpine
+    image: nginx:1.27-alpine@sha256:62223d644fa234c3a1cc785ee14242ec47a77364226f1c811d2f669f96dc2ac8
     container_name: nginx
     networks:
       external:
@@ -200,7 +200,7 @@ services:
       - /var/log/nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   lab_nginx: 
-    image: nginx:1.27-alpine
+    image: nginx:1.27-alpine@sha256:62223d644fa234c3a1cc785ee14242ec47a77364226f1c811d2f669f96dc2ac8
     container_name: lab_nginx
     networks:
       internal:
@@ -221,7 +221,7 @@ services:
       - /var/log/lab_nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   iot_nginx: 
-    image: nginx:1.27-alpine
+    image: nginx:1.27-alpine@sha256:62223d644fa234c3a1cc785ee14242ec47a77364226f1c811d2f669f96dc2ac8
     container_name: iot_nginx
     networks:
       iot:
@@ -242,7 +242,7 @@ services:
       - /var/log/iot_nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   ombi:
-    image: linuxserver/ombi
+    image: linuxserver/ombi:latest@sha256:85efc726e5f308816f5f4fcf0edfa716f644ba24eb0fb37aeff108191f561108
     container_name: ombi
     networks:
       - external
@@ -268,7 +268,7 @@ services:
       retries: 3
       start_period: 60s
   nzbget:
-    image: linuxserver/nzbget
+    image: linuxserver/nzbget:latest@sha256:404540476fba572f8d1253c7dee753929797daff6ab370a4d9f345f9438a4724
     container_name: nzbget
     ports:
       - "6789:6789"
@@ -294,7 +294,7 @@ services:
       retries: 3
       start_period: 30s
   radarr:
-    image: linuxserver/radarr:latest
+    image: linuxserver/radarr:latest@sha256:601cee9198064958cb6649cd57a4624c4b6b8461ac6fbd661be9aec741f7534e
     container_name: radarr
     ports:
       - "443:7878"
@@ -324,7 +324,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett
+    image: linuxserver/jackett:latest@sha256:5898fe0428c810cc439f6ea2291475888532a29ce534a09856a9149acb170e71
     container_name: jackett
     ports:
       - "443:9117"
@@ -348,7 +348,7 @@ services:
       retries: 3
       start_period: 30s
   sonarr:
-    image: linuxserver/sonarr
+    image: linuxserver/sonarr:latest@sha256:28c4ff50fb3ea0607ad7a2fdbb49860ad388ddfd2594a7a68933fda8c3abebaf
     container_name: sonarr
     ports:
       - "443:8989"
@@ -378,7 +378,7 @@ services:
       retries: 3
       start_period: 60s
   booksonic:
-    image: izderadicka/audioserve
+    image: izderadicka/audioserve:latest@sha256:c3609321701765671cae121fc0f61db122e8c124643c04770fbc9326c74b18e3
     container_name: audioserve
     ports:
       - "443:3000"
@@ -413,7 +413,7 @@ services:
     networks:
       internal:
         ipv4_address: {{ influxdb_ip }}
-    image: influxdb:latest
+    image: influxdb:latest@sha256:3e23a8f949851d197977fd09f19d9f1eb026e20c47a7bc50e544342b1271b0f0
     restart: unless-stopped
     deploy:
       resources:
@@ -439,7 +439,7 @@ services:
       start_period: 30s
   grafana:
     container_name: grafana
-    image: grafana/grafana:latest
+    image: grafana/grafana:latest@sha256:5c1eb28c96c2a8a103384183fb2c32f9cb499904b310b9ba8cdd6bdae435509a
     ports:
       - "443:3000"
     networks:
@@ -479,7 +479,7 @@ services:
       start_period: 30s
   loki:
     container_name: loki
-    image: grafana/loki:3.5.0
+    image: grafana/loki:3.5.0@sha256:2cbddd6e199a2ddeee13573d91f11e54d9c8fa432f44c578d3c55b9a93278c9f
     ports:
       - "3100:3100"
     networks:
@@ -513,7 +513,7 @@ services:
       - "443:80"
     networks:
       - internal
-    image: 'gitlab/gitlab-ee:latest'
+    image: 'gitlab/gitlab-ee:latest@sha256:333338d41e47cb68f87e62d15a403245bd5f3c55dd6a7b6b22fd00698f98f33e'
     restart: unless-stopped
     ulimits:
       nofile:
@@ -544,7 +544,7 @@ services:
   # Initial setup uses file storage; will be configured for GitLab JWT auth in future MR
   vault:
     container_name: vault
-    image: hashicorp/vault:1.21
+    image: hashicorp/vault:1.21@sha256:a54f6229f8416dd5514020ecd06f514664c0cb21776b6686a3d26af21a79b1b1
     restart: unless-stopped
     networks:
       internal:
@@ -584,7 +584,7 @@ services:
     container_name: deluge
     ports:
       - "443:8112"
-    image: 'lscr.io/linuxserver/deluge:latest'
+    image: 'lscr.io/linuxserver/deluge:latest@sha256:2392a75ce975de1b50c03344b05a858c5da36c1c41ba1f61a5fe6198ea88ef18'
     restart: unless-stopped
     networks:
       internal:
@@ -609,7 +609,7 @@ services:
     container_name: bitwarden
     ports:
       - "443:80"
-    image: 'vaultwarden/server:latest'
+    image: 'vaultwarden/server:latest@sha256:561405df345411d01ff5773b86b56904631e874d39a3c1326e107f3c0a6e5dfc'
     restart: unless-stopped
     networks:
       - external
@@ -628,7 +628,7 @@ services:
       retries: 3
       start_period: 30s
   blog:
-    image: wordpress
+    image: wordpress:latest@sha256:fc598b8a72b02a203abed37c175e54d79bb0d12873aead2ffed708e213a7404b
     container_name: wordpress
     ports:
       - "443:80"
@@ -655,7 +655,7 @@ services:
       retries: 3
       start_period: 60s
   wordpress_db:
-    image: mysql
+    image: mysql:latest@sha256:717d1e4b2352def1f05b40c3c16c470b57f320112a32e506d4548f9964853304
     container_name: wordpress_db
     networks:
       - wordpress_internal
@@ -685,7 +685,7 @@ services:
       - "443:8080"
     networks:
       internal:
-    image: jgraph/drawio
+    image: jgraph/drawio:latest@sha256:813cce35b41e537a237259afc7ab896f9fd9565febe2d008573b09f41107fdbd
     restart: unless-stopped
     deploy:
       resources:
@@ -712,7 +712,7 @@ services:
     devices: 
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_ETDRb11A920-if00-port0:/dev/ttyUSB0"
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0:/dev/ttyUSB1"
-    image: "homeassistant/home-assistant:2025.12"
+    image: "homeassistant/home-assistant:2025.12@sha256:9633fbba03c9702995d9b1126a264ce5670c5c31662fc3ee906a4da624ad6230"
     deploy:
       resources:
         limits:
@@ -936,7 +936,7 @@ services:
   # Images now pulled from: gitlab-registry.lab.nkontur.com:443/root/homelab/<image>
   mosquitto:
     container_name: mosquitto
-    image: eclipse-mosquitto
+    image: eclipse-mosquitto:latest@sha256:d373dffb3185c95a34e0a693667fbdab7d2dc4b676dd72e8a0a6891d50be0c64
     restart: unless-stopped
     networks:
       iot:
@@ -985,7 +985,7 @@ services:
       start_period: 30s
 
   ambientweather:
-    image: ghcr.io/neilenns/ambientweather2mqtt:latest
+    image: ghcr.io/neilenns/ambientweather2mqtt:latest@sha256:679d1a7e0de94956b35ff8d4862afb791c3bd92c2c350dd5a21e07d930560ff3
     restart: unless-stopped
     container_name: ambientweather
     networks:
@@ -1012,7 +1012,7 @@ services:
   zigbee2mqtt:
     container_name: zigbee2mqtt
     restart: unless-stopped
-    image: koenkk/zigbee2mqtt
+    image: koenkk/zigbee2mqtt:latest@sha256:835f532d0c2a480a58c407ae8e661735fe5be5580b43919239ba522c6a6a0f50
     depends_on:
       - mosquitto
     networks:
@@ -1034,7 +1034,7 @@ services:
       retries: 3
       start_period: 60s
   paperless-ngx:
-    image: lscr.io/linuxserver/paperless-ngx:latest
+    image: lscr.io/linuxserver/paperless-ngx:latest@sha256:94ebc3ba985e9548a8a74ebff1d5d51011e78d41ded5fbffee13dceea5b27401
     container_name: paperless-ngx
     networks:
       internal:
@@ -1058,7 +1058,7 @@ services:
       retries: 3
       start_period: 60s
   mopidy:
-    image: wernight/mopidy
+    image: wernight/mopidy:latest@sha256:e3156f3da69d3e88b191c852d1fa60907c91e36668bca1f5afb5b57b74a8407d
     container_name: mopidy
     networks:
       iot:
@@ -1087,7 +1087,7 @@ services:
       retries: 3
       start_period: 30s
   nextcloud_db:
-    image: mariadb
+    image: mariadb:latest@sha256:96825544d6c5044c7767016744f65477faaf97cb9529682cf17faa867315d7b9
     container_name: nextcloud_database
     command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
     restart: unless-stopped
@@ -1113,7 +1113,7 @@ services:
       retries: 3
       start_period: 60s
   nextcloud:
-    image: nextcloud:32.0.1
+    image: nextcloud:32.0.1@sha256:d2c9c96ce7a38c61674a2e0389e75c47e9820250b00f77137238014417a31201
     container_name: nextcloud
     networks:
       - external
@@ -1142,7 +1142,7 @@ services:
       start_period: 120s
 
   prowlarr:
-    image: lscr.io/linuxserver/prowlarr:latest
+    image: lscr.io/linuxserver/prowlarr:latest@sha256:b1372ea2bb237e6531412c9cc0436ff31d688be6af4f24aa56269c2d7b0fdc89
     container_name: prowlarr
     restart: unless-stopped
     ports:
