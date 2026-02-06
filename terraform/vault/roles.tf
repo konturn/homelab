@@ -9,6 +9,8 @@ resource "vault_jwt_auth_backend_role" "ci_deploy" {
   role_name = "ci-deploy"
   role_type = "jwt"
 
+  bound_audiences = ["https://vault.lab.nkontur.com:8200"]
+
   bound_claims = {
     project_id = "4"
     ref        = "main"
@@ -53,6 +55,8 @@ resource "vault_jwt_auth_backend_role" "vault_admin" {
   role_name = "vault-admin"
   role_type = "jwt"
 
+  bound_audiences = ["https://vault.lab.nkontur.com:8200"]
+
   bound_claims = {
     project_id = "4"
     ref        = "main"
@@ -75,6 +79,8 @@ resource "vault_jwt_auth_backend_role" "vault_read" {
   backend   = vault_jwt_auth_backend.gitlab.path
   role_name = "vault-read"
   role_type = "jwt"
+
+  bound_audiences = ["https://vault.lab.nkontur.com:8200"]
 
   bound_claims = {
     project_id = "4"
