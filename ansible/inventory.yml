@@ -121,6 +121,10 @@ all:
         - src: "docker/vault/config.hcl"
           dest: "{{ docker_persistent_data_path }}/vault/config/config.hcl"
           name: "vault"
+        - src: "docker/vault/auto-unseal.sh"
+          dest: "{{ docker_persistent_data_path }}/vault/scripts/auto-unseal.sh"
+          name: "vault"
+          mode: "0755"
         - src: "docker/moltbot/mcporter/mcporter.json"
           dest: "{{ docker_persistent_data_path }}/moltbot/mcporter/mcporter.json"
           name: "moltbot-gateway"
@@ -143,6 +147,10 @@ all:
         - path: "{{ docker_persistent_data_path }}/loki/data"
           owner: "10001"
           group: "10001"
+        - path: "{{ docker_persistent_data_path }}/vault/unseal"
+          owner: "root"
+          group: "root"
+          mode: "0700"
   children:
     satellites:
       vars:
