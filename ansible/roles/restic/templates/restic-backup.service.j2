@@ -12,11 +12,11 @@ Environment="RESTIC_REPOSITORY=sftp:{{ restic_ssh_host }}:{{ restic_repository_n
 {% else %}
 Environment="RESTIC_REPOSITORY={{ restic_repository }}"
 {% endif -%}
-Environment="RESTIC_PASSWORD={{ restic_password}}"
+Environment="RESTIC_PASSWORD={{ restic_password | trim }}"
 
 {% if restic_aws_access_key_id is defined and restic_aws_secret_access_key is defined %}
-Environment="AWS_ACCESS_KEY_ID={{ restic_aws_access_key_id}}"
-Environment="AWS_SECRET_ACCESS_KEY={{ restic_aws_secret_access_key}}"
+Environment="AWS_ACCESS_KEY_ID={{ restic_aws_access_key_id | trim }}"
+Environment="AWS_SECRET_ACCESS_KEY={{ restic_aws_secret_access_key | trim }}"
 {% endif %}
 
 {% if restic_check %}
