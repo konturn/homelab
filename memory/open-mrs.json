@@ -4,5 +4,11 @@
     "branch": "feat/pin-docker-images",
     "lastCommentId": 0,
     "version": 1
+  },
+  "127": {
+    "title": "feat: add credential scrubbing cron for session transcripts",
+    "branch": "feat/transcript-scrub-cron",
+    "lastCommentId": 0,
+    "version": 1
   }
 }
