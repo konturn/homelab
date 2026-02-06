@@ -29,6 +29,8 @@ Main session must stay responsive. If a task takes >30 seconds (MRs, job apps, r
 4. **Research** — Dig into something that would help Noah (job market, tech, tools)
 5. **Creative** — Write, meditate, explore ideas
 
+6. **Performance hunting** — Query InfluxDB for service response times, CPU/memory usage, container restart counts. Identify anomalously slow services. For GitLab specifically: benchmark API latency, check Sidekiq queue depth, Puma worker saturation, PostgreSQL query times. Open MRs for tuning or investigate root causes. GitLab is the lifeblood — keep it fast.
+
 **After doing something:**
 - Notify Noah via Telegram (brief: what you did, why, link if applicable)
 - Log it in `memory/YYYY-MM-DD.md`
