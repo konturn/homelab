@@ -1916,3 +1916,224 @@ Our system is simpler because it's purpose-built for a single AI agent in a home
 | Date | Author | Change |
 |------|--------|--------|
 | 2026-02-06 | Prometheus | Initial design document |
+
+---
+
+## 11. REVISED ARCHITECTURE: External Approval Service (Option 2)
+
+**Decision (2026-02-06):** Skip agent-side gating entirely. Deploy with external trust boundary from day one.
+
+### 11.1 Why External-First
+
+The original phased approach (agent-side gating → migrate to external) has a fundamental flaw: the agent crafts its own approval UI. A compromised agent could swap Approve/Deny callback data, inject misleading context in approval messages, or bypass the check entirely since enforcement runs in-process.
+
+The external approval service eliminates this class of attack entirely. The agent never touches the approval path.
+
+### 11.2 Architecture
+
+```
+┌─────────────────┐     ┌──────────────────────┐     ┌─────────────┐
+│   Prometheus     │     │  jit-approval-svc    │     │   Vault     │
+│   (moltbot)      │     │  (separate container) │     │             │
+│                  │     │                      │     │             │
+│ 1. POST request  │────▶│ 2. Validate request  │     │             │
+│    to approval   │     │ 3. Send Telegram msg │     │             │
+│    svc API       │     │    with buttons      │     │             │
+│                  │     │    (own bot token)    │     │             │
+│                  │     │                      │     │             │
+│                  │     │ 4. Receive callback  │     │             │
+│                  │     │    from Telegram     │     │             │
+│                  │     │ 5. Verify Noah's     │     │             │
+│                  │     │    user ID           │     │             │
+│                  │     │                      │     │             │
+│                  │     │ 6. Mint scoped       │────▶│ 7. Create   │
+│                  │     │    Vault token       │◀────│    token    │
+│                  │     │    with TTL          │     │             │
+│                  │     │                      │     │             │
+│ 9. Use token    │◀────│ 8. Return token      │     │             │
+│    (auto-expire) │     │    via response/poll │     │             │
+│                  │     │                      │     │             │
+│ 10. Token       │     │                      │     │ 11. Token   │
+│     expires     │     │                      │     │     revoked │
+└─────────────────┘     └──────────────────────┘     └─────────────┘
+```
+
+### 11.3 Components
+
+#### A. jit-approval-svc (Go, ~300 LOC)
+
+A standalone HTTP service running in its own Docker container.
+
+**Owns:**
+- Its own Telegram bot token (separate from Prometheus's bot)
+- A Vault token with policy to create scoped, short-lived tokens
+- A request registry (in-memory or SQLite)
+- The ONLY path to mint tier 2+ credentials
+
+**Does NOT have:**
+- Access to Prometheus's container, filesystem, or env
+- Access to Prometheus's Telegram bot
+- Any broad Vault permissions
+
+**API:**
+
+```
+POST /api/v1/request
+  Body: {
+    "requester": "prometheus",
+    "resource": "ssh:router",
+    "tier": 2,
+    "reason": "Fix iptables rule for Tailscale DNS",
+    "ttl_minutes": 15
+  }
+  Response: {
+    "request_id": "req-a1b2c3",
+    "status": "pending"
+  }
+
+GET /api/v1/request/:id
+  Response: {
+    "request_id": "req-a1b2c3",
+    "status": "approved|denied|pending|expired",
+    "token": "hvs.XXXXX"  // only present if approved
+  }
+
+GET /api/v1/health
+  Response: { "ok": true }
+```
+
+#### B. Telegram Approval Bot
+
+A second Telegram bot (e.g., @PrometheusApprovalBot) that:
+- Sends approval request messages to Noah's chat
+- Handles callback_query for approve/deny buttons
+- Is completely separate from the Prometheus/moltbot bot
+- Only accepts callbacks from Noah's Telegram user ID (hardcoded allowlist)
+
+**Approval message format:**
+```
+🔐 JIT Access Request [req-a1b2c3]
+
+Resource: SSH → router.lab.nkontur.com
+Tier: 2 (Quick Approve)
+Reason: Fix iptables rule for Tailscale DNS
+TTL: 15 minutes
+Requested: 2026-02-06 03:05 EST
+
+[✅ Approve] [❌ Deny]
+```
+
+Noah taps a button → callback goes to the approval svc (not to Prometheus) → svc mints Vault token → Prometheus polls and picks it up.
+
+#### C. Vault Policy for Approval Service
+
+```hcl
+# policy: jit-approval-svc
+# This is the ONLY policy that can create tier 2+ tokens
+
+# Create scoped tokens with specific policies
+path "auth/token/create" {
+  capabilities = ["create", "update"]
+  allowed_policies = [
+    "prometheus-tier2-ssh",
+    "prometheus-tier2-write",
+    "prometheus-tier3-admin"
+  ]
+}
+
+# Read SSH signing endpoint to issue certificates
+path "ssh-client-signer/sign/prometheus-tier2" {
+  capabilities = ["create", "update"]
+}
+
+# Nothing else. No secret read, no policy modification.
+```
+
+#### D. Agent Integration
+
+Prometheus gets a new tool or shell function:
+
+```bash
+jit_request() {
+  local resource="$1"
+  local reason="$2"
+  local ttl="${3:-15}"
+  
+  # Submit request to approval svc
+  REQ_ID=$(curl -s -X POST http://jit-approval-svc:8080/api/v1/request \
+    -H "Content-Type: application/json" \
+    -d "{\"requester\":\"prometheus\",\"resource\":\"$resource\",\"reason\":\"$reason\",\"ttl_minutes\":$ttl}" \
+    | jq -r '.request_id')
+  
+  echo "Request $REQ_ID submitted. Waiting for approval..."
+  
+  # Poll for approval (timeout after 5 min)
+  for i in $(seq 1 60); do
+    STATUS=$(curl -s "http://jit-approval-svc:8080/api/v1/request/$REQ_ID" | jq -r '.status')
+    if [ "$STATUS" = "approved" ]; then
+      TOKEN=$(curl -s "http://jit-approval-svc:8080/api/v1/request/$REQ_ID" | jq -r '.token')
+      echo "$TOKEN"
+      return 0
+    elif [ "$STATUS" = "denied" ]; then
+      echo "DENIED"
+      return 1
+    fi
+    sleep 5
+  done
+  echo "TIMEOUT"
+  return 1
+}
+```
+
+### 11.4 Security Properties
+
+| Property | Guarantee |
+|----------|-----------|
+| Agent can't self-approve | Approval path never enters agent container |
+| Agent can't swap buttons | Buttons are sent by a different bot the agent doesn't control |
+| Agent can't forge tokens | Only approval svc has the Vault policy to mint tier 2+ tokens |
+| Compromised agent blast radius | Limited to tier 0-1 (read-only APIs, own workspace) |
+| Token leakage impact | Minimized by TTL (15 min default, 60 min max) |
+| Telegram compromise | Attacker needs Noah's Telegram account AND the callback must come from his user ID |
+| Approval svc compromise | Attacker gets token-minting ability but still needs to pass Telegram callback verification |
+
+### 11.5 Deployment
+
+```yaml
+# docker-compose addition
+jit-approval-svc:
+  build: ./docker/jit-approval-svc
+  container_name: jit-approval-svc
+  restart: unless-stopped
+  environment:
+    - TELEGRAM_BOT_TOKEN={{ vault_jit_telegram_token }}
+    - VAULT_ADDR=http://vault:8200
+    - VAULT_TOKEN={{ vault_jit_svc_token }}
+    - ALLOWED_TELEGRAM_USERS=8531859108
+    - ALLOWED_REQUESTERS=prometheus
+    - MAX_TTL_MINUTES=60
+    - DEFAULT_TTL_MINUTES=15
+  networks:
+    - internal
+  # No volume mounts needed - stateless (or small SQLite for audit)
+```
+
+### 11.6 Revised Implementation Phases
+
+| Phase | What | Effort |
+|-------|------|--------|
+| 1 | Build jit-approval-svc (Go), create second Telegram bot, deploy | 1-2 weeks |
+| 2 | Vault SSH certificate engine + tier 2 SSH policy | 1 week |
+| 3 | Integrate into Prometheus (jit_request shell function, skill update) | 1 week |
+| 4 | Dynamic database credentials | 1 week |
+| 5 | Migrate from static to JIT credentials (strip static access) | 2-3 weeks |
+| 6 | Audit dashboard (Grafana) + request history | 1 week |
+
+### 11.7 Open Questions
+
+1. **Polling vs push:** Agent polls for approval status. Could use a webhook callback to OpenClaw instead, but that reintroduces a path from the approval svc into the agent. Polling is simpler and safer.
+2. **Request validation:** Should the approval svc validate that the requested resource exists? Or is it purely a token-minting gatekeeper?
+3. **Multi-approver:** Future consideration — require N-of-M approvals for tier 3+?
+4. **Emergency override:** If Noah is unreachable, should there be a break-glass mechanism? (Probably not — if Noah is unreachable, Prometheus should wait.)
+5. **Audit log:** SQLite in the approval svc container, or push to InfluxDB/Loki for centralized logging?
+
