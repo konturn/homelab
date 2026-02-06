@@ -2,45 +2,60 @@
 
 Complete guide to recovering the homelab from bare metal.
 
-**Estimated Recovery Time:** 2–4 hours (depending on data restore volume)
+**Estimated Recovery Time:** 1–3 hours (depending on data restore volume)
 
 ---
 
-## Recovery Layers
+## Overview
+
+Recovery is a **single-command process** after the base OS and disks are ready:
 
 ```
-Layer 0 — scripts/bootstrap.sh (manual, on router)
-  Install Docker, restore data from Backblaze B2, start GitLab + Runner
-
-Layer 1 — router:bootstrap CI job (manual trigger)
-  Vault, Pi-hole, nginx, switch config
-
-Layer 2 — Normal CI deploy pipeline
-  Full stack (all containers, networking, configs)
+1. Install Ubuntu 22.04, unlock disks, import ZFS
+2. Run: bash scripts/bootstrap.sh --restore
+3. Wait. Done.
 ```
 
-Each layer depends on the one below it. Work bottom-up.
+The bootstrap script handles everything: Docker, networking, data restore,
+GitLab, Vault unsealing, CI/CD variable injection, runner registration, and
+triggering the first pipeline. Zero manual post-steps.
 
-Data restore happens in Layer 0 because GitLab's own data (repos, users, CI
-config) is in the backup. Without it, GitLab starts empty and there's no
-pipeline to run.
+---
+
+## Recovery Layers (Automated)
+
+```
+bootstrap.sh (single shot, on router)
+  ├── Steps 1-3:  Docker, networks, restic
+  ├── Step 4:     Data restore from Backblaze B2
+  ├── Steps 5-6:  Start GitLab, wait for health
+  ├── Step 7:     Install gitlab-runner
+  ├── Step 8:     Start Vault container
+  ├── Step 9:     Unseal Vault (keys from restored data or prompt)
+  ├── Step 10:    Set CI/CD variables via GitLab API
+  ├── Step 11:    Register runner
+  └── Step 12:    Trigger pipeline → wait for green
+```
+
+Previous manual steps (register runner, set CI vars, trigger pipeline) are
+now fully automated inside the script.
 
 ---
 
 ## What You Need (Store Offsite)
 
-These values are everything needed for full recovery:
-
 | Secret | Purpose |
 |--------|---------|
 | `B2_ACCOUNT_ID` | Backblaze B2 application key ID |
 | `B2_ACCOUNT_KEY` | Backblaze B2 application key |
-| `RESTIC_REPOSITORY` | Backup repo URL (e.g. `s3:s3.us-east-005.backblazeb2.com/nkontur-homelab`) |
+| `RESTIC_REPOSITORY` | Backup repo URL |
 | `RESTIC_PASSWORD` | Restic repository encryption password |
-| Vault unseal keys (3 of 5) | Unseal Vault for secrets management |
+| Vault unseal keys (3 of 5) | Unseal Vault after restore |
 | LUKS password | Decrypt data drives |
+| GitLab PAT (api scope) | Bootstrap API calls (or create one post-restore) |
 
-**Where to keep these:** Encrypted file in cloud storage (1Password, Google Drive, etc.) or printed in a safe deposit box. Do NOT rely solely on GitLab CI variables — they live on the router you're recovering.
+**Where to keep these:** Encrypted file in cloud storage (1Password, Google
+Drive, etc.) or printed in a safe deposit box.
 
 ---
 
@@ -83,14 +98,8 @@ netplan apply
 ### Disk Setup
 
 ```bash
-# Install ZFS
 apt install -y zfsutils-linux
-
-# Unlock LUKS drives
-cryptsetup luksOpen /dev/sdX cryptdata1
-# ... repeat for each encrypted drive
-
-# Import ZFS pools
+cryptsetup luksOpen /dev/sdX cryptdata1   # repeat for each drive
 zpool import mpool
 zpool import persistent_data
 zfs mount -a
@@ -98,87 +107,68 @@ zfs mount -a
 
 ---
 
-## Phase 2: Layer 0 — Bootstrap Script (~30 min + restore time)
+## Phase 2: Bootstrap (~30 min + restore time)
+
+### Option A: Restore from Backup (recommended)
 
 ```bash
 cd /root
-git clone https://github.com/<mirror>/homelab.git  # or restore from backup first
+git clone https://github.com/<mirror>/homelab.git   # or restore repo first
 cd homelab
-bash scripts/bootstrap.sh
+bash scripts/bootstrap.sh --restore
 ```
 
-The script walks through 7 steps in order:
+The script will:
+1. Install Docker, create macvlan networks, install restic
+2. **Prompt for B2 credentials** and restore persistent data
+3. Start GitLab with restored data, wait for health
+4. Install and start Vault, unseal using restored keys (or prompt)
+5. Set all CI/CD variables via GitLab API
+6. Register the runner
+7. Trigger the first pipeline and wait for green
 
-1. **Install Docker + compose plugin**
-2. **Create macvlan networks** (internal, external, iot, mgmt)
-3. **Install restic**
-4. **Restore data from Backblaze B2** — interactive prompts for each path.
-   You'll need `B2_ACCOUNT_ID`, `B2_ACCOUNT_KEY`, `RESTIC_REPOSITORY`, `RESTIC_PASSWORD`.
-   Say **yes** to at least `/persistent_data/application` — this contains GitLab's data.
-5. **Start GitLab** — boots with restored data (repos, users, CI config intact)
-6. **Wait for GitLab health**
-7. **Install gitlab-runner**
+You'll be prompted for:
+- B2 credentials (if not in env)
+- Which data paths to restore
+- Vault unseal keys (if auto-unseal file not found in restored data)
+- GitLab personal access token (for API calls)
+- Vault root token (for CI/CD variable injection)
 
-### After bootstrap.sh completes:
+### Option B: Fresh Install (no backup)
 
-1. **Verify GitLab has your projects** — navigate to `http://<router-ip>`
-   (If data was restored, the root/homelab project and all config should be there)
-2. **Register the runner** (if runner config wasn't restored):
-   ```bash
-   gitlab-runner register \
-     --url https://gitlab.lab.nkontur.com/ \
-     --executor docker \
-     --docker-image ubuntu:20.04 \
-     --docker-network-mode host
-   ```
-3. **Push the repo** (if needed):
-   ```bash
-   cd /root/homelab
-   git remote set-url origin https://gitlab.lab.nkontur.com/root/homelab.git
-   git push -u origin main
-   ```
-4. **Configure CI/CD variables** in GitLab (Settings → CI/CD → Variables):
-   - `ROUTER_PRIVATE_KEY_BASE64`
-   - `VAULT_UNSEAL_KEYS`, `VAULT_TOKEN`
-   - `PIHOLE_PASSWORD`, `OMAPI_SECRET`
-   - `B2_ACCOUNT_ID`, `B2_ACCOUNT_KEY`, `RESTIC_REPOSITORY`, `RESTIC_PASSWORD`
-   - `TAILSCALE_AUTH_KEY`, `TAILSCALE_API_TOKEN`
-   - `CLOUDFLARE_API_KEY`, `CLOUDFLARE_ZONE_ID`, `NAMESILO_API_KEY`
-   - `GRAFANA_TOKEN`
-   - `GITLAB_RUNNER_TOKEN`, `IMAGES_GITLAB_RUNNER_TOKEN`
+```bash
+bash scripts/bootstrap.sh --fresh
+```
+
+Additional prompts for every Vault secret (or use `--secrets-file`):
+
+```bash
+bash scripts/bootstrap.sh --fresh --secrets-file /path/to/secrets.env.gpg
+```
+
+The secrets file is GPG-encrypted, containing `KEY=VALUE` pairs. See
+[Appendix A](#appendix-a-secrets-file-format) for the format.
 
 ---
 
-## Phase 3: Layer 1 — Bootstrap CI Job (~15 min)
+## Phase 3: There Is No Phase 3
 
-1. Go to CI/CD → Pipelines in GitLab
-2. Find the `router:bootstrap` job (manual trigger)
-3. Click the play button
+The bootstrap script triggers the CI pipeline automatically. When it
+completes, you should see:
 
-This runs `ansible/bootstrap.yml` which:
-- Configures Docker daemon
-- Starts core services (Vault, Pi-hole, nginx, GitLab via compose)
-- Initializes and unseals Vault
-- Configures Pi-hole DNS records
-- Pushes switch VLAN config (if switch is reachable)
-- Runs health checks
+```
+[bootstrap] 🎉 Pipeline #N passed! First run is GREEN. ✓
+[bootstrap] 🎉 BOOTSTRAP COMPLETE 🎉
+```
 
----
-
-## Phase 4: Layer 2 — Full Deploy
-
-Once Layer 1 is healthy, run the normal CI pipeline:
-
-1. Push a commit (or re-run the pipeline)
-2. The `router:deploy` job runs the full Ansible playbook
-3. All remaining services come up
+If the pipeline fails, the script will print the URL. Fix the issue and
+re-run the pipeline from GitLab UI.
 
 ---
 
-## Additional Data Restore
+## Additional Data Restore (Optional)
 
-The bootstrap script restores the critical paths interactively. For large data
-that you may want to restore later, run manually on the router:
+Large media files can be restored after the initial bootstrap:
 
 ```bash
 export AWS_ACCESS_KEY_ID="<B2_ACCOUNT_ID>"
@@ -186,60 +176,72 @@ export AWS_SECRET_ACCESS_KEY="<B2_ACCOUNT_KEY>"
 export RESTIC_REPOSITORY="s3:s3.us-east-005.backblazeb2.com/nkontur-homelab"
 export RESTIC_PASSWORD="<restic-password>"
 
-# Nextcloud data (large)
 restic restore latest --target / --include /mpool/nextcloud
-
-# Plex metadata
 restic restore latest --target / --include /mpool/plex/config
-
-# Photos and family videos
 restic restore latest --target / --include /mpool/plex/Photos
 restic restore latest --target / --include /mpool/plex/Family
 ```
 
-Restart services after restoring: `cd /persistent_data/application/ansible_state && docker compose down && docker compose up -d`
+Restart services after: `docker compose down && docker compose up -d`
 
 ---
 
 ## Verification
 
 ```bash
-# All containers running
-docker ps
-
-# DNS resolves
-dig @10.3.32.2 gitlab.lab.nkontur.com
-
-# Vault unsealed
-curl -sk https://vault.lab.nkontur.com:8200/v1/sys/health | jq .sealed
-
-# External access
-curl -I https://nkontur.com
-
-# VLANs up
+docker ps                                                    # All containers
+dig @10.3.32.2 gitlab.lab.nkontur.com                       # DNS
+curl -sk https://vault.lab.nkontur.com:8200/v1/sys/health   # Vault unsealed
+curl -I https://nkontur.com                                  # External access
 ping -c 1 10.2.32.1  # external nginx
 ping -c 1 10.3.32.2  # pihole
 ping -c 1 10.6.32.3  # mosquitto
-
-# Backups scheduled
-systemctl status restic-backup.timer
+systemctl status restic-backup.timer                         # Backups
 ```
+
+---
+
+## Appendix A: Secrets File Format
+
+For `--secrets-file`, create a plaintext file with `KEY=VALUE` pairs:
+
+```bash
+# Vault seed secrets — env var names match the pattern:
+# VAULT_SEED_<PATH>_<FIELD> where path separators become underscores
+
+VAULT_SEED_API_KEYS_ACLAWDEMY_API_KEY=xxx
+VAULT_SEED_API_KEYS_ANTHROPIC_API_KEY=xxx
+VAULT_SEED_BACKUP_BACKBLAZE_ACCESS_KEY_ID=xxx
+VAULT_SEED_BACKUP_BACKBLAZE_SECRET_ACCESS_KEY=xxx
+VAULT_SEED_BACKUP_RESTIC_PASSWORD=xxx
+# ... (all paths from ansible/roles/fetch-vault-secrets/defaults/main.yml)
+
+# Bootstrap credentials
+GITLAB_BOOTSTRAP_TOKEN=xxx
+B2_ACCOUNT_ID=xxx
+B2_ACCOUNT_KEY=xxx
+RESTIC_REPOSITORY=s3:s3.us-east-005.backblazeb2.com/nkontur-homelab
+RESTIC_PASSWORD=xxx
+```
+
+Encrypt with GPG: `gpg -c secrets.env` → produces `secrets.env.gpg`
 
 ---
 
 ## Quick Reference Card
 
 ```
-1. Install Ubuntu 22.04 on boot drive
+DISASTER RECOVERY QUICK REFERENCE
+
+1. Install Ubuntu Server 22.04 on boot drive
 2. Minimal netplan (WAN DHCP + bond0)
-3. Unlock LUKS, import ZFS pools
-4. Run scripts/bootstrap.sh
-   - When prompted, restore from B2 (need: B2_ACCOUNT_ID, B2_ACCOUNT_KEY,
-     RESTIC_REPOSITORY, RESTIC_PASSWORD)
-   - Restore /persistent_data/application at minimum (has GitLab data)
-5. Verify GitLab has projects, register runner if needed
-6. Push repo, set CI variables
-7. Trigger router:bootstrap CI job
-8. Run normal deploy pipeline
-9. Verify: docker ps, DNS, Vault, external access
+3. Unlock LUKS: cryptsetup luksOpen /dev/sdX name
+4. Import ZFS: zpool import mpool && zpool import persistent_data
+5. Clone repo: git clone <homelab repo> && cd homelab
+6. Run: bash scripts/bootstrap.sh --restore
+7. Answer prompts (B2 creds, unseal keys, GitLab token)
+8. Wait for "BOOTSTRAP COMPLETE"
+
+Secrets location: ___________________________
+Last tested: ___________________________
 ```
