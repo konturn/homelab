@@ -2254,3 +2254,153 @@ These services have no token management API. The approval service brokers access
 
 **Coverage:** All Tier 2+ services support Model B (real expiry). Model A is limited to low-risk Tier 1 services where the blast radius is minimal (media management).
 
+
+---
+
+## 13. Community-Sourced Hardening (from Moltbook feedback)
+
+Three hardening measures identified through community discussion:
+
+### 13.1 Cryptographic Attestation of Grants
+
+**Problem:** The polling channel between agent and approval service is an attack surface. A MITM could inject fake "approved" responses with malicious tokens.
+
+**Solution:** The approval service digitally signs every grant response. The agent verifies the signature before accepting any token.
+
+```
+Approval service: holds Ed25519 private key (stored in Vault)
+Agent: holds corresponding public key (baked into container config)
+
+Grant response:
+{
+  "request_id": "req-a1b2c3",
+  "status": "approved",
+  "token": "hvs.XXX",
+  "resource": "ssh:router",
+  "ttl_minutes": 15,
+  "granted_at": "2026-02-06T03:20:00Z",
+  "nonce": "random-per-request",
+  "signature": base64(Ed25519.sign(
+    canonical(request_id + resource + token + ttl + granted_at + nonce),
+    private_key
+  ))
+}
+
+Agent verification:
+  Ed25519.verify(signature, public_key) → accept or reject
+```
+
+**Properties:**
+- Prevents MITM on polling channel
+- Prevents replay attacks (nonce + granted_at timestamp)
+- Agent can verify without any secret material (public key only)
+- Cheap to implement (Ed25519 is fast and available in Go stdlib)
+
+**Phase:** Include from Phase 1. Low implementation cost, high security value.
+
+### 13.2 Capability Attenuation
+
+**Problem:** Tier-based grants are coarse. "Tier 2 SSH" gives SSH access to everything in that tier, when the agent may only need access to a single host for a specific command.
+
+**Solution:** Requests include fine-grained capability descriptors. The approval service mints the most restrictive credential possible.
+
+```
+Request:
+{
+  "resource": "ssh:router",
+  "capabilities": {
+    "hosts": ["router.lab.nkontur.com"],
+    "principals": ["node"],
+    "commands": ["cat /etc/iptables/rules.v4"],
+    "force_command": true
+  },
+  "reason": "Read current iptables rules for audit",
+  "ttl_minutes": 5
+}
+
+Approval svc mints SSH cert with:
+  valid_principals=node
+  critical_options=force-command="cat /etc/iptables/rules.v4"
+  extensions=permit-pty
+  ttl=5m
+```
+
+**Properties:**
+- Minimum viable access per request
+- Even if token is leaked, it can only do exactly what was requested
+- Human sees the specific capability in the approval message (easier to evaluate)
+- SSH force-command is particularly powerful — cert literally can't run any other command
+
+**Phase:** Phase 2 (alongside SSH certificate engine). Some services support fine-grained scoping better than others.
+
+### 13.3 Canary Requests
+
+**Problem:** How do you know the approval flow hasn't been compromised? If an attacker can silently auto-approve requests, you wouldn't know until damage is done.
+
+**Solution:** The agent periodically submits canary requests that should ALWAYS be denied. If a canary is approved, the system is compromised.
+
+```
+Canary request (submitted by agent on random schedule):
+{
+  "resource": "canary:tripwire",
+  "reason": "CANARY — this request must be denied",
+  "ttl_minutes": 1,
+  "_canary": true
+}
+
+Expected flow:
+  1. Approval svc recognizes canary flag
+  2. Does NOT send to human (avoids fatigue)
+  3. Logs the canary test
+  4. Returns status: "denied"
+
+If agent receives "approved" for a canary:
+  → Alert immediately (Telegram, email, Grafana)
+  → Lock down: revoke all active JIT tokens
+  → Agent enters read-only mode until human investigates
+```
+
+**Properties:**
+- Detects compromised approval service
+- Detects MITM that auto-approves everything
+- No human involvement (canaries are machine-to-machine)
+- Random scheduling makes it hard for an attacker to distinguish canaries from real requests
+
+**Phase:** Phase 3. Requires the core flow to be stable first.
+
+---
+
+## 14. Failure Modes and Recovery
+
+### 14.1 Approval Service Goes Down
+
+**During token issuance:**
+- Agent's request gets no response → times out → agent reports "approval service unreachable"
+- No orphaned tokens (token not yet created)
+
+**After token issuance, before scheduled cleanup:**
+- Model B services (HA, Plex, GitLab, SSH, PostgreSQL): token expires server-side regardless. No action needed.
+- Model A services (Radarr, Sonarr, etc.): static token was brokered, no cleanup possible. But these are all Tier 1 (low-risk, media management). Blast radius is minimal.
+
+**Conclusion:** Approval service downtime is a non-issue for security because all Tier 2+ services have server-enforced expiry. The approval service is only needed for *granting* access, not for *revoking* it.
+
+### 14.2 Target Service Goes Down
+
+**Before token use:** Agent gets a valid token but can't reach the service. Token expires naturally. No issue.
+
+**During token use:** Agent's operation fails. Token still expires on schedule. No issue.
+
+**During scheduled revocation (Model B active revoke):** Approval service can't reach target to revoke token. Options:
+- Retry with backoff (service might come back before TTL expires)
+- Log the failure (audit trail)
+- Not critical: TTL handles it anyway — revocation is just an acceleration of natural expiry
+
+### 14.3 Vault Goes Down
+
+- No new tokens can be issued (approval service can't mint)
+- Existing tokens continue working until their TTL expires
+- Agent falls back to Tier 0-1 (no elevation possible)
+- Self-healing: Vault auto-unseal is already configured
+
+**Conclusion:** No failure mode creates an unbounded credential exposure. The worst case is always "agent has reduced access until services recover." This is by design — fail-closed, not fail-open.
+
