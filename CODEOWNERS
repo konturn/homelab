@@ -1,0 +1,76 @@
+# CODEOWNERS — Privilege escalation prevention
+# 
+# moltbot (Prometheus) has Maintainer access and can self-merge MRs.
+# These rules require approval from @root for paths that could be
+# used to escalate privileges, bypass security controls, or break
+# remote access.
+#
+# Philosophy: moltbot can freely modify application configs, docs,
+# and non-sensitive infrastructure. But anything that could grant
+# it more access, break network connectivity, or run arbitrary
+# code on hosts requires human approval.
+
+# === NETWORK & FIREWALL ===
+# Could open ports, grant network access, break remote connectivity
+/networking/iptables/                    @root
+/networking/networkd/                    @root
+/networking/netplan/                     @root
+/networking/wireguard/                   @root
+/networking/dhcp/                        @root
+
+# === SSH & REMOTE ACCESS ===
+# Could add SSH keys, modify access controls
+/ansible/known_hosts                     @root
+/base/systemd/                           @root
+
+# === ANSIBLE INFRASTRUCTURE ===
+# Playbooks and inventory control what runs where with what permissions
+/ansible/*.yml                           @root
+/ansible/roles/configure-router-network/ @root
+/ansible/roles/configure-base/           @root
+/ansible/roles/configure-tailscale/      @root
+
+# === CI PIPELINE ===
+# Could run arbitrary commands during CI, exfiltrate secrets
+/.gitlab-ci.yml                          @root
+
+# === DOCKER COMPOSE ===
+# Could mount host paths, add privileged containers, modify any service
+# This is the big one — compose controls everything
+/docker/docker-compose.yml               @root
+/docker/docker-compose-*.yml             @root
+/docker/daemon.json                      @root
+
+# === MOLTBOT SELF-MODIFICATION ===
+# Prevent moltbot from expanding its own access
+/docker/moltbot/                         @root
+
+# === VAULT & SECRETS ===
+# Could access or redirect secret storage
+/docker/vault/                           @root
+
+# === SSL CERTS ===
+# Could intercept TLS traffic
+/networking/ssl/                         @root
+
+# === THIS FILE ===
+# Prevent moltbot from removing its own restrictions
+/CODEOWNERS                              @root
+
+# === SAFE FOR SELF-MERGE (no CODEOWNERS rule needed) ===
+# /docs/                    — documentation
+# /docker/grafana/          — monitoring dashboards
+# /docker/nginx/            — reverse proxy configs (read-only effect)
+# /docker/pihole/           — DNS configs
+# /docker/loki/             — logging configs
+# /docker/homeassistant/    — HA configs
+# /docker/snapserver/       — audio configs
+# /docker/zigbee2mqtt/      — zigbee configs
+# /docker/deluge/           — torrent client config
+# /docker/images/           — custom Dockerfiles
+# /docker/plex/             — media server configs
+# /docker/nextcloud/        — cloud storage configs
+# /base/telegraf/           — monitoring agent config
+# /base/minidsp/            — audio config
+# /base/sane/               — scanner config
+# /snapclient/              — audio client config
