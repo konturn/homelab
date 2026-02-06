@@ -300,13 +300,31 @@ vault:configure:
       optional: true
   variables:
     TF_VERSION: "1.7.5"
-    VAULT_ADDR: "https://vault.lab.nkontur.com:8200"
   before_script:
-    - apk add --no-cache wget unzip
+    - apk add --no-cache wget unzip curl
     - wget -q "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip"
     - unzip -o "terraform_${TF_VERSION}_linux_amd64.zip" -d /usr/local/bin/
     - chmod +x /usr/local/bin/terraform
   script:
+    # Fail fast if VAULT_TOKEN is missing
+    - |
+      if [ -z "${VAULT_TOKEN}" ]; then
+        echo "ERROR: VAULT_TOKEN CI/CD variable is not set."
+        echo "Add it at: Settings > CI/CD > Variables"
+        exit 1
+      fi
+    # Store address in a local var and unset VAULT_ADDR env var so the
+    # Vault Terraform provider only uses the explicit -var value (the env
+    # var takes precedence and causes 127.0.0.1 fallback on DNS hiccups).
+    - export TF_VAULT_ADDR="https://vault.lab.nkontur.com:8200"
+    - unset VAULT_ADDR
+    # Verify Vault is reachable before running Terraform
+    - |
+      echo "Checking Vault connectivity at ${TF_VAULT_ADDR}..."
+      curl -sk --max-time 10 "${TF_VAULT_ADDR}/v1/sys/health" || {
+        echo "ERROR: Vault is not reachable at ${TF_VAULT_ADDR}"
+        exit 1
+      }
     - cd terraform/vault
     - |
       terraform init \
@@ -319,8 +337,12 @@ vault:configure:
         -backend-config="password=${CI_JOB_TOKEN}" \
         -backend-config="retry_wait_min=5"
     - terraform validate
-    - terraform plan -var="vault_addr=${VAULT_ADDR}" -var="vault_token=${VAULT_TOKEN}" -out=tfplan
-    - terraform apply tfplan
+    - terraform plan -var="vault_addr=${TF_VAULT_ADDR}" -var="vault_token=${VAULT_TOKEN}" -out=tfplan
+    # Apply with parallelism=1 to avoid overwhelming Vault with simultaneous requests
+    - terraform apply -parallelism=1 tfplan
+  retry:
+    max: 2
+    when: script_failure
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
@@ -333,13 +355,14 @@ vault:validate:
   needs: []
   variables:
     TF_VERSION: "1.7.5"
-    VAULT_ADDR: "https://vault.lab.nkontur.com:8200"
   before_script:
     - apk add --no-cache wget unzip
     - wget -q "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip"
     - unzip -o "terraform_${TF_VERSION}_linux_amd64.zip" -d /usr/local/bin/
     - chmod +x /usr/local/bin/terraform
   script:
+    - export TF_VAULT_ADDR="https://vault.lab.nkontur.com:8200"
+    - unset VAULT_ADDR
     - cd terraform/vault
     - |
       terraform init \
@@ -352,7 +375,7 @@ vault:validate:
         -backend-config="password=${CI_JOB_TOKEN}" \
         -backend-config="retry_wait_min=5"
     - terraform validate
-    - terraform plan -var="vault_addr=${VAULT_ADDR}" -var="vault_token=${VAULT_TOKEN}"
+    - terraform plan -var="vault_addr=${TF_VAULT_ADDR}" -var="vault_token=${VAULT_TOKEN}"
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
