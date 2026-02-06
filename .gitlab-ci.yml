@@ -10,13 +10,25 @@
 #
 # Pipeline structure:
 #
+#   VALIDATE (parallel)
 #   ┌──────────────┬──────────────┬──────────────┬──────────────┐
-#   │              │              │              │              │
-#   router:val  zwave:val  sat-2:val  vault:val  moltbot:build  amcrest2mqtt:build (parallel)
-#   │              │              │
-#   router:deploy zwave:deploy sat-2:deploy (parallel, main only)
-#   │
-#   vault:configure (main only, after deploy)
+#   router:val  zwave:val  sat-2:val  vault:validate
+#
+#   BUILD (parallel, path-triggered)
+#   ┌──────────────┬──────────────┬──────────────┐
+#   moltbot:build  amcrest2mqtt:build  snapcast:build  snapclient:build
+#
+#   DEPLOY (main only, parallel)
+#   ┌──────────────┬──────────────┬──────────────┐
+#   router:deploy  zwave:deploy  sat-2:deploy
+#
+#   CONFIGURE (main only, after deploy)
+#   ┌──────────────┬──────────────────────────┐
+#   vault:configure  vault:rotate-approle [manual]
+#
+#   BOOTSTRAP (main only, manual)
+#   ┌──────────────┬──────────────┐
+#   router:bootstrap  router:restore
 #
 # =============================================================================
 
