@@ -263,7 +263,7 @@ groups:
                   |> range(start: -5m)
                   |> filter(fn: (r) => r["_measurement"] == "docker_container_status")
                   |> filter(fn: (r) => r["_field"] == "oom_killed" or r["_field"] == "status")
-                  |> filter(fn: (r) => r["container_name"] =~ /grafana|homeassistant|nginx|gitlab|influxdb|plex/)
+                  |> filter(fn: (r) => r["container_name"] =~ /grafana|homeassistant|nginx|gitlab|influxdb|plex|bitwarden|vault|loki/)
                   |> filter(fn: (r) => r["_value"] != "running" or r["oom_killed"] == 1)
                   |> group(columns: ["container_name"])
                   |> last()
