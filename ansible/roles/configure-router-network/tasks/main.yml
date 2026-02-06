@@ -99,7 +99,7 @@
   ansible.builtin.cron:
     name: "Update wan ipset"
     minute: "*/5"
-    job: "{{ '/bin/bash ' + '/root/cron/ip_update.sh >> /root/cron/logs/ip_update.log 2>&1' }}"
+    job: "{{ '/bin/bash /root/cron/ip_update.sh 2>&1 | logger -t ip-update' }}"
 
 - name: Template out cron script for DDNS
   ansible.builtin.template:
@@ -118,7 +118,7 @@
       + ((vault_cloudflare_api_key | default(lookup('env', 'CLOUDFLARE_API_KEY'))) | trim)
       + ' -z '
       + ((vault_cloudflare_zone_id | default(lookup('env', 'CLOUDFLARE_ZONE_ID'))) | trim)
-      + " -d nkontur.com -r '' '*' -e konoahko@gmail.com >> /root/cron/logs/ddns.log 2>&1")
+      + " -d nkontur.com -r '' '*' -e konoahko@gmail.com 2>&1 | logger -t ddns")
       | regex_replace('[\r\n]', '') }}
   no_log: true
 
