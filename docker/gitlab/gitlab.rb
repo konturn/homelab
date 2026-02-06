@@ -32,23 +32,65 @@ registry['storage'] = {
   }
 }
 
-# Puma (web server) configuration
-# Limit workers to prevent memory exhaustion on 32-core system
-# Default is CPU cores + 2, which causes ~46GB memory usage
-puma['worker_processes'] = 8
+###
+# Puma (web server) - Tuned for homelab single-user
+# 4 workers x 8 threads = 32 max concurrent requests (same as before, less memory)
+# min_threads=4 pre-warms threads to avoid cold-start latency
+###
+puma['worker_processes'] = 4
 puma['per_worker_max_memory_mb'] = 1200
-puma['min_threads'] = 1
-puma['max_threads'] = 4
+puma['min_threads'] = 4
+puma['max_threads'] = 8
 
-# Sidekiq (background jobs) configuration
-# Reduce concurrency to limit memory usage
-sidekiq['concurrency'] = 10
+###
+# Sidekiq (background jobs) - Reduced concurrency
+###
+sidekiq['concurrency'] = 5
 
-# PostgreSQL tuning
-postgresql['shared_buffers'] = "2GB"
-postgresql['work_mem'] = "64MB"
+###
+# PostgreSQL - Right-sized for small instance
+###
+postgresql['shared_buffers'] = "1GB"
+postgresql['work_mem'] = "32MB"
 postgresql['maintenance_work_mem'] = "256MB"
 postgresql['effective_cache_size'] = "4GB"
+
+# Slow query logging (>500ms) for diagnostics
+postgresql['log_min_duration_statement'] = 500
+
+###
+# Redis - Cache tuning with LRU eviction
+###
+redis['maxmemory'] = "512mb"
+redis['maxmemory_policy'] = "allkeys-lru"
+
+###
+# Disable built-in monitoring (using external Telegraf + InfluxDB + Grafana)
+###
+prometheus_monitoring['enable'] = false
+alertmanager['enable'] = false
+node_exporter['enable'] = false
+redis_exporter['enable'] = false
+postgres_exporter['enable'] = false
+gitlab_exporter['enable'] = false
+grafana['enable'] = false
+
+###
+# Disable unused features to reduce memory and background worker load
+###
+gitlab_kas['enable'] = false
+gitlab_pages['enable'] = false
+mattermost['enable'] = false
+dependency_proxy['enable'] = false
+terraform_state['enable'] = false
+packages['enable'] = false
+
+###
+# Memory management - jemalloc tuning to prevent RSS creep
+###
+gitlab_rails['env'] = {
+  'MALLOC_CONF' => 'dirty_decay_ms:1000,muzzy_decay_ms:1000'
+}
 
 # Preserve caches on restart to avoid cold-start performance issues
 gitlab_rails['rake_cache_clear'] = false
