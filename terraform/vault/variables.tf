@@ -1,7 +1,7 @@
 variable "vault_addr" {
   description = "Vault server address"
   type        = string
-  default     = "https://vault.lab.nkontur.com:8200"
+  default     = "https://127.0.0.1:8200"
 }
 
 variable "vault_token" {
