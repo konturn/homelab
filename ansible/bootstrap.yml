@@ -1,0 +1,364 @@
+---
+# bootstrap.yml — Bootstrap playbook for disaster recovery
+#
+# Run with: ansible-playbook -i inventory.yml bootstrap.yml --connection=local
+#
+# This playbook brings up the core infrastructure layer (Layer 1) on the router.
+# It assumes Layer 0 (Docker, GitLab, runner) is already running via scripts/bootstrap.sh.
+#
+# Phases:
+#   1. Docker daemon configuration
+#   2. Core services (vault, pihole, nginx, gitlab)
+#   3. Vault bootstrap (init, unseal, enable KV v2)
+#   4. Pi-hole DNS records
+#   5. Switch configuration (if reachable)
+#   6. Health checks
+
+- name: Bootstrap core infrastructure
+  hosts: router.lab.nkontur.com
+  connection: local
+  gather_facts: true
+  vars:
+    bootstrap_compose_path: "{{ docker_persistent_data_path }}/ansible_state"
+    vault_addr: "https://{{ vault_ip }}:8200"
+    core_services:
+      - vault
+      - pihole
+      - nginx
+      - lab_nginx
+      - iot_nginx
+      - gitlab
+    switch_host: "10.100.0.1"
+    switch_user: "admin"
+
+  tasks:
+    # =========================================================================
+    # Phase 1: Docker daemon configuration
+    # =========================================================================
+    - name: "Phase 1: Docker setup"
+      tags: [docker]
+      block:
+        - name: Ensure Docker is running
+          ansible.builtin.service:
+            name: docker
+            state: started
+            enabled: true
+
+        - name: Deploy Docker daemon.json
+          ansible.builtin.template:
+            src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/daemon.json' }}"
+            dest: /etc/docker/daemon.json
+            owner: root
+            group: root
+            mode: "0600"
+          register: daemon_json
+
+        - name: Restart Docker if daemon.json changed
+          ansible.builtin.service:
+            name: docker
+            state: restarted
+          when: daemon_json.changed
+
+    # =========================================================================
+    # Phase 2: Core services
+    # =========================================================================
+    - name: "Phase 2: Core services"
+      tags: [services]
+      block:
+        - name: Ensure compose directory exists
+          ansible.builtin.file:
+            path: "{{ bootstrap_compose_path }}"
+            state: directory
+            mode: "0700"
+
+        - name: Template docker-compose.yml
+          ansible.builtin.template:
+            src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/docker-compose.yml' }}"
+            dest: "{{ bootstrap_compose_path }}/docker-compose.yml"
+            owner: root
+            group: root
+            mode: "0700"
+          no_log: true
+
+        - name: Ensure vault config directories exist
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: directory
+            mode: "0755"
+          loop:
+            - "{{ docker_persistent_data_path }}/vault/config"
+            - "{{ docker_persistent_data_path }}/vault/scripts"
+            - "{{ docker_persistent_data_path }}/vault/unseal"
+
+        - name: Set vault unseal directory permissions
+          ansible.builtin.file:
+            path: "{{ docker_persistent_data_path }}/vault/unseal"
+            state: directory
+            owner: root
+            group: root
+            mode: "0700"
+
+        - name: Deploy vault config
+          ansible.builtin.template:
+            src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/vault/config.hcl' }}"
+            dest: "{{ docker_persistent_data_path }}/vault/config/config.hcl"
+            owner: root
+            group: root
+            mode: "0644"
+
+        - name: Deploy vault auto-unseal script
+          ansible.builtin.copy:
+            src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/vault/auto-unseal.sh' }}"
+            dest: "{{ docker_persistent_data_path }}/vault/scripts/auto-unseal.sh"
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: Start core services
+          ansible.builtin.command:
+            cmd: >-
+              docker compose
+              -f {{ bootstrap_compose_path }}/docker-compose.yml
+              up -d {{ core_services | join(' ') }}
+          register: compose_up
+          changed_when: "'Started' in compose_up.stderr or 'Created' in compose_up.stderr"
+
+    # =========================================================================
+    # Phase 3: Vault bootstrap
+    # =========================================================================
+    - name: "Phase 3: Vault bootstrap"
+      tags: [vault]
+      block:
+        - name: Write vault unseal keys from CI variable
+          ansible.builtin.copy:
+            content: "{{ lookup('env', 'VAULT_UNSEAL_KEYS') }}"
+            dest: "{{ docker_persistent_data_path }}/vault/unseal/unseal-keys"
+            owner: root
+            group: root
+            mode: "0600"
+          no_log: true
+          when: lookup('env', 'VAULT_UNSEAL_KEYS') | length > 0
+
+        - name: Wait for Vault API to respond
+          ansible.builtin.uri:
+            url: "{{ vault_addr }}/v1/sys/health"
+            validate_certs: false
+            status_code: [200, 429, 472, 473, 501, 503]
+          register: vault_health
+          retries: 20
+          delay: 10
+          until: vault_health.status is defined
+
+        - name: Check if Vault is initialized
+          ansible.builtin.uri:
+            url: "{{ vault_addr }}/v1/sys/init"
+            validate_certs: false
+          register: vault_init_status
+
+        - name: Initialize Vault (if not initialized)
+          ansible.builtin.uri:
+            url: "{{ vault_addr }}/v1/sys/init"
+            method: PUT
+            validate_certs: false
+            body_format: json
+            body:
+              secret_shares: 5
+              secret_threshold: 3
+          register: vault_init_result
+          when: not vault_init_status.json.initialized
+          no_log: true
+
+        - name: Save Vault init output
+          ansible.builtin.copy:
+            content: "{{ vault_init_result.json | to_nice_json }}"
+            dest: "{{ docker_persistent_data_path }}/vault/init-output.json"
+            owner: root
+            group: root
+            mode: "0600"
+          when: vault_init_result is changed
+          no_log: true
+
+        - name: Display init warning
+          ansible.builtin.debug:
+            msg: >
+              VAULT WAS JUST INITIALIZED. Root token and unseal keys saved to
+              {{ docker_persistent_data_path }}/vault/init-output.json.
+              BACK THIS UP IMMEDIATELY. You need 3 of 5 unseal keys.
+          when: vault_init_result is changed
+
+        - name: Check Vault seal status
+          ansible.builtin.uri:
+            url: "{{ vault_addr }}/v1/sys/seal-status"
+            validate_certs: false
+          register: vault_seal_status
+
+        - name: Unseal Vault (if sealed and keys available)
+          ansible.builtin.uri:
+            url: "{{ vault_addr }}/v1/sys/unseal"
+            method: PUT
+            validate_certs: false
+            body_format: json
+            body:
+              key: "{{ item }}"
+          loop: "{{ lookup('env', 'VAULT_UNSEAL_KEYS').split('\n') | select | list }}"
+          loop_control:
+            label: "unseal key {{ ansible_loop.index }}"
+            extended: true
+          when:
+            - vault_seal_status.json.sealed
+            - lookup('env', 'VAULT_UNSEAL_KEYS') | length > 0
+          register: unseal_result
+          no_log: true
+          failed_when: false
+
+        - name: Verify Vault is unsealed
+          ansible.builtin.uri:
+            url: "{{ vault_addr }}/v1/sys/seal-status"
+            validate_certs: false
+          register: vault_final_status
+
+        - name: Report Vault status
+          ansible.builtin.debug:
+            msg: "Vault sealed={{ vault_final_status.json.sealed }}, initialized={{ vault_final_status.json.initialized | default('unknown') }}"
+
+        - name: Enable KV v2 secrets engine (if Vault is unsealed)
+          ansible.builtin.uri:
+            url: "{{ vault_addr }}/v1/sys/mounts/secret"
+            method: POST
+            validate_certs: false
+            headers:
+              X-Vault-Token: "{{ lookup('env', 'VAULT_TOKEN') }}"
+            body_format: json
+            body:
+              type: kv
+              options:
+                version: "2"
+            status_code: [200, 204, 400]
+          when:
+            - not vault_final_status.json.sealed
+            - lookup('env', 'VAULT_TOKEN') | length > 0
+          register: kv_enable
+          failed_when: kv_enable.status not in [200, 204, 400]
+
+    # =========================================================================
+    # Phase 4: Pi-hole DNS
+    # =========================================================================
+    - name: "Phase 4: Pi-hole DNS"
+      tags: [pihole]
+      block:
+        - name: Wait for Pi-hole container to be running
+          ansible.builtin.command:
+            cmd: docker inspect --format '{{ "{{" }}.State.Running{{ "}}" }}' pihole
+          register: pihole_running
+          retries: 10
+          delay: 10
+          until: pihole_running.stdout == "true"
+          changed_when: false
+
+        - name: Configure Pi-hole DNS records
+          ansible.builtin.command:
+            cmd: >-
+              docker exec pihole pihole-FTL --config dns.hosts
+              '{{ pihole_dns_hosts | to_json }}'
+          when: pihole_dns_hosts is defined
+          changed_when: true
+
+    # =========================================================================
+    # Phase 5: Switch configuration
+    # =========================================================================
+    - name: "Phase 5: Switch configuration"
+      tags: [switch]
+      block:
+        - name: Check if switch is reachable
+          ansible.builtin.wait_for:
+            host: "{{ switch_host }}"
+            port: 22
+            timeout: 5
+          register: switch_reachable
+          ignore_errors: true
+
+        - name: Push switch VLAN/trunk config
+          ansible.builtin.raw: |
+            conf t
+            vlan 2
+              description "For External Access"
+            vlan 3
+              description "LAN-accessible only"
+            vlan 4
+              description "Management and Diagnostics"
+            vlan 5
+              description "Guest"
+            vlan 6
+              description "Buster"
+            vlan 7
+              description "Iot"
+            interface gigabitethernet 0/1/0
+              switching-profile trunk-main
+            interface gigabitethernet 0/1/1
+              switching-profile trunk-main
+            interface port-channel 0
+              switching-profile trunk-main
+            write memory
+            exit
+          delegate_to: "{{ switch_host }}"
+          vars:
+            ansible_user: "{{ switch_user }}"
+            ansible_connection: ssh
+            ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o ConnectTimeout=10"
+          when: switch_reachable is succeeded
+          register: switch_config
+          ignore_errors: true
+
+        - name: Report switch status
+          ansible.builtin.debug:
+            msg: >-
+              {{ 'Switch configured successfully.' if switch_config is succeeded
+                 else 'Switch not reachable or config failed. Configure manually if needed.' }}
+
+    # =========================================================================
+    # Phase 6: Health checks
+    # =========================================================================
+    - name: "Phase 6: Health checks"
+      tags: [healthcheck]
+      block:
+        - name: Check Vault health
+          ansible.builtin.uri:
+            url: "{{ vault_addr }}/v1/sys/health"
+            validate_certs: false
+            status_code: [200, 429, 472, 473]
+          register: vault_check
+          ignore_errors: true
+
+        - name: Check Pi-hole DNS
+          ansible.builtin.command:
+            cmd: docker exec pihole dig +short +norecurse +retry=0 @127.0.0.1 pi.hole
+          register: pihole_check
+          ignore_errors: true
+          changed_when: false
+
+        - name: Check nginx containers
+          ansible.builtin.command:
+            cmd: "docker inspect --format '{{ '{{' }}.State.Running{{ '}}' }}' {{ item }}"
+          loop:
+            - nginx
+            - lab_nginx
+            - iot_nginx
+          register: nginx_check
+          ignore_errors: true
+          changed_when: false
+
+        - name: Check GitLab health
+          ansible.builtin.uri:
+            url: "http://localhost:80/-/health"
+          register: gitlab_check
+          ignore_errors: true
+
+        - name: Health check summary
+          ansible.builtin.debug:
+            msg: |
+              === Bootstrap Health Check Summary ===
+              Vault:   {{ 'OK' if vault_check is succeeded else 'FAILED' }}
+              Pi-hole: {{ 'OK' if pihole_check is succeeded else 'FAILED' }}
+              Nginx:   {{ 'OK' if nginx_check.results | selectattr('failed', 'equalto', false) | list | length == 3 else 'PARTIAL/FAILED' }}
+              GitLab:  {{ 'OK' if gitlab_check is succeeded else 'FAILED' }}
+              ========================================

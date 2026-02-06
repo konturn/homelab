@@ -89,10 +89,24 @@ variables:
   interruptible: true
 
 stages:
+  - bootstrap
   - validate
   - build
   - deploy
   - configure
+
+# =============================================================================
+# Bootstrap Stage - Manual disaster recovery (main only)
+# =============================================================================
+router:bootstrap:
+  extends: .ansible
+  stage: bootstrap
+  when: manual
+  allow_failure: true
+  script:
+    - ansible-playbook -i ansible/inventory.yml ansible/bootstrap.yml --connection=local
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
 
 # =============================================================================
 # Base ansible job with caching
