@@ -4,10 +4,37 @@ This document lists all secrets used in the homelab infrastructure, how to rotat
 
 ## Overview
 
-Secrets are stored as **GitLab CI/CD variables** and injected into `docker-compose.yml` via Ansible's `lookup('env', ...)` function during deployment. The deployment pipeline reads these variables and templates them into the final configuration.
+Secrets are stored in two places:
 
-**GitLab CI Variables Location:**  
-Settings → CI/CD → Variables (Project: root/homelab)
+1. **HashiCorp Vault** at `vault.lab.nkontur.com:8200` — canonical source of truth for all secrets, organized under the `homelab/` KV v2 mount.
+2. **GitLab CI/CD variables** — currently used by the deploy pipeline via Ansible's `lookup('env', ...)`. These mirror Vault and will eventually be replaced by direct Vault reads.
+
+**Vault UI:** `https://vault.lab.nkontur.com:8200/ui`
+**GitLab CI Variables:** Settings → CI/CD → Variables (Project: root/homelab)
+
+### Vault Authentication
+
+| Method | Role | Policy | Used By |
+|--------|------|--------|---------|
+| JWT (GitLab OIDC) | `vault-admin` | `vault-admin` | `vault:configure` job (main only) |
+| JWT (GitLab OIDC) | `vault-read` | `vault-read` | `vault:validate` job (any branch) |
+| AppRole | `moltbot` | `moltbot-ops` | Moltbot container (scoped read-only) |
+
+### Vault Secret Layout
+
+```
+homelab/
+├── api-keys/        # External API keys (aclawdemy, anthropic, brave, openai)
+├── backup/          # Backblaze, borg, restic credentials
+├── cameras/         # Doorbell, rear camera passwords
+├── docker/          # Per-service secrets (grafana, influxdb, plex, etc.)
+├── email/           # Gmail, SMTP, DKIM
+├── gitlab/          # Runner tokens
+├── infrastructure/  # Aruba, IPMI, LUKS, OMAPI, Pi-hole, router, SNMP, Tailscale, VRRP
+├── moltbot/         # Gateway, GitLab, Telegram tokens
+├── mqtt/            # Mosquitto credentials
+└── networking/      # Cloudflare, Mullvad, Namesilo, Wireguard
+```
 
 ---
 
@@ -415,9 +442,55 @@ If a secret is compromised:
 
 ---
 
+## Vault AppRole Rotation (Moltbot)
+
+Moltbot authenticates to Vault using AppRole (`role_id` + `secret_id`).
+The `secret_id` should be rotated periodically.
+
+**CI Variables:**
+- `VAULT_APPROLE_ROLE_ID` — static, rarely changes
+- `VAULT_APPROLE_SECRET_ID` — rotate monthly
+
+**Automated rotation:**
+
+A manual CI job `vault:rotate-approle` is available on main branch pipelines.
+It can also be triggered via pipeline schedule for automatic monthly rotation.
+
+The job:
+1. Authenticates to Vault via JWT (`vault-admin` role)
+2. Generates a new `secret_id` for the moltbot AppRole
+3. Verifies the new credentials work (login test)
+4. Updates the `VAULT_APPROLE_SECRET_ID` CI variable
+5. Next moltbot deploy picks up the new secret automatically
+
+**To trigger manually:**
+1. Go to CI/CD → Pipelines → Run pipeline (on main)
+2. Find `vault:rotate-approle` in the configure stage
+3. Click the play button
+
+**To schedule:**
+1. Go to CI/CD → Schedules → New schedule
+2. Set cron: `0 4 1 * *` (4 AM on the 1st of each month)
+3. Target branch: main
+
+**Manual rotation (if CI job unavailable):**
+```bash
+# Authenticate to Vault (need admin/root token)
+export VAULT_ADDR="https://vault.lab.nkontur.com:8200"
+
+# Generate new secret_id
+curl -sk -X POST -H "X-Vault-Token: $VAULT_TOKEN" \
+  "$VAULT_ADDR/v1/auth/approle/role/moltbot/secret-id"
+
+# Update CI variable with the new secret_id value
+# Then redeploy moltbot
+```
+
+---
+
 ## Future Improvements
 
-- [ ] Consider HashiCorp Vault for centralized secret management
+- [ ] Migrate deploy pipeline from CI env vars to direct Vault reads
 - [ ] Implement secret scanning in CI pipeline
-- [ ] Set up automated rotation for API keys where supported
-- [ ] Add expiration alerts for tokens with TTL
+- [ ] Set up pipeline schedule for automatic AppRole rotation
+- [ ] Add Vault token expiry monitoring to Grafana
