@@ -960,7 +960,7 @@ services:
       MQTT_PASSWORD: {{ lookup('env', 'MQTT_PASS') }}
       HOME_ASSISTANT: "true"
       MQTT_TLS_ENABLED: "true"
-      MQTT_TLS_CA_CERT: "/etc/ssl/certs/ca-cert-ISRG_Root_X1.pem"
+      MQTT_TLS_CA_CERT: "/etc/ssl/certs/ca-certificates.crt"
       STORAGE_POLL_INTERVAL: 0
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f amcrest2mqtt || exit 1"]
