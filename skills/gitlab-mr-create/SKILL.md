@@ -14,11 +14,20 @@ This skill has been merged into the main GitLab MR reference doc. The consolidat
 source /home/node/clawd/skills/gitlab/lib.sh
 preflight_check || exit 1
 
-WORK_DIR=$(mktemp -d) && cd "$WORK_DIR"
-git clone "https://oauth2:${GITLAB_TOKEN}@gitlab.lab.nkontur.com/root/homelab.git"
-cd homelab && git config user.email "moltbot@nkontur.com" && git config user.name "Moltbot"
+REPO="/home/node/.openclaw/workspace/homelab"
+BRANCH="feat/my-thing"
+WORK_DIR="/tmp/homelab-${BRANCH}"
 
-# Branch, change, commit, push, create MR, wait for pipeline, merge if trivial
+cd "$REPO" && git fetch origin main
+git worktree add -b "$BRANCH" "$WORK_DIR" origin/main
+cd "$WORK_DIR"
+git config user.email "moltbot@nkontur.com" && git config user.name "Moltbot"
+
+# Make changes, commit, push, create MR, wait for pipeline, merge if trivial
+
+# Clean up worktree when done
+cd /tmp && git -C "$REPO" worktree remove "$WORK_DIR" 2>/dev/null
 ```
+**⚠️ NEVER checkout branches in the shared repo clone.** Use worktrees — multiple agents run concurrently.
 
 You know git. Check the reference doc for repo-specific gotchas (project ID 4, pipeline stages, when to self-merge vs escalate).

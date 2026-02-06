@@ -50,11 +50,24 @@ source /home/node/clawd/skills/gitlab/lib.sh  # Always source first
 
 1. **Project ID is 4**, not 1. API calls to project 1 will fail silently or hit wrong project.
 
-2. **Clone fresh every time.** Don't use `/home/node/clawd/homelab` — use a temp dir:
+2. **⚠️ CRITICAL: Use `git worktree` for branch isolation.** Multiple sub-agents run concurrently on the same repo. If you checkout branches in the shared clone, dirty files from other agents WILL contaminate your branch. This has caused leaked diffs in MRs repeatedly.
    ```bash
-   WORK_DIR=$(mktemp -d) && cd "$WORK_DIR"
-   git clone "https://oauth2:${GITLAB_TOKEN}@gitlab.lab.nkontur.com/root/homelab.git"
+   REPO="/home/node/.openclaw/workspace/homelab"
+   BRANCH="feat/my-thing"
+   WORK_DIR="/tmp/homelab-${BRANCH}"
+   
+   cd "$REPO" && git fetch origin main
+   git worktree add -b "$BRANCH" "$WORK_DIR" origin/main
+   cd "$WORK_DIR"
+   git config user.email "moltbot@nkontur.com"
+   git config user.name "Moltbot"
+   
+   # ... make changes, commit, push ...
+   
+   # Clean up when done
+   cd /tmp && git -C "$REPO" worktree remove "$WORK_DIR" 2>/dev/null
    ```
+   **NEVER `git checkout` in `/home/node/.openclaw/workspace/homelab`** — that's the shared clone. Always use worktrees.
 
 3. **409 Conflict errors** — `gitlab_api_call` handles retry automatically.
 
