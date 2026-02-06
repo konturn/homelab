@@ -142,7 +142,7 @@ router:bootstrap:
   after_script:
     - rm -f tmp
   cache:
-    key: "ansible-deps-v2"
+    key: "ansible-deps-v3"
     paths:
       - /cache/pip
       - /cache/ansible-roles
