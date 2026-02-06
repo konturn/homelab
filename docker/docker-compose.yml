@@ -300,10 +300,14 @@ services:
       - "443:7878"
     networks:
       - internal
+    # Memory increased from 1G to 2G: library has 5300+ movies (28MB API payload).
+    # 1G limit causes memory pressure during large serialization + concurrent tasks.
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 2G
+        reservations:
+          memory: 512M
     environment:
       - PUID=1000
       - PGID=1000
@@ -350,10 +354,14 @@ services:
       - "443:8989"
     networks:
     - internal
+    # 308K history records — Sonarr benefits from memory headroom for DB operations.
+    # Added reservation to prevent OOM kills during heavy queries.
     deploy:
       resources:
         limits:
           memory: 2G
+        reservations:
+          memory: 512M
     environment:
       - PUID=1000
       - PGID=1000
