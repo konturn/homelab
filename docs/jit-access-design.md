@@ -13,17 +13,23 @@
 1. [Executive Summary](#1-executive-summary)
 2. [Problem Statement](#2-problem-statement)
 3. [Architecture Overview](#3-architecture-overview)
-4. [Approval Flow](#4-approval-flow)
-5. [Vault Dynamic Secret Backends](#5-vault-dynamic-secret-backends)
+4. [External Approval Service](#4-external-approval-service)
+5. [Service-Specific Token Lifecycle](#5-service-specific-token-lifecycle)
 6. [Scoped Access Tiers](#6-scoped-access-tiers)
-7. [Technical Implementation](#7-technical-implementation)
-8. [Security Analysis](#8-security-analysis)
-9. [Implementation Phases](#9-implementation-phases)
-10. [UX Considerations](#10-ux-considerations)
-11. [Appendix](#11-appendix)
+7. [Community-Sourced Hardening](#7-community-sourced-hardening)
+8. [Security Requirements](#8-security-requirements)
+9. [Failure Modes and Recovery](#9-failure-modes-and-recovery)
+10. [Request Lifecycle and Crash Recovery](#10-request-lifecycle-and-crash-recovery)
+11. [Credential Isolation from LLM Context](#11-credential-isolation-from-llm-context)
+12. [Telegram UX](#12-telegram-ux)
+13. [Implementation Phases](#13-implementation-phases)
+14. [Monitoring and Alerting](#14-monitoring-and-alerting)
+15. [Operator Availability](#15-operator-availability)
+16. [Appendix A: Rejected Approaches (Agent-Side Approval Gating)](#16-appendix-a-rejected-approaches-agent-side-approval-gating)
+17. [Appendix B: Vault Reference Configuration](#17-appendix-b-vault-reference-configuration)
+18. [Revision History](#18-revision-history)
 
 ---
-
 ## 1. Executive Summary
 
 Prometheus (moltbot) currently operates with ~20 credentials injected as environment variables at container startup. As of MR !126, these are sourced from **HashiCorp Vault** during Ansible deployment (with CI env var fallback), but they are still **long-lived, broadly-scoped, and never expire at runtime**. The Vault migration centralized secret storage and rotation, but the agent still has all credentials available simultaneously from the moment its container starts. If the agent is compromised (via prompt injection, tool abuse, or container escape), every credential is immediately available to the attacker.
@@ -38,18 +44,18 @@ This document designs a **Just-In-Time (JIT) Privileged Access Management** syst
 - Credentials **auto-expire** with no cleanup needed
 - Every request, approval, denial, and usage is **audit-logged**
 
-The system is built on **HashiCorp Vault** (already running at `vault.lab.nkontur.com:8200`) and **OpenClaw's Telegram inline buttons** (already configured with `allowlist` scope).
+The system is built on **HashiCorp Vault** (already running at `vault.lab.nkontur.com:8200`) and an **external approval service** (`jit-approval-svc`) — a standalone Go microservice with its own Telegram bot that sits between the agent and Vault. The agent never touches the approval path; enforcement lives outside the agent's trust boundary entirely (see [Section 4](#4-external-approval-service)).
 
 ### Design Principles
 
 1. **Defense in depth** — approval flow + short TTLs + scoped policies + audit logging
-2. **Minimal friction for Noah** — one tap to approve, enough context to decide in 2 seconds
-3. **Graceful degradation** — if approval times out or Vault is down, the agent continues with reduced capability
-4. **Incremental migration** — runtime credentials are replaced one-by-one with JIT-issued ones
-5. **Practical over perfect** — this is a homelab, not a bank. Security proportional to risk.
+2. **External trust boundary** — the agent cannot self-approve; approval and credential minting are handled by a separate service the agent does not control
+3. **Minimal friction for Noah** — one tap to approve, enough context to decide in 2 seconds
+4. **Graceful degradation** — if approval times out or Vault is down, the agent continues with reduced capability
+5. **Incremental migration** — runtime credentials are replaced one-by-one with JIT-issued ones
+6. **Practical over perfect** — this is a homelab, not a bank. Security proportional to risk.
 
 ---
-
 ## 2. Problem Statement
 
 ### Current State
@@ -95,639 +101,350 @@ Agent needs SSH to router → requests access → Noah taps "Approve" on Telegra
 
 ---
 
+
 ## 3. Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Prometheus Container                         │
-│                                                                     │
-│  ┌───────────────┐    ┌──────────────┐    ┌──────────────────────┐ │
-│  │  Agent Logic   │───▶│  JIT Client  │───▶│  Credential Store    │ │
-│  │  (OpenClaw)    │    │  Library     │    │  (env / tmp files)   │ │
-│  └───────────────┘    └──────┬───────┘    └──────────────────────┘ │
-│                              │                                      │
-└──────────────────────────────┼──────────────────────────────────────┘
-                               │
-                    ┌──────────┼──────────┐
-                    │    1. Request        │
-                    │    (Telegram msg     │
-                    │     w/ buttons)      │
-                    ▼                      │
-┌──────────────────────────────┐           │
-│     Noah's Telegram          │           │
-│                              │           │
-│  ┌────────────────────────┐  │           │
-│  │ 🔐 SSH Access Request  │  │           │
-│  │                        │  │           │
-│  │ Host: router           │  │           │
-│  │ User: root             │  │           │
-│  │ TTL: 15m               │  │           │
-│  │ Reason: Check firewall │  │           │
-│  │ rules for MR #47       │  │           │
-│  │                        │  │           │
-│  │ [✅ Approve] [❌ Deny] │  │           │
-│  └────────────────────────┘  │           │
-│                              │           │
-└──────────────┬───────────────┘           │
-               │                           │
-               │ 2. Callback: "approve"    │
-               ▼                           │
-┌──────────────────────────────┐           │
-│     OpenClaw Gateway         │           │
-│     (Telegram channel)       │──────────▶│
-│                              │  3. Issue │
-│  callback_data received as   │  credential
-│  message to agent session    │           │
-└──────────────────────────────┘           │
-                                           │
-                    ┌──────────────────────┐│
-                    │                      ││
-                    ▼                      ▼│
-            ┌──────────────────────────────────┐
-            │         HashiCorp Vault           │
-            │     vault.lab.nkontur.com:8200    │
-            │                                   │
-            │  ┌─────────┐  ┌──────────────┐   │
-            │  │ SSH CA   │  │ Database     │   │
-            │  │ Engine   │  │ Engine       │   │
-            │  ├─────────┤  ├──────────────┤   │
-            │  │ AppRole  │  │ Token Auth   │   │
-            │  │ Auth     │  │ (scoped)     │   │
-            │  ├─────────┤  ├──────────────┤   │
-            │  │ Audit    │  │ Policies     │   │
-            │  │ Log      │  │ (per-tier)   │   │
-            │  └─────────┘  └──────────────┘   │
-            └──────────────────────────────────┘
+┌─────────────────┐     ┌──────────────────────┐     ┌─────────────┐
+│   Prometheus     │     │  jit-approval-svc    │     │   Vault     │
+│   (moltbot)      │     │  (separate container) │     │             │
+│                  │     │                      │     │             │
+│ 1. POST request  │────▶│ 2. Validate request  │     │             │
+│    to approval   │     │ 3. Send Telegram msg │     │             │
+│    svc API       │     │    with buttons      │     │             │
+│                  │     │    (own bot token)    │     │             │
+│                  │     │                      │     │             │
+│                  │     │ 4. Receive callback  │     │             │
+│                  │     │    from Telegram     │     │             │
+│                  │     │ 5. Verify Noah's     │     │             │
+│                  │     │    user ID           │     │             │
+│                  │     │                      │     │             │
+│                  │     │ 6. Mint scoped       │────▶│ 7. Create   │
+│                  │     │    Vault token       │◀────│    token    │
+│                  │     │    with TTL          │     │             │
+│                  │     │                      │     │             │
+│ 9. Use token    │◀────│ 8. Return token      │     │             │
+│    (auto-expire) │     │    via response/poll │     │             │
+│                  │     │                      │     │             │
+│ 10. Token       │     │                      │     │ 11. Token   │
+│     expires     │     │                      │     │     revoked │
+└─────────────────┘     └──────────────────────┘     └─────────────┘
 ```
 
 ### Component Responsibilities
 
 | Component | Role |
 |-----------|------|
-| **Agent Logic** | Determines when elevated access is needed, constructs requests with context |
-| **JIT Client Library** | Shell/Node.js library that handles the request→approve→issue→inject cycle |
-| **OpenClaw Gateway** | Routes Telegram messages, delivers inline buttons, receives callbacks |
-| **Telegram** | Noah's approval interface (inline keyboard buttons) |
-| **Vault** | Issues dynamic credentials, enforces TTLs, logs everything |
-| **Credential Store** | Temporary in-memory or file-based store for active credentials |
+| **Prometheus (Agent)** | Determines when elevated access is needed, submits requests to approval service, polls for approval, uses issued credentials |
+| **jit-approval-svc** | Validates requests, sends Telegram approval messages (via its own bot), receives callbacks, mints Vault tokens on approval. The ONLY path to tier 2+ credentials. |
+| **Telegram (@PrometheusApprovalBot)** | Noah's approval interface — separate bot from the agent's, controlled by the approval service |
+| **Vault** | Issues dynamic credentials (SSH certs, DB users, scoped tokens), enforces TTLs, logs everything |
+| **Scrub Cron** | Redacts any credentials that leak into LLM transcript files (defense in depth, see [Section 11](#11-credential-isolation-from-llm-context)) |
+
+### Key Security Property
+
+The agent **cannot self-approve**. The approval path never enters the agent's container. Even a fully compromised agent is limited to tier 0-1 (read-only APIs, own workspace) because:
+- Approval buttons are sent by a different Telegram bot the agent doesn't control
+- Only the approval service has the Vault policy to mint tier 2+ tokens
+- The agent's AppRole credentials are scoped to read-only tier 1 access
+
+This external trust boundary is the fundamental design choice. See [Section 16](#16-appendix-a-rejected-approaches-agent-side-approval-gating) for the rejected agent-side gating approach and why it was abandoned.
 
 ---
+## 4. External Approval Service
 
-## 4. Approval Flow
+**Decision (2026-02-06):** Deploy with an external trust boundary from day one. The agent never touches the approval path. See [Appendix A](#16-appendix-a-rejected-approaches-agent-side-approval-gating) for the rejected agent-side gating approach and the reasoning behind this decision.
 
-### 4.1 Request Initiation
+### 4.1 Why External-First
 
-When the agent determines it needs elevated access, it sends a structured request message via OpenClaw's Telegram inline buttons.
+The agent-side gating approach has a fundamental flaw: the agent crafts its own approval UI. A compromised agent could swap Approve/Deny callback data, inject misleading context in approval messages, or bypass the check entirely since enforcement runs in-process.
 
-**Request Payload Structure:**
+The external approval service eliminates this class of attack entirely. The agent never touches the approval path.
 
-```json
-{
-  "type": "jit_access_request",
-  "id": "req_20260206_143022_ssh_router",
-  "tier": 2,
-  "backend": "ssh",
-  "resource": "router.lab.nkontur.com",
-  "principal": "root",
-  "ttl": "15m",
-  "reason": "Check firewall rules for VLAN segmentation MR #47",
-  "context": {
-    "session": "agent:main:main",
-    "task": "Infrastructure audit",
-    "triggered_by": "user_request"
-  },
-  "timestamp": "2026-02-06T14:30:22Z"
-}
+### 4.2 Components
+
+#### A. jit-approval-svc (Go, ~300 LOC)
+
+A standalone HTTP service running in its own Docker container.
+
+**Owns:**
+- Its own Telegram bot token (separate from Prometheus's bot)
+- A Vault token with policy to create scoped, short-lived tokens
+- A request registry (in-memory or SQLite)
+- The ONLY path to mint tier 2+ credentials
+
+**Does NOT have:**
+- Access to Prometheus's container, filesystem, or env
+- Access to Prometheus's Telegram bot
+- Any broad Vault permissions
+
+**API:**
+
+```
+POST /api/v1/request
+  Body: {
+    "requester": "prometheus",
+    "resource": "ssh:router",
+    "tier": 2,
+    "reason": "Fix iptables rule for Tailscale DNS",
+    "ttl_minutes": 15
+  }
+  Response: {
+    "request_id": "req-a1b2c3",
+    "status": "pending"
+  }
+
+GET /api/v1/request/:id
+  Response: {
+    "request_id": "req-a1b2c3",
+    "status": "approved|denied|pending|expired",
+    "token": "hvs.XXXXX"  // only present if approved
+  }
+
+GET /api/v1/health
+  Response: { "ok": true }
 ```
 
-**The agent sends this via the message tool:**
+#### B. Telegram Approval Bot
 
-```json
-{
-  "action": "send",
-  "channel": "telegram",
-  "target": "8531859108",
-  "message": "🔐 <b>SSH Access Request</b>\n\n<b>Host:</b> router.lab.nkontur.com\n<b>User:</b> root\n<b>TTL:</b> 15 minutes\n<b>Tier:</b> 2 (quick-approve)\n\n<b>Reason:</b> Check firewall rules for VLAN segmentation MR #47\n\n<b>Context:</b> Infrastructure audit task, triggered by your request",
-  "buttons": [
-    [
-      { "text": "✅ Approve", "callback_data": "jit:approve:req_20260206_143022_ssh_router" },
-      { "text": "❌ Deny", "callback_data": "jit:deny:req_20260206_143022_ssh_router" }
-    ],
-    [
-      { "text": "✅ Approve (30m)", "callback_data": "jit:approve30:req_20260206_143022_ssh_router" },
-      { "text": "ℹ️ Details", "callback_data": "jit:details:req_20260206_143022_ssh_router" }
-    ]
+A second Telegram bot (e.g., @PrometheusApprovalBot) that:
+- Sends approval request messages to Noah's chat
+- Handles callback_query for approve/deny buttons
+- Is completely separate from the Prometheus/moltbot bot
+- Only accepts callbacks from Noah's Telegram user ID (hardcoded allowlist)
+
+**Approval message format:**
+```
+🔐 JIT Access Request [req-a1b2c3]
+
+Resource: SSH → router.lab.nkontur.com
+Tier: 2 (Quick Approve)
+Reason: Fix iptables rule for Tailscale DNS
+TTL: 15 minutes
+Requested: 2026-02-06 03:05 EST
+
+[✅ Approve] [❌ Deny]
+```
+
+Noah taps a button → callback goes to the approval svc (not to Prometheus) → svc mints Vault token → Prometheus polls and picks it up.
+
+#### C. Vault Policy for Approval Service
+
+```hcl
+# policy: jit-approval-svc
+# This is the ONLY policy that can create tier 2+ tokens
+
+# Create scoped tokens with specific policies
+path "auth/token/create" {
+  capabilities = ["create", "update"]
+  allowed_policies = [
+    "prometheus-tier2-ssh",
+    "prometheus-tier2-write",
+    "prometheus-tier3-admin"
   ]
 }
+
+# Read SSH signing endpoint to issue certificates
+path "ssh-client-signer/sign/prometheus-tier2" {
+  capabilities = ["create", "update"]
+}
+
+# Nothing else. No secret read, no policy modification.
 ```
 
-### 4.2 Telegram Approval UI
+#### D. Agent Integration
 
-What Noah sees in Telegram:
-
-```
-┌─────────────────────────────────────┐
-│ 🔐 SSH Access Request               │
-│                                     │
-│ Host: router.lab.nkontur.com        │
-│ User: root                          │
-│ TTL: 15 minutes                     │
-│ Tier: 2 (quick-approve)            │
-│                                     │
-│ Reason: Check firewall rules for    │
-│ VLAN segmentation MR #47            │
-│                                     │
-│ Context: Infrastructure audit task, │
-│ triggered by your request           │
-│                                     │
-│ ┌──────────┐ ┌──────────┐          │
-│ │✅ Approve │ │❌ Deny   │          │
-│ └──────────┘ └──────────┘          │
-│ ┌──────────────┐ ┌─────────┐      │
-│ │✅ Approve 30m │ │ℹ️ Detail│      │
-│ └──────────────┘ └─────────┘      │
-└─────────────────────────────────────┘
-```
-
-**Button actions:**
-
-| Button | Callback Data | Effect |
-|--------|--------------|--------|
-| ✅ Approve | `jit:approve:req_id` | Issue credential with requested TTL |
-| ❌ Deny | `jit:deny:req_id` | Reject, notify agent |
-| ✅ Approve (30m) | `jit:approve30:req_id` | Issue with extended 30m TTL |
-| ℹ️ Details | `jit:details:req_id` | Show full request context |
-
-### 4.3 Callback Processing
-
-When Noah taps a button, OpenClaw delivers the callback data to the agent's session as a regular message:
-
-```
-callback_data: jit:approve:req_20260206_143022_ssh_router
-```
-
-The agent parses this and acts accordingly:
+Prometheus gets a new tool or shell function:
 
 ```bash
-#!/bin/bash
-# jit-callback-handler.sh — called by agent when receiving callback_data
-
-CALLBACK="$1"  # e.g., "jit:approve:req_20260206_143022_ssh_router"
-
-ACTION=$(echo "$CALLBACK" | cut -d: -f2)    # "approve"
-REQ_ID=$(echo "$CALLBACK" | cut -d: -f3-)   # "req_20260206_143022_ssh_router"
-
-case "$ACTION" in
-  approve)
-    # Load request metadata from pending store
-    REQ_FILE="/tmp/jit-requests/${REQ_ID}.json"
-    if [[ ! -f "$REQ_FILE" ]]; then
-      echo "ERROR: Request $REQ_ID not found or expired"
-      exit 1
+jit_request() {
+  local resource="$1"
+  local reason="$2"
+  local ttl="${3:-15}"
+  
+  # Submit request to approval svc
+  REQ_ID=$(curl -s -X POST http://jit-approval-svc:8080/api/v1/request \
+    -H "Content-Type: application/json" \
+    -d "{\"requester\":\"prometheus\",\"resource\":\"$resource\",\"reason\":\"$reason\",\"ttl_minutes\":$ttl}" \
+    | jq -r '.request_id')
+  
+  echo "Request $REQ_ID submitted. Waiting for approval..."
+  
+  # Poll for approval (timeout after 5 min)
+  for i in $(seq 1 60); do
+    STATUS=$(curl -s "http://jit-approval-svc:8080/api/v1/request/$REQ_ID" | jq -r '.status')
+    if [ "$STATUS" = "approved" ]; then
+      TOKEN=$(curl -s "http://jit-approval-svc:8080/api/v1/request/$REQ_ID" | jq -r '.token')
+      echo "$TOKEN"
+      return 0
+    elif [ "$STATUS" = "denied" ]; then
+      echo "DENIED"
+      return 1
     fi
-    
-    BACKEND=$(jq -r '.backend' "$REQ_FILE")
-    TTL=$(jq -r '.ttl' "$REQ_FILE")
-    
-    # Issue credential from Vault
-    case "$BACKEND" in
-      ssh) issue_ssh_credential "$REQ_FILE" "$TTL" ;;
-      database) issue_db_credential "$REQ_FILE" "$TTL" ;;
-      token) issue_vault_token "$REQ_FILE" "$TTL" ;;
-    esac
-    
-    # Log approval
-    log_jit_event "approved" "$REQ_ID" "$TTL"
-    
-    # Clean up pending request
-    rm "$REQ_FILE"
-    ;;
-  
-  approve30)
-    # Same as approve but override TTL to 30m
-    # ... (same logic with TTL="30m")
-    ;;
-  
-  deny)
-    log_jit_event "denied" "$REQ_ID"
-    rm -f "/tmp/jit-requests/${REQ_ID}.json"
-    echo "Access request $REQ_ID was denied."
-    ;;
-  
-  details)
-    # Send full request details back to Telegram
-    cat "/tmp/jit-requests/${REQ_ID}.json" | jq .
-    ;;
-esac
-```
-
-### 4.4 Credential Issuance
-
-After approval, the agent authenticates to Vault and requests the credential:
-
-```bash
-# Authenticate to Vault via AppRole (agent's base identity)
-VAULT_ADDR="https://vault.lab.nkontur.com:8200"
-VAULT_TOKEN=$(curl -s \
-  --cacert /vault/certs/ca.pem \
-  --request POST \
-  --data "{\"role_id\":\"${VAULT_ROLE_ID}\",\"secret_id\":\"${VAULT_SECRET_ID}\"}" \
-  "${VAULT_ADDR}/v1/auth/approle/login" | jq -r '.auth.client_token')
-
-# Request SSH certificate signing
-SIGNED_KEY=$(curl -s \
-  --header "X-Vault-Token: ${VAULT_TOKEN}" \
-  --request POST \
-  --data "{
-    \"public_key\": \"$(cat ~/.ssh/id_ed25519.pub)\",
-    \"valid_principals\": \"root\",
-    \"ttl\": \"15m\"
-  }" \
-  "${VAULT_ADDR}/v1/ssh-client-signer/sign/prometheus-tier2" | jq -r '.data.signed_key')
-
-# Write signed certificate
-echo "$SIGNED_KEY" > ~/.ssh/id_ed25519-cert.pub
-chmod 600 ~/.ssh/id_ed25519-cert.pub
-
-# SSH using the signed certificate (auto-used by OpenSSH)
-ssh -o CertificateFile=~/.ssh/id_ed25519-cert.pub root@router.lab.nkontur.com
-```
-
-### 4.5 TTL and Expiry
-
-Credentials have multiple TTL enforcement layers:
-
-1. **Vault lease TTL** — Vault tracks the lease and revokes it at expiry
-2. **SSH certificate validity** — The certificate itself has a `valid_before` timestamp; sshd rejects expired certs
-3. **Agent-side cleanup** — A background process deletes credential files when TTL expires
-4. **Vault token TTL** — The agent's Vault token (used to issue credentials) also has a short TTL
-
-```bash
-# Agent-side credential cleanup (runs as background job)
-cleanup_credential() {
-  local CRED_FILE="$1"
-  local TTL_SECONDS="$2"
-  
-  sleep "$TTL_SECONDS"
-  rm -f "$CRED_FILE"
-  echo "[$(date -Iseconds)] Credential expired and cleaned: $CRED_FILE" >> /tmp/jit-audit.log
-}
-
-# After issuance:
-cleanup_credential ~/.ssh/id_ed25519-cert.pub 900 &  # 15m = 900s
-```
-
-### 4.6 Denial Flow
-
-When Noah taps "Deny":
-
-1. Agent receives `callback_data: jit:deny:req_id`
-2. Agent logs the denial
-3. Agent reports back to its current task: "Access denied by operator. Proceeding without SSH access."
-4. If the agent was in the middle of a multi-step task, it should gracefully degrade:
-   - Try alternative approaches that don't require elevated access
-   - Report what it couldn't do
-   - Queue for later if appropriate
-
-### 4.7 Request Lifecycle State Machine
-
-```
- ┌──────────┐     ┌──────────┐     ┌──────────┐
- │ PENDING  │────▶│ APPROVED │────▶│ ACTIVE   │
- │          │     │          │     │(cred live)│
- └────┬─────┘     └──────────┘     └────┬─────┘
-      │                                  │
-      │                                  │ TTL expires
-      │  denied                          ▼
-      │  or timeout              ┌──────────┐
-      └─────────────────────────▶│ EXPIRED  │
-                                 │          │
-                                 └──────────┘
-```
-
-**Timeout behavior:** Requests expire after 5 minutes if not acted on. The agent receives no approval and proceeds without elevated access.
-
----
-
-## 5. Vault Dynamic Secret Backends
-
-### 5.1 SSH — Signed Certificates
-
-The **primary use case** and highest-value backend. Replaces the static SSH key at `/home/node/clawd/.ssh/id_ed25519`.
-
-#### Vault Setup
-
-```bash
-# Enable SSH secrets engine for client certificate signing
-vault secrets enable -path=ssh-client-signer ssh
-
-# Generate CA signing key
-vault write ssh-client-signer/config/ca generate_signing_key=true
-
-# Extract CA public key (deploy to all SSH hosts)
-vault read -field=public_key ssh-client-signer/config/ca > trusted-user-ca-keys.pem
-```
-
-#### Roles (one per tier)
-
-```bash
-# Tier 2: Standard hosts (GitLab, media servers, etc.)
-vault write ssh-client-signer/roles/prometheus-tier2 \
-  key_type="ca" \
-  allow_user_certificates=true \
-  allowed_users="prometheus,moltbot,node" \
-  allowed_extensions="permit-pty" \
-  default_extensions='{"permit-pty":""}' \
-  ttl="15m" \
-  max_ttl="30m"
-
-# Tier 3: Critical infrastructure (router, Vault host)
-vault write ssh-client-signer/roles/prometheus-tier3 \
-  key_type="ca" \
-  allow_user_certificates=true \
-  allowed_users="root" \
-  allowed_extensions="permit-pty" \
-  default_extensions='{"permit-pty":""}' \
-  ttl="10m" \
-  max_ttl="15m"
-```
-
-#### SSH Host Configuration
-
-On each target host, add to `/etc/ssh/sshd_config`:
-
-```
-TrustedUserCAKeys /etc/ssh/trusted-user-ca-keys.pem
-```
-
-For the router (critical infra), also add:
-
-```
-# Only allow cert-based auth for moltbot user (no password, no plain keys)
-Match User root
-  AuthorizedKeysFile none
-  TrustedUserCAKeys /etc/ssh/trusted-user-ca-keys.pem
-  AuthorizedPrincipalsFile /etc/ssh/authorized_principals
-```
-
-And in `/etc/ssh/authorized_principals`:
-```
-root
-```
-
-#### Credential Issuance Flow
-
-```bash
-issue_ssh_credential() {
-  local REQ_FILE="$1"
-  local TTL="$2"
-  
-  RESOURCE=$(jq -r '.resource' "$REQ_FILE")
-  PRINCIPAL=$(jq -r '.principal' "$REQ_FILE")
-  TIER=$(jq -r '.tier' "$REQ_FILE")
-  
-  # Determine role based on tier
-  ROLE="prometheus-tier${TIER}"
-  
-  # Sign the agent's public key
-  RESPONSE=$(curl -s \
-    --cacert /etc/ssl/vault-ca.pem \
-    --header "X-Vault-Token: ${JIT_VAULT_TOKEN}" \
-    --request POST \
-    --data "{
-      \"public_key\": \"$(cat ~/.ssh/id_ed25519.pub)\",
-      \"valid_principals\": \"${PRINCIPAL}\",
-      \"ttl\": \"${TTL}\",
-      \"extensions\": {\"permit-pty\": \"\"}
-    }" \
-    "${VAULT_ADDR}/v1/ssh-client-signer/sign/${ROLE}")
-  
-  SIGNED_KEY=$(echo "$RESPONSE" | jq -r '.data.signed_key')
-  SERIAL=$(echo "$RESPONSE" | jq -r '.data.serial_number')
-  
-  if [[ "$SIGNED_KEY" == "null" ]] || [[ -z "$SIGNED_KEY" ]]; then
-    echo "ERROR: Failed to obtain SSH certificate"
-    echo "$RESPONSE" | jq '.errors'
-    return 1
-  fi
-  
-  # Write certificate
-  echo "$SIGNED_KEY" > ~/.ssh/id_ed25519-cert.pub
-  chmod 600 ~/.ssh/id_ed25519-cert.pub
-  
-  echo "SSH certificate issued (serial: $SERIAL, TTL: $TTL)"
-  
-  # Schedule cleanup
-  TTL_SECONDS=$(parse_ttl_to_seconds "$TTL")
-  (sleep "$TTL_SECONDS" && rm -f ~/.ssh/id_ed25519-cert.pub) &
+    sleep 5
+  done
+  echo "TIMEOUT"
+  return 1
 }
 ```
 
-### 5.2 Database — Dynamic PostgreSQL Credentials
+### 4.3 Security Properties
 
-For GitLab's PostgreSQL database and any future DB access needs.
+| Property | Guarantee |
+|----------|-----------|
+| Agent can't self-approve | Approval path never enters agent container |
+| Agent can't swap buttons | Buttons are sent by a different bot the agent doesn't control |
+| Agent can't forge tokens | Only approval svc has the Vault policy to mint tier 2+ tokens |
+| Compromised agent blast radius | Limited to tier 0-1 (read-only APIs, own workspace) |
+| Token leakage impact | Minimized by TTL (15 min default, 60 min max) |
+| Telegram compromise | Attacker needs Noah's Telegram account AND the callback must come from his user ID |
+| Approval svc compromise | Attacker gets token-minting ability but still needs to pass Telegram callback verification |
 
-#### Vault Setup
-
-```bash
-# Enable database secrets engine
-vault secrets enable database
-
-# Configure PostgreSQL connection (GitLab's DB)
-vault write database/config/gitlab-postgres \
-  plugin_name="postgresql-database-plugin" \
-  allowed_roles="prometheus-gitlab-readonly,prometheus-gitlab-readwrite" \
-  connection_url="postgresql://{{username}}:{{password}}@gitlab-db.lab.nkontur.com:5432/gitlabhq_production?sslmode=require" \
-  username="vault_admin" \
-  password="<vault-admin-password>"
-
-# Read-only role (Tier 2)
-vault write database/roles/prometheus-gitlab-readonly \
-  db_name="gitlab-postgres" \
-  creation_statements="CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}'; \
-    GRANT SELECT ON ALL TABLES IN SCHEMA public TO \"{{name}}\";" \
-  revocation_statements="REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM \"{{name}}\"; DROP ROLE IF EXISTS \"{{name}}\";" \
-  default_ttl="15m" \
-  max_ttl="30m"
-
-# Read-write role (Tier 3)
-vault write database/roles/prometheus-gitlab-readwrite \
-  db_name="gitlab-postgres" \
-  creation_statements="CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}'; \
-    GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO \"{{name}}\";" \
-  revocation_statements="REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM \"{{name}}\"; DROP ROLE IF EXISTS \"{{name}}\";" \
-  default_ttl="10m" \
-  max_ttl="15m"
-```
-
-#### Credential Issuance
-
-```bash
-issue_db_credential() {
-  local REQ_FILE="$1"
-  local TTL="$2"
-  
-  ROLE=$(jq -r '.vault_role' "$REQ_FILE")
-  
-  RESPONSE=$(curl -s \
-    --cacert /etc/ssl/vault-ca.pem \
-    --header "X-Vault-Token: ${JIT_VAULT_TOKEN}" \
-    "${VAULT_ADDR}/v1/database/creds/${ROLE}")
-  
-  DB_USER=$(echo "$RESPONSE" | jq -r '.data.username')
-  DB_PASS=$(echo "$RESPONSE" | jq -r '.data.password')
-  LEASE_ID=$(echo "$RESPONSE" | jq -r '.lease_id')
-  
-  # Inject as environment variables for the current task
-  export PGUSER="$DB_USER"
-  export PGPASSWORD="$DB_PASS"
-  
-  # Or write to a temp file that the agent's DB client reads
-  cat > /tmp/jit-db-creds.json <<EOF
-{
-  "username": "$DB_USER",
-  "password": "$DB_PASS",
-  "lease_id": "$LEASE_ID",
-  "ttl": "$TTL"
-}
-EOF
-  chmod 600 /tmp/jit-db-creds.json
-  
-  echo "Database credential issued (user: $DB_USER, TTL: $TTL)"
-}
-```
-
-### 5.3 API Tokens — Scoped Vault Tokens
-
-For services that use API tokens (GitLab, Home Assistant, etc.), Vault can issue short-lived tokens with scoped policies.
-
-#### Approach: Vault as Token Broker
-
-Rather than Vault natively integrating with each service's auth (which would require custom plugins), we use Vault's KV secrets engine + short-lived Vault tokens as a broker:
-
-1. Long-lived API tokens are stored in Vault KV (not in container env vars)
-2. Agent requests a short-lived Vault token scoped to only read specific KV paths
-3. Agent reads the API token from Vault KV using the scoped token
-4. Agent uses the API token for the specific task
-5. The Vault token expires, agent can no longer read KV
-
-This is a stepping stone. The API tokens themselves are still long-lived, but the agent's **access window** is now gated and logged.
-
-```bash
-# Store service tokens in Vault KV
-vault kv put secret/services/gitlab token="glpat-xxxxxxxxxxxx"
-vault kv put secret/services/hass token="eyJ0eXAiOiJKV1QiLC..."
-vault kv put secret/services/radarr api_key="xxxxxxxxxx"
-
-# Policy: read-only access to media service tokens
-cat <<EOF > prometheus-media-readonly.hcl
-path "secret/data/services/radarr" { capabilities = ["read"] }
-path "secret/data/services/sonarr" { capabilities = ["read"] }
-path "secret/data/services/plex"   { capabilities = ["read"] }
-path "secret/data/services/ombi"   { capabilities = ["read"] }
-EOF
-vault policy write prometheus-media-readonly prometheus-media-readonly.hcl
-
-# Policy: GitLab write access
-cat <<EOF > prometheus-gitlab-write.hcl
-path "secret/data/services/gitlab" { capabilities = ["read"] }
-EOF
-vault policy write prometheus-gitlab-write prometheus-gitlab-write.hcl
-```
-
-#### Token Issuance
-
-```bash
-issue_vault_token() {
-  local REQ_FILE="$1"
-  local TTL="$2"
-  
-  POLICY=$(jq -r '.vault_policy' "$REQ_FILE")
-  
-  # Create a short-lived child token with the scoped policy
-  RESPONSE=$(curl -s \
-    --header "X-Vault-Token: ${JIT_VAULT_TOKEN}" \
-    --request POST \
-    --data "{
-      \"policies\": [\"${POLICY}\"],
-      \"ttl\": \"${TTL}\",
-      \"renewable\": false,
-      \"display_name\": \"prometheus-jit-$(date +%s)\"
-    }" \
-    "${VAULT_ADDR}/v1/auth/token/create")
-  
-  SCOPED_TOKEN=$(echo "$RESPONSE" | jq -r '.auth.client_token')
-  
-  # Now read the actual service credential using the scoped token
-  SERVICE_CRED=$(curl -s \
-    --header "X-Vault-Token: ${SCOPED_TOKEN}" \
-    "${VAULT_ADDR}/v1/secret/data/services/gitlab" | jq -r '.data.data.token')
-  
-  export GITLAB_TOKEN="$SERVICE_CRED"
-  
-  # Schedule token revocation
-  TTL_SECONDS=$(parse_ttl_to_seconds "$TTL")
-  (sleep "$TTL_SECONDS" && unset GITLAB_TOKEN) &
-  
-  echo "Scoped Vault token issued (policy: $POLICY, TTL: $TTL)"
-}
-```
-
-### 5.4 AWS/Cloud Credentials
-
-Currently not heavily used, but the pattern is ready for future needs.
-
-```bash
-# Enable AWS secrets engine
-vault secrets enable aws
-
-# Configure root credentials (IAM user with admin, stored in Vault)
-vault write aws/config/root \
-  access_key="AKIAIOSFODNN7EXAMPLE" \
-  secret_key="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" \
-  region="us-east-1"
-
-# Role: read-only S3 access
-vault write aws/roles/prometheus-s3-readonly \
-  credential_type="iam_user" \
-  policy_document=-<<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": ["s3:GetObject", "s3:ListBucket"],
-      "Resource": "*"
-    }
-  ]
-}
-EOF
-```
-
-### 5.5 Docker Socket Access
-
-The moltbot container does **not** currently have Docker socket access, and this should remain the case. Docker operations should go through the homelab repo's CI/CD pipeline (git push → Ansible deploy).
-
-If future use cases require container inspection (not management), a read-only Docker API proxy could be deployed:
+### 4.4 Deployment
 
 ```yaml
-# NOT recommended for Phase 1 — document for future consideration
-docker-api-readonly:
-  image: tecnativa/docker-socket-proxy
+# docker-compose addition
+jit-approval-svc:
+  build: ./docker/jit-approval-svc
+  container_name: jit-approval-svc
+  restart: unless-stopped
   environment:
-    - CONTAINERS=1  # read-only container list
-    - IMAGES=1      # read-only image list
-    - NETWORKS=0    # no network access
-    - VOLUMES=0     # no volume access
-    - POST=0        # no write operations
-  volumes:
-    - /var/run/docker.sock:/var/run/docker.sock:ro
+    - TELEGRAM_BOT_TOKEN={{ vault_jit_telegram_token }}
+    - VAULT_ADDR=http://vault:8200
+    - VAULT_TOKEN={{ vault_jit_svc_token }}
+    - ALLOWED_TELEGRAM_USERS=8531859108
+    - ALLOWED_REQUESTERS=prometheus
+    - MAX_TTL_MINUTES=60
+    - DEFAULT_TTL_MINUTES=15
+  networks:
+    - internal
+  # No volume mounts needed - stateless (or small SQLite for audit)
 ```
 
-**Recommendation:** Keep Docker management out of JIT scope. The CI/CD pipeline is the correct control plane for infrastructure changes.
+### 4.5 Open Design Questions
+
+1. **Polling vs push:** Agent polls for approval status. Could use a webhook callback to OpenClaw instead, but that reintroduces a path from the approval svc into the agent. Polling is simpler and safer.
+2. **Request validation:** Should the approval svc validate that the requested resource exists? Or is it purely a token-minting gatekeeper?
+3. **Multi-approver:** Future consideration — require N-of-M approvals for tier 3+?
+4. **Audit log:** SQLite in the approval svc container, or push to InfluxDB/Loki for centralized logging?
 
 ---
+## 5. Service-Specific Token Lifecycle (Create/Revoke Patterns)
 
+**Key insight (2026-02-06):** Most critical services support programmatic token creation and revocation. The approval service can issue REAL short-lived tokens for these, not just broker static ones.
+
+### 5.1 Model B Services (True Dynamic Credentials)
+
+These services support programmatic create + revoke, giving us real cryptographic or server-enforced expiry:
+
+#### Home Assistant (OAuth2)
+```
+Approval svc holds: HA refresh token (stored in Vault)
+On approve:
+  POST https://homeassistant.lab.nkontur.com/auth/token
+    grant_type=refresh_token&
+    refresh_token=STORED_REFRESH_TOKEN&
+    client_id=https://jit-approval-svc.lab.nkontur.com
+  → Returns access_token (expires_in: 1800 = 30 min)
+On expiry: HA server rejects token automatically
+Emergency revoke: DELETE refresh token → kills ALL derived access tokens instantly
+```
+
+#### Plex (Per-Client Token)
+```
+Approval svc holds: Plex account credentials or master token (stored in Vault)
+On approve:
+  POST https://plex.tv/users/sign_in.json
+    X-Plex-Client-Identifier: jit-{request_id}
+    → Returns unique auth token for this client ID
+On expiry: 
+  POST https://plex.tv/api/v2/tokens/{token_id}?X-Plex-Token=master
+    _method=DELETE
+  → Server rejects token immediately
+```
+
+#### GitLab (Personal Access Token API)
+```
+Approval svc holds: GitLab admin token or impersonation capability (stored in Vault)
+On approve:
+  POST /api/v4/personal_access_tokens
+    name=jit-prometheus-{request_id}
+    expires_at={now + TTL}
+    scopes=["read_api"]  # scoped to request
+  → Returns new PAT with built-in expiry
+On expiry: GitLab rejects token automatically (server-side expiry)
+Emergency revoke: DELETE /api/v4/personal_access_tokens/:id
+```
+
+#### Grafana (Service Account Token)
+```
+Approval svc holds: Grafana admin credentials (stored in Vault)
+On approve:
+  POST /api/serviceaccounts/{sa_id}/tokens
+    name=jit-{request_id}
+    secondsToLive={TTL_seconds}
+  → Returns token with server-enforced TTL
+On expiry: Grafana rejects token automatically
+Emergency revoke: DELETE /api/serviceaccounts/{sa_id}/tokens/{token_id}
+```
+
+#### SSH (Vault CA Certificates)
+```
+Approval svc holds: Vault policy for ssh-client-signer
+On approve:
+  POST vault/ssh-client-signer/sign/prometheus-tier2
+    public_key={agent_pub_key}
+    valid_principals=node
+    ttl=15m
+  → Returns signed SSH certificate
+On expiry: Certificate is cryptographically expired, sshd rejects it
+No revoke needed: math handles it
+```
+
+#### PostgreSQL (Vault Database Engine)
+```
+Approval svc holds: Vault policy for database/creds
+On approve:
+  GET vault/database/creds/prometheus-readonly
+  → Returns ephemeral username + password, TTL enforced by Vault
+On expiry: Vault drops the database user automatically (lease revocation)
+Emergency revoke: PUT vault/sys/leases/revoke -d lease_id=...
+```
+
+### 5.2 Model A Services (Static Token Brokering)
+
+These services have no token management API. The approval service brokers access to a single static token:
+
+| Service | Risk Level | Mitigation |
+|---------|-----------|------------|
+| Radarr | Low (media management) | Agent-enforced TTL, audit log |
+| Sonarr | Low (media management) | Agent-enforced TTL, audit log |
+| Tautulli | Low (read-only stats) | Move to Tier 1 (auto-approved) |
+| NZBGet | Low (download client) | Agent-enforced TTL, audit log |
+| Deluge | Low (download client) | Agent-enforced TTL, audit log |
+| Ombi | Low (media requests) | Agent-enforced TTL, audit log |
+
+**Future option for Model A services:** Deploy a reverse auth proxy that validates JIT tokens before forwarding to the real API. This gives server-enforced expiry even for services that don't support it. Could be part of the Traefik migration (forward-auth middleware).
+
+### 5.3 Summary
+
+| Tier | Service | Model | Expiry Enforcement |
+|------|---------|-------|--------------------|
+| 2 | Home Assistant | B | Server (OAuth2 30m) |
+| 2 | Plex | B | Server (token revocation) |
+| 2 | GitLab | B | Server (PAT expiry) |
+| 1 | Grafana | B | Server (token TTL) |
+| 2 | SSH | B | Cryptographic (cert TTL) |
+| 3 | PostgreSQL | B | Vault (lease revocation) |
+| 1 | Radarr/Sonarr | A | Agent-enforced |
+| 1 | Tautulli | A | Agent-enforced |
+| 1 | NZBGet/Deluge | A | Agent-enforced |
+| 1 | Ombi | A | Agent-enforced |
+
+**Coverage:** All Tier 2+ services support Model B (real expiry). Model A is limited to low-risk Tier 1 services where the blast radius is minimal (media management).
+
+
+---
 ## 6. Scoped Access Tiers
 
 ### Tier Definitions
@@ -867,10 +584,1640 @@ step 3 of 5 in the audit checklist.
 ```
 
 ---
+## 7. Community-Sourced Hardening (from Moltbook feedback)
 
-## 7. Technical Implementation
+Three hardening measures identified through community discussion:
 
-### 7.1 OpenClaw Inline Buttons for Approval
+### 7.1 Cryptographic Attestation of Grants
+
+**Problem:** The polling channel between agent and approval service is an attack surface. A MITM could inject fake "approved" responses with malicious tokens.
+
+**Solution:** The approval service digitally signs every grant response. The agent verifies the signature before accepting any token.
+
+```
+Approval service: holds Ed25519 private key (stored in Vault)
+Agent: holds corresponding public key (baked into container config)
+
+Grant response:
+{
+  "request_id": "req-a1b2c3",
+  "status": "approved",
+  "token": "hvs.XXX",
+  "resource": "ssh:router",
+  "ttl_minutes": 15,
+  "granted_at": "2026-02-06T03:20:00Z",
+  "nonce": "random-per-request",
+  "signature": base64(Ed25519.sign(
+    canonical(request_id + resource + token + ttl + granted_at + nonce),
+    private_key
+  ))
+}
+
+Agent verification:
+  Ed25519.verify(signature, public_key) → accept or reject
+```
+
+**Properties:**
+- Prevents MITM on polling channel
+- Prevents replay attacks (nonce + granted_at timestamp)
+- Agent can verify without any secret material (public key only)
+- Cheap to implement (Ed25519 is fast and available in Go stdlib)
+
+**Phase:** Include from Phase 1. Low implementation cost, high security value.
+
+### 7.2 Capability Attenuation
+
+**Problem:** Tier-based grants are coarse. "Tier 2 SSH" gives SSH access to everything in that tier, when the agent may only need access to a single host for a specific command.
+
+**Solution:** Requests include fine-grained capability descriptors. The approval service mints the most restrictive credential possible.
+
+```
+Request:
+{
+  "resource": "ssh:router",
+  "capabilities": {
+    "hosts": ["router.lab.nkontur.com"],
+    "principals": ["node"],
+    "commands": ["cat /etc/iptables/rules.v4"],
+    "force_command": true
+  },
+  "reason": "Read current iptables rules for audit",
+  "ttl_minutes": 5
+}
+
+Approval svc mints SSH cert with:
+  valid_principals=node
+  critical_options=force-command="cat /etc/iptables/rules.v4"
+  extensions=permit-pty
+  ttl=5m
+```
+
+**Properties:**
+- Minimum viable access per request
+- Even if token is leaked, it can only do exactly what was requested
+- Human sees the specific capability in the approval message (easier to evaluate)
+- SSH force-command is particularly powerful — cert literally can't run any other command
+
+**Phase:** Phase 2 (alongside SSH certificate engine). Some services support fine-grained scoping better than others.
+
+### 7.3 Canary Requests
+
+**Problem:** How do you know the approval flow hasn't been compromised? If an attacker can silently auto-approve requests, you wouldn't know until damage is done.
+
+**Solution:** The agent periodically submits canary requests that should ALWAYS be denied. If a canary is approved, the system is compromised.
+
+```
+Canary request (submitted by agent on random schedule):
+{
+  "resource": "canary:tripwire",
+  "reason": "CANARY — this request must be denied",
+  "ttl_minutes": 1,
+  "_canary": true
+}
+
+Expected flow:
+  1. Approval svc recognizes canary flag
+  2. Does NOT send to human (avoids fatigue)
+  3. Logs the canary test
+  4. Returns status: "denied"
+
+If agent receives "approved" for a canary:
+  → Alert immediately (Telegram, email, Grafana)
+  → Lock down: revoke all active JIT tokens
+  → Agent enters read-only mode until human investigates
+```
+
+**Properties:**
+- Detects compromised approval service
+- Detects MITM that auto-approves everything
+- No human involvement (canaries are machine-to-machine)
+- Random scheduling makes it hard for an attacker to distinguish canaries from real requests
+
+**Phase:** Phase 3. Requires the core flow to be stable first.
+
+---
+## 8. Security Requirements
+
+The following requirements were identified through adversarial review of the JIT system design. Each represents a concrete attack surface that **must** be addressed before production deployment, not an open question.
+
+### 8.1 REQUIRE mTLS on Approval Service API
+
+**Threat:** Token in plaintext over HTTP polling. The agent polls `GET /api/v1/request/:id` and receives the Vault token in the response body. On the internal Docker network this traverses a bridge, but any container on the same network could sniff the token.
+
+**Requirement:** All communication between the agent and `jit-approval-svc` MUST use mTLS (mutual TLS). Both sides present certificates signed by the lab CA. This ensures:
+- Tokens are encrypted in transit
+- Only the agent (with its client cert) can poll the approval service
+- Only the real approval service (with its server cert) can respond
+
+**Implementation:** Use the existing lab CA (`vault.lab.nkontur.com` PKI engine) to issue short-lived client/server certificates. The agent and approval service each get a certificate at startup.
+
+### 8.2 Minimize Approval Service Vault Permissions
+
+**Threat:** The approval service is a single point of compromise. If an attacker gains code execution in the `jit-approval-svc` container, they inherit its Vault token, which can mint tier 2+ credentials.
+
+**Requirement:** The approval service's Vault policy MUST be the minimum needed:
+- Can ONLY create tokens with explicitly listed policies (no wildcard)
+- Cannot read secrets from KV
+- Cannot modify policies
+- Cannot access Vault admin endpoints
+- Token creation is further scoped by `allowed_policies` in the Vault policy
+
+**Implementation:** The Vault policy in [Section 4.2C](#c-vault-policy-for-approval-service) already demonstrates this. Enforce it. Regularly audit via `vault token capabilities`.
+
+### 8.3 Make Canary Requests Indistinguishable
+
+**Threat:** Canary requests (see [Section 7.3](#73-canary-requests)) are detectable if they use a different resource format, timing pattern, or metadata. A sophisticated attacker could selectively auto-approve real requests while denying canaries.
+
+**Requirement:** Canary requests MUST be indistinguishable from real requests at the API level:
+- Use real resource names (`ssh:router`, not `canary:tripwire`)
+- Use realistic reasons and TTLs
+- Submit on the same schedule/pattern as real requests
+- The approval service identifies canaries via a pre-shared secret or HMAC, not via request content
+
+**Implementation:** The approval service maintains a canary schedule. When a canary fires, it generates a request that looks identical to a real request. The Telegram message is sent to Noah as normal (or silently auto-denied server-side, depending on configuration). The key property: an observer of the API traffic cannot distinguish canary from real.
+
+### 8.4 REQUIRE Per-Requester Rate Limits
+
+**Threat:** No rate limiting on the approval service API. A compromised agent could flood the approval service with requests, either for denial-of-service or to fatigue Noah into approving one.
+
+**Requirement:** The approval service MUST enforce per-requester rate limits:
+- Max 10 pending requests per requester at any time
+- Max 30 requests per hour per requester
+- Max 5 tier 3 requests per hour
+- Exceeding limits returns HTTP 429 and alerts Noah
+
+**Implementation:** In-memory rate limiter in the Go service (e.g., `golang.org/x/time/rate`). Persistent counters in SQLite for cross-restart tracking.
+
+### 8.5 REQUIRE Post-Mint Poll for Token Delivery
+
+**Threat:** Poll keepalive race condition. The agent submits a request and polls. Noah approves. The approval service mints the token. But if the agent's poll and the approval happen simultaneously, the token could be minted and sitting in the response before the agent's next poll, creating a window where the token exists but is unclaimed.
+
+**Requirement:** After minting a token, the approval service MUST NOT return it until the agent's next poll (i.e., the token transitions through `minted` → `claimed` states). The token MUST only be returned once, and only to a poll that includes the correct request ID. The `claimed` transition must be atomic.
+
+**Implementation:** This is already addressed in the request state machine (see [Section 10.1](#101-request-state-machine)). Enforce it: the `GET /api/v1/request/:id` endpoint transitions from `minted` to `claimed` atomically and clears the token from subsequent responses.
+
+### 8.6 REQUIRE Authentication on Approval Service API
+
+**Threat:** No authentication on the approval service API. Any container on the internal Docker network could submit requests or poll for tokens.
+
+**Requirement:** The approval service API MUST require authentication:
+- **Option A (minimum):** Pre-shared API key in `Authorization: Bearer <key>` header. Key stored in Vault, injected into agent's env at startup.
+- **Option B (preferred):** mTLS client certificate (see 8.1), which provides authentication as a side effect.
+
+**Implementation:** If mTLS is implemented per 8.1, this requirement is automatically satisfied. If mTLS is deferred, implement API key authentication as a minimum.
+
+### 8.7 Source Telegram Bot Token from Vault
+
+**Threat:** The approval service's Telegram bot token is currently specified as an environment variable (`TELEGRAM_BOT_TOKEN={{ vault_jit_telegram_token }}`). While this IS sourced from Vault at deploy time, the token sits in the container's environment permanently.
+
+**Requirement:** The approval service SHOULD read its Telegram bot token from Vault at startup using its own AppRole authentication, then drop it from the environment. This matches the JIT philosophy — don't hold credentials longer than needed.
+
+**Implementation:** On startup, the approval service authenticates to Vault via AppRole, reads the bot token from `secret/data/services/jit-approval/telegram_token`, stores it in process memory, and does NOT expose it as an env var. The Vault token used for this initial read can then be revoked.
+
+### 8.8 Document Contradictions Resolved
+
+**Threat (now resolved):** The original document contained sections 4-10 describing an agent-side approval gating approach, followed by section 11 explicitly rejecting that approach. A reader could implement the wrong design.
+
+**Resolution:** This restructuring promotes the external approval service (original §11) as the canonical architecture (now [Section 4](#4-external-approval-service)) and moves the rejected agent-side approach to [Appendix A](#16-appendix-a-rejected-approaches-agent-side-approval-gating). The document now presents a single, consistent design.
+
+---
+## 9. Failure Modes and Recovery
+
+### 9.1 Approval Service Goes Down
+
+**During token issuance:**
+- Agent's request gets no response → times out → agent reports "approval service unreachable"
+- No orphaned tokens (token not yet created)
+
+**After token issuance, before scheduled cleanup:**
+- Model B services (HA, Plex, GitLab, SSH, PostgreSQL): token expires server-side regardless. No action needed.
+- Model A services (Radarr, Sonarr, etc.): static token was brokered, no cleanup possible. But these are all Tier 1 (low-risk, media management). Blast radius is minimal.
+
+**Conclusion:** Approval service downtime is a non-issue for security because all Tier 2+ services have server-enforced expiry. The approval service is only needed for *granting* access, not for *revoking* it.
+
+### 9.2 Target Service Goes Down
+
+**Before token use:** Agent gets a valid token but can't reach the service. Token expires naturally. No issue.
+
+**During token use:** Agent's operation fails. Token still expires on schedule. No issue.
+
+**During scheduled revocation (Model B active revoke):** Approval service can't reach target to revoke token. Options:
+- Retry with backoff (service might come back before TTL expires)
+- Log the failure (audit trail)
+- Not critical: TTL handles it anyway — revocation is just an acceleration of natural expiry
+
+### 9.3 Vault Goes Down
+
+- No new tokens can be issued (approval service can't mint)
+- Existing tokens continue working until their TTL expires
+- Agent falls back to Tier 0-1 (no elevation possible)
+- Self-healing: Vault auto-unseal is already configured
+
+**Conclusion:** No failure mode creates an unbounded credential exposure. The worst case is always "agent has reduced access until services recover." This is by design — fail-closed, not fail-open.
+
+
+---
+## 10. Request Lifecycle and Crash Recovery
+
+### 10.1 Request State Machine
+
+```
+                    ┌─────────────────────────────────┐
+                    │                                 │
+Created ──[agent polls]──▶ Pending ──[human taps]──▶ Approved
+   │                         │                         │
+   │                    [no poll for                [mint token]
+   │                     30 seconds]                   │
+   │                         │                    ┌────▼────┐
+   │                         ▼                    │ Minted  │──[TTL]──▶ Expired
+   │                    Expired                   └────┬────┘          (revoke if
+   │                    (agent gone)                   │               Model B)
+   │                                              [agent polls,
+   │                                               gets token]
+   │                                                   │
+   │                                              ┌────▼────┐
+   │                                              │ Claimed  │──[TTL]──▶ Expired
+   │                                              └─────────┘
+   │
+   └──[human taps deny]──▶ Denied ──▶ Closed
+```
+
+### 10.2 Poll-Based Keepalive
+
+The agent must actively poll to keep a request alive. This provides a trust-free mechanism for tracking agent liveness — the broker doesn't need any OpenClaw integration.
+
+```
+Agent polling loop:
+  while true:
+    response = GET /api/v1/request/{id}
+    if response.status == "approved" or "minted":
+      use token
+      break
+    if response.status == "denied" or "expired":
+      give up
+      break
+    sleep 15s    # poll interval
+
+Broker-side keepalive tracking:
+  on each poll:
+    request.last_poll_at = now()
+  
+  background reaper (every 10s):
+    for each request where status == "pending":
+      if now() - last_poll_at > 30s:
+        mark expired
+        update Telegram message: "⏰ Expired (agent stopped waiting)"
+```
+
+**Properties:**
+- Agent session dies → polling stops → request expires within 30s
+- No trust in the agent required — broker just observes silence
+- Works for both sub-agent sessions (short-lived) and main session (long-lived)
+- Agent can't keep a request alive without actively polling (no fire-and-forget)
+
+### 10.3 Durable Request Store (SQLite)
+
+Requests must survive broker restarts. SQLite is the simplest durable store.
+
+```sql
+CREATE TABLE requests (
+  id              TEXT PRIMARY KEY,     -- req-{uuid}
+  requester       TEXT NOT NULL,        -- "prometheus"
+  resource        TEXT NOT NULL,        -- "ssh:router"
+  tier            INTEGER NOT NULL,     -- 2
+  reason          TEXT NOT NULL,
+  capabilities    TEXT,                 -- JSON, optional fine-grained scope
+  status          TEXT NOT NULL,        -- pending|approved|minted|claimed|denied|expired
+  ttl_minutes     INTEGER NOT NULL,    -- requested TTL for the credential
+  created_at      TIMESTAMP NOT NULL,
+  last_poll_at    TIMESTAMP NOT NULL,
+  approved_at     TIMESTAMP,
+  token           TEXT,                 -- null until minted
+  token_expires_at TIMESTAMP,
+  telegram_msg_id TEXT,                -- for updating the approval message
+  signature       TEXT,                -- Ed25519 signature of the grant
+  revoked         BOOLEAN DEFAULT 0
+);
+
+CREATE INDEX idx_status ON requests(status);
+CREATE INDEX idx_last_poll ON requests(last_poll_at);
+```
+
+### 10.4 Crash Recovery (Broker Startup Sequence)
+
+On every broker startup:
+
+```
+1. EXPIRE stale pending requests:
+   UPDATE requests SET status='expired'
+   WHERE status='pending' AND last_poll_at < now() - 30s
+
+2. COMPLETE interrupted approvals:
+   SELECT * FROM requests WHERE status='approved' AND token IS NULL
+   For each:
+     if created_at + ttl_minutes < now():
+       mark expired (too late, don't mint stale tokens)
+     else:
+       mint Vault token, update status to 'minted'
+
+3. REVOKE orphaned tokens:
+   SELECT * FROM requests WHERE status IN ('minted','claimed')
+     AND token_expires_at < now() AND revoked = 0
+   For each:
+     call service-specific revocation
+     mark revoked = 1
+
+4. FETCH missed Telegram callbacks:
+   Use long polling (getUpdates) to retrieve any callbacks
+   received while broker was down (Telegram holds for 24h)
+   Process each callback normally
+```
+
+### 10.5 Telegram Integration Details
+
+**Long polling over webhooks.** Reasons:
+- Telegram holds unprocessed updates for 24 hours
+- Broker restart automatically picks up missed callbacks
+- No need for HTTPS endpoint or certificate management
+- Simpler deployment (no inbound routing through nginx)
+
+**Message lifecycle:**
+
+```
+Request created:
+  🔐 JIT Access Request [req-a1b2c3]
+  Resource: SSH → router
+  Tier: 2 | TTL: 15 min
+  Reason: Fix iptables rule for Tailscale DNS
+  Status: ⏳ Pending
+  [✅ Approve] [❌ Deny]
+
+Request approved:
+  (edit message)
+  ✅ Approved [req-a1b2c3]
+  Resource: SSH → router | TTL: 15 min
+  Approved at: 03:20 EST
+  Token expires: 03:35 EST
+
+Request expired (agent stopped polling):
+  (edit message)
+  ⏰ Expired [req-a1b2c3]
+  Resource: SSH → router
+  Reason: Agent stopped waiting
+
+Request denied:
+  (edit message)
+  ❌ Denied [req-a1b2c3]
+  Resource: SSH → router
+
+Token expired (post-use notification):
+  (new message)
+  🔒 Token expired [req-a1b2c3]
+  Resource: SSH → router
+  Used for: 12 min of 15 min TTL
+```
+
+
+---
+## 11. Credential Isolation from LLM Context
+
+### 11.1 The Problem
+
+When the agent polls for an approved credential and receives it via HTTP response, the credential enters the LLM's context window. OpenClaw persists the full session transcript to disk as JSONL. This means every JIT credential that passes through the LLM ends up in a transcript file — defeating the purpose of short TTLs.
+
+Even if the credential expires in 15 minutes, the plaintext sits in the transcript file permanently until the scrub cron catches it.
+
+### 11.2 Current Mitigation: Aggressive Scrub Cron
+
+A host-level cron job runs every 10 minutes scanning all transcript files for 14+ credential patterns and redacting matches in-place. Emits structured JSON audit logs to `/var/log/scrub-transcripts/scrub.log` for auditability.
+
+**Properties:**
+- Maximum credential exposure window: ~10 minutes on disk after session write
+- Credentials in active LLM context (in-memory) are not affected by scrub
+- Scrub patterns may miss novel credential formats
+- Defense in depth — not the primary protection
+
+**See:** MR !127 for implementation.
+
+### 11.3 Future: Sidecar Execution Container (Phase 5+)
+
+The definitive solution is to ensure credentials never enter the LLM context at all.
+
+**Architecture: "Separate the brain from the hands"**
+
+```
+┌─────────────────────┐     ┌──────────────────────┐
+│  Agent (moltbot)     │     │  JIT Sidecar         │
+│                      │     │  (separate container) │
+│  LLM decides WHAT:   │     │                      │
+│  "Check iptables on  │────▶│  Handles HOW:        │
+│   router"            │     │  1. Polls approval   │
+│                      │     │     svc for token    │
+│  Receives RESULT:    │◀────│  2. Authenticates    │
+│  "Here are the       │     │  3. Executes command │
+│   iptables rules..." │     │  4. Returns stdout   │
+│                      │     │  5. Destroys token   │
+│  Token NEVER enters  │     │                      │
+│  LLM context or      │     │  Token lives and     │
+│  transcript          │     │  dies in sidecar     │
+│                      │     │  process memory only  │
+└──────────────────────┘     └──────────────────────┘
+```
+
+**API:**
+```
+POST /jit-sidecar/exec
+{
+  "resource": "ssh:router",
+  "command": "cat /etc/iptables/rules.v4",
+  "reason": "Verify firewall rules for audit",
+  "ttl_minutes": 5
+}
+
+Response (after approval):
+{
+  "exit_code": 0,
+  "stdout": "<iptables rules>",
+  "stderr": "",
+  "duration_ms": 1200,
+  "request_id": "req-abc"
+}
+```
+
+**Why this works:**
+- The LLM sees the command and the output, never the credential
+- The sidecar is a dumb execution proxy — no LLM, no transcript
+- Credential exists only in sidecar process memory during execution
+- Even a full transcript dump reveals zero credentials
+
+**Why defer to Phase 5+:**
+- Requires another container and API surface
+- The sidecar needs to support multiple execution types (SSH, HTTP API, DB)
+- The 10-minute scrub cron is adequate for current risk level
+- Complexity should be proportional to threat model
+
+### 11.4 Defense in Depth Stack
+
+| Layer | Protection | Coverage | Phase |
+|-------|-----------|----------|-------|
+| Scrub cron (10 min) | Redacts credentials from transcript files on disk | Files at rest | Phase 1 (MR !127) |
+| Agent discipline | Avoid echoing credentials in responses | In-session | Now (behavioral) |
+| Shared volume (no LLM) | Credentials written to file, read by scripts, never in LLM context | In-session | Phase 3 |
+| Sidecar container | Credentials never leave sidecar process memory | Complete | Phase 5+ |
+
+Each layer addresses a smaller attack surface than the last. The scrub cron is the floor; the sidecar is the ceiling.
+
+## 12. Telegram UX
+
+### 12.1 Approval Message Design
+
+The approval message must give Noah enough context to decide in **under 3 seconds**. Noah is probably looking at his phone, possibly doing something else.
+
+**Design principles:**
+- **Tier and emoji first** — visual scanning (🔐 vs 🔒 vs ❓)
+- **Resource and action on the first line** — what's being requested
+- **Reason is mandatory** — agent must always explain why
+- **TTL is visible** — Noah knows the blast radius
+- **Buttons are obvious** — Approve and Deny, nothing ambiguous
+
+**Tier 2 (routine):**
+```
+🔐 SSH → gitlab.lab.nkontur.com (node, 15m)
+Reason: Check MR #47 pipeline logs
+
+[✅ Approve] [❌ Deny]
+```
+
+**Tier 3 (elevated):**
+```
+🔒 ELEVATED: SSH → router (root, 10m)
+
+Reason: Verify iptables rules for VLAN segmentation
+after MR #47 deployment. Step 3/5 of infra audit.
+
+⚠️ Root access to network router.
+
+[✅ Approve 10m] [❌ Deny]
+[✅ Approve 5m]  [📋 Context]
+```
+
+**Externally triggered:**
+```
+⚠️ SSH → gitlab.lab.nkontur.com (node, 15m)
+
+Reason: Process email attachment requires GitLab API
+Trigger: Email from ci-notifications@gitlab.lab.nkontur.com
+
+⚡ EXTERNAL TRIGGER — verify legitimacy
+
+[✅ Approve] [❌ Deny] [📋 Context]
+```
+
+### 12.2 Information Density
+
+Noah needs exactly this much info, no more:
+
+| Field | Why | Example |
+|-------|-----|---------|
+| Tier emoji | Instant visual classification | 🔐 / 🔒 |
+| Resource | What's being accessed | `router.lab.nkontur.com` |
+| Principal | As who | `root` |
+| TTL | How long | `10m` |
+| Reason | Why (1-2 sentences) | "Check firewall rules for MR #47" |
+| Trigger source | Was this user-initiated or external? | `user_request` / `email from x` |
+
+### 12.3 Time-Sensitive Requests When Noah Is Asleep
+
+**Scenario:** It's 3 AM. The agent is running a scheduled task and needs SSH access to check something.
+
+**Options:**
+
+1. **Queue for morning** (default for non-urgent)
+   - Agent logs the need and continues with what it can do
+   - When Noah wakes up, agent sends a summary: "I needed SSH access at 3 AM for X. Still need it?"
+
+2. **Configurable quiet hours** with auto-behavior
+   ```json
+   {
+     "quiet_hours": {
+       "start": "23:00",
+       "end": "08:00",
+       "timezone": "America/New_York",
+       "tier2_behavior": "queue",    // queue until morning
+       "tier3_behavior": "block"     // never auto-queue tier 3
+     }
+   }
+   ```
+
+3. **Emergency override** — For genuinely time-critical situations (detected security incident, service down), the agent sends the request anyway with a note:
+   ```
+   🚨 URGENT: SSH → router (root, 5m)
+   
+   Reason: Detected unusual traffic pattern on IoT VLAN.
+   Need to verify firewall rules immediately.
+   
+   ⏰ Outside quiet hours (3:12 AM ET)
+   
+   [✅ Approve] [❌ Deny]
+   ```
+
+### 12.4 Fallback Behavior on Timeout
+
+If Noah doesn't respond within 5 minutes:
+
+1. **Agent logs the timeout**
+2. **Agent continues without elevated access**
+3. **Agent reports what it couldn't do:**
+   ```
+   ℹ️ Access request timed out (SSH → router, req_xxx).
+   I'll continue the audit without direct router access.
+   Skipped: firewall rule verification (step 3/5).
+   Let me know if you want me to retry.
+   ```
+4. **Request is marked as expired** — tapping the buttons after timeout does nothing (or shows "Expired")
+
+### 12.5 Bulk Approval
+
+For complex tasks requiring multiple credentials, the agent can send a single "batch request":
+
+```
+🔐 Multi-Access Request for Infrastructure Audit
+
+1. SSH → gitlab.lab.nkontur.com (node, 15m)
+2. SSH → router.lab.nkontur.com (root, 10m)
+3. GitLab Admin API (write, 30m)
+
+Total task: Full infrastructure audit (5 steps)
+Reason: Quarterly security review
+
+[✅ Approve All] [❌ Deny All]
+[📋 Approve Individual]
+```
+
+"Approve Individual" would send separate messages for each resource.
+
+### 12.6 Post-Use Notification
+
+After the credential expires or the task completes:
+
+```
+✅ Access Session Complete
+
+SSH → router.lab.nkontur.com (root)
+Duration: 7m 23s (of 10m TTL)
+Commands executed: 3
+Status: Certificate expired, access revoked
+
+No anomalies detected.
+```
+
+This gives Noah peace of mind and creates a nice audit trail in Telegram itself.
+
+---
+## 13. Implementation Phases
+
+### Phase 1: Core Approval Flow (External Approval Service → Vault)
+
+**Goal:** Prove the end-to-end flow works with one credential type.
+
+**Prerequisites (DONE):**
+- ✅ Vault deployed and running (`vault.lab.nkontur.com:8200`)
+- ✅ All ~47 secrets populated in Vault KV v2
+- ✅ AppRole auth configured for moltbot (`moltbot-ops` policy, read-only)
+- ✅ JWT auth configured for CI runners (`vault-admin`, `vault-read` roles)
+- ✅ Ansible `fetch-vault-secrets` role deployed (MR !126)
+- ✅ Vault Terraform config-as-code (policies, auth, mounts)
+- ✅ AppRole rotation CI job (MR !123)
+
+**Remaining Scope:**
+- Build the external approval service (Go, separate container, separate Telegram bot)
+- Implement mTLS between agent and approval service (see [Section 8.1](#81-require-mtls-on-approval-service-api))
+- Implement API key authentication on approval service (see [Section 8.6](#86-require-authentication-on-approval-service-api))
+- Create the JIT client library (`skills/jit/lib.sh`) for agent-side request/poll
+- Wire Vault dynamic credential issuance on approval
+- Implement credential isolation (shared volume or sidecar, see [Section 11](#11-credential-isolation-from-llm-context))
+- Agent-side audit logging
+
+**MR candidates:**
+1. `feature/jit-approval-service` — Go approval service + Telegram bot + Dockerfile
+2. `feature/jit-client-library` — Agent-side JIT request/poll library
+3. `feature/vault-jit-policies` — Vault policies for dynamic credential issuance
+
+**Estimated effort:** 2-3 MRs, 1-2 weeks
+
+**Success criteria:**
+- Agent can request GitLab API access via approval service
+- Noah approves with one Telegram button tap
+- Approval service mints scoped Vault token → credential delivered to agent
+- Token expires after TTL
+- Audit log shows the full lifecycle
+
+### Phase 2: SSH Certificate Engine
+
+**Goal:** Replace static SSH key with Vault-signed certificates.
+
+**Scope:**
+- Enable SSH secrets engine in Vault
+- Configure CA keypair
+- Deploy `trusted-user-ca-keys.pem` to lab hosts via Ansible
+- Create SSH signing roles (tier 2, tier 3)
+- Integrate SSH certificate issuance into JIT library
+- Test with router (tier 3) and GitLab host (tier 2)
+
+**MR candidates:**
+1. `feature/vault-ssh-ca` — Vault SSH CA configuration
+2. `feature/ansible-ssh-trusted-ca` — Deploy CA public key to hosts
+3. `feature/jit-ssh-certificates` — Agent SSH cert issuance flow
+
+**Estimated effort:** 3 MRs, 1-2 weeks
+
+**Success criteria:**
+- Agent requests SSH access to router
+- Noah approves via Telegram
+- Vault signs the agent's public key with 15m TTL
+- Agent SSHs successfully
+- After 15 minutes, SSH access is revoked (cert expired)
+- Static SSH key can be removed
+
+**Dependencies:** Phase 1 (AppRole auth, JIT library)
+
+### Phase 3: Dynamic Database Credentials + Canary Requests
+
+**Goal:** Replace static database credentials with Vault-managed dynamic ones. Implement canary request system.
+
+**Scope:**
+- Enable database secrets engine
+- Configure PostgreSQL connection (GitLab DB)
+- Create read-only and read-write roles
+- Integrate DB credential issuance into JIT library
+- Implement canary requests (see [Section 7.3](#73-canary-requests))
+
+**MR candidates:**
+1. `feature/vault-db-engine` — Vault database engine configuration
+2. `feature/jit-db-credentials` — Agent DB credential issuance
+3. `feature/jit-canary-requests` — Canary request implementation
+
+**Estimated effort:** 3 MRs, 1-2 weeks
+
+**Dependencies:** Phase 1
+
+### Phase 4: Strip Runtime Env Vars (Static → JIT)
+
+**Goal:** Remove Tier 2+ credentials from container environment variables. Vault KV already has all secrets (MR !126); this phase removes the agent's ability to access them without JIT approval.
+
+**Scope:**
+- Migrate all tier 1 service tokens to Vault KV
+- Implement auto-issuance for tier 1 (no approval needed)
+- Shadow mode testing (2 weeks)
+- JIT-primary mode (1 week)
+- Remove static creds from docker-compose.yml
+- Rotate old credentials
+
+**MR candidates:**
+1. `feature/jit-tier1-auto` — Auto-issuance for tier 1 (no approval needed, just audit)
+2. `feature/remove-tier2-env-vars` — Remove Tier 2+ env vars from docker-compose
+3. `feature/rotate-old-creds` — Rotate all old static credentials (Vault values become the only copy)
+
+**Estimated effort:** 4 MRs, 3-4 weeks (including soak time)
+
+**Dependencies:** Phases 1-3
+
+### Phase 5: Sidecar Credential Isolation
+
+**Goal:** Complete credential isolation from LLM context (see [Section 11](#11-credential-isolation-from-llm-context)).
+
+**Scope:**
+- Build a sidecar container that handles all credential operations
+- Agent sends intent ("SSH to router, run X"), sidecar authenticates and executes
+- Credentials never enter LLM context or session transcripts
+- Replaces the scrub cron (Section 11.2) as primary defense
+
+### Phase 6: Audit Dashboard (Grafana) + Monitoring
+
+**Goal:** Visibility into JIT access patterns and automated alerting. See also [Section 14](#14-monitoring-and-alerting).
+
+**Scope:**
+- Ship Vault audit logs to Loki (already configured in homelab)
+- Ship agent JIT audit logs to Loki
+- Build Grafana dashboards (see [Section 14](#14-monitoring-and-alerting) for dashboard specs)
+- Configure alerting rules
+
+**MR candidates:**
+1. `feature/vault-audit-to-loki` — Configure Vault audit log shipping
+2. `feature/jit-grafana-dashboard` — Grafana dashboard JSON + alert rules
+
+**Estimated effort:** 2 MRs, 1 week
+
+**Dependencies:** Phase 1+
+
+### Phase Summary
+
+| Phase | What | Effort | Dependencies |
+|-------|------|--------|-------------|
+| 1 | Build jit-approval-svc (Go), create Telegram bot, deploy with mTLS | 1-2 weeks | None |
+| 2 | SSH certificates | 1-2 weeks | Phase 1 |
+| 3 | Database credentials + canary requests | 1-2 weeks | Phase 1 |
+| 4 | Strip runtime env vars (Tier 2+) | 3-4 weeks | Phases 1-3 |
+| 5 | Sidecar credential isolation | 2-3 weeks | Phase 4 |
+| 6 | Audit dashboard (Grafana) + monitoring/alerting | 1 week | Phase 1+ |
+
+**Total estimated timeline:** 8-12 weeks (can parallelize phases 2/3)
+
+---
+## 14. Monitoring and Alerting
+
+### 14.1 Grafana Dashboards
+
+The following dashboards should be deployed as part of Phase 6.
+
+#### Dashboard: JIT Request Overview
+
+| Panel | Type | Query | Purpose |
+|-------|------|-------|---------|
+| Request volume (24h) | Time series | Count of requests by tier over time | Baseline activity pattern |
+| Approval latency | Histogram | Time from request → approval (by tier) | How fast Noah responds, identify delays |
+| Denial rate | Stat + time series | Denied / total requests (rolling 7d) | Track if denial rate spikes (possible misuse) |
+| Active credentials | Gauge | Count of currently-active (non-expired) credentials | How many creds are live right now |
+| TTL utilization | Bar chart | Actual usage duration / granted TTL | Are we over-granting TTLs? |
+| Token revocations | Time series | Count of early revocations (before TTL) | Track emergency revokes |
+| Canary health | Status indicator | Last canary result (pass/fail) + time since last canary | Detect compromised approval path |
+
+#### Dashboard: Request Detail Log
+
+| Panel | Type | Query | Purpose |
+|-------|------|-------|---------|
+| Request table | Table | All requests with status, tier, resource, timestamp | Searchable audit log |
+| Resource heat map | Heat map | Request count by resource × hour of day | Identify unusual access patterns |
+| Requester breakdown | Pie chart | Requests by requester (for future multi-agent) | Per-agent activity |
+
+### 14.2 Alert Rules
+
+| Alert | Condition | Severity | Action |
+|-------|-----------|----------|--------|
+| Canary approved | Any canary request returns `approved` | **Critical** | Telegram + email. Auto-revoke all active tokens. Agent enters read-only. |
+| Unusual request volume | > 3σ above daily average for same hour | Warning | Telegram notification |
+| Tier 3 request outside business hours | Tier 3 request between 23:00-08:00 ET | Info | Telegram notification (Noah sees it when he wakes) |
+| Approval latency > 10m | Request pending > 10 minutes | Info | Log only (Noah might be busy) |
+| High denial rate | > 50% denial rate over 1h window | Warning | Telegram notification |
+| Approval svc health | Health check fails for > 60s | **Critical** | Telegram + email |
+| Vault connectivity | Approval svc can't reach Vault for > 60s | **Critical** | Telegram + email |
+
+### 14.3 Log Shipping
+
+**Vault audit logs → Loki:**
+```bash
+# Vault audit log is already at /vault/logs/audit.log
+# Promtail scrapes this into Loki with labels:
+#   job=vault-audit, service=vault
+```
+
+**Approval service logs → Loki:**
+```bash
+# jit-approval-svc writes structured JSON to stdout
+# Docker log driver → Promtail → Loki with labels:
+#   job=jit-approval-svc, service=jit
+```
+
+**Agent JIT audit logs → Loki:**
+```bash
+# Agent writes to /tmp/jit-audit.log
+# Promtail sidecar (or shared volume) scrapes into Loki:
+#   job=jit-agent-audit, service=prometheus
+```
+
+---
+## 15. Operator Availability
+
+### 15.1 The "Noah Is Asleep" Scenario
+
+At 3 AM, the agent is running a scheduled task and needs SSH access. Noah is asleep. What happens?
+
+**Default behavior: the agent waits, then degrades gracefully.**
+
+This is by design. The JIT system is built around human-in-the-loop approval. If the human is unavailable, the agent operates with reduced capability. This is the security/availability tradeoff appropriate for a homelab.
+
+**Concrete flow when Noah is unavailable:**
+
+1. Agent submits request to approval service
+2. Agent polls for 5 minutes (configurable timeout)
+3. Approval service sends Telegram message — Noah's phone doesn't buzz (Do Not Disturb)
+4. After 5 minutes, agent receives `TIMEOUT`
+5. Agent logs what it couldn't do and continues with available (tier 0-1) access
+6. When Noah wakes up, agent sends a summary:
+   ```
+   ☀️ Morning summary:
+   - Scheduled infra audit ran at 3:12 AM
+   - Completed 3/5 steps with available access
+   - Skipped: firewall rule verification (needed SSH to router)
+   - Skipped: GitLab backup validation (needed admin API)
+   - Would you like me to retry these now?
+   ```
+
+### 15.2 Pre-Approved Budgets (Future Consideration)
+
+For truly time-sensitive scheduled tasks, a "pre-approved budget" pattern could allow Noah to grant access in advance:
+
+```
+Noah (before bed): "Pre-approve tier 2 SSH to GitLab for tonight's backup audit"
+
+Approval service creates a pre-approval:
+{
+  "type": "pre_approval",
+  "resource": "ssh:gitlab",
+  "tier": 2,
+  "valid_from": "2026-02-06T23:00:00-05:00",
+  "valid_until": "2026-02-07T08:00:00-05:00",
+  "max_uses": 1,
+  "ttl_minutes": 15
+}
+```
+
+When the agent requests access during the pre-approval window, the approval service auto-approves without Telegram confirmation.
+
+**Constraints on pre-approvals:**
+- Only tier 2 (never tier 3)
+- Time-bounded (expires automatically)
+- Use-limited (e.g., max 1-3 uses)
+- Logged and auditable (Noah sees a summary next morning)
+- Noah creates them explicitly — the agent cannot request a pre-approval
+
+**Status:** Not yet implemented. Current answer for overnight tasks is "wait." This is acceptable for homelab scale. Pre-approved budgets add complexity and should only be implemented if overnight task failures become a recurring pain point.
+
+### 15.3 Break-Glass: When and If
+
+**For this homelab: probably never.**
+
+A break-glass mechanism would allow the agent to bypass the approval flow in emergencies (e.g., detected security incident, service down). This introduces a significant trust boundary problem — the agent deciding what constitutes an "emergency" is itself a security risk (an attacker could manufacture one).
+
+**Why break-glass is inappropriate here:**
+- This is a homelab, not a hospital or power grid. Nothing is life-critical.
+- If a service is down at 3 AM, it can wait until morning.
+- If there's a genuine security incident, the response should be *less* automation, not more.
+- A compromised agent would almost certainly try to trigger break-glass.
+
+**If break-glass is ever needed, it should be:**
+- Initiated by Noah (via a separate channel, e.g., SSH directly to the router)
+- Not accessible to the agent at all
+- A manual override of the approval service, not an agent-side bypass
+
+**Decision: No break-glass mechanism.** The agent waits for human approval. Period.
+
+---
+## 16. Appendix A: Rejected Approaches (Agent-Side Approval Gating)
+
+> **⚠️ REJECTED DESIGN — Do not implement.**
+>
+> The following sections (originally §4-10 of this document) describe an approach where the agent itself manages the approval flow: crafting Telegram messages with inline buttons, receiving callbacks, and issuing Vault credentials. This approach was rejected for two fundamental reasons:
+>
+> 1. **Trust boundary violation:** The agent crafts its own approval UI. A compromised agent could swap Approve/Deny callback data, inject misleading context in approval messages, or present fake approval confirmations.
+> 2. **Enforcement runs in-process:** The approval gating logic runs inside the agent's container. A compromised agent can trivially bypass in-process checks and call Vault directly, since the agent's AppRole token has the necessary permissions.
+>
+> These sections are preserved as design context for **why** the external approval service ([Section 4](#4-external-approval-service)) was chosen. They contain useful detail on Vault dynamic secret backends, access tier definitions, credential injection methods, and security analysis that informed the final design.
+>
+> **The canonical architecture is described in [Section 4](#4-external-approval-service).** Everything below is historical.
+
+---
+
+### Rejected: Agent-Side Approval Flow
+
+### Rejected §4: Approval Flow
+
+#### 4.1 Request Initiation
+
+When the agent determines it needs elevated access, it sends a structured request message via OpenClaw's Telegram inline buttons.
+
+**Request Payload Structure:**
+
+```json
+{
+  "type": "jit_access_request",
+  "id": "req_20260206_143022_ssh_router",
+  "tier": 2,
+  "backend": "ssh",
+  "resource": "router.lab.nkontur.com",
+  "principal": "root",
+  "ttl": "15m",
+  "reason": "Check firewall rules for VLAN segmentation MR #47",
+  "context": {
+    "session": "agent:main:main",
+    "task": "Infrastructure audit",
+    "triggered_by": "user_request"
+  },
+  "timestamp": "2026-02-06T14:30:22Z"
+}
+```
+
+**The agent sends this via the message tool:**
+
+```json
+{
+  "action": "send",
+  "channel": "telegram",
+  "target": "8531859108",
+  "message": "🔐 <b>SSH Access Request</b>\n\n<b>Host:</b> router.lab.nkontur.com\n<b>User:</b> root\n<b>TTL:</b> 15 minutes\n<b>Tier:</b> 2 (quick-approve)\n\n<b>Reason:</b> Check firewall rules for VLAN segmentation MR #47\n\n<b>Context:</b> Infrastructure audit task, triggered by your request",
+  "buttons": [
+    [
+      { "text": "✅ Approve", "callback_data": "jit:approve:req_20260206_143022_ssh_router" },
+      { "text": "❌ Deny", "callback_data": "jit:deny:req_20260206_143022_ssh_router" }
+    ],
+    [
+      { "text": "✅ Approve (30m)", "callback_data": "jit:approve30:req_20260206_143022_ssh_router" },
+      { "text": "ℹ️ Details", "callback_data": "jit:details:req_20260206_143022_ssh_router" }
+    ]
+  ]
+}
+```
+
+#### 4.2 Telegram Approval UI
+
+What Noah sees in Telegram:
+
+```
+┌─────────────────────────────────────┐
+│ 🔐 SSH Access Request               │
+│                                     │
+│ Host: router.lab.nkontur.com        │
+│ User: root                          │
+│ TTL: 15 minutes                     │
+│ Tier: 2 (quick-approve)            │
+│                                     │
+│ Reason: Check firewall rules for    │
+│ VLAN segmentation MR #47            │
+│                                     │
+│ Context: Infrastructure audit task, │
+│ triggered by your request           │
+│                                     │
+│ ┌──────────┐ ┌──────────┐          │
+│ │✅ Approve │ │❌ Deny   │          │
+│ └──────────┘ └──────────┘          │
+│ ┌──────────────┐ ┌─────────┐      │
+│ │✅ Approve 30m │ │ℹ️ Detail│      │
+│ └──────────────┘ └─────────┘      │
+└─────────────────────────────────────┘
+```
+
+**Button actions:**
+
+| Button | Callback Data | Effect |
+|--------|--------------|--------|
+| ✅ Approve | `jit:approve:req_id` | Issue credential with requested TTL |
+| ❌ Deny | `jit:deny:req_id` | Reject, notify agent |
+| ✅ Approve (30m) | `jit:approve30:req_id` | Issue with extended 30m TTL |
+| ℹ️ Details | `jit:details:req_id` | Show full request context |
+
+#### 4.3 Callback Processing
+
+When Noah taps a button, OpenClaw delivers the callback data to the agent's session as a regular message:
+
+```
+callback_data: jit:approve:req_20260206_143022_ssh_router
+```
+
+The agent parses this and acts accordingly:
+
+```bash
+#!/bin/bash
+# jit-callback-handler.sh — called by agent when receiving callback_data
+
+CALLBACK="$1"  # e.g., "jit:approve:req_20260206_143022_ssh_router"
+
+ACTION=$(echo "$CALLBACK" | cut -d: -f2)    # "approve"
+REQ_ID=$(echo "$CALLBACK" | cut -d: -f3-)   # "req_20260206_143022_ssh_router"
+
+case "$ACTION" in
+  approve)
+    # Load request metadata from pending store
+    REQ_FILE="/tmp/jit-requests/${REQ_ID}.json"
+    if [[ ! -f "$REQ_FILE" ]]; then
+      echo "ERROR: Request $REQ_ID not found or expired"
+      exit 1
+    fi
+    
+    BACKEND=$(jq -r '.backend' "$REQ_FILE")
+    TTL=$(jq -r '.ttl' "$REQ_FILE")
+    
+    # Issue credential from Vault
+    case "$BACKEND" in
+      ssh) issue_ssh_credential "$REQ_FILE" "$TTL" ;;
+      database) issue_db_credential "$REQ_FILE" "$TTL" ;;
+      token) issue_vault_token "$REQ_FILE" "$TTL" ;;
+    esac
+    
+    # Log approval
+    log_jit_event "approved" "$REQ_ID" "$TTL"
+    
+    # Clean up pending request
+    rm "$REQ_FILE"
+    ;;
+  
+  approve30)
+    # Same as approve but override TTL to 30m
+    # ... (same logic with TTL="30m")
+    ;;
+  
+  deny)
+    log_jit_event "denied" "$REQ_ID"
+    rm -f "/tmp/jit-requests/${REQ_ID}.json"
+    echo "Access request $REQ_ID was denied."
+    ;;
+  
+  details)
+    # Send full request details back to Telegram
+    cat "/tmp/jit-requests/${REQ_ID}.json" | jq .
+    ;;
+esac
+```
+
+#### 4.4 Credential Issuance
+
+After approval, the agent authenticates to Vault and requests the credential:
+
+```bash
+# Authenticate to Vault via AppRole (agent's base identity)
+VAULT_ADDR="https://vault.lab.nkontur.com:8200"
+VAULT_TOKEN=$(curl -s \
+  --cacert /vault/certs/ca.pem \
+  --request POST \
+  --data "{\"role_id\":\"${VAULT_ROLE_ID}\",\"secret_id\":\"${VAULT_SECRET_ID}\"}" \
+  "${VAULT_ADDR}/v1/auth/approle/login" | jq -r '.auth.client_token')
+
+# Request SSH certificate signing
+SIGNED_KEY=$(curl -s \
+  --header "X-Vault-Token: ${VAULT_TOKEN}" \
+  --request POST \
+  --data "{
+    \"public_key\": \"$(cat ~/.ssh/id_ed25519.pub)\",
+    \"valid_principals\": \"root\",
+    \"ttl\": \"15m\"
+  }" \
+  "${VAULT_ADDR}/v1/ssh-client-signer/sign/prometheus-tier2" | jq -r '.data.signed_key')
+
+# Write signed certificate
+echo "$SIGNED_KEY" > ~/.ssh/id_ed25519-cert.pub
+chmod 600 ~/.ssh/id_ed25519-cert.pub
+
+# SSH using the signed certificate (auto-used by OpenSSH)
+ssh -o CertificateFile=~/.ssh/id_ed25519-cert.pub root@router.lab.nkontur.com
+```
+
+#### 4.5 TTL and Expiry
+
+Credentials have multiple TTL enforcement layers:
+
+1. **Vault lease TTL** — Vault tracks the lease and revokes it at expiry
+2. **SSH certificate validity** — The certificate itself has a `valid_before` timestamp; sshd rejects expired certs
+3. **Agent-side cleanup** — A background process deletes credential files when TTL expires
+4. **Vault token TTL** — The agent's Vault token (used to issue credentials) also has a short TTL
+
+```bash
+# Agent-side credential cleanup (runs as background job)
+cleanup_credential() {
+  local CRED_FILE="$1"
+  local TTL_SECONDS="$2"
+  
+  sleep "$TTL_SECONDS"
+  rm -f "$CRED_FILE"
+  echo "[$(date -Iseconds)] Credential expired and cleaned: $CRED_FILE" >> /tmp/jit-audit.log
+}
+
+# After issuance:
+cleanup_credential ~/.ssh/id_ed25519-cert.pub 900 &  # 15m = 900s
+```
+
+#### 4.6 Denial Flow
+
+When Noah taps "Deny":
+
+1. Agent receives `callback_data: jit:deny:req_id`
+2. Agent logs the denial
+3. Agent reports back to its current task: "Access denied by operator. Proceeding without SSH access."
+4. If the agent was in the middle of a multi-step task, it should gracefully degrade:
+   - Try alternative approaches that don't require elevated access
+   - Report what it couldn't do
+   - Queue for later if appropriate
+
+#### 4.7 Request Lifecycle State Machine
+
+```
+ ┌──────────┐     ┌──────────┐     ┌──────────┐
+ │ PENDING  │────▶│ APPROVED │────▶│ ACTIVE   │
+ │          │     │          │     │(cred live)│
+ └────┬─────┘     └──────────┘     └────┬─────┘
+      │                                  │
+      │                                  │ TTL expires
+      │  denied                          ▼
+      │  or timeout              ┌──────────┐
+      └─────────────────────────▶│ EXPIRED  │
+                                 │          │
+                                 └──────────┘
+```
+
+**Timeout behavior:** Requests expire after 5 minutes if not acted on. The agent receives no approval and proceeds without elevated access.
+
+---
+
+### Rejected §5: Vault Dynamic Secret Backends
+
+#### 5.1 SSH — Signed Certificates
+
+The **primary use case** and highest-value backend. Replaces the static SSH key at `/home/node/clawd/.ssh/id_ed25519`.
+
+#### Vault Setup
+
+```bash
+# Enable SSH secrets engine for client certificate signing
+vault secrets enable -path=ssh-client-signer ssh
+
+# Generate CA signing key
+vault write ssh-client-signer/config/ca generate_signing_key=true
+
+# Extract CA public key (deploy to all SSH hosts)
+vault read -field=public_key ssh-client-signer/config/ca > trusted-user-ca-keys.pem
+```
+
+#### Roles (one per tier)
+
+```bash
+# Tier 2: Standard hosts (GitLab, media servers, etc.)
+vault write ssh-client-signer/roles/prometheus-tier2 \
+  key_type="ca" \
+  allow_user_certificates=true \
+  allowed_users="prometheus,moltbot,node" \
+  allowed_extensions="permit-pty" \
+  default_extensions='{"permit-pty":""}' \
+  ttl="15m" \
+  max_ttl="30m"
+
+# Tier 3: Critical infrastructure (router, Vault host)
+vault write ssh-client-signer/roles/prometheus-tier3 \
+  key_type="ca" \
+  allow_user_certificates=true \
+  allowed_users="root" \
+  allowed_extensions="permit-pty" \
+  default_extensions='{"permit-pty":""}' \
+  ttl="10m" \
+  max_ttl="15m"
+```
+
+#### SSH Host Configuration
+
+On each target host, add to `/etc/ssh/sshd_config`:
+
+```
+TrustedUserCAKeys /etc/ssh/trusted-user-ca-keys.pem
+```
+
+For the router (critical infra), also add:
+
+```
+# Only allow cert-based auth for moltbot user (no password, no plain keys)
+Match User root
+  AuthorizedKeysFile none
+  TrustedUserCAKeys /etc/ssh/trusted-user-ca-keys.pem
+  AuthorizedPrincipalsFile /etc/ssh/authorized_principals
+```
+
+And in `/etc/ssh/authorized_principals`:
+```
+root
+```
+
+#### Credential Issuance Flow
+
+```bash
+issue_ssh_credential() {
+  local REQ_FILE="$1"
+  local TTL="$2"
+  
+  RESOURCE=$(jq -r '.resource' "$REQ_FILE")
+  PRINCIPAL=$(jq -r '.principal' "$REQ_FILE")
+  TIER=$(jq -r '.tier' "$REQ_FILE")
+  
+  # Determine role based on tier
+  ROLE="prometheus-tier${TIER}"
+  
+  # Sign the agent's public key
+  RESPONSE=$(curl -s \
+    --cacert /etc/ssl/vault-ca.pem \
+    --header "X-Vault-Token: ${JIT_VAULT_TOKEN}" \
+    --request POST \
+    --data "{
+      \"public_key\": \"$(cat ~/.ssh/id_ed25519.pub)\",
+      \"valid_principals\": \"${PRINCIPAL}\",
+      \"ttl\": \"${TTL}\",
+      \"extensions\": {\"permit-pty\": \"\"}
+    }" \
+    "${VAULT_ADDR}/v1/ssh-client-signer/sign/${ROLE}")
+  
+  SIGNED_KEY=$(echo "$RESPONSE" | jq -r '.data.signed_key')
+  SERIAL=$(echo "$RESPONSE" | jq -r '.data.serial_number')
+  
+  if [[ "$SIGNED_KEY" == "null" ]] || [[ -z "$SIGNED_KEY" ]]; then
+    echo "ERROR: Failed to obtain SSH certificate"
+    echo "$RESPONSE" | jq '.errors'
+    return 1
+  fi
+  
+  # Write certificate
+  echo "$SIGNED_KEY" > ~/.ssh/id_ed25519-cert.pub
+  chmod 600 ~/.ssh/id_ed25519-cert.pub
+  
+  echo "SSH certificate issued (serial: $SERIAL, TTL: $TTL)"
+  
+  # Schedule cleanup
+  TTL_SECONDS=$(parse_ttl_to_seconds "$TTL")
+  (sleep "$TTL_SECONDS" && rm -f ~/.ssh/id_ed25519-cert.pub) &
+}
+```
+
+#### 5.2 Database — Dynamic PostgreSQL Credentials
+
+For GitLab's PostgreSQL database and any future DB access needs.
+
+#### Vault Setup
+
+```bash
+# Enable database secrets engine
+vault secrets enable database
+
+# Configure PostgreSQL connection (GitLab's DB)
+vault write database/config/gitlab-postgres \
+  plugin_name="postgresql-database-plugin" \
+  allowed_roles="prometheus-gitlab-readonly,prometheus-gitlab-readwrite" \
+  connection_url="postgresql://{{username}}:{{password}}@gitlab-db.lab.nkontur.com:5432/gitlabhq_production?sslmode=require" \
+  username="vault_admin" \
+  password="<vault-admin-password>"
+
+# Read-only role (Tier 2)
+vault write database/roles/prometheus-gitlab-readonly \
+  db_name="gitlab-postgres" \
+  creation_statements="CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}'; \
+    GRANT SELECT ON ALL TABLES IN SCHEMA public TO \"{{name}}\";" \
+  revocation_statements="REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM \"{{name}}\"; DROP ROLE IF EXISTS \"{{name}}\";" \
+  default_ttl="15m" \
+  max_ttl="30m"
+
+# Read-write role (Tier 3)
+vault write database/roles/prometheus-gitlab-readwrite \
+  db_name="gitlab-postgres" \
+  creation_statements="CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}'; \
+    GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO \"{{name}}\";" \
+  revocation_statements="REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM \"{{name}}\"; DROP ROLE IF EXISTS \"{{name}}\";" \
+  default_ttl="10m" \
+  max_ttl="15m"
+```
+
+#### Credential Issuance
+
+```bash
+issue_db_credential() {
+  local REQ_FILE="$1"
+  local TTL="$2"
+  
+  ROLE=$(jq -r '.vault_role' "$REQ_FILE")
+  
+  RESPONSE=$(curl -s \
+    --cacert /etc/ssl/vault-ca.pem \
+    --header "X-Vault-Token: ${JIT_VAULT_TOKEN}" \
+    "${VAULT_ADDR}/v1/database/creds/${ROLE}")
+  
+  DB_USER=$(echo "$RESPONSE" | jq -r '.data.username')
+  DB_PASS=$(echo "$RESPONSE" | jq -r '.data.password')
+  LEASE_ID=$(echo "$RESPONSE" | jq -r '.lease_id')
+  
+  # Inject as environment variables for the current task
+  export PGUSER="$DB_USER"
+  export PGPASSWORD="$DB_PASS"
+  
+  # Or write to a temp file that the agent's DB client reads
+  cat > /tmp/jit-db-creds.json <<EOF
+{
+  "username": "$DB_USER",
+  "password": "$DB_PASS",
+  "lease_id": "$LEASE_ID",
+  "ttl": "$TTL"
+}
+EOF
+  chmod 600 /tmp/jit-db-creds.json
+  
+  echo "Database credential issued (user: $DB_USER, TTL: $TTL)"
+}
+```
+
+#### 5.3 API Tokens — Scoped Vault Tokens
+
+For services that use API tokens (GitLab, Home Assistant, etc.), Vault can issue short-lived tokens with scoped policies.
+
+#### Approach: Vault as Token Broker
+
+Rather than Vault natively integrating with each service's auth (which would require custom plugins), we use Vault's KV secrets engine + short-lived Vault tokens as a broker:
+
+1. Long-lived API tokens are stored in Vault KV (not in container env vars)
+2. Agent requests a short-lived Vault token scoped to only read specific KV paths
+3. Agent reads the API token from Vault KV using the scoped token
+4. Agent uses the API token for the specific task
+5. The Vault token expires, agent can no longer read KV
+
+This is a stepping stone. The API tokens themselves are still long-lived, but the agent's **access window** is now gated and logged.
+
+```bash
+# Store service tokens in Vault KV
+vault kv put secret/services/gitlab token="glpat-xxxxxxxxxxxx"
+vault kv put secret/services/hass token="eyJ0eXAiOiJKV1QiLC..."
+vault kv put secret/services/radarr api_key="xxxxxxxxxx"
+
+# Policy: read-only access to media service tokens
+cat <<EOF > prometheus-media-readonly.hcl
+path "secret/data/services/radarr" { capabilities = ["read"] }
+path "secret/data/services/sonarr" { capabilities = ["read"] }
+path "secret/data/services/plex"   { capabilities = ["read"] }
+path "secret/data/services/ombi"   { capabilities = ["read"] }
+EOF
+vault policy write prometheus-media-readonly prometheus-media-readonly.hcl
+
+# Policy: GitLab write access
+cat <<EOF > prometheus-gitlab-write.hcl
+path "secret/data/services/gitlab" { capabilities = ["read"] }
+EOF
+vault policy write prometheus-gitlab-write prometheus-gitlab-write.hcl
+```
+
+#### Token Issuance
+
+```bash
+issue_vault_token() {
+  local REQ_FILE="$1"
+  local TTL="$2"
+  
+  POLICY=$(jq -r '.vault_policy' "$REQ_FILE")
+  
+  # Create a short-lived child token with the scoped policy
+  RESPONSE=$(curl -s \
+    --header "X-Vault-Token: ${JIT_VAULT_TOKEN}" \
+    --request POST \
+    --data "{
+      \"policies\": [\"${POLICY}\"],
+      \"ttl\": \"${TTL}\",
+      \"renewable\": false,
+      \"display_name\": \"prometheus-jit-$(date +%s)\"
+    }" \
+    "${VAULT_ADDR}/v1/auth/token/create")
+  
+  SCOPED_TOKEN=$(echo "$RESPONSE" | jq -r '.auth.client_token')
+  
+  # Now read the actual service credential using the scoped token
+  SERVICE_CRED=$(curl -s \
+    --header "X-Vault-Token: ${SCOPED_TOKEN}" \
+    "${VAULT_ADDR}/v1/secret/data/services/gitlab" | jq -r '.data.data.token')
+  
+  export GITLAB_TOKEN="$SERVICE_CRED"
+  
+  # Schedule token revocation
+  TTL_SECONDS=$(parse_ttl_to_seconds "$TTL")
+  (sleep "$TTL_SECONDS" && unset GITLAB_TOKEN) &
+  
+  echo "Scoped Vault token issued (policy: $POLICY, TTL: $TTL)"
+}
+```
+
+#### 5.4 AWS/Cloud Credentials
+
+Currently not heavily used, but the pattern is ready for future needs.
+
+```bash
+# Enable AWS secrets engine
+vault secrets enable aws
+
+# Configure root credentials (IAM user with admin, stored in Vault)
+vault write aws/config/root \
+  access_key="AKIAIOSFODNN7EXAMPLE" \
+  secret_key="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" \
+  region="us-east-1"
+
+# Role: read-only S3 access
+vault write aws/roles/prometheus-s3-readonly \
+  credential_type="iam_user" \
+  policy_document=-<<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:ListBucket"],
+      "Resource": "*"
+    }
+  ]
+}
+EOF
+```
+
+#### 5.5 Docker Socket Access
+
+The moltbot container does **not** currently have Docker socket access, and this should remain the case. Docker operations should go through the homelab repo's CI/CD pipeline (git push → Ansible deploy).
+
+If future use cases require container inspection (not management), a read-only Docker API proxy could be deployed:
+
+```yaml
+# NOT recommended for Phase 1 — document for future consideration
+docker-api-readonly:
+  image: tecnativa/docker-socket-proxy
+  environment:
+    - CONTAINERS=1  # read-only container list
+    - IMAGES=1      # read-only image list
+    - NETWORKS=0    # no network access
+    - VOLUMES=0     # no volume access
+    - POST=0        # no write operations
+  volumes:
+    - /var/run/docker.sock:/var/run/docker.sock:ro
+```
+
+**Recommendation:** Keep Docker management out of JIT scope. The CI/CD pipeline is the correct control plane for infrastructure changes.
+
+---
+
+### Rejected §6: Scoped Access Tiers
+
+#### Tier Definitions
+
+#### Tier 0 — Always Available (No Credentials Needed)
+
+| Resource | Access Type | Implementation |
+|----------|------------|----------------|
+| Own workspace (`/home/node/.openclaw/workspace`) | Read/Write | Filesystem |
+| Web search (Brave API) | Read | API key in env (low risk) |
+| Public APIs | Read | No auth needed |
+| OpenClaw message tool (Telegram) | Send/Read | Built into framework |
+| Internal clock, shell, node.js | Execute | Container baseline |
+
+**No change needed.** These are the agent's baseline capabilities.
+
+#### Tier 1 — Auto-Approved, Logged
+
+| Resource | Access Type | Current Credential | JIT Migration |
+|----------|------------|-------------------|---------------|
+| Radarr/Sonarr/Prowlarr | Read API | `RADARR_API_KEY` etc. | Vault KV + auto-issue token |
+| Plex | Read API | `PLEX_TOKEN` | Vault KV + auto-issue token |
+| Ombi | Read API | `OMBI_API_KEY` | Vault KV + auto-issue token |
+| Home Assistant | Read states | `HASS_TOKEN` | Vault KV + auto-issue token |
+| Paperless-ngx | Read API | `PAPERLESS_TOKEN` | Vault KV + auto-issue token |
+| InfluxDB | Read queries | `INFLUXDB_TOKEN` | Vault KV + auto-issue token |
+| Grafana | Read dashboards | `GRAFANA_TOKEN` | Vault KV + auto-issue token |
+
+**Implementation:** Agent authenticates to Vault on startup with AppRole. Vault issues a token scoped to `secret/data/services/tier1/*` with a 4-hour TTL. Agent reads service credentials from KV and caches them. Token auto-renews while the agent is running.
+
+**Why auto-approve:** These are read-only operations against services Noah already trusts the agent to monitor. The overhead of manual approval would be unreasonable for routine checks.
+
+**Why still gate through Vault:** Audit logging. Even auto-approved access creates a Vault audit trail, so we can see exactly when and how often the agent accesses each service.
+
+```bash
+# Tier 1 policy (auto-approved, read-only)
+cat <<EOF > prometheus-tier1.hcl
+# Read-only access to tier 1 service credentials
+path "secret/data/services/tier1/*" {
+  capabilities = ["read"]
+}
+
+# Allow self-renewal of the tier 1 token
+path "auth/token/renew-self" {
+  capabilities = ["update"]
+}
+EOF
+vault policy write prometheus-tier1 prometheus-tier1.hcl
+```
+
+#### Tier 2 — Quick-Approve via Telegram
+
+| Resource | Access Type | Approval | TTL |
+|----------|------------|----------|-----|
+| Home Assistant | Write (services) | Single tap | 30m |
+| Radarr/Sonarr | Write (add/modify) | Single tap | 30m |
+| GitLab | Admin API, merge | Single tap | 30m |
+| SSH to lab hosts | Login as prometheus/node | Single tap | 15m |
+| NZBGet/Deluge | Read/Write | Single tap | 30m |
+| Email (IMAP) | Read inbox | Single tap | 15m |
+
+**Approval message template:**
+
+```
+🔐 Tier 2 Access Request
+
+📋 {resource} — {access_type}
+⏱️ TTL: {ttl}
+📝 {reason}
+
+[✅ Approve] [❌ Deny]
+```
+
+#### Tier 3 — Requires Justification + Approval
+
+| Resource | Access Type | Approval | TTL |
+|----------|------------|----------|-----|
+| SSH to router | Root access | Justification + tap | 10m |
+| Vault admin | Policy/config changes | Justification + tap | 10m |
+| Network config | VLAN/firewall rules | Justification + tap | 10m |
+| IPMI | Server power management | Justification + tap | 5m |
+| GitLab CI variables | Secret management | Justification + tap | 10m |
+
+**Approval message template (more detail):**
+
+```
+🔒 Tier 3 Access Request — ELEVATED
+
+📋 SSH to router.lab.nkontur.com as root
+⏱️ TTL: 10 minutes (max: 15m)
+🏷️ Tier: 3 (requires justification)
+
+📝 Reason: Need to verify firewall rules for new VLAN
+segmentation after MR #47 deployment. Specifically checking
+iptables rules for IoT → Internal traffic.
+
+🔍 Context: User requested infrastructure audit. This is
+step 3 of 5 in the audit checklist.
+
+⚠️ This grants root SSH access to the network router.
+
+[✅ Approve (10m)] [❌ Deny]
+[✅ Approve (5m)]  [📋 Full Context]
+```
+
+#### Tier 4 — Never Automated
+
+| Resource | Why Never Automated |
+|----------|-------------------|
+| Tailscale API | Controls VPN mesh, could isolate/expose infrastructure |
+| Production databases (destructive writes) | Data loss risk |
+| Credential rotation | Could lock out the human operator |
+| Vault unseal keys | Complete infrastructure compromise |
+| DNS/domain management | External-facing, long propagation |
+| Certificate management | Could break TLS for all services |
+
+**These credentials are never exposed to the agent at all.** They exist in Vault KV but are only fetched during pipeline execution by the `fetch-vault-secrets` Ansible role (MR !126). The agent's AppRole policy (`moltbot-ops`) does not grant access to these paths. Noah manages them directly.
+
+#### Tier Decision Matrix
+
+```
+                    ┌─────────────────────────────────────────┐
+                    │           Does the action modify state?  │
+                    └───────────┬──────────────┬──────────────┘
+                                │              │
+                              No              Yes
+                                │              │
+                    ┌───────────▼───┐  ┌───────▼──────────────┐
+                    │ Read-only?     │  │ What's the blast      │
+                    │ Public data?   │  │ radius if it goes     │
+                    └───┬────────┬──┘  │ wrong?                │
+                        │        │     └──┬──────────┬─────┬──┘
+                     Yes         No       │          │     │
+                        │        │     Small    Medium   Large
+                        │        │        │          │     │
+                   Tier 0    Tier 1   Tier 2    Tier 3  Tier 4
+```
+
+---
+
+### Rejected §7: Technical Implementation
+
+#### 7.1 OpenClaw Inline Buttons for Approval
 
 OpenClaw's Telegram channel supports inline keyboards natively. The key details:
 
@@ -921,7 +2268,7 @@ The agent receives this as a normal inbound message in its session and must pars
 - Multiple taps send multiple callbacks — agent must handle idempotently
 - Buttons persist until the message is edited/deleted
 
-### 7.2 Vault Policy Structure
+#### 7.2 Vault Policy Structure
 
 #### Base Policy (always active)
 
@@ -999,7 +2346,7 @@ path "auth/token/create" {
 # It must receive and use the approval token from the webhook
 ```
 
-### 7.3 The Approval Webhook / Callback Mechanism
+#### 7.3 The Approval Webhook / Callback Mechanism
 
 The complete flow from button press to credential issuance:
 
@@ -1052,7 +2399,7 @@ TTL expires → credential auto-revoked → cleanup
 
 **No external webhook needed.** The beauty of OpenClaw's inline button support is that the callback flows back through the existing agent message channel. There's no need for a separate webhook endpoint, HTTP server, or external service. The agent IS the webhook handler.
 
-### 7.4 Credential Injection
+#### 7.4 Credential Injection
 
 How credentials are made available to the agent's tools and commands:
 
@@ -1118,7 +2465,7 @@ moltbot-vault-agent:
 
 **Recommendation for Phase 1:** Use Methods 1-3 (direct issuance). The agent calls Vault API directly. This is simplest and keeps the system understandable. Consider Method 4 only if credential management becomes unwieldy.
 
-### 7.5 Audit Logging
+#### 7.5 Audit Logging
 
 #### Vault Audit Log
 
@@ -1175,7 +2522,7 @@ log_jit_event() {
 | Credential revoked | Vault audit log | Early revocation (manual or error) |
 | Request timed out | Agent log | 5-minute timeout exceeded |
 
-### 7.6 JIT Client Library
+#### 7.6 JIT Client Library
 
 A shell library that encapsulates the full flow:
 
@@ -1352,9 +2699,9 @@ log_jit_event() {
 
 ---
 
-## 8. Security Analysis
+### Rejected §8: Security Analysis
 
-### 8.1 Attack Surfaces
+#### 8.1 Attack Surfaces
 
 | Surface | Risk | Mitigation |
 |---------|------|------------|
@@ -1365,7 +2712,7 @@ log_jit_event() {
 | **Man-in-the-middle on Vault API** | TLS interception between agent and Vault | Both are on the same internal network (10.3.x.x). Vault uses TLS with lab CA cert. Certificate pinning possible. |
 | **Replay of approval callback** | Attacker replays `callback_data: jit:approve:req_xxx` | Request IDs are unique and single-use. After processing, the request file is removed. Idempotency check prevents double-issuance. |
 
-### 8.2 Preventing Agent Bypass of Approval Flow
+#### 8.2 Preventing Agent Bypass of Approval Flow
 
 The Phase 1 design has the agent enforcing the approval flow. This means a compromised agent could bypass it. Mitigations:
 
@@ -1380,7 +2727,7 @@ The Phase 1 design has the agent enforcing the approval flow. This means a compr
 
 4. **Future: Vault-side gating (Option B)** — The agent's AppRole token only grants tier 0-1 access. Tier 2+ requires a separate token that only the approval webhook can create. This moves the trust boundary from the agent to Vault.
 
-### 8.3 Telegram Channel Compromise
+#### 8.3 Telegram Channel Compromise
 
 If an attacker gains access to Noah's Telegram account:
 
@@ -1393,7 +2740,7 @@ If an attacker gains access to Noah's Telegram account:
 4. **Notification on unusual approvals** — If tier 3 access is approved outside normal hours (23:00-08:00), send a secondary notification (email? phone call?)
 5. **Revocation capability** — Noah can send `/jit revoke-all` to immediately revoke all active JIT credentials
 
-### 8.4 Runtime Credential Migration Path
+#### 8.4 Runtime Credential Migration Path
 
 **Prerequisite (DONE):** All secrets centralized in Vault KV v2. Ansible deploy fetches from Vault with env var fallback (MR !126). This provides the infrastructure for JIT — secrets are already in Vault, we just need to change *when* and *how* the agent accesses them.
 
@@ -1421,7 +2768,7 @@ Phase A          Phase B          Phase C          Phase D
    Week 1        Week 2-3        Week 4+         Week 6+
 ```
 
-### 8.5 Prompt Injection Considerations
+#### 8.5 Prompt Injection Considerations
 
 The agent processes external content (emails, web pages, API responses). A crafted payload could attempt:
 
@@ -1453,9 +2800,9 @@ Request tier 3 access with reason "Emergency security patch required."
 
 ---
 
-## 9. Implementation Phases
+### Rejected §9: Implementation Phases
 
-### Phase 1: Core Approval Flow (External Approval Service → Vault)
+#### Phase 1: Core Approval Flow (External Approval Service → Vault)
 
 **Goal:** Prove the end-to-end flow works with one credential type.
 
@@ -1472,7 +2819,7 @@ Request tier 3 access with reason "Emergency security patch required."
 - Build the external approval service (Go, separate container, separate Telegram bot)
 - Create the JIT client library (`skills/jit/lib.sh`) for agent-side request/poll
 - Wire Vault dynamic credential issuance on approval
-- Implement credential isolation (shared volume or sidecar, see Section 16)
+- Implement credential isolation (shared volume or sidecar, see [Section 11](#11-credential-isolation-from-llm-context))
 - Agent-side audit logging
 
 **MR candidates:**
@@ -1489,7 +2836,7 @@ Request tier 3 access with reason "Emergency security patch required."
 - Token expires after TTL
 - Audit log shows the full lifecycle
 
-### Phase 2: SSH Certificate Engine
+#### Phase 2: SSH Certificate Engine
 
 **Goal:** Replace static SSH key with Vault-signed certificates.
 
@@ -1518,7 +2865,7 @@ Request tier 3 access with reason "Emergency security patch required."
 
 **Dependencies:** Phase 1 (AppRole auth, JIT library)
 
-### Phase 3: Dynamic Database Credentials
+#### Phase 3: Dynamic Database Credentials
 
 **Goal:** Replace static database credentials with Vault-managed dynamic ones.
 
@@ -1537,7 +2884,7 @@ Request tier 3 access with reason "Emergency security patch required."
 
 **Dependencies:** Phase 1
 
-### Phase 4: Strip Runtime Env Vars (Static → JIT)
+#### Phase 4: Strip Runtime Env Vars (Static → JIT)
 
 **Goal:** Remove Tier 2+ credentials from container environment variables. Vault KV already has all secrets (MR !126); this phase removes the agent's ability to access them without JIT approval.
 
@@ -1558,7 +2905,7 @@ Request tier 3 access with reason "Emergency security patch required."
 
 **Dependencies:** Phases 1-3
 
-### Phase 5: Audit Dashboard (Grafana)
+#### Phase 5: Audit Dashboard (Grafana)
 
 **Goal:** Visibility into JIT access patterns.
 
@@ -1580,19 +2927,19 @@ Request tier 3 access with reason "Emergency security patch required."
 
 **Dependencies:** Phase 1+
 
-### Phase 6 (Future): Sidecar Credential Isolation
+#### Phase 6 (Future): Sidecar Credential Isolation
 
-**Goal:** Complete credential isolation from LLM context (see Section 16).
+**Goal:** Complete credential isolation from LLM context (see [Section 11](#11-credential-isolation-from-llm-context)).
 
 **Scope:**
 - Build a sidecar container that handles all credential operations
 - Agent sends intent ("SSH to router, run X"), sidecar authenticates and executes
 - Credentials never enter LLM context or session transcripts
-- Replaces the scrub cron (Section 16.2) as primary defense
+- Replaces the scrub cron (Section 11.2) as primary defense
 
-Note: The external approval service is already in Phase 1 (Section 11), not deferred to Phase 6. This phase is purely about the execution sidecar for credential isolation.
+Note: The external approval service is already in Phase 1 ([Section 4](#4-external-approval-service)), not deferred to Phase 6. This phase is purely about the execution sidecar for credential isolation.
 
-### Phase Summary
+#### Phase Summary
 
 | Phase | What | Effort | Dependencies |
 |-------|------|--------|-------------|
@@ -1607,9 +2954,9 @@ Note: The external approval service is already in Phase 1 (Section 11), not defe
 
 ---
 
-## 10. UX Considerations
+### Rejected §10: UX Considerations
 
-### 10.1 Approval Message Design
+#### 10.1 Approval Message Design
 
 The approval message must give Noah enough context to decide in **under 3 seconds**. Noah is probably looking at his phone, possibly doing something else.
 
@@ -1653,7 +3000,7 @@ Trigger: Email from ci-notifications@gitlab.lab.nkontur.com
 [✅ Approve] [❌ Deny] [📋 Context]
 ```
 
-### 10.2 Information Density
+#### 10.2 Information Density
 
 Noah needs exactly this much info, no more:
 
@@ -1666,7 +3013,7 @@ Noah needs exactly this much info, no more:
 | Reason | Why (1-2 sentences) | "Check firewall rules for MR #47" |
 | Trigger source | Was this user-initiated or external? | `user_request` / `email from x` |
 
-### 10.3 Time-Sensitive Requests When Noah Is Asleep
+#### 10.3 Time-Sensitive Requests When Noah Is Asleep
 
 **Scenario:** It's 3 AM. The agent is running a scheduled task and needs SSH access to check something.
 
@@ -1701,7 +3048,7 @@ Noah needs exactly this much info, no more:
    [✅ Approve] [❌ Deny]
    ```
 
-### 10.4 Fallback Behavior on Timeout
+#### 10.4 Fallback Behavior on Timeout
 
 If Noah doesn't respond within 5 minutes:
 
@@ -1716,7 +3063,7 @@ If Noah doesn't respond within 5 minutes:
    ```
 4. **Request is marked as expired** — tapping the buttons after timeout does nothing (or shows "Expired")
 
-### 10.5 Bulk Approval
+#### 10.5 Bulk Approval
 
 For complex tasks requiring multiple credentials, the agent can send a single "batch request":
 
@@ -1736,7 +3083,7 @@ Reason: Quarterly security review
 
 "Approve Individual" would send separate messages for each resource.
 
-### 10.6 Post-Use Notification
+#### 10.6 Post-Use Notification
 
 After the credential expires or the task completes:
 
@@ -1755,7 +3102,7 @@ This gives Noah peace of mind and creates a nice audit trail in Telegram itself.
 
 ---
 
-## 11. Appendix
+## 17. Appendix B: Vault Reference Configuration
 
 ### A. Vault AppRole Configuration for Prometheus
 
@@ -1928,750 +3275,10 @@ Our system is simpler because it's purpose-built for a single AI agent in a home
 
 ---
 
-## Revision History
+## 18. Revision History
 
 | Date | Author | Change |
 |------|--------|--------|
 | 2026-02-06 | Prometheus | Initial design document |
-
----
-
-## 11. REVISED ARCHITECTURE: External Approval Service (Option 2)
-
-**Decision (2026-02-06):** Skip agent-side gating entirely. Deploy with external trust boundary from day one.
-
-### 11.1 Why External-First
-
-The original phased approach (agent-side gating → migrate to external) has a fundamental flaw: the agent crafts its own approval UI. A compromised agent could swap Approve/Deny callback data, inject misleading context in approval messages, or bypass the check entirely since enforcement runs in-process.
-
-The external approval service eliminates this class of attack entirely. The agent never touches the approval path.
-
-### 11.2 Architecture
-
-```
-┌─────────────────┐     ┌──────────────────────┐     ┌─────────────┐
-│   Prometheus     │     │  jit-approval-svc    │     │   Vault     │
-│   (moltbot)      │     │  (separate container) │     │             │
-│                  │     │                      │     │             │
-│ 1. POST request  │────▶│ 2. Validate request  │     │             │
-│    to approval   │     │ 3. Send Telegram msg │     │             │
-│    svc API       │     │    with buttons      │     │             │
-│                  │     │    (own bot token)    │     │             │
-│                  │     │                      │     │             │
-│                  │     │ 4. Receive callback  │     │             │
-│                  │     │    from Telegram     │     │             │
-│                  │     │ 5. Verify Noah's     │     │             │
-│                  │     │    user ID           │     │             │
-│                  │     │                      │     │             │
-│                  │     │ 6. Mint scoped       │────▶│ 7. Create   │
-│                  │     │    Vault token       │◀────│    token    │
-│                  │     │    with TTL          │     │             │
-│                  │     │                      │     │             │
-│ 9. Use token    │◀────│ 8. Return token      │     │             │
-│    (auto-expire) │     │    via response/poll │     │             │
-│                  │     │                      │     │             │
-│ 10. Token       │     │                      │     │ 11. Token   │
-│     expires     │     │                      │     │     revoked │
-└─────────────────┘     └──────────────────────┘     └─────────────┘
-```
-
-### 11.3 Components
-
-#### A. jit-approval-svc (Go, ~300 LOC)
-
-A standalone HTTP service running in its own Docker container.
-
-**Owns:**
-- Its own Telegram bot token (separate from Prometheus's bot)
-- A Vault token with policy to create scoped, short-lived tokens
-- A request registry (in-memory or SQLite)
-- The ONLY path to mint tier 2+ credentials
-
-**Does NOT have:**
-- Access to Prometheus's container, filesystem, or env
-- Access to Prometheus's Telegram bot
-- Any broad Vault permissions
-
-**API:**
-
-```
-POST /api/v1/request
-  Body: {
-    "requester": "prometheus",
-    "resource": "ssh:router",
-    "tier": 2,
-    "reason": "Fix iptables rule for Tailscale DNS",
-    "ttl_minutes": 15
-  }
-  Response: {
-    "request_id": "req-a1b2c3",
-    "status": "pending"
-  }
-
-GET /api/v1/request/:id
-  Response: {
-    "request_id": "req-a1b2c3",
-    "status": "approved|denied|pending|expired",
-    "token": "hvs.XXXXX"  // only present if approved
-  }
-
-GET /api/v1/health
-  Response: { "ok": true }
-```
-
-#### B. Telegram Approval Bot
-
-A second Telegram bot (e.g., @PrometheusApprovalBot) that:
-- Sends approval request messages to Noah's chat
-- Handles callback_query for approve/deny buttons
-- Is completely separate from the Prometheus/moltbot bot
-- Only accepts callbacks from Noah's Telegram user ID (hardcoded allowlist)
-
-**Approval message format:**
-```
-🔐 JIT Access Request [req-a1b2c3]
-
-Resource: SSH → router.lab.nkontur.com
-Tier: 2 (Quick Approve)
-Reason: Fix iptables rule for Tailscale DNS
-TTL: 15 minutes
-Requested: 2026-02-06 03:05 EST
-
-[✅ Approve] [❌ Deny]
-```
-
-Noah taps a button → callback goes to the approval svc (not to Prometheus) → svc mints Vault token → Prometheus polls and picks it up.
-
-#### C. Vault Policy for Approval Service
-
-```hcl
-# policy: jit-approval-svc
-# This is the ONLY policy that can create tier 2+ tokens
-
-# Create scoped tokens with specific policies
-path "auth/token/create" {
-  capabilities = ["create", "update"]
-  allowed_policies = [
-    "prometheus-tier2-ssh",
-    "prometheus-tier2-write",
-    "prometheus-tier3-admin"
-  ]
-}
-
-# Read SSH signing endpoint to issue certificates
-path "ssh-client-signer/sign/prometheus-tier2" {
-  capabilities = ["create", "update"]
-}
-
-# Nothing else. No secret read, no policy modification.
-```
-
-#### D. Agent Integration
-
-Prometheus gets a new tool or shell function:
-
-```bash
-jit_request() {
-  local resource="$1"
-  local reason="$2"
-  local ttl="${3:-15}"
-  
-  # Submit request to approval svc
-  REQ_ID=$(curl -s -X POST http://jit-approval-svc:8080/api/v1/request \
-    -H "Content-Type: application/json" \
-    -d "{\"requester\":\"prometheus\",\"resource\":\"$resource\",\"reason\":\"$reason\",\"ttl_minutes\":$ttl}" \
-    | jq -r '.request_id')
-  
-  echo "Request $REQ_ID submitted. Waiting for approval..."
-  
-  # Poll for approval (timeout after 5 min)
-  for i in $(seq 1 60); do
-    STATUS=$(curl -s "http://jit-approval-svc:8080/api/v1/request/$REQ_ID" | jq -r '.status')
-    if [ "$STATUS" = "approved" ]; then
-      TOKEN=$(curl -s "http://jit-approval-svc:8080/api/v1/request/$REQ_ID" | jq -r '.token')
-      echo "$TOKEN"
-      return 0
-    elif [ "$STATUS" = "denied" ]; then
-      echo "DENIED"
-      return 1
-    fi
-    sleep 5
-  done
-  echo "TIMEOUT"
-  return 1
-}
-```
-
-### 11.4 Security Properties
-
-| Property | Guarantee |
-|----------|-----------|
-| Agent can't self-approve | Approval path never enters agent container |
-| Agent can't swap buttons | Buttons are sent by a different bot the agent doesn't control |
-| Agent can't forge tokens | Only approval svc has the Vault policy to mint tier 2+ tokens |
-| Compromised agent blast radius | Limited to tier 0-1 (read-only APIs, own workspace) |
-| Token leakage impact | Minimized by TTL (15 min default, 60 min max) |
-| Telegram compromise | Attacker needs Noah's Telegram account AND the callback must come from his user ID |
-| Approval svc compromise | Attacker gets token-minting ability but still needs to pass Telegram callback verification |
-
-### 11.5 Deployment
-
-```yaml
-# docker-compose addition
-jit-approval-svc:
-  build: ./docker/jit-approval-svc
-  container_name: jit-approval-svc
-  restart: unless-stopped
-  environment:
-    - TELEGRAM_BOT_TOKEN={{ vault_jit_telegram_token }}
-    - VAULT_ADDR=http://vault:8200
-    - VAULT_TOKEN={{ vault_jit_svc_token }}
-    - ALLOWED_TELEGRAM_USERS=8531859108
-    - ALLOWED_REQUESTERS=prometheus
-    - MAX_TTL_MINUTES=60
-    - DEFAULT_TTL_MINUTES=15
-  networks:
-    - internal
-  # No volume mounts needed - stateless (or small SQLite for audit)
-```
-
-### 11.6 Revised Implementation Phases
-
-| Phase | What | Effort |
-|-------|------|--------|
-| 1 | Build jit-approval-svc (Go), create second Telegram bot, deploy | 1-2 weeks |
-| 2 | Vault SSH certificate engine + tier 2 SSH policy | 1 week |
-| 3 | Integrate into Prometheus (jit_request shell function, skill update) | 1 week |
-| 4 | Dynamic database credentials | 1 week |
-| 5 | Strip Tier 2+ runtime env vars (Vault KV migration already done via MR !126) | 2-3 weeks |
-| 6 | Audit dashboard (Grafana) + request history | 1 week |
-
-### 11.7 Open Questions
-
-1. **Polling vs push:** Agent polls for approval status. Could use a webhook callback to OpenClaw instead, but that reintroduces a path from the approval svc into the agent. Polling is simpler and safer.
-2. **Request validation:** Should the approval svc validate that the requested resource exists? Or is it purely a token-minting gatekeeper?
-3. **Multi-approver:** Future consideration — require N-of-M approvals for tier 3+?
-4. **Emergency override:** If Noah is unreachable, should there be a break-glass mechanism? (Probably not — if Noah is unreachable, Prometheus should wait.)
-5. **Audit log:** SQLite in the approval svc container, or push to InfluxDB/Loki for centralized logging?
-
-
----
-
-## 12. Service-Specific Token Lifecycle (Create/Revoke Patterns)
-
-**Key insight (2026-02-06):** Most critical services support programmatic token creation and revocation. The approval service can issue REAL short-lived tokens for these, not just broker static ones.
-
-### 12.1 Model B Services (True Dynamic Credentials)
-
-These services support programmatic create + revoke, giving us real cryptographic or server-enforced expiry:
-
-#### Home Assistant (OAuth2)
-```
-Approval svc holds: HA refresh token (stored in Vault)
-On approve:
-  POST https://homeassistant.lab.nkontur.com/auth/token
-    grant_type=refresh_token&
-    refresh_token=STORED_REFRESH_TOKEN&
-    client_id=https://jit-approval-svc.lab.nkontur.com
-  → Returns access_token (expires_in: 1800 = 30 min)
-On expiry: HA server rejects token automatically
-Emergency revoke: DELETE refresh token → kills ALL derived access tokens instantly
-```
-
-#### Plex (Per-Client Token)
-```
-Approval svc holds: Plex account credentials or master token (stored in Vault)
-On approve:
-  POST https://plex.tv/users/sign_in.json
-    X-Plex-Client-Identifier: jit-{request_id}
-    → Returns unique auth token for this client ID
-On expiry: 
-  POST https://plex.tv/api/v2/tokens/{token_id}?X-Plex-Token=master
-    _method=DELETE
-  → Server rejects token immediately
-```
-
-#### GitLab (Personal Access Token API)
-```
-Approval svc holds: GitLab admin token or impersonation capability (stored in Vault)
-On approve:
-  POST /api/v4/personal_access_tokens
-    name=jit-prometheus-{request_id}
-    expires_at={now + TTL}
-    scopes=["read_api"]  # scoped to request
-  → Returns new PAT with built-in expiry
-On expiry: GitLab rejects token automatically (server-side expiry)
-Emergency revoke: DELETE /api/v4/personal_access_tokens/:id
-```
-
-#### Grafana (Service Account Token)
-```
-Approval svc holds: Grafana admin credentials (stored in Vault)
-On approve:
-  POST /api/serviceaccounts/{sa_id}/tokens
-    name=jit-{request_id}
-    secondsToLive={TTL_seconds}
-  → Returns token with server-enforced TTL
-On expiry: Grafana rejects token automatically
-Emergency revoke: DELETE /api/serviceaccounts/{sa_id}/tokens/{token_id}
-```
-
-#### SSH (Vault CA Certificates)
-```
-Approval svc holds: Vault policy for ssh-client-signer
-On approve:
-  POST vault/ssh-client-signer/sign/prometheus-tier2
-    public_key={agent_pub_key}
-    valid_principals=node
-    ttl=15m
-  → Returns signed SSH certificate
-On expiry: Certificate is cryptographically expired, sshd rejects it
-No revoke needed: math handles it
-```
-
-#### PostgreSQL (Vault Database Engine)
-```
-Approval svc holds: Vault policy for database/creds
-On approve:
-  GET vault/database/creds/prometheus-readonly
-  → Returns ephemeral username + password, TTL enforced by Vault
-On expiry: Vault drops the database user automatically (lease revocation)
-Emergency revoke: PUT vault/sys/leases/revoke -d lease_id=...
-```
-
-### 12.2 Model A Services (Static Token Brokering)
-
-These services have no token management API. The approval service brokers access to a single static token:
-
-| Service | Risk Level | Mitigation |
-|---------|-----------|------------|
-| Radarr | Low (media management) | Agent-enforced TTL, audit log |
-| Sonarr | Low (media management) | Agent-enforced TTL, audit log |
-| Tautulli | Low (read-only stats) | Move to Tier 1 (auto-approved) |
-| NZBGet | Low (download client) | Agent-enforced TTL, audit log |
-| Deluge | Low (download client) | Agent-enforced TTL, audit log |
-| Ombi | Low (media requests) | Agent-enforced TTL, audit log |
-
-**Future option for Model A services:** Deploy a reverse auth proxy that validates JIT tokens before forwarding to the real API. This gives server-enforced expiry even for services that don't support it. Could be part of the Traefik migration (forward-auth middleware).
-
-### 12.3 Summary
-
-| Tier | Service | Model | Expiry Enforcement |
-|------|---------|-------|--------------------|
-| 2 | Home Assistant | B | Server (OAuth2 30m) |
-| 2 | Plex | B | Server (token revocation) |
-| 2 | GitLab | B | Server (PAT expiry) |
-| 1 | Grafana | B | Server (token TTL) |
-| 2 | SSH | B | Cryptographic (cert TTL) |
-| 3 | PostgreSQL | B | Vault (lease revocation) |
-| 1 | Radarr/Sonarr | A | Agent-enforced |
-| 1 | Tautulli | A | Agent-enforced |
-| 1 | NZBGet/Deluge | A | Agent-enforced |
-| 1 | Ombi | A | Agent-enforced |
-
-**Coverage:** All Tier 2+ services support Model B (real expiry). Model A is limited to low-risk Tier 1 services where the blast radius is minimal (media management).
-
-
----
-
-## 13. Community-Sourced Hardening (from Moltbook feedback)
-
-Three hardening measures identified through community discussion:
-
-### 13.1 Cryptographic Attestation of Grants
-
-**Problem:** The polling channel between agent and approval service is an attack surface. A MITM could inject fake "approved" responses with malicious tokens.
-
-**Solution:** The approval service digitally signs every grant response. The agent verifies the signature before accepting any token.
-
-```
-Approval service: holds Ed25519 private key (stored in Vault)
-Agent: holds corresponding public key (baked into container config)
-
-Grant response:
-{
-  "request_id": "req-a1b2c3",
-  "status": "approved",
-  "token": "hvs.XXX",
-  "resource": "ssh:router",
-  "ttl_minutes": 15,
-  "granted_at": "2026-02-06T03:20:00Z",
-  "nonce": "random-per-request",
-  "signature": base64(Ed25519.sign(
-    canonical(request_id + resource + token + ttl + granted_at + nonce),
-    private_key
-  ))
-}
-
-Agent verification:
-  Ed25519.verify(signature, public_key) → accept or reject
-```
-
-**Properties:**
-- Prevents MITM on polling channel
-- Prevents replay attacks (nonce + granted_at timestamp)
-- Agent can verify without any secret material (public key only)
-- Cheap to implement (Ed25519 is fast and available in Go stdlib)
-
-**Phase:** Include from Phase 1. Low implementation cost, high security value.
-
-### 13.2 Capability Attenuation
-
-**Problem:** Tier-based grants are coarse. "Tier 2 SSH" gives SSH access to everything in that tier, when the agent may only need access to a single host for a specific command.
-
-**Solution:** Requests include fine-grained capability descriptors. The approval service mints the most restrictive credential possible.
-
-```
-Request:
-{
-  "resource": "ssh:router",
-  "capabilities": {
-    "hosts": ["router.lab.nkontur.com"],
-    "principals": ["node"],
-    "commands": ["cat /etc/iptables/rules.v4"],
-    "force_command": true
-  },
-  "reason": "Read current iptables rules for audit",
-  "ttl_minutes": 5
-}
-
-Approval svc mints SSH cert with:
-  valid_principals=node
-  critical_options=force-command="cat /etc/iptables/rules.v4"
-  extensions=permit-pty
-  ttl=5m
-```
-
-**Properties:**
-- Minimum viable access per request
-- Even if token is leaked, it can only do exactly what was requested
-- Human sees the specific capability in the approval message (easier to evaluate)
-- SSH force-command is particularly powerful — cert literally can't run any other command
-
-**Phase:** Phase 2 (alongside SSH certificate engine). Some services support fine-grained scoping better than others.
-
-### 13.3 Canary Requests
-
-**Problem:** How do you know the approval flow hasn't been compromised? If an attacker can silently auto-approve requests, you wouldn't know until damage is done.
-
-**Solution:** The agent periodically submits canary requests that should ALWAYS be denied. If a canary is approved, the system is compromised.
-
-```
-Canary request (submitted by agent on random schedule):
-{
-  "resource": "canary:tripwire",
-  "reason": "CANARY — this request must be denied",
-  "ttl_minutes": 1,
-  "_canary": true
-}
-
-Expected flow:
-  1. Approval svc recognizes canary flag
-  2. Does NOT send to human (avoids fatigue)
-  3. Logs the canary test
-  4. Returns status: "denied"
-
-If agent receives "approved" for a canary:
-  → Alert immediately (Telegram, email, Grafana)
-  → Lock down: revoke all active JIT tokens
-  → Agent enters read-only mode until human investigates
-```
-
-**Properties:**
-- Detects compromised approval service
-- Detects MITM that auto-approves everything
-- No human involvement (canaries are machine-to-machine)
-- Random scheduling makes it hard for an attacker to distinguish canaries from real requests
-
-**Phase:** Phase 3. Requires the core flow to be stable first.
-
----
-
-## 14. Failure Modes and Recovery
-
-### 14.1 Approval Service Goes Down
-
-**During token issuance:**
-- Agent's request gets no response → times out → agent reports "approval service unreachable"
-- No orphaned tokens (token not yet created)
-
-**After token issuance, before scheduled cleanup:**
-- Model B services (HA, Plex, GitLab, SSH, PostgreSQL): token expires server-side regardless. No action needed.
-- Model A services (Radarr, Sonarr, etc.): static token was brokered, no cleanup possible. But these are all Tier 1 (low-risk, media management). Blast radius is minimal.
-
-**Conclusion:** Approval service downtime is a non-issue for security because all Tier 2+ services have server-enforced expiry. The approval service is only needed for *granting* access, not for *revoking* it.
-
-### 14.2 Target Service Goes Down
-
-**Before token use:** Agent gets a valid token but can't reach the service. Token expires naturally. No issue.
-
-**During token use:** Agent's operation fails. Token still expires on schedule. No issue.
-
-**During scheduled revocation (Model B active revoke):** Approval service can't reach target to revoke token. Options:
-- Retry with backoff (service might come back before TTL expires)
-- Log the failure (audit trail)
-- Not critical: TTL handles it anyway — revocation is just an acceleration of natural expiry
-
-### 14.3 Vault Goes Down
-
-- No new tokens can be issued (approval service can't mint)
-- Existing tokens continue working until their TTL expires
-- Agent falls back to Tier 0-1 (no elevation possible)
-- Self-healing: Vault auto-unseal is already configured
-
-**Conclusion:** No failure mode creates an unbounded credential exposure. The worst case is always "agent has reduced access until services recover." This is by design — fail-closed, not fail-open.
-
-
----
-
-## 15. Request Lifecycle and Crash Recovery
-
-### 15.1 Request State Machine
-
-```
-                    ┌─────────────────────────────────┐
-                    │                                 │
-Created ──[agent polls]──▶ Pending ──[human taps]──▶ Approved
-   │                         │                         │
-   │                    [no poll for                [mint token]
-   │                     30 seconds]                   │
-   │                         │                    ┌────▼────┐
-   │                         ▼                    │ Minted  │──[TTL]──▶ Expired
-   │                    Expired                   └────┬────┘          (revoke if
-   │                    (agent gone)                   │               Model B)
-   │                                              [agent polls,
-   │                                               gets token]
-   │                                                   │
-   │                                              ┌────▼────┐
-   │                                              │ Claimed  │──[TTL]──▶ Expired
-   │                                              └─────────┘
-   │
-   └──[human taps deny]──▶ Denied ──▶ Closed
-```
-
-### 15.2 Poll-Based Keepalive
-
-The agent must actively poll to keep a request alive. This provides a trust-free mechanism for tracking agent liveness — the broker doesn't need any OpenClaw integration.
-
-```
-Agent polling loop:
-  while true:
-    response = GET /api/v1/request/{id}
-    if response.status == "approved" or "minted":
-      use token
-      break
-    if response.status == "denied" or "expired":
-      give up
-      break
-    sleep 15s    # poll interval
-
-Broker-side keepalive tracking:
-  on each poll:
-    request.last_poll_at = now()
-  
-  background reaper (every 10s):
-    for each request where status == "pending":
-      if now() - last_poll_at > 30s:
-        mark expired
-        update Telegram message: "⏰ Expired (agent stopped waiting)"
-```
-
-**Properties:**
-- Agent session dies → polling stops → request expires within 30s
-- No trust in the agent required — broker just observes silence
-- Works for both sub-agent sessions (short-lived) and main session (long-lived)
-- Agent can't keep a request alive without actively polling (no fire-and-forget)
-
-### 15.3 Durable Request Store (SQLite)
-
-Requests must survive broker restarts. SQLite is the simplest durable store.
-
-```sql
-CREATE TABLE requests (
-  id              TEXT PRIMARY KEY,     -- req-{uuid}
-  requester       TEXT NOT NULL,        -- "prometheus"
-  resource        TEXT NOT NULL,        -- "ssh:router"
-  tier            INTEGER NOT NULL,     -- 2
-  reason          TEXT NOT NULL,
-  capabilities    TEXT,                 -- JSON, optional fine-grained scope
-  status          TEXT NOT NULL,        -- pending|approved|minted|claimed|denied|expired
-  ttl_minutes     INTEGER NOT NULL,    -- requested TTL for the credential
-  created_at      TIMESTAMP NOT NULL,
-  last_poll_at    TIMESTAMP NOT NULL,
-  approved_at     TIMESTAMP,
-  token           TEXT,                 -- null until minted
-  token_expires_at TIMESTAMP,
-  telegram_msg_id TEXT,                -- for updating the approval message
-  signature       TEXT,                -- Ed25519 signature of the grant
-  revoked         BOOLEAN DEFAULT 0
-);
-
-CREATE INDEX idx_status ON requests(status);
-CREATE INDEX idx_last_poll ON requests(last_poll_at);
-```
-
-### 15.4 Crash Recovery (Broker Startup Sequence)
-
-On every broker startup:
-
-```
-1. EXPIRE stale pending requests:
-   UPDATE requests SET status='expired'
-   WHERE status='pending' AND last_poll_at < now() - 30s
-
-2. COMPLETE interrupted approvals:
-   SELECT * FROM requests WHERE status='approved' AND token IS NULL
-   For each:
-     if created_at + ttl_minutes < now():
-       mark expired (too late, don't mint stale tokens)
-     else:
-       mint Vault token, update status to 'minted'
-
-3. REVOKE orphaned tokens:
-   SELECT * FROM requests WHERE status IN ('minted','claimed')
-     AND token_expires_at < now() AND revoked = 0
-   For each:
-     call service-specific revocation
-     mark revoked = 1
-
-4. FETCH missed Telegram callbacks:
-   Use long polling (getUpdates) to retrieve any callbacks
-   received while broker was down (Telegram holds for 24h)
-   Process each callback normally
-```
-
-### 15.5 Telegram Integration Details
-
-**Long polling over webhooks.** Reasons:
-- Telegram holds unprocessed updates for 24 hours
-- Broker restart automatically picks up missed callbacks
-- No need for HTTPS endpoint or certificate management
-- Simpler deployment (no inbound routing through nginx)
-
-**Message lifecycle:**
-
-```
-Request created:
-  🔐 JIT Access Request [req-a1b2c3]
-  Resource: SSH → router
-  Tier: 2 | TTL: 15 min
-  Reason: Fix iptables rule for Tailscale DNS
-  Status: ⏳ Pending
-  [✅ Approve] [❌ Deny]
-
-Request approved:
-  (edit message)
-  ✅ Approved [req-a1b2c3]
-  Resource: SSH → router | TTL: 15 min
-  Approved at: 03:20 EST
-  Token expires: 03:35 EST
-
-Request expired (agent stopped polling):
-  (edit message)
-  ⏰ Expired [req-a1b2c3]
-  Resource: SSH → router
-  Reason: Agent stopped waiting
-
-Request denied:
-  (edit message)
-  ❌ Denied [req-a1b2c3]
-  Resource: SSH → router
-
-Token expired (post-use notification):
-  (new message)
-  🔒 Token expired [req-a1b2c3]
-  Resource: SSH → router
-  Used for: 12 min of 15 min TTL
-```
-
-
----
-
-## 16. Credential Isolation from LLM Context
-
-### 16.1 The Problem
-
-When the agent polls for an approved credential and receives it via HTTP response, the credential enters the LLM's context window. OpenClaw persists the full session transcript to disk as JSONL. This means every JIT credential that passes through the LLM ends up in a transcript file — defeating the purpose of short TTLs.
-
-Even if the credential expires in 15 minutes, the plaintext sits in the transcript file permanently until the scrub cron catches it.
-
-### 16.2 Current Mitigation: Aggressive Scrub Cron
-
-A host-level cron job runs every 10 minutes scanning all transcript files for 14+ credential patterns and redacting matches in-place. Emits structured JSON audit logs to `/var/log/scrub-transcripts/scrub.log` for auditability.
-
-**Properties:**
-- Maximum credential exposure window: ~10 minutes on disk after session write
-- Credentials in active LLM context (in-memory) are not affected by scrub
-- Scrub patterns may miss novel credential formats
-- Defense in depth — not the primary protection
-
-**See:** MR !127 for implementation.
-
-### 16.3 Future: Sidecar Execution Container (Phase 5+)
-
-The definitive solution is to ensure credentials never enter the LLM context at all.
-
-**Architecture: "Separate the brain from the hands"**
-
-```
-┌─────────────────────┐     ┌──────────────────────┐
-│  Agent (moltbot)     │     │  JIT Sidecar         │
-│                      │     │  (separate container) │
-│  LLM decides WHAT:   │     │                      │
-│  "Check iptables on  │────▶│  Handles HOW:        │
-│   router"            │     │  1. Polls approval   │
-│                      │     │     svc for token    │
-│  Receives RESULT:    │◀────│  2. Authenticates    │
-│  "Here are the       │     │  3. Executes command │
-│   iptables rules..." │     │  4. Returns stdout   │
-│                      │     │  5. Destroys token   │
-│  Token NEVER enters  │     │                      │
-│  LLM context or      │     │  Token lives and     │
-│  transcript          │     │  dies in sidecar     │
-│                      │     │  process memory only  │
-└──────────────────────┘     └──────────────────────┘
-```
-
-**API:**
-```
-POST /jit-sidecar/exec
-{
-  "resource": "ssh:router",
-  "command": "cat /etc/iptables/rules.v4",
-  "reason": "Verify firewall rules for audit",
-  "ttl_minutes": 5
-}
-
-Response (after approval):
-{
-  "exit_code": 0,
-  "stdout": "<iptables rules>",
-  "stderr": "",
-  "duration_ms": 1200,
-  "request_id": "req-abc"
-}
-```
-
-**Why this works:**
-- The LLM sees the command and the output, never the credential
-- The sidecar is a dumb execution proxy — no LLM, no transcript
-- Credential exists only in sidecar process memory during execution
-- Even a full transcript dump reveals zero credentials
-
-**Why defer to Phase 5+:**
-- Requires another container and API surface
-- The sidecar needs to support multiple execution types (SSH, HTTP API, DB)
-- The 10-minute scrub cron is adequate for current risk level
-- Complexity should be proportional to threat model
-
-### 16.4 Defense in Depth Stack
-
-| Layer | Protection | Coverage | Phase |
-|-------|-----------|----------|-------|
-| Scrub cron (10 min) | Redacts credentials from transcript files on disk | Files at rest | Phase 1 (MR !127) |
-| Agent discipline | Avoid echoing credentials in responses | In-session | Now (behavioral) |
-| Shared volume (no LLM) | Credentials written to file, read by scripts, never in LLM context | In-session | Phase 3 |
-| Sidecar container | Credentials never leave sidecar process memory | Complete | Phase 5+ |
-
-Each layer addresses a smaller attack surface than the last. The scrub cron is the floor; the sidecar is the ceiling.
-
+| 2026-02-06 | Prometheus | Added external approval service architecture (§11), service-specific token lifecycle (§12), community-sourced hardening from GhostNode, Pi_for_Jese, Alice_rdg on Moltbook (§13), failure modes (§14), request lifecycle and crash recovery (§15), credential isolation (§16) |
+| 2026-02-06 | Prometheus | **Major restructure:** Promoted external approval service from appendix (old §11) to primary architecture (new §4). Collapsed old agent-side gating design (old §4-10) into Appendix A (rejected approaches). Added formalized security requirements from adversarial review (§8). Added monitoring/alerting section (§14). Added operator availability / "Noah is asleep" section (§15). Renumbered all sections. Updated TOC. |
