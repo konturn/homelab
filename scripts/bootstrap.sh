@@ -3,13 +3,17 @@
 #
 # Run directly on the router as root. Idempotent (safe to re-run).
 #
-# What this does:
-#   1. Installs Docker + docker-compose plugin
-#   2. Creates required Docker macvlan networks
-#   3. Templates and starts a minimal GitLab container
-#   4. Waits for GitLab to be healthy
-#   5. Installs gitlab-runner
-#   6. Prints next steps
+# Steps (in order):
+#   1. Install Docker + docker-compose plugin
+#   2. Create required Docker macvlan networks
+#   3. Install restic
+#   4. Prompt to restore persistent data from Backblaze B2
+#   5. Start GitLab container (using restored data if available)
+#   6. Wait for GitLab to be healthy
+#   7. Install gitlab-runner
+#
+# Data restore MUST happen before GitLab starts — GitLab's own data
+# (repos, users, CI config) lives in the backup.
 
 set -euo pipefail
 
@@ -21,9 +25,6 @@ GITLAB_DATA="${PERSISTENT_DATA}/gitlab"
 GITLAB_IMAGE="gitlab/gitlab-ee:latest"
 GITLAB_CONTAINER="gitlab-bootstrap"
 GITLAB_HTTP_PORT=80
-
-# Network interface for macvlan (bond0 with VLANs)
-BOND_IFACE="bond0"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -38,7 +39,7 @@ require_root() {
 }
 
 # ---------------------------------------------------------------------------
-# Step 1: Install Docker
+# Step 1: Install Docker + compose plugin
 # ---------------------------------------------------------------------------
 install_docker() {
   if command -v docker &>/dev/null; then
@@ -49,12 +50,7 @@ install_docker() {
     systemctl enable --now docker
     log "Docker installed: $(docker --version)"
   fi
-}
 
-# ---------------------------------------------------------------------------
-# Step 2: Install docker-compose plugin
-# ---------------------------------------------------------------------------
-install_compose() {
   if docker compose version &>/dev/null; then
     log "Docker Compose plugin already installed: $(docker compose version)"
   else
@@ -66,7 +62,7 @@ install_compose() {
 }
 
 # ---------------------------------------------------------------------------
-# Step 3: Create Docker macvlan networks
+# Step 2: Create Docker macvlan networks
 # ---------------------------------------------------------------------------
 create_networks() {
   local -A networks=(
@@ -93,104 +89,36 @@ create_networks() {
 }
 
 # ---------------------------------------------------------------------------
-# Step 4: Start minimal GitLab container
-# ---------------------------------------------------------------------------
-start_gitlab() {
-  if docker ps --format '{{.Names}}' | grep -q "^${GITLAB_CONTAINER}$"; then
-    log "GitLab container '${GITLAB_CONTAINER}' is already running."
-    return
-  fi
-
-  # Remove stopped container if it exists
-  docker rm -f "${GITLAB_CONTAINER}" 2>/dev/null || true
-
-  # Ensure data directories exist
-  mkdir -p "${GITLAB_DATA}/config" "${GITLAB_DATA}/logs" "${GITLAB_DATA}/data"
-
-  log "Starting minimal GitLab container..."
-  docker run -d \
-    --name "${GITLAB_CONTAINER}" \
-    --restart unless-stopped \
-    --network internal \
-    --memory 8g \
-    -p "${GITLAB_HTTP_PORT}:80" \
-    -v "${GITLAB_DATA}/config:/etc/gitlab" \
-    -v "${GITLAB_DATA}/logs:/var/log/gitlab" \
-    -v "${GITLAB_DATA}/data:/var/opt/gitlab" \
-    "${GITLAB_IMAGE}"
-
-  log "GitLab container started."
-}
-
-# ---------------------------------------------------------------------------
-# Step 5: Wait for GitLab to be healthy
-# ---------------------------------------------------------------------------
-wait_for_gitlab() {
-  local max_wait=600  # 10 minutes
-  local interval=15
-  local elapsed=0
-
-  log "Waiting for GitLab to become healthy (up to ${max_wait}s)..."
-
-  while [[ $elapsed -lt $max_wait ]]; do
-    if docker exec "${GITLAB_CONTAINER}" curl -sf http://localhost:80/-/health &>/dev/null; then
-      log "GitLab is healthy after ${elapsed}s."
-      return
-    fi
-    sleep "$interval"
-    elapsed=$((elapsed + interval))
-    log "  ... still waiting (${elapsed}s elapsed)"
-  done
-
-  warn "GitLab did not become healthy within ${max_wait}s."
-  warn "Check logs: docker logs ${GITLAB_CONTAINER}"
-}
-
-# ---------------------------------------------------------------------------
-# Step 6: Install gitlab-runner
-# ---------------------------------------------------------------------------
-install_runner() {
-  if command -v gitlab-runner &>/dev/null; then
-    log "gitlab-runner already installed: $(gitlab-runner --version 2>&1 | head -1)"
-    return
-  fi
-
-  log "Installing gitlab-runner..."
-  curl -fsSL "https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.deb.sh" | bash
-  apt-get install -y -qq gitlab-runner
-  log "gitlab-runner installed: $(gitlab-runner --version 2>&1 | head -1)"
-}
-
-# ---------------------------------------------------------------------------
-# Step 7: Optional data restore from Backblaze B2
+# Step 3: Install restic
 # ---------------------------------------------------------------------------
 install_restic() {
   if command -v restic &>/dev/null; then
     log "restic already installed: $(restic version)"
-    return
+  else
+    log "Installing restic..."
+    apt-get update -qq
+    apt-get install -y -qq restic
+    log "restic installed: $(restic version)"
   fi
-
-  log "Installing restic..."
-  apt-get update -qq
-  apt-get install -y -qq restic
-  log "restic installed: $(restic version)"
 }
 
+# ---------------------------------------------------------------------------
+# Step 4: Restore persistent data from Backblaze B2
+# ---------------------------------------------------------------------------
 restore_from_backup() {
   log ""
-  log "=== Optional: Restore Data from Backblaze B2 ==="
+  log "=== Data Restore from Backblaze B2 ==="
   log ""
-  log "If this is a fresh install, you may need to restore persistent data"
-  log "(GitLab data, configs, databases) before GitLab can serve the repo."
+  log "GitLab's data (repos, users, CI config) lives in the backup."
+  log "If this is a fresh install, you MUST restore before GitLab can start"
+  log "with your existing projects and configuration."
   log ""
 
   read -rp "[bootstrap] Restore data from Backblaze B2 backup? [y/N] " answer
   if [[ ! "$answer" =~ ^[Yy]$ ]]; then
-    log "Skipping restore."
+    log "Skipping restore. GitLab will start with empty data."
     return
   fi
-
-  install_restic
 
   # Prompt for credentials if not already set
   if [[ -z "${B2_ACCOUNT_ID:-}" ]]; then
@@ -213,7 +141,6 @@ restore_from_backup() {
     export RESTIC_PASSWORD
   fi
 
-  # B2 uses S3-compatible API for restic
   export AWS_ACCESS_KEY_ID="${B2_ACCOUNT_ID}"
   export AWS_SECRET_ACCESS_KEY="${B2_ACCOUNT_KEY}"
 
@@ -224,45 +151,113 @@ restore_from_backup() {
   fi
 
   log ""
-  log "The following restore paths are available (in recommended order):"
-  log "  1. /persistent_data/application  — Service configs (GitLab, HA, Vault, etc.)"
+  log "Restore paths (in recommended order):"
+  log "  1. /persistent_data/application   — Service configs (GitLab, HA, Vault, etc.)"
   log "  2. /persistent_data/docker/volumes — Docker volumes (databases)"
-  log "  3. /mpool/nextcloud              — Nextcloud data (large)"
-  log "  4. /mpool/plex/config            — Plex metadata"
-  log "  5. /mpool/plex/Photos            — Photos (large, optional)"
-  log "  6. /mpool/plex/Family            — Family videos (large, optional)"
+  log "  3. /mpool/nextcloud               — Nextcloud data (large)"
+  log "  4. /mpool/plex/config             — Plex metadata"
+  log "  5. /mpool/plex/Photos             — Photos (large, optional)"
+  log "  6. /mpool/plex/Family             — Family videos (large, optional)"
   log ""
   warn "This will OVERWRITE existing files at the restore paths."
-  read -rp "[bootstrap] Restore /persistent_data/application (service configs)? [y/N] " answer
-  if [[ "$answer" =~ ^[Yy]$ ]]; then
+
+  read -rp "[bootstrap] Restore /persistent_data/application (service configs incl. GitLab)? [Y/n] " answer
+  if [[ ! "$answer" =~ ^[Nn]$ ]]; then
     log "Restoring /persistent_data/application..."
-    restic restore latest --target / --include /persistent_data/application
+    restic restore latest --target / --include /persistent_data/application --verbose
     log "Done."
   fi
 
-  read -rp "[bootstrap] Restore /persistent_data/docker/volumes (databases)? [y/N] " answer
-  if [[ "$answer" =~ ^[Yy]$ ]]; then
+  read -rp "[bootstrap] Restore /persistent_data/docker/volumes (databases)? [Y/n] " answer
+  if [[ ! "$answer" =~ ^[Nn]$ ]]; then
     log "Restoring /persistent_data/docker/volumes..."
-    restic restore latest --target / --include /persistent_data/docker/volumes
+    restic restore latest --target / --include /persistent_data/docker/volumes --verbose
     log "Done."
   fi
 
   read -rp "[bootstrap] Restore /mpool/nextcloud (Nextcloud data)? [y/N] " answer
   if [[ "$answer" =~ ^[Yy]$ ]]; then
     log "Restoring /mpool/nextcloud (this may take a while)..."
-    restic restore latest --target / --include /mpool/nextcloud
+    restic restore latest --target / --include /mpool/nextcloud --verbose
     log "Done."
   fi
 
   read -rp "[bootstrap] Restore /mpool/plex (config + media metadata)? [y/N] " answer
   if [[ "$answer" =~ ^[Yy]$ ]]; then
     log "Restoring /mpool/plex/config..."
-    restic restore latest --target / --include /mpool/plex/config
+    restic restore latest --target / --include /mpool/plex/config --verbose
     log "Done."
   fi
 
-  log "Restore complete. Restart containers to pick up restored data:"
-  log "  cd ${PERSISTENT_DATA}/ansible_state && docker compose down && docker compose up -d"
+  log ""
+  log "Restore complete."
+}
+
+# ---------------------------------------------------------------------------
+# Step 5: Start GitLab container
+# ---------------------------------------------------------------------------
+start_gitlab() {
+  if docker ps --format '{{.Names}}' | grep -q "^${GITLAB_CONTAINER}$"; then
+    log "GitLab container '${GITLAB_CONTAINER}' is already running."
+    return
+  fi
+
+  docker rm -f "${GITLAB_CONTAINER}" 2>/dev/null || true
+
+  mkdir -p "${GITLAB_DATA}/config" "${GITLAB_DATA}/logs" "${GITLAB_DATA}/data"
+
+  log "Starting GitLab container..."
+  docker run -d \
+    --name "${GITLAB_CONTAINER}" \
+    --restart unless-stopped \
+    --network internal \
+    --memory 8g \
+    -p "${GITLAB_HTTP_PORT}:80" \
+    -v "${GITLAB_DATA}/config:/etc/gitlab" \
+    -v "${GITLAB_DATA}/logs:/var/log/gitlab" \
+    -v "${GITLAB_DATA}/data:/var/opt/gitlab" \
+    "${GITLAB_IMAGE}"
+
+  log "GitLab container started."
+}
+
+# ---------------------------------------------------------------------------
+# Step 6: Wait for GitLab to be healthy
+# ---------------------------------------------------------------------------
+wait_for_gitlab() {
+  local max_wait=600
+  local interval=15
+  local elapsed=0
+
+  log "Waiting for GitLab to become healthy (up to ${max_wait}s)..."
+
+  while [[ $elapsed -lt $max_wait ]]; do
+    if docker exec "${GITLAB_CONTAINER}" curl -sf http://localhost:80/-/health &>/dev/null; then
+      log "GitLab is healthy after ${elapsed}s."
+      return
+    fi
+    sleep "$interval"
+    elapsed=$((elapsed + interval))
+    log "  ... still waiting (${elapsed}s elapsed)"
+  done
+
+  warn "GitLab did not become healthy within ${max_wait}s."
+  warn "Check logs: docker logs ${GITLAB_CONTAINER}"
+}
+
+# ---------------------------------------------------------------------------
+# Step 7: Install gitlab-runner
+# ---------------------------------------------------------------------------
+install_runner() {
+  if command -v gitlab-runner &>/dev/null; then
+    log "gitlab-runner already installed: $(gitlab-runner --version 2>&1 | head -1)"
+    return
+  fi
+
+  log "Installing gitlab-runner..."
+  curl -fsSL "https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.deb.sh" | bash
+  apt-get install -y -qq gitlab-runner
+  log "gitlab-runner installed: $(gitlab-runner --version 2>&1 | head -1)"
 }
 
 # ---------------------------------------------------------------------------
@@ -273,34 +268,46 @@ main() {
   log ""
 
   require_root
+
+  log "Step 1/7: Docker"
   install_docker
-  install_compose
+
+  log "Step 2/7: Networks"
   create_networks
 
-  # Offer restore before starting GitLab — restored data includes GitLab config
+  log "Step 3/7: Restic"
+  install_restic
+
+  log "Step 4/7: Data restore"
   restore_from_backup
 
+  log "Step 5/7: GitLab"
   start_gitlab
+
+  log "Step 6/7: Waiting for GitLab"
   wait_for_gitlab
+
+  log "Step 7/7: Runner"
   install_runner
 
   log ""
   log "=== Bootstrap Complete ==="
   log ""
   log "Next steps:"
-  log "  1. Set the GitLab root password (first login at http://<router-ip>)"
-  log "  2. Create the 'root/homelab' project in GitLab"
-  log "  3. Register the runner:"
+  log "  1. If data was restored, GitLab should have your existing projects."
+  log "     If not, set the root password at http://<router-ip> and create"
+  log "     the 'root/homelab' project manually."
+  log "  2. Register the runner (if not already registered):"
   log "       gitlab-runner register \\"
   log "         --url https://gitlab.lab.nkontur.com/ \\"
   log "         --executor docker \\"
   log "         --docker-image ubuntu:20.04 \\"
   log "         --docker-network-mode host"
-  log "  4. Push this repo to GitLab:"
-  log "       git remote add origin https://gitlab.lab.nkontur.com/root/homelab.git"
+  log "  3. Push this repo to GitLab:"
+  log "       git remote set-url origin https://gitlab.lab.nkontur.com/root/homelab.git"
   log "       git push -u origin main"
-  log "  5. Configure CI/CD variables in GitLab (Settings > CI/CD > Variables)"
-  log "  6. Trigger the 'router:bootstrap' CI job (manual) to bring up core services"
+  log "  4. Configure CI/CD variables in GitLab (Settings > CI/CD > Variables)"
+  log "  5. Trigger the 'router:bootstrap' CI job (manual) to bring up core services"
   log ""
 }
 
