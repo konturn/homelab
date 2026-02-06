@@ -1,3 +1,4 @@
+{% raw %}
 apiVersion: 1
 
 contactPoints:
@@ -26,3 +27,4 @@ contactPoints:
             
             Time: {{ .CommonAnnotations.startsAt }}
         disableResolveMessage: false
+{% endraw %}

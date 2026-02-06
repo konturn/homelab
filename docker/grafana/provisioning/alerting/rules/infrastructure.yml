@@ -1,3 +1,4 @@
+{% raw %}
 apiVersion: 1
 
 groups:
@@ -18,7 +19,7 @@ groups:
             model:
               datasource:
                 type: influxdb
-                uid: influxdb
+                uid: pOh_O4GGz
               query: |
                 from(bucket: "metrics")
                   |> range(start: -5m)
@@ -60,7 +61,7 @@ groups:
         for: 2m
         annotations:
           summary: "Container {{ $labels.container_name }} health check failed"
-          description: "Container {{ $labels.container_name }} has been reporting unhealthy status for more than 2 minutes. This indicates the container service may be down or malfunctioning."
+          description: "Container {{ $labels.container_name }} has been reporting unhealthy status for more than 2 minutes."
         labels:
           severity: critical
           team: infrastructure
@@ -78,7 +79,7 @@ groups:
             model:
               datasource:
                 type: influxdb
-                uid: influxdb
+                uid: pOh_O4GGz
               query: |
                 from(bucket: "metrics")
                   |> range(start: -5m)
@@ -120,7 +121,7 @@ groups:
         for: 5m
         annotations:
           summary: "Disk space warning on {{ $labels.device }} ({{ $labels.path }})"
-          description: "Disk usage on {{ $labels.device }} mounted at {{ $labels.path }} is {{ $value }}%, which exceeds the 80% warning threshold. Consider freeing up space or extending storage."
+          description: "Disk usage on {{ $labels.device }} mounted at {{ $labels.path }} is {{ $value }}%, exceeding 80% warning threshold."
         labels:
           severity: warning
           team: infrastructure
@@ -138,7 +139,7 @@ groups:
             model:
               datasource:
                 type: influxdb
-                uid: influxdb
+                uid: pOh_O4GGz
               query: |
                 from(bucket: "metrics")
                   |> range(start: -5m)
@@ -180,7 +181,7 @@ groups:
         for: 2m
         annotations:
           summary: "CRITICAL: Disk space on {{ $labels.device }} ({{ $labels.path }}) at {{ $value }}%"
-          description: "Disk usage on {{ $labels.device }} mounted at {{ $labels.path }} is {{ $value }}%, which exceeds the 90% critical threshold. Immediate action required to prevent system issues."
+          description: "Disk usage on {{ $labels.device }} mounted at {{ $labels.path }} is {{ $value }}%, exceeding 90% critical threshold. Immediate action required."
         labels:
           severity: critical
           team: infrastructure
@@ -198,7 +199,7 @@ groups:
             model:
               datasource:
                 type: influxdb
-                uid: influxdb
+                uid: pOh_O4GGz
               query: |
                 from(bucket: "metrics")
                   |> range(start: -10m)
@@ -239,7 +240,7 @@ groups:
         for: 10m
         annotations:
           summary: "High memory usage detected: {{ $value }}%"
-          description: "System memory usage has been at {{ $value }}% for more than 10 minutes, which exceeds the 85% threshold. This may impact system performance and stability."
+          description: "System memory usage has been at {{ $value }}% for more than 10 minutes, exceeding 85% threshold."
         labels:
           severity: warning
           team: infrastructure
@@ -257,7 +258,7 @@ groups:
             model:
               datasource:
                 type: influxdb
-                uid: influxdb
+                uid: pOh_O4GGz
               query: |
                 from(bucket: "metrics")
                   |> range(start: -5m)
@@ -300,7 +301,7 @@ groups:
         for: 1m
         annotations:
           summary: "Critical service {{ $labels.container_name }} is down"
-          description: "Critical homelab service {{ $labels.container_name }} has stopped running or was OOM killed. This service is essential for homelab operations and requires immediate attention."
+          description: "Critical homelab service {{ $labels.container_name }} has stopped running or was OOM killed."
         labels:
           severity: critical
           team: infrastructure
@@ -318,7 +319,7 @@ groups:
             model:
               datasource:
                 type: loki
-                uid: loki
+                uid: P8E80F9AEF21F6940
               expr: 'rate({job=~".+"} |~ "(?i)(error|fatal|exception|panic)" [5m])'
               refId: A
           - refId: B
@@ -353,8 +354,248 @@ groups:
         for: 5m
         annotations:
           summary: "High error rate detected in logs"
-          description: "Error rate in application logs has exceeded 0.1 errors per second over the last 5 minutes. This may indicate service issues requiring investigation."
+          description: "Error rate in application logs has exceeded 0.1 errors per second over the last 5 minutes."
         labels:
           severity: warning
           team: infrastructure
           alertname: LogErrorRate
+
+      # UPS Monitoring Alerts - replaces legacy dashboard alerts
+      - uid: ups-high-power-consumption
+        title: UPS High Power Consumption (>800W)
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 300
+              to: 0
+            model:
+              datasource:
+                type: influxdb
+                uid: pOh_O4GGz
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r["_measurement"] == "snmp")
+                  |> filter(fn: (r) => r["_field"] == "load")
+                  |> map(fn: (r) => ({r with _value: r._value * 10.0}))
+                  |> aggregateWindow(every: 1m, fn: mean, createEmpty: false)
+                  |> yield(name: "mean")
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 0
+              to: 0
+            model:
+              conditions:
+                - evaluator:
+                    params: [800]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: B
+              type: reduce
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          summary: "UPS power consumption exceeds 800W"
+          description: "UPS load is {{ $value }}W, exceeding the 800W warning threshold. Check for unexpected power draw."
+        labels:
+          severity: warning
+          team: infrastructure
+          alertname: UPSHighPowerConsumption
+
+      - uid: ups-low-battery
+        title: UPS Battery Low (<75%)
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 300
+              to: 0
+            model:
+              datasource:
+                type: influxdb
+                uid: pOh_O4GGz
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r["_measurement"] == "snmp")
+                  |> filter(fn: (r) => r["_field"] == "percent_charge")
+                  |> aggregateWindow(every: 1m, fn: mean, createEmpty: false)
+                  |> yield(name: "mean")
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 0
+              to: 0
+            model:
+              conditions:
+                - evaluator:
+                    params: [75]
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: B
+              type: reduce
+        noDataState: OK
+        execErrState: Alerting
+        for: 2m
+        annotations:
+          summary: "UPS battery charge below 75%"
+          description: "UPS battery is at {{ $value }}%, below 75% threshold. Check power supply status."
+        labels:
+          severity: critical
+          team: infrastructure
+          alertname: UPSLowBattery
+
+      - uid: ups-data-missing
+        title: UPS SNMP Data Missing
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 600
+              to: 0
+            model:
+              datasource:
+                type: influxdb
+                uid: pOh_O4GGz
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -10m)
+                  |> filter(fn: (r) => r["_measurement"] == "snmp")
+                  |> filter(fn: (r) => r["_field"] == "percent_charge")
+                  |> count()
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 0
+              to: 0
+            model:
+              conditions:
+                - evaluator:
+                    params: [1]
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: B
+              type: reduce
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 15m
+        annotations:
+          summary: "UPS SNMP data missing for >15 minutes"
+          description: "No SNMP data received from UPS in the last 10 minutes. Check telegraf container and UPS SNMP connectivity."
+        labels:
+          severity: warning
+          team: infrastructure
+          alertname: UPSDataMissing
+
+      # CPU Temperature Alert - replaces legacy dashboard alert
+      - uid: cpu-temp-high
+        title: CPU Temperature High (>80°C)
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 600
+              to: 0
+            model:
+              datasource:
+                type: influxdb
+                uid: pOh_O4GGz
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -10m)
+                  |> filter(fn: (r) => r["_measurement"] == "ipmi_sensor")
+                  |> filter(fn: (r) => r["_field"] == "value")
+                  |> filter(fn: (r) => r["name"] == "cpu1_temp" or r["name"] == "cpu2_temp")
+                  |> aggregateWindow(every: 1m, fn: max, createEmpty: false)
+                  |> yield(name: "max")
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 0
+              to: 0
+            model:
+              conditions:
+                - evaluator:
+                    params: [80]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: B
+              type: reduce
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          summary: "CPU temperature above 80°C"
+          description: "CPU temperature has been above 80°C for more than 5 minutes. Current value: {{ $value }}°C. Check cooling."
+        labels:
+          severity: critical
+          team: infrastructure
+          alertname: CPUTempHigh
+{% endraw %}
