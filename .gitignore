@@ -17,6 +17,10 @@
 !skills/**/scripts/*.py
 !skills/**/scripts/*.js
 
+# JIT Approval Service (full Go project)
+!jit-approval-svc/**
+!jit-approval-svc/**/*
+
 # Face recognition skill specifics
 !skills/face-recognition/models/**
 !skills/face-recognition/package.json

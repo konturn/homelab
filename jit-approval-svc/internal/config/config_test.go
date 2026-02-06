@@ -1,0 +1,116 @@
+package config
+
+import (
+	"testing"
+	"time"
+)
+
+func TestTierFor(t *testing.T) {
+	cfg := &Config{
+		Tiers: map[int]TierConfig{
+			0: {TTL: 5 * time.Minute, AutoApprove: true, Description: "Read-only monitoring"},
+			1: {TTL: 15 * time.Minute, AutoApprove: true, Description: "Service management"},
+			2: {TTL: 30 * time.Minute, AutoApprove: false, Description: "Infrastructure"},
+			3: {TTL: 60 * time.Minute, AutoApprove: false, Description: "Critical"},
+		},
+	}
+
+	tests := []struct {
+		tier        int
+		wantTTL     time.Duration
+		wantAuto    bool
+		wantErr     bool
+	}{
+		{0, 5 * time.Minute, true, false},
+		{1, 15 * time.Minute, true, false},
+		{2, 30 * time.Minute, false, false},
+		{3, 60 * time.Minute, false, false},
+		{4, 0, false, true},
+		{-1, 0, false, true},
+	}
+
+	for _, tt := range tests {
+		tc, err := cfg.TierFor(tt.tier)
+		if tt.wantErr {
+			if err == nil {
+				t.Errorf("tier %d: expected error", tt.tier)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("tier %d: unexpected error: %v", tt.tier, err)
+			continue
+		}
+		if tc.TTL != tt.wantTTL {
+			t.Errorf("tier %d: TTL = %v, want %v", tt.tier, tc.TTL, tt.wantTTL)
+		}
+		if tc.AutoApprove != tt.wantAuto {
+			t.Errorf("tier %d: AutoApprove = %v, want %v", tt.tier, tc.AutoApprove, tt.wantAuto)
+		}
+	}
+}
+
+func TestIsRequesterAllowed(t *testing.T) {
+	cfg := &Config{
+		AllowedRequesters: []string{"prometheus", "backup-agent"},
+	}
+
+	tests := []struct {
+		requester string
+		want      bool
+	}{
+		{"prometheus", true},
+		{"backup-agent", true},
+		{"unknown", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		got := cfg.IsRequesterAllowed(tt.requester)
+		if got != tt.want {
+			t.Errorf("IsRequesterAllowed(%q) = %v, want %v", tt.requester, got, tt.want)
+		}
+	}
+}
+
+func TestValidate(t *testing.T) {
+	base := Config{
+		VaultAddr:        "https://vault.example.com",
+		VaultRoleID:      "role-id",
+		VaultSecretID:    "secret-id",
+		TelegramBotToken: "bot-token",
+	}
+
+	// Valid config
+	if err := base.Validate(); err != nil {
+		t.Errorf("expected valid config, got: %v", err)
+	}
+
+	// Missing VaultAddr
+	c := base
+	c.VaultAddr = ""
+	if err := c.Validate(); err == nil {
+		t.Error("expected error for missing VaultAddr")
+	}
+
+	// Missing VaultRoleID
+	c = base
+	c.VaultRoleID = ""
+	if err := c.Validate(); err == nil {
+		t.Error("expected error for missing VaultRoleID")
+	}
+
+	// Missing VaultSecretID
+	c = base
+	c.VaultSecretID = ""
+	if err := c.Validate(); err == nil {
+		t.Error("expected error for missing VaultSecretID")
+	}
+
+	// Missing TelegramBotToken
+	c = base
+	c.TelegramBotToken = ""
+	if err := c.Validate(); err == nil {
+		t.Error("expected error for missing TelegramBotToken")
+	}
+}

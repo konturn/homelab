@@ -1,0 +1,39 @@
+# Add this service to the homelab docker-compose.yml
+# Jinja2 templated variables reference Ansible/Vault secrets
+
+services:
+  jit-approval-svc:
+    build:
+      context: ./docker/jit-approval-svc
+      dockerfile: Dockerfile
+    container_name: jit-approval-svc
+    restart: unless-stopped
+    environment:
+      - VAULT_ADDR=https://vault.lab.nkontur.com:8200
+      - VAULT_ROLE_ID={{ vault_jit_approle_role_id }}
+      - VAULT_SECRET_ID={{ vault_jit_approle_secret_id }}
+      - TELEGRAM_BOT_TOKEN={{ vault_jit_telegram_bot_token }}
+      - TELEGRAM_CHAT_ID=8531859108
+      - TELEGRAM_WEBHOOK_SECRET={{ vault_jit_telegram_webhook_secret }}
+      - LISTEN_ADDR=:8080
+      - REQUEST_TIMEOUT=300
+      - ALLOWED_REQUESTERS=prometheus
+    networks:
+      - internal
+    ports:
+      - "127.0.0.1:8080:8080"  # Only accessible from localhost/internal
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://10.3.32.4:3100/loki/api/v1/push"
+        labels: "service=jit-approval-svc"
+        loki-retries: "5"
+        loki-batch-size: "400"
+        max-buffer-size: "4m"
+        mode: "non-blocking"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
