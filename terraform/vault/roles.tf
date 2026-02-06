@@ -38,3 +38,29 @@ resource "vault_approle_auth_backend_role" "moltbot" {
   token_num_uses         = 0
   secret_id_num_uses     = 0
 }
+
+# =============================================================================
+# JWT Role: vault-admin
+# =============================================================================
+# Scoped admin role for the vault:configure CI job. Grants the vault-admin
+# policy so Terraform can manage auth backends, policies, and mounts.
+#
+# Tightly bound: only project 4 (homelab), only the main branch.
+# 15-minute TTL — enough for a terraform plan+apply cycle.
+
+resource "vault_jwt_auth_backend_role" "vault_admin" {
+  backend   = vault_jwt_auth_backend.gitlab.path
+  role_name = "vault-admin"
+  role_type = "jwt"
+
+  bound_claims = {
+    project_id = "4"
+    ref        = "main"
+    ref_type   = "branch"
+  }
+
+  user_claim     = "user_email"
+  token_policies = ["vault-admin"]
+  token_ttl      = 900
+  token_max_ttl  = 900
+}
