@@ -11,16 +11,16 @@
 # Pipeline structure:
 #
 #   VALIDATE (parallel)
-#   ┌──────────────┬──────────────┬──────────────┬──────────────┐
-#   router:val  zwave:val  sat-2:val  vault:validate
+#   ┌────────────────────────┬──────────────┬──────────────┬──────────────┐
+#   router:val [id_tokens]  zwave:val  sat-2:val  vault:validate
 #
 #   BUILD (parallel, path-triggered)
 #   ┌──────────────┬──────────────┬──────────────┐
 #   moltbot:build  amcrest2mqtt:build  snapcast:build  snapclient:build
 #
 #   DEPLOY (main only, parallel)
-#   ┌──────────────┬──────────────┬──────────────┐
-#   router:deploy  zwave:deploy  sat-2:deploy
+#   ┌──────────────────────────┬──────────────┬──────────────┐
+#   router:deploy [id_tokens]  zwave:deploy  sat-2:deploy
 #
 #   CONFIGURE (main only, after deploy)
 #   ┌──────────────┬──────────────────────────┐
@@ -62,6 +62,7 @@ variables:
         - ansible/roles/configure-router-network/**/*
         - ansible/roles/configure-wireguard/**/*
         - ansible/roles/configure-notifications/**/*
+        - ansible/roles/fetch-vault-secrets/**/*
         - docker/docker-compose.yml
         - docker/**/*
         - networking/**/*
@@ -155,6 +156,9 @@ router:validate:
     - .interruptible
     - .router_changes
   stage: validate
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: https://vault.lab.nkontur.com:8200
   needs: []
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml --check --diff
@@ -283,6 +287,9 @@ router:deploy:
   extends: .ansible
   stage: deploy
   resource_group: deploy-router
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: https://vault.lab.nkontur.com:8200
   needs:
     - job: router:validate
       optional: true

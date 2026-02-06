@@ -113,7 +113,7 @@
   ansible.builtin.cron:
     name: "Update public DNS records"
     minute: "*/5"
-    job: "{{ '/usr/bin/python3 ' + '/root/cron/ddns.py -k ' + lookup('env', 'CLOUDFLARE_API_KEY') + ' -z ' + lookup('env', 'CLOUDFLARE_ZONE_ID') }} -d nkontur.com -r '' '*' -e konoahko@gmail.com >> /root/cron/logs/ddns.log 2>&1"
+    job: "{{ '/usr/bin/python3 ' + '/root/cron/ddns.py -k ' + lookup('env', 'CLOUDFLARE_API_KEY') + ' -z ' + (vault_cloudflare_zone_id | default(lookup('env', 'CLOUDFLARE_ZONE_ID'))) }} -d nkontur.com -r '' '*' -e konoahko@gmail.com >> /root/cron/logs/ddns.log 2>&1"
   no_log: true
 
 - name: Template out cron script for SSL renewal
@@ -130,7 +130,7 @@
     minute: "0"
     hour: "4"
     weekday: "1"
-    job: "{{ '/bin/bash ' + '/root/cron/renew.sh ' + lookup('env', 'NAMESILO_API_KEY') + ' >> /root/cron/logs/ssl.log 2>&1' }}"
+    job: "{{ '/bin/bash ' + '/root/cron/renew.sh ' + (vault_namesilo_api_key | default(lookup('env', 'NAMESILO_API_KEY'))) + ' >> /root/cron/logs/ssl.log 2>&1' }}"
   no_log: true
 
 - name: Template out cron script for ISO conversion
