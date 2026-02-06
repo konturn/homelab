@@ -306,6 +306,16 @@
     cmd: "docker restart pihole"
   when: (pihole_dnsmasq_d is changed or pihole_listening_mode is changed) and not ansible_check_mode
 
+- name: Configure Pi-hole local DNS records via pihole-FTL
+  ansible.builtin.command:
+    cmd: >-
+      docker exec pihole pihole-FTL --config dns.hosts
+      '{{ pihole_dns_hosts | to_json }}'
+  when:
+    - pihole_dns_hosts is defined
+    - not ansible_check_mode
+  changed_when: true
+
 # Deluge cache fix: reduce libtorrent disk cache to prevent excessive RAM usage.
 # Default cache_size of 512 pieces causes 28GB+ memory consumption with large torrents.
 # Repo-managed core.conf sets cache_size to 128, keeping usage under 2GB.
