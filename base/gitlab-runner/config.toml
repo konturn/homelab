@@ -14,17 +14,3 @@ check_interval = 0
     image = "ubuntu:20.04"
     network_mode = "host"
     volumes = ["/cache/gitlab-runner:/cache"]
-
-[[runners]]
-  name = "images"
-  url = "https://gitlab.lab.nkontur.com/"
-  tls-ca-file = "/persistent_data/application/certs/nkontur.com/live/iot.lab.nkontur.com-0003/chain.pem"
-  token = "{{ lookup('env', 'IMAGES_GITLAB_RUNNER_TOKEN') }}"
-  executor = "docker"
-  [runners.docker]
-    image = "docker:24"
-    network_mode = "docker_mgmt"
-    privileged = false
-    volumes = ["/cache/gitlab-runner:/cache"]
-  # Use docker-socket-proxy instead of direct socket (static IP on mgmt network)
-  environment = ["DOCKER_HOST=tcp://{{ docker_socket_proxy_ip }}:2375"]
