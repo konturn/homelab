@@ -10,5 +10,11 @@
     "branch": "feat/transcript-scrub-cron",
     "lastCommentId": 0,
     "version": 1
+  },
+  "130": {
+    "title": "feat: add Promtail for host-level log ingestion to Loki",
+    "branch": "feat/promtail-log-ingestion",
+    "lastCommentId": 0,
+    "version": 1
   }
 }
