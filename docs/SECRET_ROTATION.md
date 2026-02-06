@@ -49,6 +49,7 @@ Secrets are managed through a **Vault-first** architecture with CI environment v
 | JWT (GitLab OIDC) | `ci-deploy` | `ci-deploy` | `router:deploy`, `zwave:deploy`, `satellite-2:deploy`, `router:validate` (main/MR) |
 | JWT (GitLab OIDC) | `vault-read` | `vault-read` | `vault:validate` (MR only — terraform plan) |
 | AppRole | `moltbot` | `moltbot-ops` | Moltbot container (scoped read-only) |
+| AppRole | `jit-approval-svc` | `jit-approval-svc` | JIT approval service (credential broker) |
 
 ### Vault Secret Layout
 
@@ -435,6 +436,21 @@ The job:
 1. Go to CI/CD → Schedules → New schedule
 2. Set cron: `0 4 1 * *` (4 AM on the 1st of each month)
 3. Target branch: main
+
+---
+
+## Vault AppRole Rotation (JIT Approval Service)
+
+The JIT approval service authenticates to Vault using AppRole (`role_id` + `secret_id`).
+It brokers credential access for the agent by minting short-lived child tokens with
+scoped policies (`jit-tier0-monitoring`, `jit-tier1-services`, `jit-tier2-infra`).
+
+**Policies attached:**
+- `jit-approval-svc` — service's own policy (token management + read brokered secrets)
+- Child tokens minted with tier-specific policies only
+
+**Rotation:** Same procedure as moltbot AppRole — generate new `secret_id`, update the
+service's environment, restart.
 
 ---
 

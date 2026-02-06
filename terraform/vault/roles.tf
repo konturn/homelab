@@ -42,6 +42,28 @@ resource "vault_approle_auth_backend_role" "moltbot" {
 }
 
 # =============================================================================
+# AppRole Role: jit-approval-svc
+# =============================================================================
+# AppRole for the JIT approval service. The service brokers credential access
+# on behalf of the agent — it authenticates to Vault, then mints short-lived
+# scoped tokens (using jit-tier0/1/2 policies) when requests are approved.
+#
+# secret_id_ttl = 0 means secret IDs don't expire (manual rotation).
+# token_num_uses = 0 means unlimited token uses (long-running service).
+
+resource "vault_approle_auth_backend_role" "jit_approval_svc" {
+  backend        = vault_auth_backend.approle.path
+  role_name      = "jit-approval-svc"
+  token_policies = ["jit-approval-svc"]
+  token_ttl      = 3600
+  token_max_ttl  = 86400
+
+  secret_id_ttl          = 0
+  token_num_uses         = 0
+  secret_id_num_uses     = 0
+}
+
+# =============================================================================
 # JWT Role: vault-admin
 # =============================================================================
 # Scoped admin role for the vault:configure CI job. Grants the vault-admin
