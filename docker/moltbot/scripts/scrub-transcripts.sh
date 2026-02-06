@@ -13,14 +13,38 @@
 set -euo pipefail
 
 TRANSCRIPT_DIR="${1:?Usage: scrub-transcripts.sh <transcript_directory>}"
+LOG_DIR="/var/log/scrub-transcripts"
+LOG_FILE="${LOG_DIR}/scrub.log"
+
+mkdir -p "$LOG_DIR"
 
 if [[ ! -d "$TRANSCRIPT_DIR" ]]; then
   echo "ERROR: Directory does not exist: $TRANSCRIPT_DIR" >&2
   exit 1
 fi
 
+# Structured logging function
+log_event() {
+  local level="$1"
+  local event="$2"
+  local details="${3:-}"
+  local ts
+  ts=$(date -Iseconds)
+  local entry="{\"ts\":\"${ts}\",\"level\":\"${level}\",\"event\":\"${event}\",\"details\":\"${details}\"}"
+  echo "$entry" >> "$LOG_FILE"
+  echo "[$ts] $level: $event $details"
+}
+
+# Rotate log if > 10MB
+if [[ -f "$LOG_FILE" ]] && [[ $(stat -f%z "$LOG_FILE" 2>/dev/null || stat -c%s "$LOG_FILE" 2>/dev/null) -gt 10485760 ]]; then
+  mv "$LOG_FILE" "${LOG_FILE}.1"
+  log_event "INFO" "log_rotated" "previous log archived"
+fi
+
 TOTAL_FILES=0
 TOTAL_REDACTED=0
+
+log_event "INFO" "scrub_started" "dir=${TRANSCRIPT_DIR}"
 
 # Build a combined sed expression for all credential patterns.
 # We use extended regex (-E) for readability.
@@ -83,20 +107,20 @@ while IFS= read -r -d '' file; do
     # Apply redactions in-place
     sed -i -E "$SED_SCRIPT" "$file"
 
-    echo "SCRUBBED: $file ($match_count lines redacted)"
+    log_event "SCRUB" "file_redacted" "file=$(basename "$file"),lines=${match_count}"
     TOTAL_FILES=$((TOTAL_FILES + 1))
     TOTAL_REDACTED=$((TOTAL_REDACTED + match_count))
   fi
 done < <(find "$TRANSCRIPT_DIR" \( -name "*.jsonl" -o -name "*.deleted.*" \) -type f -print0 2>/dev/null)
 
-echo "--- Scrub summary: $TOTAL_FILES files modified, ~$TOTAL_REDACTED lines redacted ---"
+log_event "INFO" "scrub_complete" "files=${TOTAL_FILES},lines_redacted=${TOTAL_REDACTED}"
 
 # --- Purge old archived sub-agent transcripts (older than 7 days) ---
 PURGE_COUNT=0
 while IFS= read -r -d '' old_file; do
   rm -f "$old_file"
-  echo "PURGED: $old_file"
+  log_event "PURGE" "transcript_deleted" "file=$(basename "$old_file")"
   PURGE_COUNT=$((PURGE_COUNT + 1))
 done < <(find "$TRANSCRIPT_DIR" -name "*.deleted.*" -mtime +7 -type f -print0 2>/dev/null)
 
-echo "--- Purge summary: $PURGE_COUNT archived transcripts deleted (>7 days old) ---"
+log_event "INFO" "purge_complete" "deleted=${PURGE_COUNT}"
