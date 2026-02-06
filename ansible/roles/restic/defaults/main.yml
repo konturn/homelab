@@ -10,6 +10,11 @@ restic_default_folders:
   - { path: "/etc" }
   - { path: "/var/log" }
   - { path: "/root", exclude: "--exclude .cache" }
+# Paths that must NEVER be included in offsite backups.
+# Vault unseal keys on disk + offsite backup = defeat the purpose of seal/unseal.
+restic_global_excludes:
+  - "/persistent_data/application/vault/unseal"
+
 restic_folders: []
 restic_databases: []
 restic_dump_compression_enabled: false
