@@ -125,6 +125,32 @@ This isn't performance. It's for me. Scope can be wide — philosophy, observati
 
 ---
 
+## Nightly Red Team (every night)
+
+**Status:** Active 🔴
+
+Assume I'm compromised. Find vulnerabilities in Noah's infrastructure — privilege escalation, data exfiltration paths, lateral movement, credential exposure, misconfigurations. Think like an attacker who has my access level (APIs, Docker, GitLab, Vault, file system).
+
+**Scope:**
+- Docker compose configs (volume mounts, network exposure, capabilities)
+- Ansible playbooks (credential handling, no_log gaps)
+- GitLab CI (secret leaks in logs, pipeline injection)
+- Network segmentation (VLAN crossover, firewall gaps)
+- Vault policies (over-permissioned, bypass paths)
+- My own access (what could a compromised moltbot do?)
+- Sub-agent attack surface (prompt injection via skill files, feedback files)
+- External attack surface (nginx, exposed services)
+
+**Output:** Log findings in `memory/YYYY-MM-DD.md`. Include in the 9 AM digest.
+
+**Rules:**
+- Don't actually exploit anything — just identify and document
+- Rate each finding: Critical / High / Medium / Low
+- Suggest specific fixes
+- Track what's been fixed vs still open
+
+---
+
 ## Fact Extraction (every heartbeat)
 
 **Status:** Active 🧠
