@@ -59,10 +59,10 @@ postgresql['effective_cache_size'] = "4GB"
 postgresql['log_min_duration_statement'] = 500
 
 ###
-# Redis - Cache tuning with LRU eviction
+# Redis
+# Note: maxmemory/maxmemory_policy are not valid Omnibus keys.
+# Redis memory config requires a custom redis config file if needed.
 ###
-redis['maxmemory'] = "512mb"
-redis['maxmemory_policy'] = "allkeys-lru"
 
 ###
 # Disable built-in monitoring (using external Telegraf + InfluxDB + Grafana)
@@ -73,7 +73,6 @@ node_exporter['enable'] = false
 redis_exporter['enable'] = false
 postgres_exporter['enable'] = false
 gitlab_exporter['enable'] = false
-grafana['enable'] = false
 
 ###
 # Disable unused features to reduce memory and background worker load
@@ -81,9 +80,6 @@ grafana['enable'] = false
 gitlab_kas['enable'] = false
 gitlab_pages['enable'] = false
 mattermost['enable'] = false
-dependency_proxy['enable'] = false
-terraform_state['enable'] = false
-packages['enable'] = false
 
 ###
 # Memory management - jemalloc tuning to prevent RSS creep
