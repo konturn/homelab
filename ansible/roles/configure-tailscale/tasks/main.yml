@@ -45,7 +45,7 @@
 - name: Configure Tailscale as subnet router
   command: >
     tailscale up
-    --authkey={{ tailscale_auth_key }}
+    --authkey={{ tailscale_auth_key | trim }}
     --advertise-routes={{ tailscale_advertised_routes }}
     --accept-dns=false
     --reset
@@ -60,7 +60,7 @@
     url: "https://api.tailscale.com/api/v2/tailnet/{{ tailscale_tailnet }}/dns/split-dns"
     method: PATCH
     headers:
-      Authorization: "Bearer {{ tailscale_api_token }}"
+      Authorization: "Bearer {{ tailscale_api_token | trim }}"
       Content-Type: "application/json"
     body_format: json
     body: "{{ tailscale_split_dns }}"
