@@ -1,0 +1,124 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// TierConfig holds the configuration for a given tier level.
+type TierConfig struct {
+	TTL          time.Duration
+	AutoApprove  bool
+	Description  string
+}
+
+// Config holds all service configuration sourced from environment variables.
+type Config struct {
+	VaultAddr     string
+	VaultRoleID   string
+	VaultSecretID string
+
+	TelegramBotToken     string
+	TelegramChatID       int64
+	TelegramWebhookSecret string
+
+	ListenAddr     string
+	RequestTimeout time.Duration
+
+	AllowedRequesters []string
+
+	Tiers map[int]TierConfig
+}
+
+// Load reads configuration from environment variables.
+func Load() (*Config, error) {
+	chatID, err := strconv.ParseInt(getEnv("TELEGRAM_CHAT_ID", "8531859108"), 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid TELEGRAM_CHAT_ID: %w", err)
+	}
+
+	timeoutSec, err := strconv.Atoi(getEnv("REQUEST_TIMEOUT", "300"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid REQUEST_TIMEOUT: %w", err)
+	}
+
+	requesters := strings.Split(getEnv("ALLOWED_REQUESTERS", "prometheus"), ",")
+	for i := range requesters {
+		requesters[i] = strings.TrimSpace(requesters[i])
+	}
+
+	cfg := &Config{
+		VaultAddr:     getEnv("VAULT_ADDR", "https://vault.lab.nkontur.com:8200"),
+		VaultRoleID:   os.Getenv("VAULT_ROLE_ID"),
+		VaultSecretID: os.Getenv("VAULT_SECRET_ID"),
+
+		TelegramBotToken:     os.Getenv("TELEGRAM_BOT_TOKEN"),
+		TelegramChatID:       chatID,
+		TelegramWebhookSecret: os.Getenv("TELEGRAM_WEBHOOK_SECRET"),
+
+		ListenAddr:     getEnv("LISTEN_ADDR", ":8080"),
+		RequestTimeout: time.Duration(timeoutSec) * time.Second,
+
+		AllowedRequesters: requesters,
+
+		Tiers: map[int]TierConfig{
+			0: {TTL: 5 * time.Minute, AutoApprove: true, Description: "Read-only monitoring"},
+			1: {TTL: 15 * time.Minute, AutoApprove: true, Description: "Service management"},
+			2: {TTL: 30 * time.Minute, AutoApprove: false, Description: "Infrastructure"},
+			3: {TTL: 60 * time.Minute, AutoApprove: false, Description: "Critical"},
+		},
+	}
+
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+
+	return cfg, nil
+}
+
+// Validate checks that required configuration is present.
+func (c *Config) Validate() error {
+	if c.VaultAddr == "" {
+		return fmt.Errorf("VAULT_ADDR is required")
+	}
+	if c.VaultRoleID == "" {
+		return fmt.Errorf("VAULT_ROLE_ID is required")
+	}
+	if c.VaultSecretID == "" {
+		return fmt.Errorf("VAULT_SECRET_ID is required")
+	}
+	if c.TelegramBotToken == "" {
+		return fmt.Errorf("TELEGRAM_BOT_TOKEN is required")
+	}
+	return nil
+}
+
+// TierFor returns the tier configuration for a given tier level.
+// Returns an error if the tier is unknown.
+func (c *Config) TierFor(tier int) (TierConfig, error) {
+	tc, ok := c.Tiers[tier]
+	if !ok {
+		return TierConfig{}, fmt.Errorf("unknown tier: %d", tier)
+	}
+	return tc, nil
+}
+
+// IsRequesterAllowed checks if the given requester ID is in the allowlist.
+func (c *Config) IsRequesterAllowed(requester string) bool {
+	for _, r := range c.AllowedRequesters {
+		if r == requester {
+			return true
+		}
+	}
+	return false
+}
+
+func getEnv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}

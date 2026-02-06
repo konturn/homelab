@@ -15,8 +15,8 @@
 #   router:val [id_tokens]  zwave:val  sat-2:val  vault:validate
 #
 #   BUILD (parallel, path-triggered)
-#   ┌──────────────┬──────────────┬──────────────┐
-#   moltbot:build  amcrest2mqtt:build  snapcast:build  snapclient:build
+#   ┌──────────────┬──────────────┬──────────────┬──────────────────────┐
+#   moltbot:build  amcrest2mqtt:build  snapcast:build  snapclient:build  jit-approval-svc:build
 #
 #   DEPLOY (main only, parallel)
 #   ┌──────────────────────────┬──────────────┬──────────────┐
@@ -282,6 +282,26 @@ snapcast:build:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - docker/images/snapcast/**/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
+
+jit-approval-svc:build:
+  extends: .docker_build
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE/jit-approval-svc:latest -t $CI_REGISTRY_IMAGE/jit-approval-svc:$CI_COMMIT_SHORT_SHA docker/jit-approval-svc/
+    - docker push $CI_REGISTRY_IMAGE/jit-approval-svc:latest
+    - docker push $CI_REGISTRY_IMAGE/jit-approval-svc:$CI_COMMIT_SHORT_SHA
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - docker/jit-approval-svc/**/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - docker/jit-approval-svc/**/*
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       when: manual
       allow_failure: true

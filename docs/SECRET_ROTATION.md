@@ -58,7 +58,7 @@ homelab/
 ├── api-keys/        # External API keys (aclawdemy, anthropic, brave, openai)
 ├── backup/          # Backblaze, borg, restic credentials
 ├── cameras/         # Doorbell, rear camera passwords
-├── docker/          # Per-service secrets (grafana, influxdb, plex, etc.)
+├── docker/          # Per-service secrets (grafana, influxdb, jit-approval-svc, plex, etc.)
 ├── email/           # Gmail, SMTP, DKIM
 ├── gitlab/          # Runner tokens
 ├── infrastructure/  # Aruba, IPMI, LUKS, OMAPI, Pi-hole, router, SNMP, Tailscale, VRRP
@@ -148,6 +148,10 @@ To remove CI variable fallback (after Vault is proven stable):
 | `GRAFANA_TOKEN` | `docker/grafana` | `token` | moltbot-gateway |
 | `SPOTIFY_DC` | `infrastructure/spotify` | `sp_dc` | Home Assistant spotcast |
 | `SPOTIFY_KEY` | `infrastructure/spotify` | `sp_key` | Home Assistant spotcast |
+| `JIT_APPROLE_ROLE_ID` | `docker/jit-approval-svc` | `approle_role_id` | jit-approval-svc |
+| `JIT_APPROLE_SECRET_ID` | `docker/jit-approval-svc` | `approle_secret_id` | jit-approval-svc |
+| `JIT_TELEGRAM_BOT_TOKEN` | `docker/jit-approval-svc` | `telegram_bot_token` | jit-approval-svc |
+| `JIT_TELEGRAM_WEBHOOK_SECRET` | `docker/jit-approval-svc` | `telegram_webhook_secret` | jit-approval-svc |
 | `BACKBLAZE_ACCESS_KEY_ID` | `backup/backblaze` | `access_key_id` | Restic backups |
 | `BACKBLAZE_SECRET_ACCESS_KEY` | `backup/backblaze` | `secret_access_key` | Restic backups |
 | `RESTIC_PASSWORD` | `backup/restic` | `password` | Restic backups |

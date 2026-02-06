@@ -30,6 +30,14 @@ vault_secret_paths:
     fields:
       vault_openai_api_key: "api_key"
 
+  # JIT Approval Service secrets
+  - path: "docker/jit-approval-svc"
+    fields:
+      vault_jit_approle_role_id: "approle_role_id"
+      vault_jit_approle_secret_id: "approle_secret_id"
+      vault_jit_telegram_bot_token: "telegram_bot_token"
+      vault_jit_telegram_webhook_secret: "telegram_webhook_secret"
+
   # Docker service secrets
   - path: "docker/audioserve"
     fields:
