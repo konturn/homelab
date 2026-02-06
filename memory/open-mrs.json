@@ -1,1 +1,8 @@
-{}
+{
+  "125": {
+    "title": "feat: pin all Docker images to SHA256 digests",
+    "branch": "feat/pin-docker-images",
+    "lastCommentId": 0,
+    "version": 1
+  }
+}
