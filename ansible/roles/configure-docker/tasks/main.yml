@@ -236,7 +236,10 @@
     group: root
     mode: '0600'
   no_log: true
-  when: lookup('env', 'VAULT_UNSEAL_KEYS') | length > 0
+  when:
+    - lookup('env', 'VAULT_UNSEAL_KEYS') | length > 0
+    - docker_data_dirs is defined
+    - docker_data_dirs | selectattr('path', 'search', 'vault') | list | length > 0
 
 - name: Copy docker configuration files
   ansible.builtin.template:
