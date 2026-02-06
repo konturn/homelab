@@ -2137,3 +2137,120 @@ jit-approval-svc:
 4. **Emergency override:** If Noah is unreachable, should there be a break-glass mechanism? (Probably not — if Noah is unreachable, Prometheus should wait.)
 5. **Audit log:** SQLite in the approval svc container, or push to InfluxDB/Loki for centralized logging?
 
+
+---
+
+## 12. Service-Specific Token Lifecycle (Create/Revoke Patterns)
+
+**Key insight (2026-02-06):** Most critical services support programmatic token creation and revocation. The approval service can issue REAL short-lived tokens for these, not just broker static ones.
+
+### 12.1 Model B Services (True Dynamic Credentials)
+
+These services support programmatic create + revoke, giving us real cryptographic or server-enforced expiry:
+
+#### Home Assistant (OAuth2)
+```
+Approval svc holds: HA refresh token (stored in Vault)
+On approve:
+  POST https://homeassistant.lab.nkontur.com/auth/token
+    grant_type=refresh_token&
+    refresh_token=STORED_REFRESH_TOKEN&
+    client_id=https://jit-approval-svc.lab.nkontur.com
+  → Returns access_token (expires_in: 1800 = 30 min)
+On expiry: HA server rejects token automatically
+Emergency revoke: DELETE refresh token → kills ALL derived access tokens instantly
+```
+
+#### Plex (Per-Client Token)
+```
+Approval svc holds: Plex account credentials or master token (stored in Vault)
+On approve:
+  POST https://plex.tv/users/sign_in.json
+    X-Plex-Client-Identifier: jit-{request_id}
+    → Returns unique auth token for this client ID
+On expiry: 
+  POST https://plex.tv/api/v2/tokens/{token_id}?X-Plex-Token=master
+    _method=DELETE
+  → Server rejects token immediately
+```
+
+#### GitLab (Personal Access Token API)
+```
+Approval svc holds: GitLab admin token or impersonation capability (stored in Vault)
+On approve:
+  POST /api/v4/personal_access_tokens
+    name=jit-prometheus-{request_id}
+    expires_at={now + TTL}
+    scopes=["read_api"]  # scoped to request
+  → Returns new PAT with built-in expiry
+On expiry: GitLab rejects token automatically (server-side expiry)
+Emergency revoke: DELETE /api/v4/personal_access_tokens/:id
+```
+
+#### Grafana (Service Account Token)
+```
+Approval svc holds: Grafana admin credentials (stored in Vault)
+On approve:
+  POST /api/serviceaccounts/{sa_id}/tokens
+    name=jit-{request_id}
+    secondsToLive={TTL_seconds}
+  → Returns token with server-enforced TTL
+On expiry: Grafana rejects token automatically
+Emergency revoke: DELETE /api/serviceaccounts/{sa_id}/tokens/{token_id}
+```
+
+#### SSH (Vault CA Certificates)
+```
+Approval svc holds: Vault policy for ssh-client-signer
+On approve:
+  POST vault/ssh-client-signer/sign/prometheus-tier2
+    public_key={agent_pub_key}
+    valid_principals=node
+    ttl=15m
+  → Returns signed SSH certificate
+On expiry: Certificate is cryptographically expired, sshd rejects it
+No revoke needed: math handles it
+```
+
+#### PostgreSQL (Vault Database Engine)
+```
+Approval svc holds: Vault policy for database/creds
+On approve:
+  GET vault/database/creds/prometheus-readonly
+  → Returns ephemeral username + password, TTL enforced by Vault
+On expiry: Vault drops the database user automatically (lease revocation)
+Emergency revoke: PUT vault/sys/leases/revoke -d lease_id=...
+```
+
+### 12.2 Model A Services (Static Token Brokering)
+
+These services have no token management API. The approval service brokers access to a single static token:
+
+| Service | Risk Level | Mitigation |
+|---------|-----------|------------|
+| Radarr | Low (media management) | Agent-enforced TTL, audit log |
+| Sonarr | Low (media management) | Agent-enforced TTL, audit log |
+| Tautulli | Low (read-only stats) | Move to Tier 1 (auto-approved) |
+| NZBGet | Low (download client) | Agent-enforced TTL, audit log |
+| Deluge | Low (download client) | Agent-enforced TTL, audit log |
+| Ombi | Low (media requests) | Agent-enforced TTL, audit log |
+
+**Future option for Model A services:** Deploy a reverse auth proxy that validates JIT tokens before forwarding to the real API. This gives server-enforced expiry even for services that don't support it. Could be part of the Traefik migration (forward-auth middleware).
+
+### 12.3 Summary
+
+| Tier | Service | Model | Expiry Enforcement |
+|------|---------|-------|--------------------|
+| 2 | Home Assistant | B | Server (OAuth2 30m) |
+| 2 | Plex | B | Server (token revocation) |
+| 2 | GitLab | B | Server (PAT expiry) |
+| 1 | Grafana | B | Server (token TTL) |
+| 2 | SSH | B | Cryptographic (cert TTL) |
+| 3 | PostgreSQL | B | Vault (lease revocation) |
+| 1 | Radarr/Sonarr | A | Agent-enforced |
+| 1 | Tautulli | A | Agent-enforced |
+| 1 | NZBGet/Deluge | A | Agent-enforced |
+| 1 | Ombi | A | Agent-enforced |
+
+**Coverage:** All Tier 2+ services support Model B (real expiry). Model A is limited to low-risk Tier 1 services where the blast radius is minimal (media management).
+
