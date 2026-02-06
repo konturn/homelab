@@ -326,7 +326,7 @@ jit-approval-svc:
 1. **Polling vs push:** Agent polls for approval status. Could use a webhook callback to OpenClaw instead, but that reintroduces a path from the approval svc into the agent. Polling is simpler and safer.
 2. **Request validation:** Should the approval svc validate that the requested resource exists? Or is it purely a token-minting gatekeeper?
 3. **Multi-approver:** Future consideration — require N-of-M approvals for tier 3+?
-4. **Audit log:** SQLite in the approval svc container, or push to InfluxDB/Loki for centralized logging?
+4. **Audit log:** ~~SQLite in the approval svc container, or push to InfluxDB/Loki for centralized logging?~~ **RESOLVED:** Centralized logging via Loki. See Section 14.3.
 
 ---
 ## 5. Service-Specific Token Lifecycle (Create/Revoke Patterns)
@@ -1402,28 +1402,149 @@ The following dashboards should be deployed as part of Phase 6.
 | Approval svc health | Health check fails for > 60s | **Critical** | Telegram + email |
 | Vault connectivity | Approval svc can't reach Vault for > 60s | **Critical** | Telegram + email |
 
-### 14.3 Log Shipping
+### 14.3 Log Shipping — Centralized Audit via Loki
 
-**Vault audit logs → Loki:**
-```bash
-# Vault audit log is already at /vault/logs/audit.log
-# Promtail scrapes this into Loki with labels:
-#   job=vault-audit, service=vault
+All JIT components MUST ship structured logs to the centralized Loki instance. This is not optional — the audit trail IS the security model. If we can't prove what happened, the system is untrustworthy.
+
+**Architecture:**
+```
+┌─────────────────┐    ┌──────────────┐    ┌──────────┐    ┌─────────┐
+│ Approval Service│──→ │ Docker Loki  │──→ │   Loki   │──→ │ Grafana │
+│  (stdout JSON)  │    │  Log Driver  │    │          │    │         │
+├─────────────────┤    ├──────────────┤    │          │    │         │
+│  Vault Audit    │──→ │  Promtail    │──→ │          │    │         │
+│  (/vault/logs/) │    │  (file tail) │    │          │    │         │
+├─────────────────┤    ├──────────────┤    │          │    │         │
+│  Agent JIT Logs │──→ │ Docker Loki  │──→ │          │    │         │
+│  (stdout JSON)  │    │  Log Driver  │    │          │    │         │
+└─────────────────┘    └──────────────┘    └──────────┘    └─────────┘
 ```
 
-**Approval service logs → Loki:**
-```bash
-# jit-approval-svc writes structured JSON to stdout
-# Docker log driver → Promtail → Loki with labels:
-#   job=jit-approval-svc, service=jit
+#### 14.3.1 Approval Service → Loki
+
+The approval service runs as a Docker container with the Loki log driver (same as all other compose services). Structured JSON to stdout.
+
+**Log format (one JSON object per line):**
+```json
+{
+  "ts": "2026-02-06T14:30:00Z",
+  "level": "info",
+  "event": "request_received",
+  "request_id": "req-abc123",
+  "requester": "prometheus",
+  "resource": "homeassistant",
+  "tier": 1,
+  "reason": "Check sensor readings for daily report"
+}
 ```
 
-**Agent JIT audit logs → Loki:**
-```bash
-# Agent writes to /tmp/jit-audit.log
-# Promtail sidecar (or shared volume) scrapes into Loki:
-#   job=jit-agent-audit, service=prometheus
+**Required events (every one of these MUST be logged):**
+| Event | When | Fields |
+|-------|------|--------|
+| `request_received` | New request comes in | requester, resource, tier, reason |
+| `approval_sent` | Telegram message sent to Noah | request_id, telegram_message_id |
+| `approved` | Noah approves | request_id, approver, ttl_granted |
+| `denied` | Noah denies | request_id, approver, denial_reason |
+| `timeout` | Request expires without response | request_id, timeout_seconds |
+| `token_issued` | Vault token/credential minted | request_id, resource, ttl, vault_lease_id |
+| `token_revoked` | Credential revoked (early or TTL) | request_id, resource, revocation_reason |
+| `token_expired` | TTL elapsed naturally | request_id, resource |
+| `canary_fired` | Canary request generated | canary_id, resource |
+| `canary_result` | Canary resolved | canary_id, result (approved/denied/timeout) |
+| `health_check` | Periodic health ping | vault_reachable, uptime_seconds |
+| `error` | Any error | error_type, error_message, stack |
+
+**Loki labels** (set via Docker Loki log driver):
+```yaml
+logging:
+  driver: loki
+  options:
+    loki-url: "http://10.3.32.4:3100/loki/api/v1/push"
+    labels: "service=jit-approval-svc"
+    loki-retries: "5"
+    loki-batch-size: "400"
+    max-buffer-size: "4m"
+    mode: "non-blocking"
 ```
+
+**LogQL queries for Grafana dashboards:**
+```logql
+# All JIT events
+{service="jit-approval-svc"} | json
+
+# Request timeline for a specific request
+{service="jit-approval-svc"} | json | request_id="req-abc123"
+
+# Denial rate (last 24h)
+sum(count_over_time({service="jit-approval-svc"} | json | event="denied" [24h])) /
+sum(count_over_time({service="jit-approval-svc"} | json | event=~"approved|denied" [24h]))
+
+# Canary alerts
+{service="jit-approval-svc"} | json | event="canary_result" | result="approved"
+```
+
+#### 14.3.2 Vault Audit Logs → Loki
+
+Vault's file audit backend writes to `/vault/logs/audit.log`. Promtail tails this file.
+
+**Promtail config addition** (add to `docker/promtail/config.yml`):
+```yaml
+- job_name: vault-audit
+  static_configs:
+    - targets: [localhost]
+      labels:
+        job: vault-audit
+        host: router
+        service: vault
+        __path__: /vault/logs/audit.log
+```
+
+**Note:** Promtail needs a volume mount for the Vault log directory. Add to compose:
+```yaml
+promtail:
+  volumes:
+    - {{ docker_persistent_data_path }}/vault/logs:/vault/logs:ro
+```
+
+**Key fields in Vault audit logs:** `type` (request/response), `auth.token_type`, `request.path`, `request.operation`, `response.data.ttl`. These allow correlation: when the approval service mints a token, the Vault audit log records the corresponding `auth/token/create` call.
+
+#### 14.3.3 Agent JIT Audit Logs → Loki
+
+The agent (moltbot/OpenClaw container) already uses the Loki log driver. JIT-related actions should be logged to stdout as structured JSON with a `jit_` prefix on event names for easy filtering.
+
+**Log format:**
+```json
+{
+  "ts": "2026-02-06T14:30:05Z",
+  "level": "info",
+  "event": "jit_credential_requested",
+  "resource": "homeassistant",
+  "reason": "Check sensor readings for daily report",
+  "request_id": "req-abc123"
+}
+```
+
+**LogQL for agent JIT activity:**
+```logql
+{compose_service="moltbot-gateway"} | json | event=~"jit_.*"
+```
+
+#### 14.3.4 Cross-Component Correlation
+
+All components use `request_id` as the correlation key. A single JIT request produces logs in all three streams:
+
+1. **Agent:** `jit_credential_requested` → `jit_credential_received` → `jit_credential_used` → `jit_credential_released`
+2. **Approval svc:** `request_received` → `approval_sent` → `approved` → `token_issued` → `token_expired`
+3. **Vault:** `auth/token/create` → `secret/data/read` → (TTL expiry)
+
+**Grafana: JIT Request Trace panel** — query all three streams by `request_id`, display as timeline. This gives a single view of the full lifecycle of any credential request.
+
+#### 14.3.5 Retention and Compliance
+
+- **JIT audit logs:** Retain in Loki for 90 days minimum (configure via `table_manager.retention_period`)
+- **Vault audit logs:** Same 90-day retention
+- **Never delete audit logs early** — they are the proof that the system works as designed
+- **Consider:** Loki → S3/B2 archival for long-term retention beyond 90 days
 
 ---
 ## 15. Operator Availability
