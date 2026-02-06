@@ -435,6 +435,56 @@ The job:
 
 ---
 
+## Transcript Hygiene
+
+OpenClaw session transcripts (`.jsonl` files) may contain credentials that were pasted or echoed during interactive sessions. A cron job runs every 6 hours on the router to scrub these automatically.
+
+### What it does
+
+1. **Credential redaction** — Scans all transcript files under `{{ docker_persistent_data_path }}/moltbot-gateway/agents/main/sessions/` and replaces known secret patterns with `[REDACTED]` in-place.
+2. **Archive purge** — Deletes archived sub-agent transcripts (`*.deleted.*` files) older than 7 days to reclaim disk space.
+
+### Patterns redacted
+
+| Pattern | Example |
+|---------|---------|
+| Vault tokens | `hvs.CAESILx...` |
+| GitLab tokens | `glpat-xxxx...` |
+| GitHub tokens | `ghp_`, `gho_`, `ghs_` |
+| OpenAI keys | `sk-xxxx...` (20+ chars) |
+| Anthropic keys | `sk-ant-xxxx...` |
+| Slack tokens | `xoxb-`, `xoxp-` |
+| AWS access keys | `AKIA...` |
+| Telegram bot tokens | `123456:AAxxx...` |
+| JWT tokens | `eyJ...eyJ...xxx` |
+| Private key blocks | `-----BEGIN...PRIVATE KEY-----` |
+| UUID secrets | After `secret_id`, `secret`, `password` keywords |
+| Long hex strings | After `token`, `password`, `secret`, `key` keywords |
+| App passwords | Near `app.password` or `GMAIL_APP_PASSWORD` |
+
+### Configuration
+
+- **Script:** `/usr/local/bin/scrub-transcripts.sh` (deployed by Ansible)
+- **Source:** `docker/moltbot/scripts/scrub-transcripts.sh` in this repo
+- **Schedule:** Every 6 hours at :30 (cron)
+- **Logging:** Output goes to syslog via `logger -t scrub-transcripts`
+- **Ansible task:** In `configure-docker` role
+
+### Manual run
+
+```bash
+/usr/local/bin/scrub-transcripts.sh /persistent_data/application/moltbot-gateway/agents/main/sessions/
+```
+
+### Monitoring
+
+Check recent scrub activity:
+```bash
+journalctl -t scrub-transcripts --since "24 hours ago"
+```
+
+---
+
 ## Future Improvements
 
 - [ ] Remove CI env var fallbacks once Vault proves stable (~1 month)
