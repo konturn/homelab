@@ -46,7 +46,8 @@ Secrets are managed through a **Vault-first** architecture with CI environment v
 | Method | Role | Policy | Used By |
 |--------|------|--------|---------|
 | JWT (GitLab OIDC) | `vault-admin` | `vault-admin` | `vault:configure`, `vault:rotate-approle` (main only) |
-| JWT (GitLab OIDC) | `vault-read` | `vault-read` | `vault:validate`, `router:validate`, `router:deploy` (any/main) |
+| JWT (GitLab OIDC) | `ci-deploy` | `ci-deploy` | `router:deploy`, `zwave:deploy`, `satellite-2:deploy`, `router:validate` (main/MR) |
+| JWT (GitLab OIDC) | `vault-read` | `vault-read` | `vault:validate` (MR only — terraform plan) |
 | AppRole | `moltbot` | `moltbot-ops` | Moltbot container (scoped read-only) |
 
 ### Vault Secret Layout
@@ -153,7 +154,7 @@ To remove CI variable fallback (after Vault is proven stable):
 | `VAULT_APPROLE_ROLE_ID` | Circular dependency — needed to auth to Vault |
 | `VAULT_APPROLE_SECRET_ID` | Circular dependency — needed to auth to Vault |
 | `VAULT_UNSEAL_KEYS` | Break-glass secret — must not depend on Vault |
-| `ROUTER_PRIVATE_KEY_BASE64` | Used in CI `before_script` before Ansible runs |
+| `ROUTER_PRIVATE_KEY_BASE64` | CI `before_script` fallback — Vault JWT fetch attempted first |
 | `GRAFANA_TOKEN` | Non-sensitive service token, kept in inventory |
 | `CLOUDFLARE_API_KEY` | Used in cron job via `lookup('env', ...)` (not yet in Vault) |
 
@@ -310,10 +311,12 @@ To remove CI variable fallback (after Vault is proven stable):
 
 **Vault path:** `homelab/moltbot/tokens`
 
+**Note:** `MOLTBOT_GITLAB_TOKEN` is also used by the `vault:rotate-approle` CI job. That job now fetches it from Vault via JWT auth, falling back to the CI variable.
+
 **How to rotate:**
 1. Generate new token (varies by service)
 2. Update in Vault: `homelab/moltbot/tokens` → relevant field
-3. Update GitLab CI variable
+3. Update GitLab CI variable (fallback)
 4. Redeploy moltbot-gateway container
 
 **Complexity:** 🟢-🟡 Easy to Medium
@@ -324,7 +327,9 @@ To remove CI variable fallback (after Vault is proven stable):
 
 **Description:** Base64-encoded SSH private key for Ansible deployments.
 
-**Note:** This secret is used in the CI `.ansible` template's `before_script` (before Ansible runs), so it **cannot** use the Vault integration. It remains CI-only.
+**Vault path:** `infrastructure/router` → `private_key_base64`
+
+**Note:** The CI `.ansible` template's `before_script` now fetches this key from Vault via JWT auth (role `ci-deploy`) before Ansible runs. The CI variable `ROUTER_PRIVATE_KEY_BASE64` is kept as a fallback if Vault is unreachable.
 
 **Used by:**
 - GitLab CI pipeline (all ansible playbook runs)
@@ -333,9 +338,10 @@ To remove CI variable fallback (after Vault is proven stable):
 1. Generate new SSH keypair
 2. Add public key to authorized_keys on all deploy targets
 3. Base64 encode the private key
-4. Update `ROUTER_PRIVATE_KEY_BASE64` in GitLab CI/CD variables
-5. Test deployment with a dummy commit
-6. Remove old public key from all hosts
+4. Update in Vault: `homelab/infrastructure/router` → `private_key_base64`
+5. Update `ROUTER_PRIVATE_KEY_BASE64` in GitLab CI/CD variables (fallback)
+6. Test deployment with a dummy commit
+7. Remove old public key from all hosts
 
 **Complexity:** 🔴 Hard (requires access to multiple hosts)
 

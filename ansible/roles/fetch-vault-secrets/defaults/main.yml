@@ -7,7 +7,7 @@ vault_timeout: 10
 # Authentication method priority: jwt > approle > env_fallback
 # JWT token is set by GitLab CI id_tokens block
 vault_jwt_token: "{{ lookup('env', 'VAULT_ID_TOKEN') }}"
-vault_jwt_role: "vault-read"
+vault_jwt_role: "ci-deploy"
 
 # AppRole credentials (fallback for non-CI contexts like moltbot)
 vault_approle_role_id: "{{ lookup('env', 'VAULT_APPROLE_ROLE_ID') }}"

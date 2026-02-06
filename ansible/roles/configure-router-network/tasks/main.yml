@@ -136,7 +136,11 @@
     minute: "0"
     hour: "4"
     weekday: "1"
-    job: "{{ '/bin/bash ' + '/root/cron/renew.sh ' + (vault_namesilo_api_key | default(lookup('env', 'NAMESILO_API_KEY'))) + ' >> /root/cron/logs/ssl.log 2>&1' }}"
+    job: >-
+      {{ ('/bin/bash /root/cron/renew.sh '
+      + ((vault_namesilo_api_key | default(lookup('env', 'NAMESILO_API_KEY'))) | trim)
+      + ' >> /root/cron/logs/ssl.log 2>&1')
+      | regex_replace('[\r\n]', '') }}
   no_log: true
 
 - name: Template out cron script for ISO conversion
