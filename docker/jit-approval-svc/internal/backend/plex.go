@@ -44,9 +44,9 @@ func (b *PlexBackend) MintCredential(resource string, tier int, ttl time.Duratio
 		return nil, fmt.Errorf("read vault secret: %w", err)
 	}
 
-	serverToken, ok := secrets["server_token"]
+	serverToken, ok := secrets["token"]
 	if !ok || serverToken == "" {
-		return nil, fmt.Errorf("missing server_token in vault path %s", b.vaultPath)
+		return nil, fmt.Errorf("missing token in vault path %s", b.vaultPath)
 	}
 
 	// GET transient token
@@ -101,9 +101,9 @@ func (b *PlexBackend) Health() error {
 		return fmt.Errorf("read vault secret for health: %w", err)
 	}
 
-	serverToken, ok := secrets["server_token"]
+	serverToken, ok := secrets["token"]
 	if !ok || serverToken == "" {
-		return fmt.Errorf("missing server_token for health check")
+		return fmt.Errorf("missing token for health check")
 	}
 
 	url := fmt.Sprintf("%s/identity?X-Plex-Token=%s", b.baseURL, serverToken)

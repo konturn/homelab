@@ -178,7 +178,7 @@ func TestGrafanaBackend_MintCredential(t *testing.T) {
 	reader := &mockVaultReader{
 		secrets: map[string]map[string]string{
 			"homelab/data/docker/grafana": {
-				"admin_token":        "grafana-admin-token",
+				"token":        "grafana-admin-token",
 				"service_account_id": "42",
 			},
 		},
@@ -211,7 +211,7 @@ func TestGrafanaBackend_MintCredential_Error(t *testing.T) {
 	reader := &mockVaultReader{
 		secrets: map[string]map[string]string{
 			"homelab/data/docker/grafana": {
-				"admin_token":        "bad-token",
+				"token":        "bad-token",
 				"service_account_id": "42",
 			},
 		},
@@ -270,7 +270,7 @@ func TestPlexBackend_MintCredential(t *testing.T) {
 	reader := &mockVaultReader{
 		secrets: map[string]map[string]string{
 			"homelab/data/docker/plex": {
-				"server_token": "plex-server-token",
+				"token": "plex-server-token",
 			},
 		},
 	}
@@ -302,7 +302,7 @@ func TestPlexBackend_MintCredential_EmptyToken(t *testing.T) {
 	reader := &mockVaultReader{
 		secrets: map[string]map[string]string{
 			"homelab/data/docker/plex": {
-				"server_token": "plex-server-token",
+				"token": "plex-server-token",
 			},
 		},
 	}
@@ -328,7 +328,7 @@ func TestPlexBackend_Health(t *testing.T) {
 	reader := &mockVaultReader{
 		secrets: map[string]map[string]string{
 			"homelab/data/docker/plex": {
-				"server_token": "plex-server-token",
+				"token": "plex-server-token",
 			},
 		},
 	}
@@ -544,7 +544,7 @@ func TestGrafanaBackend_MissingVaultField(t *testing.T) {
 	reader := &mockVaultReader{
 		secrets: map[string]map[string]string{
 			"homelab/data/docker/grafana": {
-				"admin_token": "token",
+				"token": "token",
 				// missing service_account_id
 			},
 		},
@@ -561,7 +561,7 @@ func TestPlexBackend_MissingVaultField(t *testing.T) {
 	reader := &mockVaultReader{
 		secrets: map[string]map[string]string{
 			"homelab/data/docker/plex": {
-				// missing server_token
+				// missing token
 			},
 		},
 	}
@@ -569,7 +569,7 @@ func TestPlexBackend_MissingVaultField(t *testing.T) {
 	b := NewPlexBackend("http://localhost", reader)
 	_, err := b.MintCredential("plex", 1, 15*time.Minute)
 	if err == nil {
-		t.Fatal("expected error for missing server_token")
+		t.Fatal("expected error for missing token")
 	}
 }
 

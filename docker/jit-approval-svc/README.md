@@ -172,8 +172,8 @@ Dynamic backends read their upstream credentials from Vault:
 | Backend | Vault Path | Required Fields |
 |---------|-----------|-----------------|
 | Home Assistant | `homelab/data/docker/homeassistant` | `refresh_token`, `client_id` |
-| Grafana | `homelab/data/docker/grafana` | `admin_token`, `service_account_id` |
-| Plex | `homelab/data/docker/plex` | `server_token` |
+| Grafana | `homelab/data/docker/grafana` | `token`, `service_account_id` |
+| Plex | `homelab/data/docker/plex` | `token` |
 | InfluxDB | `homelab/data/docker/influxdb` | `admin_token`, `org_id` |
 
 ## Build

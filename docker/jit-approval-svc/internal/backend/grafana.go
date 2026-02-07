@@ -39,9 +39,9 @@ func (b *GrafanaBackend) MintCredential(resource string, tier int, ttl time.Dura
 		return nil, fmt.Errorf("read vault secret: %w", err)
 	}
 
-	adminToken, ok := secrets["admin_token"]
+	adminToken, ok := secrets["token"]
 	if !ok || adminToken == "" {
-		return nil, fmt.Errorf("missing admin_token in vault path %s", b.vaultPath)
+		return nil, fmt.Errorf("missing token in vault path %s", b.vaultPath)
 	}
 	serviceAccountID, ok := secrets["service_account_id"]
 	if !ok || serviceAccountID == "" {
