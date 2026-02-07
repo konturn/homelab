@@ -16,6 +16,12 @@ services:
       - /root/nginx/conf/ssl_config:/etc/nginx/ssl_config
       - /root/nginx/log:/data/log
       - /certs:/data/certs/nkontur.com/certificates
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep nginx > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   room-assistant:
     image: mkerix/room-assistant:latest@sha256:e09275d619025fa7905e60a432ecb4cb3f1fad46c20bd033734808d565dfc78a
     container_name: room-assistant
@@ -25,3 +31,9 @@ services:
       - /var/run/dbus:/var/run/dbus
       - /root/room-assistant/config:/room-assistant/config
       - /etc/localtime:/etc/localtime:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f room-assistant || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

@@ -22,6 +22,12 @@ services:
     ports:
       - '8091:8091' # port for web interface
       - '3000:3000' # port for Z-Wave JS websocket server
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:8091"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 volumes:
   zwave-config:
     name: zwave-config

@@ -12,6 +12,12 @@ services:
       - zwave
     environment:
       - TZ=America/New_York
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 volumes:
   zigbee-config:
     name: zigbee-config
