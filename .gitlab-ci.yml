@@ -24,7 +24,7 @@
 #
 #   CONFIGURE (main only, after deploy)
 #   ┌──────────────┬──────────────────────────┐
-#   vault:configure  vault:rotate-approle [manual]
+#   vault:configure  vault:rotate-approles [manual]
 #
 #   BOOTSTRAP (main only, manual)
 #   ┌──────────────┬──────────────┐
@@ -388,7 +388,7 @@ vault:configure:
       changes:
         - terraform/vault/**/*
 
-vault:rotate-approle:
+vault:rotate-approles:
   stage: configure
   image: alpine:3.19
   needs:
@@ -406,6 +406,72 @@ vault:rotate-approle:
     - apk add --no-cache curl jq
   script:
     - |
+      set -euo pipefail
+
+      # --- Helper functions ---
+      vault_api() {
+        local method="$1" path="$2" data="${3:-}"
+        if [ -n "$data" ]; then
+          curl -sk --max-time 10 -X "$method" \
+            -H "X-Vault-Token: $VAULT_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$data" \
+            "${VAULT_ADDR}/v1/${path}"
+        else
+          curl -sk --max-time 10 -X "$method" \
+            -H "X-Vault-Token: $VAULT_TOKEN" \
+            "${VAULT_ADDR}/v1/${path}"
+        fi
+      }
+
+      rotate_approle() {
+        local role_name="$1"
+        echo ""
+        echo "=== Rotating AppRole: ${role_name} ==="
+
+        # Get role_id
+        local ROLE_ID_RESP
+        ROLE_ID_RESP=$(vault_api GET "auth/approle/role/${role_name}/role-id")
+        local ROLE_ID
+        ROLE_ID=$(echo "$ROLE_ID_RESP" | jq -r '.data.role_id // empty')
+        if [ -z "$ROLE_ID" ]; then
+          echo "ERROR: Failed to read role_id for ${role_name}"
+          echo "$ROLE_ID_RESP" | jq -r '.errors[]' 2>/dev/null
+          return 1
+        fi
+        echo "  role_id: ${ROLE_ID:0:8}..."
+
+        # Generate new secret_id
+        local SECRET_RESP
+        SECRET_RESP=$(vault_api POST "auth/approle/role/${role_name}/secret-id")
+        local NEW_SECRET_ID
+        NEW_SECRET_ID=$(echo "$SECRET_RESP" | jq -r '.data.secret_id // empty')
+        if [ -z "$NEW_SECRET_ID" ]; then
+          echo "ERROR: Failed to generate secret_id for ${role_name}"
+          echo "$SECRET_RESP" | jq -r '.errors[]' 2>/dev/null
+          return 1
+        fi
+        echo "  New secret_id generated"
+
+        # Verify login with new credentials
+        local LOGIN_TEST
+        LOGIN_TEST=$(curl -sk --max-time 10 -X POST \
+          -d "{\"role_id\":\"$ROLE_ID\",\"secret_id\":\"$NEW_SECRET_ID\"}" \
+          "${VAULT_ADDR}/v1/auth/approle/login")
+        if ! echo "$LOGIN_TEST" | jq -e '.auth.client_token' > /dev/null 2>&1; then
+          echo "ERROR: Login verification FAILED for ${role_name} — aborting"
+          return 1
+        fi
+        echo "  Login verification passed"
+
+        # Return values via globals (sh-compatible)
+        _ROTATED_ROLE_ID="$ROLE_ID"
+        _ROTATED_SECRET_ID="$NEW_SECRET_ID"
+        return 0
+      }
+
+      # --- Main ---
+
       echo "=== Authenticating to Vault via JWT ==="
       JWT_RESPONSE=$(curl -sk --max-time 10 \
         --request POST \
@@ -413,7 +479,6 @@ vault:rotate-approle:
         "${VAULT_ADDR}/v1/auth/jwt/login" 2>/dev/null) || true
 
       VAULT_TOKEN=$(echo "$JWT_RESPONSE" | jq -r '.auth.client_token // empty' 2>/dev/null)
-
       if [ -z "$VAULT_TOKEN" ]; then
         echo "JWT authentication failed"
         echo "$JWT_RESPONSE" | jq -r '.errors[]' 2>/dev/null
@@ -421,69 +486,99 @@ vault:rotate-approle:
       fi
       echo "JWT authentication succeeded"
 
-      echo "=== Generating new AppRole secret_id ==="
-      SECRET_RESPONSE=$(curl -sk -X POST \
-        -H "X-Vault-Token: $VAULT_TOKEN" \
-        "${VAULT_ADDR}/v1/auth/approle/role/moltbot/secret-id")
+      FAILURES=0
 
-      NEW_SECRET_ID=$(echo "$SECRET_RESPONSE" | jq -r '.data.secret_id // empty')
+      # -----------------------------------------------------------------
+      # 1. Rotate moltbot AppRole (stored in CI variable)
+      # -----------------------------------------------------------------
+      if rotate_approle "moltbot"; then
+        echo "=== Updating moltbot CI variable ==="
+        # Fetch GitLab token from Vault for CI variable update
+        GL_TOKEN=""
+        GL_SECRET_RESP=$(vault_api GET "homelab/data/moltbot/tokens") || true
+        GL_TOKEN=$(echo "$GL_SECRET_RESP" | jq -r '.data.data.gitlab_token // empty' 2>/dev/null)
+        if [ -n "$GL_TOKEN" ]; then
+          echo "  GitLab token fetched from Vault"
+        else
+          echo "  WARN: Could not fetch GitLab token from Vault — falling back to CI variable"
+          GL_TOKEN="${MOLTBOT_GITLAB_TOKEN:-}"
+        fi
+        unset GL_SECRET_RESP
 
-      if [ -z "$NEW_SECRET_ID" ]; then
-        echo "Failed to generate secret_id"
-        echo "$SECRET_RESPONSE" | jq -r '.errors[]' 2>/dev/null
-        exit 1
-      fi
-      echo "New secret_id generated"
+        if [ -z "$GL_TOKEN" ]; then
+          echo "  ERROR: No GitLab token available"
+          FAILURES=$((FAILURES + 1))
+        else
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
+            "https://gitlab.lab.nkontur.com/api/v4/projects/${CI_PROJECT_ID}/variables/VAULT_APPROLE_SECRET_ID" \
+            -H "PRIVATE-TOKEN: ${GL_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"value\":\"${_ROTATED_SECRET_ID}\",\"protected\":true,\"masked\":true}")
+          unset GL_TOKEN
 
-      echo "=== Verifying new credentials ==="
-      ROLE_ID="${VAULT_APPROLE_ROLE_ID}"
-      LOGIN_TEST=$(curl -sk -X POST \
-        -d "{\"role_id\":\"$ROLE_ID\",\"secret_id\":\"$NEW_SECRET_ID\"}" \
-        "${VAULT_ADDR}/v1/auth/approle/login")
-
-      if echo "$LOGIN_TEST" | jq -e '.auth.client_token' > /dev/null 2>&1; then
-        echo "Login verification passed"
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "  CI variable updated ✓"
+          else
+            echo "  ERROR: Failed to update CI variable (HTTP $HTTP_CODE)"
+            FAILURES=$((FAILURES + 1))
+          fi
+        fi
       else
-        echo "Login verification FAILED — aborting rotation"
-        exit 1
+        FAILURES=$((FAILURES + 1))
       fi
 
-      echo "=== Fetching GitLab token from Vault ==="
-      GL_TOKEN=""
-      GL_SECRET_RESP=$(curl -sk --max-time 10 \
-        -H "X-Vault-Token: $VAULT_TOKEN" \
-        "${VAULT_ADDR}/v1/homelab/data/moltbot/tokens" 2>/dev/null) || true
-      GL_TOKEN=$(echo "$GL_SECRET_RESP" | jq -r '.data.data.gitlab_token // empty' 2>/dev/null)
-      if [ -n "$GL_TOKEN" ]; then
-        echo "GitLab token fetched from Vault"
+      # -----------------------------------------------------------------
+      # 2. Rotate jit-approval-svc AppRole (stored in Vault KV)
+      # -----------------------------------------------------------------
+      if rotate_approle "jit-approval-svc"; then
+        echo "=== Updating jit-approval-svc secrets in Vault ==="
+        # Read existing secret to preserve non-approle fields (telegram tokens)
+        EXISTING=$(vault_api GET "homelab/data/docker/jit-approval-svc")
+        EXISTING_DATA=$(echo "$EXISTING" | jq -r '.data.data // empty' 2>/dev/null)
+
+        if [ -n "$EXISTING_DATA" ] && [ "$EXISTING_DATA" != "null" ]; then
+          # Merge: update approle fields, keep everything else
+          UPDATED=$(echo "$EXISTING_DATA" | jq \
+            --arg rid "$_ROTATED_ROLE_ID" \
+            --arg sid "$_ROTATED_SECRET_ID" \
+            '. + {approle_role_id: $rid, approle_secret_id: $sid}')
+        else
+          # First time: create with just approle fields
+          echo "  WARN: No existing secret found — creating new entry"
+          UPDATED=$(jq -n \
+            --arg rid "$_ROTATED_ROLE_ID" \
+            --arg sid "$_ROTATED_SECRET_ID" \
+            '{approle_role_id: $rid, approle_secret_id: $sid}')
+        fi
+
+        WRITE_RESP=$(vault_api POST "homelab/data/docker/jit-approval-svc" \
+          "{\"data\": $UPDATED}")
+
+        if echo "$WRITE_RESP" | jq -e '.data.version' > /dev/null 2>&1; then
+          VERSION=$(echo "$WRITE_RESP" | jq -r '.data.version')
+          echo "  Vault KV updated (version: ${VERSION}) ✓"
+        else
+          echo "  ERROR: Failed to update Vault KV"
+          echo "$WRITE_RESP" | jq -r '.errors[]' 2>/dev/null
+          FAILURES=$((FAILURES + 1))
+        fi
       else
-        echo "WARN: Could not fetch GitLab token from Vault — falling back to CI variable"
-        GL_TOKEN="${MOLTBOT_GITLAB_TOKEN:-}"
-      fi
-      unset GL_SECRET_RESP
-
-      if [ -z "$GL_TOKEN" ]; then
-        echo "ERROR: No GitLab token available from Vault or CI variable"
-        exit 1
+        FAILURES=$((FAILURES + 1))
       fi
 
-      echo "=== Updating CI variable ==="
-      HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
-        "https://gitlab.lab.nkontur.com/api/v4/projects/${CI_PROJECT_ID}/variables/VAULT_APPROLE_SECRET_ID" \
-        -H "PRIVATE-TOKEN: ${GL_TOKEN}" \
-        -H "Content-Type: application/json" \
-        -d "{\"value\":\"$NEW_SECRET_ID\",\"protected\":true,\"masked\":true}")
-      unset GL_TOKEN
-
-      if [ "$HTTP_CODE" = "200" ]; then
-        echo "CI variable updated successfully"
+      # -----------------------------------------------------------------
+      # Summary
+      # -----------------------------------------------------------------
+      echo ""
+      echo "=== Rotation Summary ==="
+      if [ "$FAILURES" -eq 0 ]; then
+        echo "All AppRoles rotated successfully ✓"
+        echo "  - moltbot: next deploy picks up new secret_id from CI variable"
+        echo "  - jit-approval-svc: next deploy picks up new credentials from Vault KV"
       else
-        echo "Failed to update CI variable (HTTP $HTTP_CODE)"
+        echo "WARNING: ${FAILURES} rotation(s) failed — check logs above"
         exit 1
       fi
-
-      echo "=== Rotation complete ==="
-      echo "Next moltbot deploy will pick up the new secret_id"
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
 
