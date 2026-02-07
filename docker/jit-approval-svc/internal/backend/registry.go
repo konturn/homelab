@@ -12,7 +12,7 @@ type Registry struct {
 
 // NewRegistry creates a backend registry with the static fallback.
 // Dynamic backends are added for resources where the service URL is configured.
-func NewRegistry(vaultMinter VaultTokenMinter, vaultReader VaultSecretReader, haURL, grafanaURL, plexURL, influxdbURL string) *Registry {
+func NewRegistry(vaultMinter VaultTokenMinter, vaultReader VaultSecretReader, haURL, grafanaURL, influxdbURL string) *Registry {
 	static := NewStaticBackend(vaultMinter)
 
 	r := &Registry{
@@ -36,15 +36,6 @@ func NewRegistry(vaultMinter VaultTokenMinter, vaultReader VaultSecretReader, ha
 		logger.Info("backend_registered", logger.Fields{
 			"resource": "grafana",
 			"backend":  "dynamic/grafana",
-		})
-	}
-
-	if plexURL != "" {
-		b := NewPlexBackend(plexURL, vaultReader)
-		r.backends["plex"] = b
-		logger.Info("backend_registered", logger.Fields{
-			"resource": "plex",
-			"backend":  "dynamic/plex",
 		})
 	}
 

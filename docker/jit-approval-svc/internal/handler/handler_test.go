@@ -66,7 +66,7 @@ func mockHandlerWithMinter(minter *mockVaultMinter) *Handler {
 	reader := &mockVaultReader{secrets: map[string]map[string]string{}}
 
 	// Create a backend registry with only static backends
-	backends := backend.NewRegistry(minter, reader, "", "", "", "")
+	backends := backend.NewRegistry(minter, reader, "", "", "")
 
 	return &Handler{
 		cfg:      cfg,
