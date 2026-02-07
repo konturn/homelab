@@ -63,6 +63,7 @@ variables:
         - ansible/roles/configure-wireguard/**/*
         - ansible/roles/configure-notifications/**/*
         - ansible/roles/fetch-vault-secrets/**/*
+        - ansible/roles/restic/**/*
         - docker/docker-compose.yml
         - docker/**/*
         - networking/**/*

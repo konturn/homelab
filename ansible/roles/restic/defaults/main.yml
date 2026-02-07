@@ -22,6 +22,8 @@ restic_forget: true
 restic_forget_keep_within: 30d
 restic_prune: true
 restic_check: true
+restic_check_timer_on_calendar: "Sun *-*-* 04:00:00"
+restic_check_read_data_subset: "5%"
 
 restic_ssh_enabled: true
 restic_ssh_host: backup

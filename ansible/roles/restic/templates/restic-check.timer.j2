@@ -1,0 +1,9 @@
+[Unit]
+Description=Weekly restic repository integrity check
+
+[Timer]
+OnCalendar={{ restic_check_timer_on_calendar }}
+RandomizedDelaySec=1800
+
+[Install]
+WantedBy=timers.target
