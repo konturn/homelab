@@ -182,5 +182,16 @@ resource "vault_policy" "vault_read" {
     path "sys/health" {
       capabilities = ["read"]
     }
+
+    # Allow Terraform provider to create limited child tokens during plan
+    # Child tokens inherit parent's (read-only) policies — no privilege escalation
+    path "auth/token/create" {
+      capabilities = ["create", "update"]
+    }
+
+    # Allow looking up own token
+    path "auth/token/lookup-self" {
+      capabilities = ["read"]
+    }
   EOT
 }
