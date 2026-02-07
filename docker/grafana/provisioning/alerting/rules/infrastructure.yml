@@ -306,6 +306,112 @@ groups:
           team: infrastructure
           alertname: ServiceDowntime
 
+      - uid: restic-backup-stale
+        title: Restic Backup Stale (36h+)
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 129600
+              to: 0
+            model:
+              datasource:
+                type: loki
+                uid: loki
+              expr: 'count_over_time({job="systemd-journal", unit="restic-backup.service"} |= "backup" |= "processed" [36h])'
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 0
+              to: 0
+            model:
+              conditions:
+                - evaluator:
+                    params: [1]
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: B
+              type: reduce
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          summary: "No successful restic backup in the last 36 hours"
+          description: "The restic-backup.service has not completed a successful backup in over 36 hours. This may indicate a backup failure, repository connectivity issue, or timer malfunction. Check with: journalctl -u restic-backup.service --since '36 hours ago'"
+        labels:
+          severity: critical
+          team: infrastructure
+          alertname: ResticBackupStale
+
+      - uid: restic-check-failure
+        title: Restic Repository Check Failed
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 604800
+              to: 0
+            model:
+              datasource:
+                type: loki
+                uid: loki
+              expr: 'count_over_time({job="systemd-journal", unit="restic-check.service"} |= "Fatal" [7d])'
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 0
+              to: 0
+            model:
+              conditions:
+                - evaluator:
+                    params: [0]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: B
+              type: reduce
+        noDataState: NoData
+        execErrState: Alerting
+        for: 0s
+        annotations:
+          summary: "Restic repository integrity check failed"
+          description: "The weekly restic-check.service reported fatal errors, indicating possible repository corruption. Immediate investigation required. Check with: journalctl -u restic-check.service --since '7 days ago'"
+        labels:
+          severity: critical
+          team: infrastructure
+          alertname: ResticCheckFailure
+
       - uid: loki-log-errors
         title: High Error Rate in Logs
         condition: B

@@ -1,0 +1,6 @@
+[Unit]
+Description=Send failure notification for %i
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'printf "Subject: [ALERT] Restic failure: %i\nFrom: restic@{{ inventory_hostname }}\nTo: konoahko@gmail.com\n\nRestic unit %i failed on {{ inventory_hostname }} at $(date).\n\nRecent logs:\n$(journalctl -u %i --no-pager -n 30 2>&1)" | /usr/sbin/sendmail konoahko@gmail.com'

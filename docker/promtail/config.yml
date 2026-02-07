@@ -53,3 +53,22 @@ scrape_configs:
           job: scrub-transcripts
           host: router
           __path__: /var/log/scrub-transcripts/*.log
+
+  # Systemd journal (restic backup and check services)
+  - job_name: journal
+    journal:
+      json: false
+      max_age: 48h
+      labels:
+        job: systemd-journal
+        host: router
+      path: /run/log/journal
+    relabel_configs:
+      - source_labels: ['__journal__systemd_unit']
+        target_label: 'unit'
+    pipeline_stages:
+      - match:
+          selector: '{unit=~"restic-.*"}'
+          stages:
+            - labels:
+                unit:

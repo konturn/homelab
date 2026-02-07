@@ -48,8 +48,38 @@
     mode: "0644"
   notify: Reload systemd
 
+- name: Add failure notification service
+  ansible.builtin.template:
+    src: restic-notify-failure@.service.j2
+    dest: /etc/systemd/system/restic-notify-failure@.service
+    mode: "0644"
+  notify: Reload systemd
+
+- name: Add systemd service for restic check
+  ansible.builtin.template:
+    src: restic-check.service.j2
+    dest: /etc/systemd/system/restic-check.service
+    mode: "0644"
+  when: restic_check
+  notify: Reload systemd
+
+- name: Add systemd timer for restic check
+  ansible.builtin.template:
+    src: restic-check.timer.j2
+    dest: /etc/systemd/system/restic-check.timer
+    mode: "0644"
+  when: restic_check
+  notify: Reload systemd
+
 - name: Enable and start restic timer
   ansible.builtin.systemd:
     name: restic-backup.timer
     enabled: true
     state: started
+
+- name: Enable and start restic check timer
+  ansible.builtin.systemd:
+    name: restic-check.timer
+    enabled: true
+    state: started
+  when: restic_check
