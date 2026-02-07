@@ -16,10 +16,12 @@ import (
 // For unit tests that only exercise store + config logic.
 func mockHandler() *Handler {
 	cfg := &config.Config{
-		TelegramChatID:     8531859108,
-		ListenAddr:         ":8080",
-		RequestTimeout:     5 * time.Minute,
-		AllowedRequesters:  []string{"prometheus"},
+		TelegramChatID:        8531859108,
+		TelegramWebhookSecret: "test-secret",
+		JITAPIKey:             "test-api-key",
+		ListenAddr:            ":8080",
+		RequestTimeout:        5 * time.Minute,
+		AllowedRequesters:     []string{"prometheus"},
 		Tiers: map[int]config.TierConfig{
 			0: {TTL: 5 * time.Minute, AutoApprove: true, Description: "Read-only monitoring"},
 			1: {TTL: 15 * time.Minute, AutoApprove: true, Description: "Service management"},
@@ -70,6 +72,7 @@ func TestHandleRequest_Validation(t *testing.T) {
 			body, _ := json.Marshal(tt.body)
 			req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("X-JIT-API-Key", "test-api-key")
 			w := httptest.NewRecorder()
 
 			h.HandleRequest(w, req)
@@ -93,6 +96,7 @@ func TestHandleRequest_Tier2_CreatesPending(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-JIT-API-Key", "test-api-key")
 	w := httptest.NewRecorder()
 
 	h.HandleRequest(w, req)
@@ -113,6 +117,40 @@ func TestHandleRequest_Tier2_CreatesPending(t *testing.T) {
 	}
 	if resp.Status != "pending" {
 		t.Errorf("expected status pending, got %s", resp.Status)
+	}
+}
+
+func TestHandleRequest_MissingAPIKey(t *testing.T) {
+	h := mockHandler()
+
+	body, _ := json.Marshal(CreateRequestBody{
+		Requester: "prometheus",
+		Resource:  "gitlab",
+		Tier:      2,
+		Reason:    "MR review",
+	})
+
+	// No API key header
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	h.HandleRequest(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 without API key, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Wrong API key
+	req2 := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("X-JIT-API-Key", "wrong-key")
+	w2 := httptest.NewRecorder()
+
+	h.HandleRequest(w2, req2)
+
+	if w2.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 with wrong API key, got %d: %s", w2.Code, w2.Body.String())
 	}
 }
 
@@ -276,6 +314,7 @@ func TestHandleTelegramWebhook_UnauthorizedUser(t *testing.T) {
 	body, _ := json.Marshal(update)
 
 	req := httptest.NewRequest(http.MethodPost, "/telegram/webhook", bytes.NewReader(body))
+	req.Header.Set("X-Telegram-Bot-Api-Secret-Token", "test-secret")
 	w := httptest.NewRecorder()
 
 	h.HandleTelegramWebhook(w, req)

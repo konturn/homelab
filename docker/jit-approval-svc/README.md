@@ -19,6 +19,7 @@ Submit a credential request.
 ```bash
 curl -X POST http://jit-approval-svc:8080/request \
   -H "Content-Type: application/json" \
+  -H "X-JIT-API-Key: $JIT_API_KEY" \
   -d '{
     "requester": "prometheus",
     "resource": "homeassistant",
@@ -26,6 +27,8 @@ curl -X POST http://jit-approval-svc:8080/request \
     "reason": "Check sensor readings"
   }'
 ```
+
+Requires `X-JIT-API-Key` header matching the configured `JIT_API_KEY`. Returns 401 if missing or invalid.
 
 Response:
 ```json
@@ -99,7 +102,8 @@ All configuration via environment variables:
 | `VAULT_SECRET_ID` | Yes | — | Vault AppRole secret ID |
 | `TELEGRAM_BOT_TOKEN` | Yes | — | Telegram bot token for approval messages |
 | `TELEGRAM_CHAT_ID` | No | `8531859108` | Noah's Telegram chat ID |
-| `TELEGRAM_WEBHOOK_SECRET` | No | — | Secret for webhook verification |
+| `TELEGRAM_WEBHOOK_SECRET` | Yes | — | Secret for webhook verification |
+| `JIT_API_KEY` | Yes | — | API key for `/request` endpoint auth (passed as `X-JIT-API-Key` header) |
 | `LISTEN_ADDR` | No | `:8080` | HTTP listen address |
 | `REQUEST_TIMEOUT` | No | `300` | Seconds before pending requests auto-timeout |
 | `ALLOWED_REQUESTERS` | No | `prometheus` | Comma-separated requester allowlist |
@@ -121,7 +125,7 @@ go test ./...
 
 ```bash
 docker build -t jit-approval-svc .
-docker run -e VAULT_ROLE_ID=... -e VAULT_SECRET_ID=... -e TELEGRAM_BOT_TOKEN=... jit-approval-svc
+docker run -e VAULT_ROLE_ID=... -e VAULT_SECRET_ID=... -e TELEGRAM_BOT_TOKEN=... -e TELEGRAM_WEBHOOK_SECRET=... -e JIT_API_KEY=... jit-approval-svc
 ```
 
 See `docker-compose.snippet.yml` for homelab integration.
@@ -138,7 +142,8 @@ Events logged: `request_received`, `approval_sent`, `approved`, `denied`, `timeo
 
 ## Security
 
-- Webhook endpoint validates Telegram secret token
+- Webhook endpoint validates Telegram secret token (required)
+- `/request` endpoint requires `X-JIT-API-Key` header authentication
 - Only configured requesters can submit requests
 - Only callbacks from configured Telegram chat ID are processed
 - Credentials returned exactly once (claim-on-first-poll)

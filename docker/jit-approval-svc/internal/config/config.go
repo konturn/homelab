@@ -25,6 +25,8 @@ type Config struct {
 	TelegramChatID       int64
 	TelegramWebhookSecret string
 
+	JITAPIKey string
+
 	ListenAddr     string
 	RequestTimeout time.Duration
 
@@ -59,6 +61,8 @@ func Load() (*Config, error) {
 		TelegramChatID:       chatID,
 		TelegramWebhookSecret: os.Getenv("TELEGRAM_WEBHOOK_SECRET"),
 
+		JITAPIKey: os.Getenv("JIT_API_KEY"),
+
 		ListenAddr:     getEnv("LISTEN_ADDR", ":8080"),
 		RequestTimeout: time.Duration(timeoutSec) * time.Second,
 
@@ -92,6 +96,12 @@ func (c *Config) Validate() error {
 	}
 	if c.TelegramBotToken == "" {
 		return fmt.Errorf("TELEGRAM_BOT_TOKEN is required")
+	}
+	if c.TelegramWebhookSecret == "" {
+		return fmt.Errorf("TELEGRAM_WEBHOOK_SECRET is required")
+	}
+	if c.JITAPIKey == "" {
+		return fmt.Errorf("JIT_API_KEY is required")
 	}
 	return nil
 }

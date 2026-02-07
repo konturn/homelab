@@ -79,6 +79,13 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate API key
+	apiKey := r.Header.Get("X-JIT-API-Key")
+	if apiKey == "" || apiKey != h.cfg.JITAPIKey {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
 	var body CreateRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -220,16 +227,14 @@ func (h *Handler) HandleTelegramWebhook(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Verify webhook secret
-	if h.cfg.TelegramWebhookSecret != "" {
-		secretHeader := r.Header.Get("X-Telegram-Bot-Api-Secret-Token")
-		if secretHeader != h.cfg.TelegramWebhookSecret {
-			logger.Warn("webhook_unauthorized", logger.Fields{
-				"remote_addr": r.RemoteAddr,
-			})
-			writeError(w, http.StatusUnauthorized, "unauthorized")
-			return
-		}
+	// Verify webhook secret (always required)
+	secretHeader := r.Header.Get("X-Telegram-Bot-Api-Secret-Token")
+	if secretHeader != h.cfg.TelegramWebhookSecret {
+		logger.Warn("webhook_unauthorized", logger.Fields{
+			"remote_addr": r.RemoteAddr,
+		})
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
 	}
 
 	var update TelegramUpdate

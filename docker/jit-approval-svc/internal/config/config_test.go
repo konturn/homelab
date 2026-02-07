@@ -75,10 +75,12 @@ func TestIsRequesterAllowed(t *testing.T) {
 
 func TestValidate(t *testing.T) {
 	base := Config{
-		VaultAddr:        "https://vault.example.com",
-		VaultRoleID:      "role-id",
-		VaultSecretID:    "secret-id",
-		TelegramBotToken: "bot-token",
+		VaultAddr:             "https://vault.example.com",
+		VaultRoleID:           "role-id",
+		VaultSecretID:         "secret-id",
+		TelegramBotToken:      "bot-token",
+		TelegramWebhookSecret: "webhook-secret",
+		JITAPIKey:             "test-api-key",
 	}
 
 	// Valid config
@@ -112,5 +114,19 @@ func TestValidate(t *testing.T) {
 	c.TelegramBotToken = ""
 	if err := c.Validate(); err == nil {
 		t.Error("expected error for missing TelegramBotToken")
+	}
+
+	// Missing TelegramWebhookSecret
+	c = base
+	c.TelegramWebhookSecret = ""
+	if err := c.Validate(); err == nil {
+		t.Error("expected error for missing TelegramWebhookSecret")
+	}
+
+	// Missing JITAPIKey
+	c = base
+	c.JITAPIKey = ""
+	if err := c.Validate(); err == nil {
+		t.Error("expected error for missing JITAPIKey")
 	}
 }
