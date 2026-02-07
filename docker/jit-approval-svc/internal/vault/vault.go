@@ -137,31 +137,54 @@ func (vc *Client) Health() error {
 	return nil
 }
 
-// policiesForResource maps a resource name and tier to Vault policies.
+// resourceTier maps each known resource to its tier level.
+// This determines which Vault policy the minted token receives.
+var resourceTier = map[string]int{
+	// Tier 0: Monitoring (auto-approve, 5 min TTL)
+	"grafana":  0,
+	"influxdb": 0,
+
+	// Tier 1: Service management (auto-approve, 15 min TTL)
+	"plex":      1,
+	"radarr":    1,
+	"sonarr":    1,
+	"ombi":      1,
+	"nzbget":    1,
+	"deluge":    1,
+	"paperless": 1,
+	"mqtt":      1,
+	"cameras":   1,
+
+	// Tier 2: Infrastructure (requires approval, 30 min TTL)
+	"gitlab":        2,
+	"homeassistant": 2,
+}
+
+// tierPolicy maps tier levels to the Vault policy name assigned to minted tokens.
+// These policies must exist in Vault (defined in terraform/vault/policies.tf).
+var tierPolicy = map[int]string{
+	0: "jit-tier0-monitoring",
+	1: "jit-tier1-services",
+	2: "jit-tier2-infra",
+}
+
+// policiesForResource returns the Vault policies for a minted token.
+// The resource must be in resourceTier, and the requested tier must match.
 func policiesForResource(resource string, tier int) []string {
-	// Resource-specific policy mappings
-	resourcePolicies := map[string][]string{
-		"homeassistant": {"prometheus-tier1-homeassistant"},
-		"grafana":       {"prometheus-tier1-grafana"},
-		"influxdb":      {"prometheus-tier1-influxdb"},
-		"tautulli":      {"prometheus-tier1-tautulli"},
-		"plex":          {"prometheus-tier1-plex"},
-		"radarr":        {"prometheus-tier1-radarr"},
-		"sonarr":        {"prometheus-tier1-sonarr"},
-		"gitlab":        {"prometheus-tier2-gitlab"},
-		"portainer":     {"prometheus-tier2-portainer"},
-		"docker":        {"prometheus-tier2-docker"},
-		"ssh":           {"prometheus-tier2-ssh"},
-		"vault-admin":   {"prometheus-tier3-vault-admin"},
-		"network":       {"prometheus-tier3-network"},
+	expectedTier, known := resourceTier[resource]
+	if !known {
+		return nil
+	}
+	if tier != expectedTier {
+		return nil
 	}
 
-	if policies, ok := resourcePolicies[resource]; ok {
-		return policies
+	policy, ok := tierPolicy[tier]
+	if !ok {
+		return nil
 	}
 
-	// Fallback: tier-based generic policy
-	return []string{fmt.Sprintf("prometheus-tier%d-generic", tier)}
+	return []string{policy}
 }
 
 func boolPtr(b bool) *bool {
