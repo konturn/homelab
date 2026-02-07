@@ -200,7 +200,7 @@ resource "vault_policy" "vault_read" {
 #
 # This policy grants:
 # - Token lifecycle management (create, revoke, lookup-self)
-# - Read access to all secrets the service may broker
+# - Read access to all secrets the service may broker (including dynamic backend creds)
 
 resource "vault_policy" "jit_approval_svc" {
   name = "jit-approval-svc"
@@ -250,12 +250,6 @@ resource "vault_policy" "jit_approval_svc" {
       capabilities = ["read"]
     }
     path "homelab/data/docker/paperless" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/mqtt" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/cameras" {
       capabilities = ["read"]
     }
 
@@ -322,12 +316,6 @@ resource "vault_policy" "jit_tier1_services" {
       capabilities = ["read"]
     }
     path "homelab/data/docker/paperless" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/mqtt" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/cameras" {
       capabilities = ["read"]
     }
   EOT

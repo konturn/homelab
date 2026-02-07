@@ -660,6 +660,49 @@ services:
       retries: 3
       start_period: 30s
 
+  # JIT Approval Service - Credential brokering with Telegram approval flow
+  # Receives credential requests from moltbot, sends approval prompts via Telegram,
+  # and issues short-lived Vault tokens on approval.
+  jit-approval-svc:
+    image: gitlab-registry.lab.nkontur.com:443/root/homelab/jit-approval-svc:latest
+    container_name: jit-approval-svc
+    restart: unless-stopped
+    networks:
+      internal:
+        ipv4_address: {{ jit_approval_svc_ip }}
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    environment:
+      - VAULT_ADDR=https://vault.lab.nkontur.com:8200
+      - VAULT_ROLE_ID={{ vault_jit_approle_role_id }}
+      - VAULT_SECRET_ID={{ vault_jit_approle_secret_id }}
+      - TELEGRAM_BOT_TOKEN={{ vault_jit_telegram_bot_token }}
+      - TELEGRAM_CHAT_ID=8531859108
+      - TELEGRAM_WEBHOOK_SECRET={{ vault_jit_telegram_webhook_secret }}
+      - LISTEN_ADDR=:8080
+      - REQUEST_TIMEOUT=300
+      - ALLOWED_REQUESTERS=prometheus
+      - JIT_API_KEY={{ vault_jit_api_key }}
+    depends_on:
+      - vault
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://{{ loki_ip }}:3100/loki/api/v1/push"
+        labels: "service=jit-approval-svc"
+        loki-retries: "5"
+        loki-batch-size: "400"
+        max-buffer-size: "4m"
+        mode: "non-blocking"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   deluge:
     container_name: deluge
     security_opt:
