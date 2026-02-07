@@ -14,6 +14,10 @@
 #   ┌────────────────────────┬──────────────┬──────────────┬──────────────┐
 #   router:val [id_tokens]  zwave:val  sat-2:val  vault:validate
 #
+#   DIND-VALIDATE (parallel, path-triggered)
+#   ┌────────────────────────┐
+#   gitlab:dind-validate
+#
 #   BUILD (parallel, path-triggered)
 #   ┌──────────────┬──────────────┬──────────────┐
 #   moltbot:build  amcrest2mqtt:build  snapcast:build  snapclient:build
@@ -95,6 +99,17 @@ variables:
         - ansible/requirements.yml
         - .gitlab-ci.yml
 
+.gitlab_config_changes:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - docker/gitlab/gitlab.rb
+        - docker/docker-compose.yml
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - docker/gitlab/gitlab.rb
+        - docker/docker-compose.yml
+
 # =============================================================================
 # Job Templates
 # =============================================================================
@@ -104,6 +119,7 @@ variables:
 stages:
   - bootstrap
   - validate
+  - dind-validate
   - build
   - deploy
   - configure
@@ -211,6 +227,90 @@ satellite-2:validate:
         echo "SSH key unavailable — running syntax check only"
         ansible-playbook -i ansible/inventory.yml ansible/satellite-2.yml --syntax-check
       fi
+
+# =============================================================================
+# DinD Validation Stage - Spin up containers to verify config before deploy
+# =============================================================================
+# Catches config errors (like the gitlab.rb crash in MR !111) by starting
+# containers with proposed configs and waiting for healthcheck pass.
+# Uses the remote Docker daemon at 10.4.32.2 (same as build jobs).
+
+gitlab:dind-validate:
+  extends:
+    - .interruptible
+    - .gitlab_config_changes
+  stage: dind-validate
+  image: docker:27
+  variables:
+    DOCKER_HOST: "tcp://10.4.32.2:2375"
+  needs: []
+  script:
+    - |
+      set -eu
+
+      CONTAINER_NAME="ci-gitlab-validate-${CI_PIPELINE_ID}"
+      IMAGE="gitlab/gitlab-ee:latest@sha256:333338d41e47cb68f87e62d15a403245bd5f3c55dd6a7b6b22fd00698f98f33e"
+      TIMEOUT=300
+      INTERVAL=10
+
+      cleanup() {
+        echo "Cleaning up container: ${CONTAINER_NAME}"
+        docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+      }
+      trap cleanup EXIT
+
+      echo "════════════════════════════════════════════════════════════"
+      echo "GitLab Config Validation (dind)"
+      echo "  Image:   ${IMAGE}"
+      echo "  Timeout: ${TIMEOUT}s"
+      echo "════════════════════════════════════════════════════════════"
+
+      # Copy gitlab.rb into a temp volume for the container
+      docker volume create "${CONTAINER_NAME}-config" || true
+      # Use a helper container to copy gitlab.rb into the volume
+      docker run --rm -v "${CONTAINER_NAME}-config:/etc/gitlab" -v "${CI_PROJECT_DIR}/docker/gitlab:/src:ro" alpine:3.19 sh -c "cp /src/gitlab.rb /etc/gitlab/gitlab.rb"
+
+      echo "Starting GitLab container..."
+      docker run -d \
+        --name "$CONTAINER_NAME" \
+        --memory=8g \
+        -v "${CONTAINER_NAME}-config:/etc/gitlab" \
+        "$IMAGE"
+
+      echo "Waiting for healthy (up to ${TIMEOUT}s)..."
+      elapsed=0
+      while [ "$elapsed" -lt "$TIMEOUT" ]; do
+        if docker exec "$CONTAINER_NAME" curl -sf http://localhost:80/-/health >/dev/null 2>&1; then
+          echo "Container healthy after ${elapsed}s"
+          echo ""
+          echo "-- Last 10 log lines --"
+          docker logs --tail 10 "$CONTAINER_NAME" 2>&1 || true
+          # Clean up volume
+          docker volume rm "${CONTAINER_NAME}-config" 2>/dev/null || true
+          exit 0
+        fi
+
+        STATE=$(docker inspect -f '{{.State.Status}}' "$CONTAINER_NAME" 2>/dev/null || echo "missing")
+        if [ "$STATE" = "exited" ] || [ "$STATE" = "dead" ] || [ "$STATE" = "missing" ]; then
+          echo "Container died (state: ${STATE})"
+          echo ""
+          echo "-- Container logs --"
+          docker logs --tail 80 "$CONTAINER_NAME" 2>&1 || true
+          docker volume rm "${CONTAINER_NAME}-config" 2>/dev/null || true
+          exit 1
+        fi
+
+        sleep "$INTERVAL"
+        elapsed=$((elapsed + INTERVAL))
+        echo "  ${elapsed}s - container ${STATE}, waiting..."
+      done
+
+      echo "Container failed to become healthy within ${TIMEOUT}s"
+      echo ""
+      echo "-- Container logs --"
+      docker logs --tail 80 "$CONTAINER_NAME" 2>&1 || true
+      docker volume rm "${CONTAINER_NAME}-config" 2>/dev/null || true
+      exit 1
 
 # =============================================================================
 # Build Stage - Container images (GitLab Registry)
