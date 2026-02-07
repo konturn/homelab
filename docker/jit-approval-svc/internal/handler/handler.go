@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nkontur/jit-approval-svc/internal/backend"
 	"github.com/nkontur/jit-approval-svc/internal/config"
 	"github.com/nkontur/jit-approval-svc/internal/logger"
 	"github.com/nkontur/jit-approval-svc/internal/store"
@@ -20,15 +21,17 @@ type Handler struct {
 	store    *store.Store
 	vault    *vault.Client
 	telegram *telegram.Client
+	backends *backend.Registry
 }
 
 // New creates a new Handler.
-func New(cfg *config.Config, s *store.Store, v *vault.Client, tg *telegram.Client) *Handler {
+func New(cfg *config.Config, s *store.Store, v *vault.Client, tg *telegram.Client, backends *backend.Registry) *Handler {
 	return &Handler{
 		cfg:      cfg,
 		store:    s,
 		vault:    v,
 		telegram: tg,
+		backends: backends,
 	}
 }
 
@@ -50,24 +53,25 @@ type CreateRequestResponse struct {
 
 // StatusResponse is the JSON response for GET /status/:id.
 type StatusResponse struct {
-	RequestID  string               `json:"request_id"`
-	Status     string               `json:"status"`
-	Credential *CredentialResponse  `json:"credential,omitempty"`
+	RequestID  string              `json:"request_id"`
+	Status     string              `json:"status"`
+	Credential *CredentialResponse `json:"credential,omitempty"`
 }
 
 // CredentialResponse is the credential data returned in status responses.
 type CredentialResponse struct {
-	Token    string `json:"token,omitempty"`
-	LeaseTTL string `json:"lease_ttl,omitempty"`
-	LeaseID  string `json:"lease_id,omitempty"`
+	Token    string            `json:"token,omitempty"`
+	LeaseTTL string           `json:"lease_ttl,omitempty"`
+	LeaseID  string            `json:"lease_id,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
 // HealthResponse is the JSON response for GET /health.
 type HealthResponse struct {
-	Status    string `json:"status"`
-	Vault     string `json:"vault"`
-	Uptime    string `json:"uptime"`
-	Requests  int    `json:"requests_in_store"`
+	Status   string `json:"status"`
+	Vault    string `json:"vault"`
+	Uptime   string `json:"uptime"`
+	Requests int    `json:"requests_in_store"`
 }
 
 // --- Handlers ---
@@ -185,6 +189,7 @@ func (h *Handler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 				Token:    cred.Token,
 				LeaseTTL: cred.LeaseTTL.String(),
 				LeaseID:  cred.LeaseID,
+				Metadata: cred.Metadata,
 			}
 
 			logger.Info("credential_claimed", logger.Fields{
@@ -289,6 +294,39 @@ type TelegramUser struct {
 
 // --- Internal methods ---
 
+// mintCredential attempts to mint a credential via the dynamic backend first,
+// falling back to the static Vault token if the dynamic backend fails.
+func (h *Handler) mintCredential(req *store.Request, tierCfg config.TierConfig) (*store.Credential, error) {
+	b := h.backends.For(req.Resource)
+	isDynamic := h.backends.IsDynamic(req.Resource)
+
+	cred, err := b.MintCredential(req.Resource, req.Tier, tierCfg.TTL)
+	if err != nil {
+		if isDynamic {
+			// Dynamic backend failed. Log and fall back to static.
+			logger.Warn("dynamic_backend_failed_fallback", logger.Fields{
+				"request_id": req.ID,
+				"resource":   req.Resource,
+				"error":      err.Error(),
+			})
+			staticB := h.backends.For("__static_fallback__") // triggers fallback
+			cred, err = staticB.MintCredential(req.Resource, req.Tier, tierCfg.TTL)
+			if err != nil {
+				return nil, fmt.Errorf("static fallback also failed: %w", err)
+			}
+		} else {
+			return nil, err
+		}
+	}
+
+	return &store.Credential{
+		Token:    cred.Token,
+		LeaseTTL: cred.LeaseTTL,
+		LeaseID:  cred.Metadata["lease_id"],
+		Metadata: cred.Metadata,
+	}, nil
+}
+
 // autoApprove immediately approves a tier 0-1 request by minting a credential.
 func (h *Handler) autoApprove(req *store.Request, tierCfg config.TierConfig) {
 	logger.Info("auto_approve", logger.Fields{
@@ -297,19 +335,13 @@ func (h *Handler) autoApprove(req *store.Request, tierCfg config.TierConfig) {
 		"resource":   req.Resource,
 	})
 
-	token, leaseID, err := h.vault.MintToken(req.Resource, req.Tier, tierCfg.TTL)
+	cred, err := h.mintCredential(req, tierCfg)
 	if err != nil {
 		logger.Error("auto_approve_mint_failed", logger.Fields{
 			"request_id": req.ID,
 			"error":      err.Error(),
 		})
 		return
-	}
-
-	cred := &store.Credential{
-		Token:    token,
-		LeaseTTL: tierCfg.TTL,
-		LeaseID:  leaseID,
 	}
 
 	if err := h.store.Approve(req.ID, cred, tierCfg.TTL); err != nil {
@@ -323,6 +355,7 @@ func (h *Handler) autoApprove(req *store.Request, tierCfg config.TierConfig) {
 		"request_id":  req.ID,
 		"approver":    "auto",
 		"ttl_granted": tierCfg.TTL.String(),
+		"backend":     cred.Metadata["backend"],
 	})
 }
 
@@ -354,7 +387,7 @@ func (h *Handler) sendApprovalMessage(req *store.Request, tierCfg config.TierCon
 	h.store.SetTelegramMessageID(req.ID, msgID)
 
 	logger.Info("approval_sent", logger.Fields{
-		"request_id":         req.ID,
+		"request_id":          req.ID,
 		"telegram_message_id": msgID,
 	})
 
@@ -418,19 +451,13 @@ func (h *Handler) handleApprove(req *store.Request) {
 		return
 	}
 
-	token, leaseID, err := h.vault.MintToken(req.Resource, req.Tier, tierCfg.TTL)
+	cred, err := h.mintCredential(req, tierCfg)
 	if err != nil {
 		logger.Error("approve_mint_failed", logger.Fields{
 			"request_id": req.ID,
 			"error":      err.Error(),
 		})
 		return
-	}
-
-	cred := &store.Credential{
-		Token:    token,
-		LeaseTTL: tierCfg.TTL,
-		LeaseID:  leaseID,
 	}
 
 	if err := h.store.Approve(req.ID, cred, tierCfg.TTL); err != nil {
@@ -445,6 +472,7 @@ func (h *Handler) handleApprove(req *store.Request) {
 		"request_id":  req.ID,
 		"approver":    fmt.Sprintf("telegram:%d", h.cfg.TelegramChatID),
 		"ttl_granted": tierCfg.TTL.String(),
+		"backend":     cred.Metadata["backend"],
 	})
 
 	// Edit Telegram message to reflect approval

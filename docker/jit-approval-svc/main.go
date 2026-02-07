@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/nkontur/jit-approval-svc/internal/backend"
 	"github.com/nkontur/jit-approval-svc/internal/config"
 	"github.com/nkontur/jit-approval-svc/internal/handler"
 	"github.com/nkontur/jit-approval-svc/internal/logger"
@@ -26,10 +27,14 @@ func main() {
 	}
 
 	logger.Info("starting", logger.Fields{
-		"listen_addr":     cfg.ListenAddr,
-		"vault_addr":      cfg.VaultAddr,
-		"request_timeout": cfg.RequestTimeout.String(),
+		"listen_addr":        cfg.ListenAddr,
+		"vault_addr":         cfg.VaultAddr,
+		"request_timeout":    cfg.RequestTimeout.String(),
 		"allowed_requesters": cfg.AllowedRequesters,
+		"ha_url":             cfg.HAURL,
+		"grafana_url":        cfg.GrafanaURL,
+		"plex_url":           cfg.PlexURL,
+		"influxdb_url":       cfg.InfluxDBURL,
 	})
 
 	// Initialize request store
@@ -46,8 +51,18 @@ func main() {
 	// Initialize Telegram client
 	tgClient := telegram.New(cfg.TelegramBotToken, cfg.TelegramChatID)
 
+	// Initialize backend registry (dynamic backends + static fallback)
+	backends := backend.NewRegistry(
+		vaultClient,
+		vaultClient,
+		cfg.HAURL,
+		cfg.GrafanaURL,
+		cfg.PlexURL,
+		cfg.InfluxDBURL,
+	)
+
 	// Initialize handler
-	h := handler.New(cfg, reqStore, vaultClient, tgClient)
+	h := handler.New(cfg, reqStore, vaultClient, tgClient, backends)
 
 	// Setup HTTP routes
 	mux := http.NewServeMux()

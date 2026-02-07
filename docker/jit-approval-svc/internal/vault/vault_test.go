@@ -20,7 +20,7 @@ func TestPoliciesForResource_Tier0(t *testing.T) {
 }
 
 func TestPoliciesForResource_Tier1(t *testing.T) {
-	tier1Resources := []string{"plex", "radarr", "sonarr", "ombi", "nzbget", "deluge", "paperless", "mqtt", "cameras"}
+	tier1Resources := []string{"plex", "radarr", "sonarr", "ombi", "nzbget", "deluge", "paperless"}
 
 	for _, res := range tier1Resources {
 		policies := policiesForResource(res, 1)
@@ -49,6 +49,20 @@ func TestPoliciesForResource_Tier2(t *testing.T) {
 	}
 }
 
+func TestPoliciesForResource_RemovedResources(t *testing.T) {
+	// mqtt and cameras have been removed
+	removedResources := []string{"mqtt", "cameras"}
+
+	for _, res := range removedResources {
+		for tier := 0; tier <= 3; tier++ {
+			policies := policiesForResource(res, tier)
+			if policies != nil {
+				t.Errorf("%s tier %d: expected nil for removed resource, got %v", res, tier, policies)
+			}
+		}
+	}
+}
+
 func TestPoliciesForResource_UnknownResource(t *testing.T) {
 	policies := policiesForResource("nonexistent", 0)
 	if policies != nil {
@@ -68,6 +82,7 @@ func TestPoliciesForResource_WrongTier(t *testing.T) {
 	if policies != nil {
 		t.Errorf("expected nil for wrong tier, got %v", policies)
 	}
+
 }
 
 func TestResourceTierConsistency(t *testing.T) {

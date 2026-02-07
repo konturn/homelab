@@ -7,8 +7,31 @@ A Go HTTP service that brokers JIT (Just-In-Time) credential access between the 
 ```
 Agent → POST /request → Approval Service → Telegram inline buttons → Noah approves/denies
 Agent → GET /status/:id → polls for result
-On approve → Approval Service → Vault API → mint short-lived token → return to agent
+On approve → Backend Registry → Dynamic backend or Vault → mint credential → return to agent
 ```
+
+### Dynamic vs Static Backends
+
+The service supports two types of credential backends:
+
+**Dynamic backends** generate real ephemeral credentials directly from the upstream service (e.g., a Grafana service account token, a Plex transient token). These are preferred because they:
+- Provide native credentials the service understands
+- Have service-managed lifecycle (auto-expiry, auto-cleanup)
+- Don't require Vault token management on the consumer side
+
+**Static backend** (fallback) mints a scoped Vault token that the consumer uses to read the static secret from Vault. This is the original behavior and is used for services without a dynamic backend.
+
+**Fallback behavior:** If a dynamic backend fails (service unreachable, auth error, etc.), the service automatically falls back to the static Vault token approach and logs a warning.
+
+### Backend Assignment
+
+| Resource | Backend | Credential Type |
+|----------|---------|----------------|
+| Grafana | Dynamic (GrafanaBackend) | Service account token with expiration |
+| InfluxDB | Dynamic (InfluxDBBackend) | Read-only authorization token (auto-cleaned after TTL) |
+| Plex | Dynamic (PlexBackend) | Transient token (48h, destroyed on restart) |
+| Home Assistant | Dynamic (HomeAssistantBackend) | OAuth access token (30 min, via refresh flow) |
+| Radarr, Sonarr, Ombi, NZBGet, Deluge, Paperless, GitLab | Static (Vault) | Scoped Vault token |
 
 ## API
 
@@ -23,7 +46,7 @@ curl -X POST http://jit-approval-svc:8080/request \
   -d '{
     "requester": "prometheus",
     "resource": "homeassistant",
-    "tier": 1,
+    "tier": 2,
     "reason": "Check sensor readings"
   }'
 ```
@@ -54,14 +77,35 @@ Response (pending):
 }
 ```
 
-Response (approved, first poll):
+Response (approved, first poll — dynamic backend):
+```json
+{
+  "request_id": "req-a1b2c3d4e5f6",
+  "status": "approved",
+  "credential": {
+    "token": "glsa_xxxxx",
+    "lease_ttl": "5m0s",
+    "metadata": {
+      "backend": "grafana",
+      "type": "service_account_token",
+      "service_account_id": "5"
+    }
+  }
+}
+```
+
+Response (approved, first poll — static backend):
 ```json
 {
   "request_id": "req-a1b2c3d4e5f6",
   "status": "approved",
   "credential": {
     "token": "hvs.XXXXX",
-    "lease_ttl": "30m0s"
+    "lease_ttl": "15m0s",
+    "metadata": {
+      "backend": "static",
+      "type": "vault_token"
+    }
   }
 }
 ```
@@ -86,10 +130,9 @@ Telegram webhook endpoint for inline button callbacks. Validates `X-Telegram-Bot
 
 | Tier | TTL | Approval | Resources |
 |------|-----|----------|-----------|
-| 0 | 5 min | Auto | Grafana, InfluxDB, Tautulli |
-| 1 | 15 min | Auto | Home Assistant, Plex, Radarr, Sonarr |
-| 2 | 30 min | Manual (Telegram) | GitLab API, Portainer, Docker |
-| 3 | 60 min | Manual (Telegram) | SSH, Vault admin, network config |
+| 0 | 5 min | Auto | Grafana, InfluxDB |
+| 1 | 15 min | Auto | Plex, Radarr, Sonarr, Ombi, NZBGet, Deluge, Paperless |
+| 2 | 30 min | Manual (Telegram) | GitLab, Home Assistant |
 
 ## Configuration
 
@@ -107,6 +150,31 @@ All configuration via environment variables:
 | `LISTEN_ADDR` | No | `:8080` | HTTP listen address |
 | `REQUEST_TIMEOUT` | No | `300` | Seconds before pending requests auto-timeout |
 | `ALLOWED_REQUESTERS` | No | `prometheus` | Comma-separated requester allowlist |
+| `HA_URL` | No | `https://homeassistant.lab.nkontur.com` | Home Assistant URL for dynamic backend |
+| `GRAFANA_URL` | No | `https://grafana.lab.nkontur.com` | Grafana URL for dynamic backend |
+| `PLEX_URL` | No | `http://plex.lab.nkontur.com:32400` | Plex URL for dynamic backend |
+| `INFLUXDB_URL` | No | `https://influxdb.lab.nkontur.com:8086` | InfluxDB URL for dynamic backend |
+
+### Disabling Dynamic Backends
+
+To disable a dynamic backend and force static Vault token mode, set the URL to empty:
+
+```bash
+HA_URL=""  # Disables Home Assistant dynamic backend, falls back to Vault token
+```
+
+If the URL is not set at all, the default homelab URL is used and the dynamic backend is enabled.
+
+### Vault Secrets for Dynamic Backends
+
+Dynamic backends read their upstream credentials from Vault:
+
+| Backend | Vault Path | Required Fields |
+|---------|-----------|-----------------|
+| Home Assistant | `homelab/data/docker/homeassistant` | `refresh_token`, `client_id` |
+| Grafana | `homelab/data/docker/grafana` | `admin_token`, `service_account_id` |
+| Plex | `homelab/data/docker/plex` | `server_token` |
+| InfluxDB | `homelab/data/docker/influxdb` | `admin_token`, `org_id` |
 
 ## Build
 
@@ -135,10 +203,10 @@ See `docker-compose.snippet.yml` for homelab integration.
 All output is structured JSON to stdout, designed for the Docker Loki log driver.
 
 ```json
-{"ts":"2026-02-06T14:30:00Z","level":"info","event":"request_received","request_id":"req-abc123","requester":"prometheus","resource":"homeassistant","tier":1,"reason":"Check sensor readings"}
+{"ts":"2026-02-06T14:30:00Z","level":"info","event":"backend_credential_minted","backend":"grafana","resource":"grafana","tier":0,"ttl":"5m0s"}
 ```
 
-Events logged: `request_received`, `approval_sent`, `approved`, `denied`, `timeout`, `token_issued`, `credential_claimed`, `http_request`, `health_check`, `error`.
+Events logged: `request_received`, `approval_sent`, `approved`, `denied`, `timeout`, `token_issued`, `backend_credential_minted`, `credential_claimed`, `dynamic_backend_failed_fallback`, `backend_registered`, `influxdb_cleanup_start`, `influxdb_cleanup_success`, `http_request`, `health_check`, `error`.
 
 ## Security
 
@@ -149,6 +217,9 @@ Events logged: `request_received`, `approval_sent`, `approved`, `denied`, `timeo
 - Credentials returned exactly once (claim-on-first-poll)
 - No credential data in logs (request_id and resource only, never tokens)
 - Request auto-timeout (5 min default)
+- Dynamic backend failures fall back to static Vault tokens (defense in depth)
+- All HTTP clients have 10-second timeouts
+- InfluxDB tokens are auto-cleaned via goroutine after TTL expiry
 
 ## Design Doc
 

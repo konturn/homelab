@@ -10,9 +10,9 @@ import (
 
 // TierConfig holds the configuration for a given tier level.
 type TierConfig struct {
-	TTL          time.Duration
-	AutoApprove  bool
-	Description  string
+	TTL         time.Duration
+	AutoApprove bool
+	Description string
 }
 
 // Config holds all service configuration sourced from environment variables.
@@ -21,8 +21,8 @@ type Config struct {
 	VaultRoleID   string
 	VaultSecretID string
 
-	TelegramBotToken     string
-	TelegramChatID       int64
+	TelegramBotToken      string
+	TelegramChatID        int64
 	TelegramWebhookSecret string
 
 	JITAPIKey string
@@ -33,6 +33,12 @@ type Config struct {
 	AllowedRequesters []string
 
 	Tiers map[int]TierConfig
+
+	// Backend service URLs (optional, enables dynamic credential backends)
+	HAURL       string
+	GrafanaURL  string
+	PlexURL     string
+	InfluxDBURL string
 }
 
 // Load reads configuration from environment variables.
@@ -57,8 +63,8 @@ func Load() (*Config, error) {
 		VaultRoleID:   os.Getenv("VAULT_ROLE_ID"),
 		VaultSecretID: os.Getenv("VAULT_SECRET_ID"),
 
-		TelegramBotToken:     os.Getenv("TELEGRAM_BOT_TOKEN"),
-		TelegramChatID:       chatID,
+		TelegramBotToken:      os.Getenv("TELEGRAM_BOT_TOKEN"),
+		TelegramChatID:        chatID,
 		TelegramWebhookSecret: os.Getenv("TELEGRAM_WEBHOOK_SECRET"),
 
 		JITAPIKey: os.Getenv("JIT_API_KEY"),
@@ -74,6 +80,12 @@ func Load() (*Config, error) {
 			2: {TTL: 30 * time.Minute, AutoApprove: false, Description: "Infrastructure"},
 			3: {TTL: 60 * time.Minute, AutoApprove: false, Description: "Critical"},
 		},
+
+		// Backend URLs: empty string means fall back to static/Vault
+		HAURL:       getEnvOrEmpty("HA_URL", "https://homeassistant.lab.nkontur.com"),
+		GrafanaURL:  getEnvOrEmpty("GRAFANA_URL", "https://grafana.lab.nkontur.com"),
+		PlexURL:     getEnvOrEmpty("PLEX_URL", "http://plex.lab.nkontur.com:32400"),
+		InfluxDBURL: getEnvOrEmpty("INFLUXDB_URL", "https://influxdb.lab.nkontur.com:8086"),
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -131,4 +143,14 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// getEnvOrEmpty returns the env var value, or the default if the env var
+// is not set. If the env var is explicitly set to empty, returns empty
+// (which disables the corresponding dynamic backend).
+func getEnvOrEmpty(key, defaultVal string) string {
+	if v, ok := os.LookupEnv(key); ok {
+		return v
+	}
+	return defaultVal
 }

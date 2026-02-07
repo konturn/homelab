@@ -3,18 +3,51 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/nkontur/jit-approval-svc/internal/backend"
 	"github.com/nkontur/jit-approval-svc/internal/config"
 	"github.com/nkontur/jit-approval-svc/internal/store"
 )
 
-// mockHandler creates a handler with no real Vault or Telegram connections.
-// For unit tests that only exercise store + config logic.
+// mockVaultMinter implements backend.VaultTokenMinter for tests.
+type mockVaultMinter struct {
+	token   string
+	leaseID string
+	err     error
+}
+
+func (m *mockVaultMinter) MintToken(resource string, tier int, ttl time.Duration) (string, string, error) {
+	return m.token, m.leaseID, m.err
+}
+
+// mockVaultReader implements backend.VaultSecretReader for tests.
+type mockVaultReader struct {
+	secrets map[string]map[string]string
+}
+
+func (m *mockVaultReader) ReadSecret(path string) (map[string]string, error) {
+	s, ok := m.secrets[path]
+	if !ok {
+		return nil, fmt.Errorf("no secret at %s", path)
+	}
+	return s, nil
+}
+
+// mockHandler creates a handler with mock backends (no real Vault or Telegram).
 func mockHandler() *Handler {
+	return mockHandlerWithMinter(&mockVaultMinter{
+		token:   "hvs.mock-token",
+		leaseID: "accessor-mock",
+	})
+}
+
+// mockHandlerWithMinter creates a handler with a specific vault minter.
+func mockHandlerWithMinter(minter *mockVaultMinter) *Handler {
 	cfg := &config.Config{
 		TelegramChatID:        8531859108,
 		TelegramWebhookSecret: "test-secret",
@@ -30,9 +63,15 @@ func mockHandler() *Handler {
 		},
 	}
 
+	reader := &mockVaultReader{secrets: map[string]map[string]string{}}
+
+	// Create a backend registry with only static backends
+	backends := backend.NewRegistry(minter, reader, "", "", "", "")
+
 	return &Handler{
-		cfg:   cfg,
-		store: store.New(),
+		cfg:      cfg,
+		store:    store.New(),
+		backends: backends,
 		// vault and telegram are nil - only test paths that don't call them
 	}
 }
@@ -101,9 +140,6 @@ func TestHandleRequest_Tier2_CreatesPending(t *testing.T) {
 
 	h.HandleRequest(w, req)
 
-	// Should succeed (201) even though Telegram client is nil
-	// because the Telegram send will fail silently and log an error
-	// In production, Telegram client is always present
 	if w.Code != http.StatusCreated {
 		t.Errorf("expected 201, got %d: %s", w.Code, w.Body.String())
 	}
@@ -117,6 +153,91 @@ func TestHandleRequest_Tier2_CreatesPending(t *testing.T) {
 	}
 	if resp.Status != "pending" {
 		t.Errorf("expected status pending, got %s", resp.Status)
+	}
+}
+
+func TestHandleRequest_AutoApprove_WithStaticBackend(t *testing.T) {
+	h := mockHandler()
+
+	body, _ := json.Marshal(CreateRequestBody{
+		Requester: "prometheus",
+		Resource:  "radarr",
+		Tier:      1,
+		Reason:    "Check downloads",
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-JIT-API-Key", "test-api-key")
+	w := httptest.NewRecorder()
+
+	h.HandleRequest(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp CreateRequestResponse
+	json.Unmarshal(w.Body.Bytes(), &resp)
+
+	// Should be auto-approved
+	if resp.Status != "approved" {
+		t.Errorf("expected status approved (auto-approve tier 1), got %s", resp.Status)
+	}
+
+	// Verify credential can be claimed
+	statusReq := httptest.NewRequest(http.MethodGet, "/status/"+resp.RequestID, nil)
+	statusW := httptest.NewRecorder()
+	h.HandleStatus(statusW, statusReq)
+
+	var statusResp StatusResponse
+	json.Unmarshal(statusW.Body.Bytes(), &statusResp)
+
+	if statusResp.Credential == nil {
+		t.Fatal("expected credential on first claim")
+	}
+	if statusResp.Credential.Token != "hvs.mock-token" {
+		t.Errorf("expected token hvs.mock-token, got %s", statusResp.Credential.Token)
+	}
+	if statusResp.Credential.Metadata["backend"] != "static" {
+		t.Errorf("expected backend static in metadata, got %s", statusResp.Credential.Metadata["backend"])
+	}
+}
+
+func TestHandleRequest_AutoApprove_MintFailure(t *testing.T) {
+	minter := &mockVaultMinter{err: fmt.Errorf("vault unavailable")}
+	h := mockHandlerWithMinter(minter)
+
+	body, _ := json.Marshal(CreateRequestBody{
+		Requester: "prometheus",
+		Resource:  "radarr",
+		Tier:      1,
+		Reason:    "Check downloads",
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-JIT-API-Key", "test-api-key")
+	w := httptest.NewRecorder()
+
+	h.HandleRequest(w, req)
+
+	// Request still created (201) but stays pending since mint failed
+	if w.Code != http.StatusCreated {
+		t.Errorf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp CreateRequestResponse
+	json.Unmarshal(w.Body.Bytes(), &resp)
+
+	// Check the store status - should still be pending since mint failed
+	storeReq := h.store.Get(resp.RequestID)
+	if storeReq == nil {
+		t.Fatal("request should exist in store")
+	}
+	// The request was created as pending, mint failed so it stays pending
+	if storeReq.Status != store.StatusPending {
+		t.Errorf("expected pending (mint failed), got %s", storeReq.Status)
 	}
 }
 
@@ -201,6 +322,7 @@ func TestHandleStatus_ApprovedClaims(t *testing.T) {
 	_ = h.store.Approve(storeReq.ID, &store.Credential{
 		Token:    "hvs.test-token",
 		LeaseTTL: 30 * time.Minute,
+		Metadata: map[string]string{"backend": "static"},
 	}, 30*time.Minute)
 
 	// First poll should claim the credential
@@ -245,6 +367,39 @@ func TestHandleStatus_ApprovedClaims(t *testing.T) {
 	}
 }
 
+func TestHandleStatus_CredentialMetadata(t *testing.T) {
+	h := mockHandler()
+
+	storeReq := h.store.Create("prometheus", "grafana", 0, "check dashboards")
+	_ = h.store.Approve(storeReq.ID, &store.Credential{
+		Token:    "glsa-test-token",
+		LeaseTTL: 5 * time.Minute,
+		Metadata: map[string]string{
+			"backend":            "grafana",
+			"type":               "service_account_token",
+			"service_account_id": "42",
+		},
+	}, 5*time.Minute)
+
+	req := httptest.NewRequest(http.MethodGet, "/status/"+storeReq.ID, nil)
+	w := httptest.NewRecorder()
+
+	h.HandleStatus(w, req)
+
+	var resp StatusResponse
+	json.Unmarshal(w.Body.Bytes(), &resp)
+
+	if resp.Credential == nil {
+		t.Fatal("expected credential")
+	}
+	if resp.Credential.Metadata["backend"] != "grafana" {
+		t.Errorf("expected backend grafana, got %s", resp.Credential.Metadata["backend"])
+	}
+	if resp.Credential.Metadata["service_account_id"] != "42" {
+		t.Errorf("expected service_account_id 42, got %s", resp.Credential.Metadata["service_account_id"])
+	}
+}
+
 func TestHandleHealth(t *testing.T) {
 	h := mockHandler()
 
@@ -253,8 +408,6 @@ func TestHandleHealth(t *testing.T) {
 
 	// This will panic because vault client is nil.
 	// In real deployment, vault is always present.
-	// Skip vault health for this test by checking the response handling
-	// We test the handler structure, not vault connectivity
 	defer func() {
 		if r := recover(); r != nil {
 			// Expected: vault client is nil in test

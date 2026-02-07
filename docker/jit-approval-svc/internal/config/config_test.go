@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"testing"
 	"time"
 )
@@ -16,10 +17,10 @@ func TestTierFor(t *testing.T) {
 	}
 
 	tests := []struct {
-		tier        int
-		wantTTL     time.Duration
-		wantAuto    bool
-		wantErr     bool
+		tier     int
+		wantTTL  time.Duration
+		wantAuto bool
+		wantErr  bool
 	}{
 		{0, 5 * time.Minute, true, false},
 		{1, 15 * time.Minute, true, false},
@@ -128,5 +129,49 @@ func TestValidate(t *testing.T) {
 	c.JITAPIKey = ""
 	if err := c.Validate(); err == nil {
 		t.Error("expected error for missing JITAPIKey")
+	}
+}
+
+func TestBackendURLDefaults(t *testing.T) {
+	// When env vars are not set, defaults should be used
+	cfg := &Config{
+		HAURL:       getEnvOrEmpty("HA_URL_TEST_UNSET", "https://homeassistant.lab.nkontur.com"),
+		GrafanaURL:  getEnvOrEmpty("GRAFANA_URL_TEST_UNSET", "https://grafana.lab.nkontur.com"),
+		PlexURL:     getEnvOrEmpty("PLEX_URL_TEST_UNSET", "http://plex.lab.nkontur.com:32400"),
+		InfluxDBURL: getEnvOrEmpty("INFLUXDB_URL_TEST_UNSET", "https://influxdb.lab.nkontur.com:8086"),
+	}
+
+	if cfg.HAURL != "https://homeassistant.lab.nkontur.com" {
+		t.Errorf("expected default HA_URL, got %s", cfg.HAURL)
+	}
+	if cfg.GrafanaURL != "https://grafana.lab.nkontur.com" {
+		t.Errorf("expected default GRAFANA_URL, got %s", cfg.GrafanaURL)
+	}
+	if cfg.PlexURL != "http://plex.lab.nkontur.com:32400" {
+		t.Errorf("expected default PLEX_URL, got %s", cfg.PlexURL)
+	}
+	if cfg.InfluxDBURL != "https://influxdb.lab.nkontur.com:8086" {
+		t.Errorf("expected default INFLUXDB_URL, got %s", cfg.InfluxDBURL)
+	}
+}
+
+func TestBackendURLOverride(t *testing.T) {
+	os.Setenv("HA_URL_TEST", "https://custom-ha.example.com")
+	defer os.Unsetenv("HA_URL_TEST")
+
+	val := getEnvOrEmpty("HA_URL_TEST", "https://homeassistant.lab.nkontur.com")
+	if val != "https://custom-ha.example.com" {
+		t.Errorf("expected custom HA URL, got %s", val)
+	}
+}
+
+func TestBackendURLDisable(t *testing.T) {
+	// Explicitly setting to empty string should disable the backend
+	os.Setenv("HA_URL_TEST_EMPTY", "")
+	defer os.Unsetenv("HA_URL_TEST_EMPTY")
+
+	val := getEnvOrEmpty("HA_URL_TEST_EMPTY", "https://homeassistant.lab.nkontur.com")
+	if val != "" {
+		t.Errorf("expected empty (disabled), got %s", val)
 	}
 }

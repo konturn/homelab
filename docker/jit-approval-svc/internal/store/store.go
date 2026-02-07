@@ -42,10 +42,11 @@ type Request struct {
 
 // Credential holds the minted credential data.
 type Credential struct {
-	Token     string        `json:"token,omitempty"`
-	LeaseTTL time.Duration `json:"lease_ttl,omitempty"`
-	LeaseID  string        `json:"lease_id,omitempty"`
-	Policies []string      `json:"policies,omitempty"`
+	Token    string            `json:"token,omitempty"`
+	LeaseTTL time.Duration    `json:"lease_ttl,omitempty"`
+	LeaseID  string            `json:"lease_id,omitempty"`
+	Policies []string          `json:"policies,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
 // Store is an in-memory, thread-safe request store.

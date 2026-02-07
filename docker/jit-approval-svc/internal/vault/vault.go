@@ -11,8 +11,8 @@ import (
 
 // Client wraps the Vault API for JIT credential operations.
 type Client struct {
-	client *vaultapi.Client
-	roleID string
+	client   *vaultapi.Client
+	roleID   string
 	secretID string
 }
 
@@ -61,6 +61,46 @@ func (vc *Client) authenticate() error {
 	})
 
 	return nil
+}
+
+// ReadSecret reads a KV v2 secret and returns the data map as string values.
+// The path should include the "data/" prefix (e.g. "homelab/data/docker/grafana").
+func (vc *Client) ReadSecret(path string) (map[string]string, error) {
+	secret, err := vc.client.Logical().Read(path)
+	if err != nil {
+		// Re-authenticate and retry once
+		if authErr := vc.authenticate(); authErr != nil {
+			return nil, fmt.Errorf("re-auth failed: %w (original: %v)", authErr, err)
+		}
+		secret, err = vc.client.Logical().Read(path)
+		if err != nil {
+			return nil, fmt.Errorf("read secret (after re-auth): %w", err)
+		}
+	}
+
+	if secret == nil || secret.Data == nil {
+		return nil, fmt.Errorf("no data at path %s", path)
+	}
+
+	// KV v2 nests actual data under a "data" key
+	dataRaw, ok := secret.Data["data"]
+	if !ok {
+		return nil, fmt.Errorf("no 'data' key in KV v2 response for %s", path)
+	}
+
+	dataMap, ok := dataRaw.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("unexpected data format at %s", path)
+	}
+
+	result := make(map[string]string, len(dataMap))
+	for k, v := range dataMap {
+		if s, ok := v.(string); ok {
+			result[k] = s
+		}
+	}
+
+	return result, nil
 }
 
 // MintToken creates a scoped, short-lived Vault token for the given resource.
@@ -114,11 +154,11 @@ func (vc *Client) MintToken(resource string, tier int, ttl time.Duration) (strin
 	}
 
 	logger.Info("token_issued", logger.Fields{
-		"resource":       resource,
-		"tier":           tier,
-		"ttl":            ttl.String(),
-		"policies":       policies,
-		"display_name":   displayName,
+		"resource":     resource,
+		"tier":         tier,
+		"ttl":          ttl.String(),
+		"policies":     policies,
+		"display_name": displayName,
 	})
 
 	return resp.Auth.ClientToken, resp.Auth.Accessor, nil
@@ -152,8 +192,6 @@ var resourceTier = map[string]int{
 	"nzbget":    1,
 	"deluge":    1,
 	"paperless": 1,
-	"mqtt":      1,
-	"cameras":   1,
 
 	// Tier 2: Infrastructure (requires approval, 30 min TTL)
 	"gitlab":        2,
