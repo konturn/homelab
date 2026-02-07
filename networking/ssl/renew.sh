@@ -22,6 +22,7 @@ docker run --rm \
   -d blog.nkontur.com \
   -d bitwarden.nkontur.com \
   -d booksonic.nkontur.com \
+  -d jit-webhook.nkontur.com \
   -v
 echo "Certbot renewal succeeded."
 
