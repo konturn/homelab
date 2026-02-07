@@ -195,3 +195,164 @@ resource "vault_policy" "vault_read" {
     }
   EOT
 }
+
+# =============================================================================
+# Policy: jit-approval-svc
+# =============================================================================
+# The JIT approval service brokers credential access on behalf of the agent.
+# It authenticates to Vault via AppRole, then mints short-lived child tokens
+# with scoped policies (jit-tier0/1/2) when requests are approved.
+#
+# This policy grants:
+# - Token lifecycle management (create, revoke, lookup-self)
+# - Read access to all secrets the service may broker
+
+resource "vault_policy" "jit_approval_svc" {
+  name = "jit-approval-svc"
+
+  policy = <<-EOT
+    # Create child tokens with specific policies and TTLs
+    path "auth/token/create" {
+      capabilities = ["create", "update"]
+    }
+
+    # Revoke tokens (for deny/timeout/early-revoke)
+    path "auth/token/revoke" {
+      capabilities = ["create", "update"]
+    }
+
+    # Lookup own token (health checks)
+    path "auth/token/lookup-self" {
+      capabilities = ["read"]
+    }
+
+    # Read secrets that the service may broker access to
+    # Tier 0: Monitoring (auto-approve)
+    path "homelab/data/docker/grafana" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/docker/influxdb" {
+      capabilities = ["read"]
+    }
+
+    # Tier 1: Service management (auto-approve)
+    path "homelab/data/docker/plex" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/docker/radarr" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/docker/sonarr" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/docker/ombi" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/docker/nzbget" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/docker/deluge" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/docker/paperless" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/mqtt" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/cameras" {
+      capabilities = ["read"]
+    }
+
+    # Tier 2: Infrastructure (requires approval)
+    path "homelab/data/docker/gitlab" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/docker/homeassistant" {
+      capabilities = ["read"]
+    }
+
+    # Read own service secrets
+    path "homelab/data/docker/jit-approval-svc" {
+      capabilities = ["read"]
+    }
+  EOT
+}
+
+# =============================================================================
+# Policy: jit-tier0-monitoring
+# =============================================================================
+# Lightweight scoped policy for JIT-minted child tokens.
+# Tier 0: Read-only access to monitoring services (auto-approve).
+
+resource "vault_policy" "jit_tier0_monitoring" {
+  name = "jit-tier0-monitoring"
+
+  policy = <<-EOT
+    path "homelab/data/docker/grafana" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/docker/influxdb" {
+      capabilities = ["read"]
+    }
+  EOT
+}
+
+# =============================================================================
+# Policy: jit-tier1-services
+# =============================================================================
+# Lightweight scoped policy for JIT-minted child tokens.
+# Tier 1: Read access to operational services (auto-approve).
+
+resource "vault_policy" "jit_tier1_services" {
+  name = "jit-tier1-services"
+
+  policy = <<-EOT
+    path "homelab/data/docker/plex" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/docker/radarr" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/docker/sonarr" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/docker/ombi" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/docker/nzbget" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/docker/deluge" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/docker/paperless" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/mqtt" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/cameras" {
+      capabilities = ["read"]
+    }
+  EOT
+}
+
+# =============================================================================
+# Policy: jit-tier2-infra
+# =============================================================================
+# Lightweight scoped policy for JIT-minted child tokens.
+# Tier 2: Read access to infrastructure services (requires human approval).
+
+resource "vault_policy" "jit_tier2_infra" {
+  name = "jit-tier2-infra"
+
+  policy = <<-EOT
+    path "homelab/data/docker/gitlab" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/docker/homeassistant" {
+      capabilities = ["read"]
+    }
+  EOT
+}
