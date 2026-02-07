@@ -77,6 +77,8 @@ services:
   # Only allows build/image operations, blocks exec/start/stop
   docker-socket-proxy:
     container_name: docker-socket-proxy
+    security_opt:
+      - no-new-privileges:true
     image: tecnativa/docker-socket-proxy:latest@sha256:bd2241b3bec83abcff25927a0a7ae518e0c5bef624b3cc247dcb31e68b53f417
     restart: unless-stopped
     networks:
@@ -109,6 +111,8 @@ services:
 
   plex:
     container_name: plex
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "32400/tcp"
     image: plexinc/pms-docker:latest@sha256:f42deee6fad8c0d3e40ac52163ca8f6acf520bafda617f845ad7970dc35fe128
@@ -165,6 +169,11 @@ services:
       start_period: 30s
   iperf3:
     container_name: iperf3
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
     image: networkstatic/iperf3:latest@sha256:993080f3167738f4155d6b2749b8b95ba6da5d44fe1c02e36b6e03a6d544c922
     ports:
       - "5201/tcp"
@@ -180,6 +189,13 @@ services:
   nginx: 
     image: nginx:1.27-alpine@sha256:62223d644fa234c3a1cc785ee14242ec47a77364226f1c811d2f669f96dc2ac8
     container_name: nginx
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+      - /var/cache/nginx
     networks:
       external:
         ipv4_address: {{ nginx_ip }}
@@ -202,6 +218,13 @@ services:
   lab_nginx: 
     image: nginx:1.27-alpine@sha256:62223d644fa234c3a1cc785ee14242ec47a77364226f1c811d2f669f96dc2ac8
     container_name: lab_nginx
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+      - /var/cache/nginx
     networks:
       internal:
         ipv4_address: {{ lab_nginx_ip }}
@@ -223,6 +246,13 @@ services:
   iot_nginx: 
     image: nginx:1.27-alpine@sha256:62223d644fa234c3a1cc785ee14242ec47a77364226f1c811d2f669f96dc2ac8
     container_name: iot_nginx
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+      - /var/cache/nginx
     networks:
       iot:
         ipv4_address: {{ iot_nginx_ip }}
@@ -244,6 +274,8 @@ services:
   ombi:
     image: linuxserver/ombi:latest@sha256:85efc726e5f308816f5f4fcf0edfa716f644ba24eb0fb37aeff108191f561108
     container_name: ombi
+    security_opt:
+      - no-new-privileges:true
     networks:
       - external
       - internal
@@ -270,6 +302,8 @@ services:
   nzbget:
     image: linuxserver/nzbget:latest@sha256:404540476fba572f8d1253c7dee753929797daff6ab370a4d9f345f9438a4724
     container_name: nzbget
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "6789:6789"
     networks:
@@ -296,6 +330,8 @@ services:
   radarr:
     image: linuxserver/radarr:latest@sha256:601cee9198064958cb6649cd57a4624c4b6b8461ac6fbd661be9aec741f7534e
     container_name: radarr
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "443:7878"
     networks:
@@ -326,6 +362,8 @@ services:
   jackett:
     image: linuxserver/jackett:latest@sha256:5898fe0428c810cc439f6ea2291475888532a29ce534a09856a9149acb170e71
     container_name: jackett
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "443:9117"
     networks:
@@ -350,6 +388,8 @@ services:
   sonarr:
     image: linuxserver/sonarr:latest@sha256:28c4ff50fb3ea0607ad7a2fdbb49860ad388ddfd2594a7a68933fda8c3abebaf
     container_name: sonarr
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "443:8989"
     networks:
@@ -380,6 +420,8 @@ services:
   booksonic:
     image: izderadicka/audioserve:latest@sha256:c3609321701765671cae121fc0f61db122e8c124643c04770fbc9326c74b18e3
     container_name: audioserve
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "443:3000"
     networks:
@@ -408,6 +450,8 @@ services:
       start_period: 30s
   influxdb:
     container_name: influxdb
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "443:8086"
     networks:
@@ -439,6 +483,8 @@ services:
       start_period: 30s
   grafana:
     container_name: grafana
+    security_opt:
+      - no-new-privileges:true
     image: grafana/grafana:latest@sha256:5c1eb28c96c2a8a103384183fb2c32f9cb499904b310b9ba8cdd6bdae435509a
     ports:
       - "443:3000"
@@ -479,6 +525,8 @@ services:
       start_period: 30s
   loki:
     container_name: loki
+    security_opt:
+      - no-new-privileges:true
     image: grafana/loki:3.5.0@sha256:2cbddd6e199a2ddeee13573d91f11e54d9c8fa432f44c578d3c55b9a93278c9f
     ports:
       - "3100:3100"
@@ -509,6 +557,8 @@ services:
   promtail:
     image: grafana/promtail:3.5.0@sha256:450959b22a0eabbf7c364dc3b0c6483573a22012ab853fa5e88025fdd12deda5
     container_name: promtail
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
     depends_on:
       - loki
@@ -612,6 +662,8 @@ services:
 
   deluge:
     container_name: deluge
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "443:8112"
     image: 'lscr.io/linuxserver/deluge:latest@sha256:2392a75ce975de1b50c03344b05a858c5da36c1c41ba1f61a5fe6198ea88ef18'
@@ -637,6 +689,8 @@ services:
       start_period: 30s
   bitwarden:
     container_name: bitwarden
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "443:80"
     image: 'vaultwarden/server:latest@sha256:561405df345411d01ff5773b86b56904631e874d39a3c1326e107f3c0a6e5dfc'
@@ -660,6 +714,8 @@ services:
   blog:
     image: wordpress:latest@sha256:fc598b8a72b02a203abed37c175e54d79bb0d12873aead2ffed708e213a7404b
     container_name: wordpress
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "443:80"
     networks:
@@ -711,6 +767,8 @@ services:
       start_period: 60s
   diagram:
     container_name: diagram
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "443:8080"
     networks:
@@ -764,6 +822,8 @@ services:
       start_period: 120s
   snapserver:
     container_name: snapserver
+    security_opt:
+      - no-new-privileges:true
     hostname: snapserver
     networks:
       iot:
@@ -789,6 +849,8 @@ services:
       start_period: 30s
   snapclient_office:
     container_name: snapclient_office
+    security_opt:
+      - no-new-privileges:true
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -814,6 +876,8 @@ services:
       start_period: 15s
   snapclient_global:
     container_name: snapclient_global
+    security_opt:
+      - no-new-privileges:true
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -839,6 +903,8 @@ services:
       start_period: 15s
   snapclient_kitchen:
     container_name: snapclient_kitchen
+    security_opt:
+      - no-new-privileges:true
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -864,6 +930,8 @@ services:
       start_period: 15s
   snapclient_main_bedroom:
     container_name: snapclient_main_bedroom
+    security_opt:
+      - no-new-privileges:true
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -889,6 +957,8 @@ services:
       start_period: 15s
   snapclient_main_bathroom:
     container_name: snapclient_main_bathroom
+    security_opt:
+      - no-new-privileges:true
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -914,6 +984,8 @@ services:
       start_period: 15s
   snapclient_guest_bathroom:
     container_name: snapclient_guest_bathroom
+    security_opt:
+      - no-new-privileges:true
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -939,6 +1011,8 @@ services:
       start_period: 15s
   snapclient_guest_bedroom:
     container_name: snapclient_guest_bedroom
+    security_opt:
+      - no-new-privileges:true
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -966,6 +1040,11 @@ services:
   # Images now pulled from: gitlab-registry.lab.nkontur.com:443/root/homelab/<image>
   mosquitto:
     container_name: mosquitto
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
     image: eclipse-mosquitto:latest@sha256:d373dffb3185c95a34e0a693667fbdab7d2dc4b676dd72e8a0a6891d50be0c64
     restart: unless-stopped
     networks:
@@ -987,6 +1066,8 @@ services:
       start_period: 30s
   amcrest2mqtt:
     container_name: amcrest2mqtt
+    security_opt:
+      - no-new-privileges:true
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/amcrest2mqtt:latest"
     depends_on:
       - mosquitto
@@ -1018,6 +1099,8 @@ services:
     image: ghcr.io/neilenns/ambientweather2mqtt:latest@sha256:679d1a7e0de94956b35ff8d4862afb791c3bd92c2c350dd5a21e07d930560ff3
     restart: unless-stopped
     container_name: ambientweather
+    security_opt:
+      - no-new-privileges:true
     networks:
       iot:
         ipv4_address: {{ weather_mqtt_bridge_ip }}
@@ -1066,6 +1149,8 @@ services:
   paperless-ngx:
     image: lscr.io/linuxserver/paperless-ngx:latest@sha256:94ebc3ba985e9548a8a74ebff1d5d51011e78d41ded5fbffee13dceea5b27401
     container_name: paperless-ngx
+    security_opt:
+      - no-new-privileges:true
     networks:
       internal:
     deploy:
@@ -1090,6 +1175,8 @@ services:
   mopidy:
     image: wernight/mopidy:latest@sha256:e3156f3da69d3e88b191c852d1fa60907c91e36668bca1f5afb5b57b74a8407d
     container_name: mopidy
+    security_opt:
+      - no-new-privileges:true
     networks:
       iot:
         ipv4_address: {{ mopidy_address }}
@@ -1119,6 +1206,8 @@ services:
   nextcloud_db:
     image: mariadb:latest@sha256:96825544d6c5044c7767016744f65477faaf97cb9529682cf17faa867315d7b9
     container_name: nextcloud_database
+    security_opt:
+      - no-new-privileges:true
     command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
     restart: unless-stopped
     networks:
@@ -1145,6 +1234,8 @@ services:
   nextcloud:
     image: nextcloud:32.0.1@sha256:d2c9c96ce7a38c61674a2e0389e75c47e9820250b00f77137238014417a31201
     container_name: nextcloud
+    security_opt:
+      - no-new-privileges:true
     networks:
       - external
       - nextcloud_internal
@@ -1174,6 +1265,8 @@ services:
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:latest@sha256:b1372ea2bb237e6531412c9cc0436ff31d688be6af4f24aa56269c2d7b0fdc89
     container_name: prowlarr
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
     ports:
       - "443:7878"
@@ -1198,6 +1291,8 @@ services:
   moltbot-gateway:
     image: gitlab-registry.lab.nkontur.com:443/root/homelab/moltbot:{{ moltbot_image_tag | default('latest') }}
     container_name: moltbot-gateway
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
     networks:
       internal:
