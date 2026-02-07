@@ -211,9 +211,9 @@ resource "vault_policy" "jit_approval_svc" {
   name = "jit-approval-svc"
 
   policy = <<-EOT
-    # Create child tokens with specific policies and TTLs
-    path "auth/token/create" {
-      capabilities = ["create", "update"]
+    # Create orphan tokens with specific policies and TTLs
+    path "auth/token/create-orphan" {
+      capabilities = ["create", "update", "sudo"]
     }
 
     # Revoke tokens (for deny/timeout/early-revoke)
