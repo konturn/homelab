@@ -152,11 +152,6 @@ resource "vault_policy" "vault_read" {
   name = "vault-read"
 
   policy = <<-EOT
-    # Read secrets for terraform plan
-    path "homelab/*" {
-      capabilities = ["read", "list"]
-    }
-
     # Read auth configuration for plan
     path "auth/*" {
       capabilities = ["read", "list"]
