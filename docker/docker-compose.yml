@@ -634,6 +634,7 @@ services:
       - LISTEN_ADDR=:8080
       - REQUEST_TIMEOUT=300
       - ALLOWED_REQUESTERS=prometheus
+      - JIT_API_KEY={{ vault_jit_api_key }}
     depends_on:
       - vault
     logging:
