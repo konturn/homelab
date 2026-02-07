@@ -11,8 +11,8 @@
 # Pipeline structure:
 #
 #   VALIDATE (parallel)
-#   ┌────────────────────────┬──────────────┬──────────────┬──────────────┐
-#   router:val [id_tokens]  zwave:val  sat-2:val  vault:validate
+#   ┌────────────────────────┬──────────────┬──────────────┬──────────────┬──────────────────┐
+#   router:val [id_tokens]  zwave:val  sat-2:val  vault:validate  jit-approval-svc:test
 #
 #   BUILD (parallel, path-triggered)
 #   ┌──────────────┬──────────────┬──────────────┬──────────────────────┐
@@ -211,6 +211,22 @@ satellite-2:validate:
         echo "SSH key unavailable — running syntax check only"
         ansible-playbook -i ansible/inventory.yml ansible/satellite-2.yml --syntax-check
       fi
+
+jit-approval-svc:test:
+  extends: .interruptible
+  stage: validate
+  image: golang:1.22-alpine
+  needs: []
+  script:
+    - cd docker/jit-approval-svc
+    - go test -v -count=1 ./...
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - docker/jit-approval-svc/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - docker/jit-approval-svc/**/*
 
 # =============================================================================
 # Build Stage - Container images (GitLab Registry)
