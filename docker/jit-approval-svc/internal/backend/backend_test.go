@@ -2,7 +2,6 @@ package backend
 
 import (
 	"encoding/json"
-	"encoding/xml"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -243,102 +242,6 @@ func TestGrafanaBackend_Health(t *testing.T) {
 	}
 }
 
-// --- Plex Tests ---
-
-func TestPlexBackend_MintCredential(t *testing.T) {
-	type testMediaContainer struct {
-		XMLName xml.Name `xml:"MediaContainer"`
-		Token   string   `xml:"token,attr"`
-	}
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/security/token" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		if r.URL.Query().Get("X-Plex-Token") != "plex-server-token" {
-			t.Errorf("unexpected X-Plex-Token: %s", r.URL.Query().Get("X-Plex-Token"))
-		}
-
-		w.Header().Set("Content-Type", "application/xml")
-		mc := testMediaContainer{Token: "transient-abc123"}
-		xml.NewEncoder(w).Encode(mc)
-	}))
-	defer server.Close()
-
-	reader := &mockVaultReader{
-		secrets: map[string]map[string]string{
-			"homelab/data/docker/plex": {
-				"token": "plex-server-token",
-			},
-		},
-	}
-
-	b := NewPlexBackend(server.URL, reader)
-	cred, err := b.MintCredential("plex", 1, 15*time.Minute)
-	if err != nil {
-		t.Fatalf("MintCredential failed: %v", err)
-	}
-
-	if cred.Token != "transient-abc123" {
-		t.Errorf("expected token transient-abc123, got %s", cred.Token)
-	}
-	if cred.LeaseTTL != 15*time.Minute {
-		t.Errorf("expected TTL 15m, got %s", cred.LeaseTTL)
-	}
-	if cred.Metadata["type"] != "transient" {
-		t.Errorf("expected type transient, got %s", cred.Metadata["type"])
-	}
-}
-
-func TestPlexBackend_MintCredential_EmptyToken(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/xml")
-		w.Write([]byte(`<MediaContainer token=""/>`))
-	}))
-	defer server.Close()
-
-	reader := &mockVaultReader{
-		secrets: map[string]map[string]string{
-			"homelab/data/docker/plex": {
-				"token": "plex-server-token",
-			},
-		},
-	}
-
-	b := NewPlexBackend(server.URL, reader)
-	_, err := b.MintCredential("plex", 1, 15*time.Minute)
-	if err == nil {
-		t.Fatal("expected error for empty transient token")
-	}
-}
-
-func TestPlexBackend_Health(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/identity" {
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`<MediaContainer machineIdentifier="abc"/>`))
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer server.Close()
-
-	reader := &mockVaultReader{
-		secrets: map[string]map[string]string{
-			"homelab/data/docker/plex": {
-				"token": "plex-server-token",
-			},
-		},
-	}
-
-	b := NewPlexBackend(server.URL, reader)
-	if err := b.Health(); err != nil {
-		t.Errorf("Health() failed: %v", err)
-	}
-}
-
 // --- InfluxDB Tests ---
 
 func TestInfluxDBBackend_MintCredential(t *testing.T) {
@@ -491,7 +394,7 @@ func TestRegistry_DynamicBackendSelection(t *testing.T) {
 	reader := &mockVaultReader{secrets: map[string]map[string]string{}}
 
 	// Only register grafana as dynamic
-	r := NewRegistry(minter, reader, "", "https://grafana.example.com", "", "")
+	r := NewRegistry(minter, reader, "", "https://grafana.example.com", "")
 
 	if !r.IsDynamic("grafana") {
 		t.Error("expected grafana to be dynamic")
@@ -508,7 +411,7 @@ func TestRegistry_FallbackToStatic(t *testing.T) {
 	minter := &mockVaultMinter{token: "vault-token", leaseID: "acc-1"}
 	reader := &mockVaultReader{secrets: map[string]map[string]string{}}
 
-	r := NewRegistry(minter, reader, "", "", "", "")
+	r := NewRegistry(minter, reader, "", "", "")
 
 	// All should be static (no dynamic URLs configured)
 	b := r.For("radarr")
@@ -554,22 +457,6 @@ func TestGrafanaBackend_MissingVaultField(t *testing.T) {
 	_, err := b.MintCredential("grafana", 0, 5*time.Minute)
 	if err == nil {
 		t.Fatal("expected error for missing service_account_id")
-	}
-}
-
-func TestPlexBackend_MissingVaultField(t *testing.T) {
-	reader := &mockVaultReader{
-		secrets: map[string]map[string]string{
-			"homelab/data/docker/plex": {
-				// missing token
-			},
-		},
-	}
-
-	b := NewPlexBackend("http://localhost", reader)
-	_, err := b.MintCredential("plex", 1, 15*time.Minute)
-	if err == nil {
-		t.Fatal("expected error for missing token")
 	}
 }
 

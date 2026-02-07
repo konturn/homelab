@@ -33,7 +33,6 @@ func main() {
 		"allowed_requesters": cfg.AllowedRequesters,
 		"ha_url":             cfg.HAURL,
 		"grafana_url":        cfg.GrafanaURL,
-		"plex_url":           cfg.PlexURL,
 		"influxdb_url":       cfg.InfluxDBURL,
 	})
 
@@ -57,7 +56,6 @@ func main() {
 		vaultClient,
 		cfg.HAURL,
 		cfg.GrafanaURL,
-		cfg.PlexURL,
 		cfg.InfluxDBURL,
 	)
 

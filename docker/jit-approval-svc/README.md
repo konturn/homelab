@@ -29,7 +29,7 @@ The service supports two types of credential backends:
 |----------|---------|----------------|
 | Grafana | Dynamic (GrafanaBackend) | Service account token with expiration |
 | InfluxDB | Dynamic (InfluxDBBackend) | Read-only authorization token (auto-cleaned after TTL) |
-| Plex | Dynamic (PlexBackend) | Transient token (48h, destroyed on restart) |
+| Plex | Static (Vault) | API key from Vault (transient token API deprecated in Plex 1.43+) |
 | Home Assistant | Dynamic (HomeAssistantBackend) | OAuth access token (30 min, via refresh flow) |
 | Radarr, Sonarr, Ombi, NZBGet, Deluge, Paperless, GitLab | Static (Vault) | Scoped Vault token |
 

@@ -137,7 +137,6 @@ func TestBackendURLDefaults(t *testing.T) {
 	cfg := &Config{
 		HAURL:       getEnvOrEmpty("HA_URL_TEST_UNSET", "https://homeassistant.lab.nkontur.com"),
 		GrafanaURL:  getEnvOrEmpty("GRAFANA_URL_TEST_UNSET", "https://grafana.lab.nkontur.com"),
-		PlexURL:     getEnvOrEmpty("PLEX_URL_TEST_UNSET", "http://plex.lab.nkontur.com:32400"),
 		InfluxDBURL: getEnvOrEmpty("INFLUXDB_URL_TEST_UNSET", "https://influxdb.lab.nkontur.com:8086"),
 	}
 
@@ -146,9 +145,6 @@ func TestBackendURLDefaults(t *testing.T) {
 	}
 	if cfg.GrafanaURL != "https://grafana.lab.nkontur.com" {
 		t.Errorf("expected default GRAFANA_URL, got %s", cfg.GrafanaURL)
-	}
-	if cfg.PlexURL != "http://plex.lab.nkontur.com:32400" {
-		t.Errorf("expected default PLEX_URL, got %s", cfg.PlexURL)
 	}
 	if cfg.InfluxDBURL != "https://influxdb.lab.nkontur.com:8086" {
 		t.Errorf("expected default INFLUXDB_URL, got %s", cfg.InfluxDBURL)
