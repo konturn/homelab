@@ -153,7 +153,7 @@ All configuration via environment variables:
 | `HA_URL` | No | `https://homeassistant.lab.nkontur.com` | Home Assistant URL for dynamic backend |
 | `GRAFANA_URL` | No | `https://grafana.lab.nkontur.com` | Grafana URL for dynamic backend |
 | `PLEX_URL` | No | `http://plex.lab.nkontur.com:32400` | Plex URL for dynamic backend |
-| `INFLUXDB_URL` | No | `https://influxdb.lab.nkontur.com:8086` | InfluxDB URL for dynamic backend |
+| `INFLUXDB_URL` | No | `https://influxdb.lab.nkontur.com` | InfluxDB URL for dynamic backend |
 
 ### Disabling Dynamic Backends
 
@@ -172,7 +172,7 @@ Dynamic backends read their upstream credentials from Vault:
 | Backend | Vault Path | Required Fields |
 |---------|-----------|-----------------|
 | Home Assistant | `homelab/data/docker/homeassistant` | `refresh_token`, `client_id` |
-| Grafana | `homelab/data/docker/grafana` | `token`, `service_account_id` |
+| Grafana | `homelab/data/docker/grafana` | `jit_admin_token`, `service_account_id` |
 | Plex | `homelab/data/docker/plex` | `token` |
 | InfluxDB | `homelab/data/docker/influxdb` | `admin_token`, `org_id` |
 

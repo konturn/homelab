@@ -178,7 +178,7 @@ func TestGrafanaBackend_MintCredential(t *testing.T) {
 	reader := &mockVaultReader{
 		secrets: map[string]map[string]string{
 			"homelab/data/docker/grafana": {
-				"token":        "grafana-admin-token",
+				"jit_admin_token":    "grafana-admin-token",
 				"service_account_id": "42",
 			},
 		},
@@ -211,7 +211,7 @@ func TestGrafanaBackend_MintCredential_Error(t *testing.T) {
 	reader := &mockVaultReader{
 		secrets: map[string]map[string]string{
 			"homelab/data/docker/grafana": {
-				"token":        "bad-token",
+				"jit_admin_token":    "bad-token",
 				"service_account_id": "42",
 			},
 		},
@@ -544,7 +544,7 @@ func TestGrafanaBackend_MissingVaultField(t *testing.T) {
 	reader := &mockVaultReader{
 		secrets: map[string]map[string]string{
 			"homelab/data/docker/grafana": {
-				"token": "token",
+				"jit_admin_token": "token",
 				// missing service_account_id
 			},
 		},

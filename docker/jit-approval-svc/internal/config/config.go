@@ -85,7 +85,7 @@ func Load() (*Config, error) {
 		HAURL:       getEnvOrEmpty("HA_URL", "https://homeassistant.lab.nkontur.com"),
 		GrafanaURL:  getEnvOrEmpty("GRAFANA_URL", "https://grafana.lab.nkontur.com"),
 		PlexURL:     getEnvOrEmpty("PLEX_URL", "http://plex.lab.nkontur.com:32400"),
-		InfluxDBURL: getEnvOrEmpty("INFLUXDB_URL", "https://influxdb.lab.nkontur.com:8086"),
+		InfluxDBURL: getEnvOrEmpty("INFLUXDB_URL", "https://influxdb.lab.nkontur.com"),
 	}
 
 	if err := cfg.Validate(); err != nil {
