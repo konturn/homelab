@@ -37,7 +37,6 @@ type Config struct {
 	// Backend service URLs (optional, enables dynamic credential backends)
 	HAURL       string
 	GrafanaURL  string
-	PlexURL     string
 	InfluxDBURL string
 }
 
@@ -84,7 +83,6 @@ func Load() (*Config, error) {
 		// Backend URLs: empty string means fall back to static/Vault
 		HAURL:       getEnvOrEmpty("HA_URL", "https://homeassistant.lab.nkontur.com"),
 		GrafanaURL:  getEnvOrEmpty("GRAFANA_URL", "https://grafana.lab.nkontur.com"),
-		PlexURL:     getEnvOrEmpty("PLEX_URL", "http://plex.lab.nkontur.com:32400"),
 		InfluxDBURL: getEnvOrEmpty("INFLUXDB_URL", "https://influxdb.lab.nkontur.com"),
 	}
 
