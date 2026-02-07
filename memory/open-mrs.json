@@ -1,7 +1,19 @@
 {
+  "88": {
+    "title": "feat: Deploy Noah's personal website (nkontur.com)",
+    "branch": "feat/nkontur-website",
+    "lastCommentId": 0,
+    "version": 1
+  },
   "139": {
     "title": "feat: add JIT approval service (Go) for credential brokering",
     "branch": "feat/jit-approval-svc",
+    "lastCommentId": 0,
+    "version": 1
+  },
+  "141": {
+    "title": "feat: collapse bootstrap into single-shot Vault-aware process",
+    "branch": "feat/bootstrap-single-shot",
     "lastCommentId": 0,
     "version": 1
   }
