@@ -1,1 +1,8 @@
-{}
+{
+  "139": {
+    "title": "feat: add JIT approval service (Go) for credential brokering",
+    "branch": "feat/jit-approval-svc",
+    "lastCommentId": 0,
+    "version": 1
+  }
+}
