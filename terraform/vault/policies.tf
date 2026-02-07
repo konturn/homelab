@@ -74,6 +74,11 @@ resource "vault_policy" "moltbot_ops" {
     path "homelab/data/cameras" {
       capabilities = ["read"]
     }
+
+    # Agent shared secrets (JIT API key, etc.)
+    path "homelab/data/agents/*" {
+      capabilities = ["read"]
+    }
   EOT
 }
 
@@ -263,6 +268,11 @@ resource "vault_policy" "jit_approval_svc" {
 
     # Read own service secrets
     path "homelab/data/docker/jit-approval-svc" {
+      capabilities = ["read"]
+    }
+
+    # Shared agent secrets
+    path "homelab/data/agents/*" {
       capabilities = ["read"]
     }
   EOT
