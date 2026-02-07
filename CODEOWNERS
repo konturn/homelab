@@ -48,6 +48,7 @@
 # === VAULT & SECRETS ===
 # Could access or redirect secret storage
 /docker/vault/                           @root
+/terraform/vault/                        @root
 
 # === SSL CERTS ===
 # Could intercept TLS traffic
