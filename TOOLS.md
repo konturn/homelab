@@ -202,6 +202,41 @@ Pushing triggers GitLab CI → Ansible deploys to router. See `CLAUDE.md` in the
 
 ---
 
+## Vault Access (AppRole)
+
+**Auth method:** AppRole (env vars `VAULT_APPROLE_ROLE_ID`, `VAULT_APPROLE_SECRET_ID`)
+**Vault address:** `$VAULT_ADDR` = `https://vault.lab.nkontur.com:8200`
+**Policy:** `moltbot-ops`
+
+**Login pattern:**
+```bash
+VAULT_TOKEN=$(curl -s --request POST \
+  --data '{"role_id":"'"$VAULT_APPROLE_ROLE_ID"'","secret_id":"'"$VAULT_APPROLE_SECRET_ID"'"}' \
+  "$VAULT_ADDR/v1/auth/approle/login" | jq -r '.auth.client_token')
+```
+
+**Paths I can read (moltbot-ops policy):**
+- `homelab/data/docker/plex`
+- `homelab/data/docker/radarr`
+- `homelab/data/docker/sonarr`
+- `homelab/data/docker/ombi`
+- `homelab/data/docker/nzbget`
+- `homelab/data/docker/deluge`
+- `homelab/data/docker/grafana`
+- `homelab/data/docker/influxdb`
+- `homelab/data/docker/paperless`
+- `homelab/data/mqtt`
+- `homelab/data/cameras`
+
+**NOT accessible:** jit-approval-svc secrets, moltbot config, networking, SSH, LUKS, backups, homeassistant, gitlab
+
+**JIT Approval Service:**
+- URL: `http://10.3.32.8:8080` (internal only, nginx redirect loop on jit.lab.nkontur.com)
+- API key: needs shared Vault path (TODO)
+- Endpoints: `GET /health`, `POST /request`
+
+---
+
 ## Home Assistant API
 
 **Direct API access via environment variables:**
