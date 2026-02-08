@@ -187,7 +187,7 @@ services:
       - "-s"
     restart: unless-stopped
   nginx: 
-    image: nginx:1.27-alpine@sha256:62223d644fa234c3a1cc785ee14242ec47a77364226f1c811d2f669f96dc2ac8
+    image: nginx:1.29.5-alpine3.23-perl@sha256:db0a3121225ffbc32fa36cc7a02c6c11002fec0c7fd2596ba204a811cc4a71dc
     container_name: nginx
     security_opt:
       - no-new-privileges:true
@@ -216,7 +216,7 @@ services:
       - /var/log/nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   lab_nginx: 
-    image: nginx:1.27-alpine@sha256:62223d644fa234c3a1cc785ee14242ec47a77364226f1c811d2f669f96dc2ac8
+    image: nginx:1.29.5-alpine3.23-perl@sha256:db0a3121225ffbc32fa36cc7a02c6c11002fec0c7fd2596ba204a811cc4a71dc
     container_name: lab_nginx
     security_opt:
       - no-new-privileges:true
@@ -244,7 +244,7 @@ services:
       - /var/log/lab_nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   iot_nginx: 
-    image: nginx:1.27-alpine@sha256:62223d644fa234c3a1cc785ee14242ec47a77364226f1c811d2f669f96dc2ac8
+    image: nginx:1.29.5-alpine3.23-perl@sha256:db0a3121225ffbc32fa36cc7a02c6c11002fec0c7fd2596ba204a811cc4a71dc
     container_name: iot_nginx
     security_opt:
       - no-new-privileges:true
@@ -527,7 +527,7 @@ services:
     container_name: loki
     security_opt:
       - no-new-privileges:true
-    image: grafana/loki:3.5.0@sha256:2cbddd6e199a2ddeee13573d91f11e54d9c8fa432f44c578d3c55b9a93278c9f
+    image: grafana/loki:3.6@sha256:847c287ada0e12603910589f42038c5cdaaad04e248bd1dc6c6e0920a235f427
     ports:
       - "3100:3100"
     networks:
@@ -555,7 +555,7 @@ services:
       retries: 3
       start_period: 30s
   promtail:
-    image: grafana/promtail:3.5.0@sha256:450959b22a0eabbf7c364dc3b0c6483573a22012ab853fa5e88025fdd12deda5
+    image: grafana/promtail:3.6@sha256:6140a3158fddd7ef2276908bd321ad5265ee6ad2abd9fb3c937394827df3ea4d
     container_name: promtail
     security_opt:
       - no-new-privileges:true
@@ -1275,7 +1275,7 @@ services:
       retries: 3
       start_period: 60s
   nextcloud:
-    image: nextcloud:32.0.1@sha256:d2c9c96ce7a38c61674a2e0389e75c47e9820250b00f77137238014417a31201
+    image: nextcloud:32.0.5-fpm@sha256:859376abea2c2fbee4cd2046cb1d9ed9714d37f200fa8b409bbca10ca3bc52e6
     container_name: nextcloud
     security_opt:
       - no-new-privileges:true
