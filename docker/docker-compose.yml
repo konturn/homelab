@@ -843,7 +843,7 @@ services:
     devices: 
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_ETDRb11A920-if00-port0:/dev/ttyUSB0"
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0:/dev/ttyUSB1"
-    image: "homeassistant/home-assistant:2025.12@sha256:9633fbba03c9702995d9b1126a264ce5670c5c31662fc3ee906a4da624ad6230"
+    image: "homeassistant/home-assistant:2026.2@sha256:17441c45ba14560b4ef727ee06aac4d605cf0dc0625fc4f2e043cb2551d72749"
     deploy:
       resources:
         limits:
