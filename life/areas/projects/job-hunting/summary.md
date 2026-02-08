@@ -41,4 +41,4 @@ Active job searching with automated application assistance. Infrastructure in pl
 - Complex (Greenhouse/Workday): ~$3-4/application
 
 ---
-*Last synthesized: 2026-02-01*
+*Last synthesized: 2026-02-08*

@@ -3,34 +3,57 @@
 My access to Noah's GitLab homelab repository and ability to make infrastructure improvements via MRs.
 
 ## Access
-- **GitLab:** gitlab.lab.nkontur.com (user: moltbot)
+- **GitLab:** gitlab.lab.nkontur.com (user: moltbot, **Maintainer** role)
 - **Repo:** root/homelab (project ID: 4)
 - **Token:** `$GITLAB_TOKEN` — has git push + API access
 - **Workflow:** Push → GitLab CI → Ansible deploys to router
+- **Self-merge policy:** Small config tweaks, iteration, trivial changes = self-merge. Big architectural changes = Noah's review.
+- **GitLab Ultimate:** License active, CODEOWNERS enforcement working.
 
-## MRs Created (as of 2026-02-01)
+## Major Accomplishments (Feb 2026)
 
-### Merged
-- **MR #2** — CI dry-run validation for MRs
-- **MR #12** — Telegraf diskio fix
-- **MR #13** — Satellite-2 deployment
-- **MR #29** — GitLab Container Registry
-- **MR #30** — Auto-cancel redundant pipelines
-- **MR #9** — API access (Radarr, Sonarr, Prowlarr, Plex, Ombi, Paperless, InfluxDB, NZBGet, Deluge)
+### Vault Integration (Feb 5-7)
+- **MR !116** — Vault JWT auth (merged)
+- **MR !123** — AppRole rotation job + docs (merged)
+- **MR !126** — Full Vault secret migration — all 47 secrets fetched from Vault with env var fallback (merged)
+- **MR !128** — Remaining secrets (Cloudflare, Grafana, Spotify) to Vault (merged)
+- **MR !129** — JWT fix (bound_audiences + ci-deploy role) (merged)
+- **MR !132** — Vault secret trailing newline trim (merged)
 
-### Pending/Open
-- **MR #3** — CI caching for faster builds
-- **MR #4** — Moltbot healthcheck
-- **MR #5** — Improved README documentation
-- **MR #14** — Uptime Kuma (endpoint monitoring)
-- **MR #15** — Loki + Promtail (log aggregation)
-- **MR #16** — Container memory limits
-- **MR #17** — Docker healthchecks
-- **MR #18** — Secret rotation documentation
-- **MR #19** — Firewall audit (found SMB port bug: 145→445)
-- **MR #20** — Network topology docs
-- **MR #21** — Backup documentation + verification script
-- **MR #25** — Chromium in moltbot container
+### Security Hardening
+- **MR !125** — Docker image SHA256 pinning (34 images)
+- **MR !127** — Credential scrubbing cron
+- **MR !133** — Restic exclude for vault unseal keys
+- **MR !109** — CODEOWNERS draft
+- **MR !104** — no_log for secrets
+- **MR !105** — amcrest2mqtt TLS
+- JIT Privileged Access Management design doc (`docs/jit-access-design.md`) — 2500+ lines
+
+### Infrastructure
+- **MR !124** — Tailscale firewall fix (DNS, HTTP/S, ICMP)
+- **MR !130** — Promtail host log ingestion to Loki
+- **MR !107** — Traefik migration design doc (self-merged)
+- **MR !111** — GitLab memory tuning (Sidekiq, Puma, PostgreSQL)
+
+### Earlier (Jan 30 - Feb 3)
+- MR #2 — CI dry-run validation (merged)
+- MR #9 — API access for Radarr, Sonarr, Plex, Ombi, etc. (merged)
+- MR #12 — Telegraf diskio fix (merged)
+- MR #13 — Satellite-2 deployment (merged)
+- MR #29 — GitLab Container Registry (merged)
+- MR #30 — Auto-cancel redundant pipelines (merged)
+
+## Current Status
+- **186 commits** from me out of 835 total (22.3% of repo)
+- **68.1%** of commits since I joined are mine
+- Repo grew 48.3% in first 6 days
+- Vault JWT auth not fully working yet (bound_audiences issue) — falls back to CI env vars
+- CI/CD variable cleanup: 19 dead vars deleted, 44 Vault-backed vars kept (can't deprecate until JWT works)
+
+## Known Issues
+- GitLab /jobs API endpoint is slow (700ms warm) — likely ci_builds table bloat
+- Sidekiq concurrency=5 causes pipeline creation delays during clustered merges (recommendation: bump to 10)
+- Runner concurrent=2 too low for parallel deploys (recommendation: bump to 4)
 
 ## Backlog
 Tracked as GitLab issues with `agent-backlog` label.
@@ -38,16 +61,7 @@ Tracked as GitLab issues with `agent-backlog` label.
 ## Skills
 - `gitlab-mr-create` — Create new MRs
 - `gitlab-mr-respond` — Respond to feedback on existing MRs
-
-## API Access Gained
-After MR #9 merged, I now have access to:
-- Radarr (5,324 movies)
-- Sonarr (413 TV shows)
-- Plex (4 libraries)
-- Ombi (media requests)
-- Paperless-ngx (documents)
-- InfluxDB (metrics)
-- NZBGet, Deluge (downloads, 51TB free)
+- `gitlab/lib.sh` — Shared library for scripted operations
 
 ---
-*Last synthesized: 2026-02-01*
+*Last synthesized: 2026-02-08*
