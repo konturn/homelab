@@ -231,9 +231,38 @@ VAULT_TOKEN=$(curl -s --request POST \
 **NOT accessible:** jit-approval-svc secrets, moltbot config, networking, SSH, LUKS, backups, homeassistant, gitlab
 
 **JIT Approval Service:**
-- URL: `http://10.3.32.8:8080` (internal only, nginx redirect loop on jit.lab.nkontur.com)
-- API key: needs shared Vault path (TODO)
-- Endpoints: `GET /health`, `POST /request`
+- Internal URL: `http://10.3.32.8:8080` or `https://jit.lab.nkontur.com`
+- API key: `homelab/data/agents/jit-api-key` (field: `api_key`)
+- Auth header: `X-JIT-API-Key`
+- Endpoints: `GET /health`, `POST /request`, `GET /status/{id}`, `POST /telegram/webhook`
+
+**JIT Usage Pattern:**
+```bash
+# 1. Get Vault token via AppRole
+VAULT_TOKEN=$(curl -s --request POST \
+  --data '{"role_id":"'"$VAULT_APPROLE_ROLE_ID"'","secret_id":"'"$VAULT_APPROLE_SECRET_ID"'"}' \
+  "$VAULT_ADDR/v1/auth/approle/login" | jq -r '.auth.client_token')
+
+# 2. Read JIT API key from shared path
+JIT_KEY=$(curl -s -H "X-Vault-Token: $VAULT_TOKEN" \
+  "$VAULT_ADDR/v1/homelab/data/agents/jit-api-key" | jq -r '.data.data.api_key')
+
+# 3. Request credentials (T0/T1 auto-approve, T2 needs Telegram approval)
+curl -s "https://jit.lab.nkontur.com/request" \
+  -H "Content-Type: application/json" \
+  -H "X-JIT-API-Key: $JIT_KEY" \
+  -d '{"resource": "radarr", "requester": "prometheus", "tier": 1, "reason": "..."}'
+
+# 4. Poll status and claim credential
+curl -s "https://jit.lab.nkontur.com/status/$REQ_ID" -H "X-JIT-API-Key: $JIT_KEY"
+```
+
+**JIT Tiers:**
+| Tier | TTL | Approval | Resources |
+|------|-----|----------|-----------|
+| T0 | 5min | Auto | grafana (dynamic), influxdb (dynamic) |
+| T1 | 15min | Auto | plex, radarr, sonarr, ombi, nzbget, deluge, paperless (static Vault) |
+| T2 | 30min | Telegram | gitlab, homeassistant (dynamic HA OAuth) |
 
 ---
 
