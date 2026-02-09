@@ -187,6 +187,7 @@ func TestHandleRequest_AutoApprove_WithStaticBackend(t *testing.T) {
 
 	// Verify credential can be claimed
 	statusReq := httptest.NewRequest(http.MethodGet, "/status/"+resp.RequestID, nil)
+	statusReq.Header.Set("X-JIT-API-Key", "test-api-key")
 	statusW := httptest.NewRecorder()
 	h.HandleStatus(statusW, statusReq)
 
@@ -275,10 +276,32 @@ func TestHandleRequest_MissingAPIKey(t *testing.T) {
 	}
 }
 
+func TestHandleStatus_MissingAPIKey(t *testing.T) {
+	h := mockHandler()
+
+	// No API key
+	req := httptest.NewRequest(http.MethodGet, "/status/req-test", nil)
+	w := httptest.NewRecorder()
+	h.HandleStatus(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 without API key, got %d", w.Code)
+	}
+
+	// Wrong API key
+	req2 := httptest.NewRequest(http.MethodGet, "/status/req-test", nil)
+	req2.Header.Set("X-JIT-API-Key", "wrong-key")
+	w2 := httptest.NewRecorder()
+	h.HandleStatus(w2, req2)
+	if w2.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 with wrong API key, got %d", w2.Code)
+	}
+}
+
 func TestHandleStatus_NotFound(t *testing.T) {
 	h := mockHandler()
 
 	req := httptest.NewRequest(http.MethodGet, "/status/req-nonexistent", nil)
+	req.Header.Set("X-JIT-API-Key", "test-api-key")
 	w := httptest.NewRecorder()
 
 	h.HandleStatus(w, req)
@@ -295,6 +318,7 @@ func TestHandleStatus_Pending(t *testing.T) {
 	storeReq := h.store.Create("prometheus", "gitlab", 2, "test")
 
 	req := httptest.NewRequest(http.MethodGet, "/status/"+storeReq.ID, nil)
+	req.Header.Set("X-JIT-API-Key", "test-api-key")
 	w := httptest.NewRecorder()
 
 	h.HandleStatus(w, req)
@@ -327,6 +351,7 @@ func TestHandleStatus_ApprovedClaims(t *testing.T) {
 
 	// First poll should claim the credential
 	req := httptest.NewRequest(http.MethodGet, "/status/"+storeReq.ID, nil)
+	req.Header.Set("X-JIT-API-Key", "test-api-key")
 	w := httptest.NewRecorder()
 
 	h.HandleStatus(w, req)
@@ -351,6 +376,7 @@ func TestHandleStatus_ApprovedClaims(t *testing.T) {
 
 	// Second poll should NOT return the credential again
 	req2 := httptest.NewRequest(http.MethodGet, "/status/"+storeReq.ID, nil)
+	req2.Header.Set("X-JIT-API-Key", "test-api-key")
 	w2 := httptest.NewRecorder()
 
 	h.HandleStatus(w2, req2)
@@ -382,6 +408,7 @@ func TestHandleStatus_CredentialMetadata(t *testing.T) {
 	}, 5*time.Minute)
 
 	req := httptest.NewRequest(http.MethodGet, "/status/"+storeReq.ID, nil)
+	req.Header.Set("X-JIT-API-Key", "test-api-key")
 	w := httptest.NewRecorder()
 
 	h.HandleStatus(w, req)

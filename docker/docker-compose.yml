@@ -667,6 +667,13 @@ services:
     image: gitlab-registry.lab.nkontur.com:443/root/homelab/jit-approval-svc:latest
     container_name: jit-approval-svc
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
     networks:
       internal:
         ipv4_address: {{ jit_approval_svc_ip }}
