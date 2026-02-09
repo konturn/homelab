@@ -236,33 +236,151 @@ VAULT_TOKEN=$(curl -s --request POST \
 - Auth header: `X-JIT-API-Key`
 - Endpoints: `GET /health`, `POST /request`, `GET /status/{id}`, `POST /telegram/webhook`
 
-**JIT Usage Pattern:**
+**JIT Helper — Reusable Pattern:**
 ```bash
-# 1. Get Vault token via AppRole
-VAULT_TOKEN=$(curl -s --request POST \
-  --data '{"role_id":"'"$VAULT_APPROLE_ROLE_ID"'","secret_id":"'"$VAULT_APPROLE_SECRET_ID"'"}' \
-  "$VAULT_ADDR/v1/auth/approle/login" | jq -r '.auth.client_token')
+# Get JIT credentials in one shot (reuse across all services)
+jit_request() {
+  local resource=$1 tier=$2 reason=$3
+  VAULT_TOKEN=$(curl -s --request POST \
+    --data '{"role_id":"'"$VAULT_APPROLE_ROLE_ID"'","secret_id":"'"$VAULT_APPROLE_SECRET_ID"'"}' \
+    "$VAULT_ADDR/v1/auth/approle/login" | jq -r '.auth.client_token')
+  JIT_KEY=$(curl -s -H "X-Vault-Token: $VAULT_TOKEN" \
+    "$VAULT_ADDR/v1/homelab/data/agents/jit-api-key" | jq -r '.data.data.api_key')
+  curl -s "https://jit.lab.nkontur.com/request" \
+    -H "Content-Type: application/json" \
+    -H "X-JIT-API-Key: $JIT_KEY" \
+    -d "{\"resource\": \"$resource\", \"requester\": \"prometheus\", \"tier\": $tier, \"reason\": \"$reason\"}"
+}
 
-# 2. Read JIT API key from shared path
-JIT_KEY=$(curl -s -H "X-Vault-Token: $VAULT_TOKEN" \
-  "$VAULT_ADDR/v1/homelab/data/agents/jit-api-key" | jq -r '.data.data.api_key')
-
-# 3. Request credentials (T0/T1 auto-approve, T2 needs Telegram approval)
-curl -s "https://jit.lab.nkontur.com/request" \
-  -H "Content-Type: application/json" \
-  -H "X-JIT-API-Key: $JIT_KEY" \
-  -d '{"resource": "radarr", "requester": "prometheus", "tier": 1, "reason": "..."}'
-
-# 4. Poll status and claim credential
-curl -s "https://jit.lab.nkontur.com/status/$REQ_ID" -H "X-JIT-API-Key: $JIT_KEY"
+jit_status() {
+  local req_id=$1
+  VAULT_TOKEN=$(curl -s --request POST \
+    --data '{"role_id":"'"$VAULT_APPROLE_ROLE_ID"'","secret_id":"'"$VAULT_APPROLE_SECRET_ID"'"}' \
+    "$VAULT_ADDR/v1/auth/approle/login" | jq -r '.auth.client_token')
+  JIT_KEY=$(curl -s -H "X-Vault-Token: $VAULT_TOKEN" \
+    "$VAULT_ADDR/v1/homelab/data/agents/jit-api-key" | jq -r '.data.data.api_key')
+  curl -s "https://jit.lab.nkontur.com/status/$req_id" -H "X-JIT-API-Key: $JIT_KEY"
+}
 ```
 
 **JIT Tiers:**
 | Tier | TTL | Approval | Resources |
 |------|-----|----------|-----------|
-| T0 | 5min | Auto | grafana (dynamic), influxdb (dynamic) |
-| T1 | 15min | Auto | plex, radarr, sonarr, ombi, nzbget, deluge, paperless (static Vault) |
-| T2 | 30min | Telegram | gitlab, homeassistant (dynamic HA OAuth) |
+| T0 | 5min | Auto | grafana (dynamic SA token), influxdb (dynamic auth token) |
+| T1 | 15min | Auto | plex, radarr, sonarr, ombi, nzbget, deluge, paperless (scoped Vault token) |
+| T2 | 30min | Telegram | gitlab (dynamic project access token), homeassistant (dynamic OAuth) |
+
+**Using JIT credentials per service:**
+
+T0 — Grafana (dynamic service account token, 5min):
+```bash
+RESP=$(jit_request grafana 0 "Query dashboards")
+TOKEN=$(echo $RESP | jq -r '.credential.token // empty')
+# If auto-approved, token is in response. Otherwise poll:
+# TOKEN=$(jit_status $REQ_ID | jq -r '.credential.token')
+curl -s "https://grafana.lab.nkontur.com/api/dashboards/home" -H "Authorization: Bearer $TOKEN"
+```
+
+T0 — InfluxDB (dynamic authorization token, 5min):
+```bash
+RESP=$(jit_request influxdb 0 "Query metrics")
+TOKEN=$(echo $RESP | jq -r '.credential.token // empty')
+curl -s "https://influxdb.lab.nkontur.com/api/v2/query?org=homelab" \
+  -H "Authorization: Token $TOKEN" \
+  -H "Content-Type: application/vnd.flux" \
+  -d 'from(bucket:"telegraf") |> range(start: -1h) |> limit(n:5)'
+```
+
+T1 — Radarr/Sonarr/etc (scoped Vault token → read API key, 15min):
+```bash
+RESP=$(jit_request radarr 1 "Check movie queue")
+VAULT_TOKEN=$(echo $RESP | jq -r '.credential.token')
+API_KEY=$(curl -s -H "X-Vault-Token: $VAULT_TOKEN" "$VAULT_ADDR/v1/homelab/data/docker/radarr" | jq -r '.data.data.api_key')
+curl -s "https://radarr.lab.nkontur.com/api/v3/movie" -H "X-Api-Key: $API_KEY"
+# Same pattern for: sonarr, ombi, nzbget, deluge, paperless, plex
+```
+
+T2 — HomeAssistant (dynamic OAuth token, 30min, needs Telegram approval):
+```bash
+RESP=$(jit_request homeassistant 2 "Control lights")
+REQ_ID=$(echo $RESP | jq -r '.request_id')
+# Wait for Noah to approve via Telegram, then:
+TOKEN=$(jit_status $REQ_ID | jq -r '.credential.token')
+curl -s "https://homeassistant.lab.nkontur.com/api/states" -H "Authorization: Bearer $TOKEN"
+```
+
+T2 — GitLab (dynamic project access token, 30min, needs Telegram approval):
+```bash
+RESP=$(jit_request gitlab 2 "Check pipeline status")
+REQ_ID=$(echo $RESP | jq -r '.request_id')
+# Wait for approval, then:
+TOKEN=$(jit_status $REQ_ID | jq -r '.credential.token')
+curl -s "https://gitlab.lab.nkontur.com/api/v4/projects/4/pipelines?per_page=5" -H "PRIVATE-TOKEN: $TOKEN"
+```
+
+**Note:** T0/T1 return credentials immediately in the `/request` response. T2 returns `status: pending` — poll `/status/{id}` after Noah approves.
+
+---
+
+## Loki (Log Querying via Grafana)
+
+**Access:** Via Grafana proxy (use Grafana token from Vault or JIT T0)
+**Datasource UID:** `P8E80F9AEF21F6940`
+
+**Query pattern:**
+```bash
+# Get a Grafana token
+VAULT_TOKEN=$(curl -s --request POST \
+  --data '{"role_id":"'"$VAULT_APPROLE_ROLE_ID"'","secret_id":"'"$VAULT_APPROLE_SECRET_ID"'"}' \
+  "$VAULT_ADDR/v1/auth/approle/login" | jq -r '.auth.client_token')
+GRAFANA_TOKEN=$(curl -s -H "X-Vault-Token: $VAULT_TOKEN" \
+  "$VAULT_ADDR/v1/homelab/data/docker/grafana" | jq -r '.data.data.token')
+
+# Query logs
+curl -s "https://grafana.lab.nkontur.com/api/ds/query" \
+  -H "Authorization: Bearer $GRAFANA_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "queries": [{
+      "refId": "A",
+      "datasource": {"uid": "P8E80F9AEF21F6940"},
+      "expr": "{container_name=\"CONTAINER\"} |~ \"PATTERN\"",
+      "queryType": "range",
+      "maxLines": 50
+    }],
+    "from": "now-1h",
+    "to": "now"
+  }'
+```
+
+**Parsing response:**
+```bash
+# Log lines are in: .results.A.frames[0].data.values[2][]  (array of JSON strings)
+# Timestamps in:    .results.A.frames[0].data.values[1][]  (epoch ms)
+| jq -r '.results.A.frames[0].data.values[2][]'
+```
+
+**Common queries:**
+```
+# JIT service logs
+{container_name="jit-approval-svc"} |~ "error|warn|approved|denied"
+
+# Nginx access logs for a domain
+{container_name="nginx"} |~ "jit-webhook.nkontur.com"
+
+# GitLab errors
+{container_name="gitlab"} |~ "error" | json | level="error"
+
+# Any container by name
+{container_name="plex"} |~ "pattern"
+
+# Filter by log level (JSON logs)
+{container_name="jit-approval-svc"} | json | level="error"
+```
+
+**Labels available:** `container_name`, `compose_service`, `compose_project`, `host`, `source` (stdout/stderr), `filename`
+
+**Time ranges:** `now-5m`, `now-1h`, `now-24h`, `now-7d`, or absolute `"2026-02-09T00:00:00Z"` to `"2026-02-09T23:59:59Z"`
 
 ---
 
