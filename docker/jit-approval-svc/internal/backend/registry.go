@@ -12,7 +12,7 @@ type Registry struct {
 
 // NewRegistry creates a backend registry with the static fallback.
 // Dynamic backends are added for resources where the service URL is configured.
-func NewRegistry(vaultMinter VaultTokenMinter, vaultReader VaultSecretReader, haURL, grafanaURL, influxdbURL string) *Registry {
+func NewRegistry(vaultMinter VaultTokenMinter, vaultReader VaultSecretReader, haURL, grafanaURL, influxdbURL, gitlabURL, gitlabAdminToken string) *Registry {
 	static := NewStaticBackend(vaultMinter)
 
 	r := &Registry{
@@ -45,6 +45,15 @@ func NewRegistry(vaultMinter VaultTokenMinter, vaultReader VaultSecretReader, ha
 		logger.Info("backend_registered", logger.Fields{
 			"resource": "influxdb",
 			"backend":  "dynamic/influxdb",
+		})
+	}
+
+	if gitlabURL != "" && gitlabAdminToken != "" {
+		b := NewGitLabBackend(gitlabURL, gitlabAdminToken)
+		r.backends["gitlab"] = b
+		logger.Info("backend_registered", logger.Fields{
+			"resource": "gitlab",
+			"backend":  "dynamic/gitlab",
 		})
 	}
 

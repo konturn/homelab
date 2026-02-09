@@ -39,6 +39,10 @@ type Config struct {
 	HAURL       string
 	GrafanaURL  string
 	InfluxDBURL string
+	GitLabURL   string
+
+	// GitLab admin token for creating project access tokens (Maintainer-level)
+	GitLabAdminToken string
 }
 
 // Load reads configuration from environment variables.
@@ -86,6 +90,9 @@ func Load() (*Config, error) {
 		HAURL:       getEnvOrEmpty("HA_URL", "https://homeassistant.lab.nkontur.com"),
 		GrafanaURL:  getEnvOrEmpty("GRAFANA_URL", "https://grafana.lab.nkontur.com"),
 		InfluxDBURL: getEnvOrEmpty("INFLUXDB_URL", "https://influxdb.lab.nkontur.com"),
+		GitLabURL:   getEnvOrEmpty("GITLAB_URL", "https://gitlab.lab.nkontur.com"),
+
+		GitLabAdminToken: os.Getenv("GITLAB_ADMIN_TOKEN"),
 	}
 
 	if err := cfg.Validate(); err != nil {
