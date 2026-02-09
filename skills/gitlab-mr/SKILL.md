@@ -100,21 +100,12 @@ Don't leave orphaned issues or untracked MRs.
 
 ## MR Tracking
 
-**File:** `/home/node/clawd/memory/open-mrs.json`
-
-Track open MRs for the comment-monitor cron:
-```json
-{
-  "64": {
-    "title": "feat: Add BRAVE_API_KEY",
-    "branch": "feat/brave-api-key",
-    "lastCommentId": 0,
-    "version": 1
-  }
-}
+Query GitLab API directly instead of maintaining local state:
+```bash
+# List open MRs
+curl -s "https://gitlab.lab.nkontur.com/api/v4/projects/4/merge_requests?state=opened" \
+  -H "PRIVATE-TOKEN: $GITLAB_TOKEN" | jq '.[] | {iid, title, source_branch, web_url}'
 ```
-
-**Locking:** If doing extended work on an MR, set `lockedBy` and `lockedAt` to prevent cron conflicts. Clear when done.
 
 ---
 
