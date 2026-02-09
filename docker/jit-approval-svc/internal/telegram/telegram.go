@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/nkontur/jit-approval-svc/internal/logger"
@@ -39,12 +40,17 @@ type InlineButton struct {
 
 // SendApprovalMessage sends an approval request to Noah with inline buttons.
 // Returns the message ID for later editing.
-func (c *Client) SendApprovalMessage(requestID, resource string, tier int, reason, requester string, ttlStr string) (int, error) {
+func (c *Client) SendApprovalMessage(requestID, resource string, tier int, reason, requester string, ttlStr string, scopes []string) (int, error) {
 	emoji := "🔐"
 	tierDesc := "Quick Approve"
 	if tier >= 3 {
 		emoji = "🔒"
 		tierDesc = "Elevated"
+	}
+
+	scopeStr := ""
+	if len(scopes) > 0 {
+		scopeStr = fmt.Sprintf("\n<b>Scopes:</b> %s", strings.Join(scopes, ", "))
 	}
 
 	text := fmt.Sprintf(
@@ -53,9 +59,9 @@ func (c *Client) SendApprovalMessage(requestID, resource string, tier int, reaso
 			"<b>Tier:</b> %d (%s)\n"+
 			"<b>TTL:</b> %s\n"+
 			"<b>Requester:</b> %s\n"+
-			"<b>Reason:</b> %s\n\n"+
+			"<b>Reason:</b> %s%s\n\n"+
 			"⏳ Awaiting approval...",
-		emoji, requestID, resource, tier, tierDesc, ttlStr, requester, reason,
+		emoji, requestID, resource, tier, tierDesc, ttlStr, requester, reason, scopeStr,
 	)
 
 	buttons := [][]InlineButton{

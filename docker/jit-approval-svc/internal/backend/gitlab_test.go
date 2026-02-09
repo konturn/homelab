@@ -52,7 +52,7 @@ func TestGitLabBackend_MintCredential(t *testing.T) {
 	defer server.Close()
 
 	b := NewGitLabBackend(server.URL, "gitlab-admin-token")
-	cred, err := b.MintCredential("gitlab", 2, 30*time.Minute)
+	cred, err := b.MintCredential("gitlab", 2, 30*time.Minute, MintOptions{})
 	if err != nil {
 		t.Fatalf("MintCredential failed: %v", err)
 	}
@@ -74,6 +74,36 @@ func TestGitLabBackend_MintCredential(t *testing.T) {
 	}
 }
 
+func TestGitLabBackend_MintCredential_CustomScopes(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body gitlabTokenRequest
+		json.NewDecoder(r.Body).Decode(&body)
+		if len(body.Scopes) != 2 || body.Scopes[0] != "read_api" || body.Scopes[1] != "read_repository" {
+			t.Errorf("expected scopes [read_api, read_repository], got %v", body.Scopes)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(gitlabTokenResponse{
+			ID:    100,
+			Token: "glpat-scoped-token",
+			Name:  body.Name,
+		})
+	}))
+	defer server.Close()
+
+	b := NewGitLabBackend(server.URL, "gitlab-admin-token")
+	cred, err := b.MintCredential("gitlab", 2, 30*time.Minute, MintOptions{
+		Scopes: []string{"read_api", "read_repository"},
+	})
+	if err != nil {
+		t.Fatalf("MintCredential failed: %v", err)
+	}
+	if cred.Token != "glpat-scoped-token" {
+		t.Errorf("expected token glpat-scoped-token, got %s", cred.Token)
+	}
+}
+
 func TestGitLabBackend_MintCredential_Error(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
@@ -82,7 +112,7 @@ func TestGitLabBackend_MintCredential_Error(t *testing.T) {
 	defer server.Close()
 
 	b := NewGitLabBackend(server.URL, "bad-token")
-	_, err := b.MintCredential("gitlab", 2, 30*time.Minute)
+	_, err := b.MintCredential("gitlab", 2, 30*time.Minute, MintOptions{})
 	if err == nil {
 		t.Fatal("expected error from bad gitlab response")
 	}

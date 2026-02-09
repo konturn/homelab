@@ -26,6 +26,7 @@ type Request struct {
 	Resource  string    `json:"resource"`
 	Tier      int       `json:"tier"`
 	Reason    string    `json:"reason"`
+	Scopes    []string  `json:"scopes,omitempty"`
 	Status    Status    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
 
@@ -73,13 +74,14 @@ func GenerateID() string {
 }
 
 // Create stores a new request and returns it.
-func (s *Store) Create(requester, resource string, tier int, reason string) *Request {
+func (s *Store) Create(requester, resource string, tier int, reason string, scopes []string) *Request {
 	req := &Request{
 		ID:        GenerateID(),
 		Requester: requester,
 		Resource:  resource,
 		Tier:      tier,
 		Reason:    reason,
+		Scopes:    scopes,
 		Status:    StatusPending,
 		CreatedAt: time.Now(),
 	}

@@ -25,7 +25,7 @@ func TestGenerateID(t *testing.T) {
 func TestCreateAndGet(t *testing.T) {
 	s := New()
 
-	req := s.Create("prometheus", "homeassistant", 1, "Check sensors")
+	req := s.Create("prometheus", "homeassistant", 1, "Check sensors", nil)
 	if req.ID == "" {
 		t.Fatal("expected non-empty ID")
 	}
@@ -52,7 +52,7 @@ func TestCreateAndGet(t *testing.T) {
 
 func TestApproveAndClaim(t *testing.T) {
 	s := New()
-	req := s.Create("prometheus", "gitlab", 2, "MR review")
+	req := s.Create("prometheus", "gitlab", 2, "MR review", nil)
 
 	cred := &Credential{
 		Token:    "hvs.test-token",
@@ -101,7 +101,7 @@ func TestApproveAndClaim(t *testing.T) {
 
 func TestDeny(t *testing.T) {
 	s := New()
-	req := s.Create("prometheus", "ssh", 3, "Router access")
+	req := s.Create("prometheus", "ssh", 3, "Router access", nil)
 
 	err := s.Deny(req.ID)
 	if err != nil {
@@ -122,7 +122,7 @@ func TestDeny(t *testing.T) {
 
 func TestTimeout(t *testing.T) {
 	s := New()
-	req := s.Create("prometheus", "docker", 2, "Check containers")
+	req := s.Create("prometheus", "docker", 2, "Check containers", nil)
 
 	err := s.Timeout(req.ID)
 	if err != nil {
@@ -143,7 +143,7 @@ func TestTimeout(t *testing.T) {
 
 func TestApproveNonPending(t *testing.T) {
 	s := New()
-	req := s.Create("prometheus", "gitlab", 2, "test")
+	req := s.Create("prometheus", "gitlab", 2, "test", nil)
 	_ = s.Deny(req.ID)
 
 	err := s.Approve(req.ID, &Credential{Token: "x"}, time.Minute)
@@ -154,9 +154,9 @@ func TestApproveNonPending(t *testing.T) {
 
 func TestPendingRequests(t *testing.T) {
 	s := New()
-	s.Create("prometheus", "res1", 1, "test1")
-	req2 := s.Create("prometheus", "res2", 2, "test2")
-	s.Create("prometheus", "res3", 1, "test3")
+	s.Create("prometheus", "res1", 1, "test1", nil)
+	req2 := s.Create("prometheus", "res2", 2, "test2", nil)
+	s.Create("prometheus", "res3", 1, "test3", nil)
 
 	_ = s.Deny(req2.ID)
 
@@ -170,7 +170,7 @@ func TestCleanup(t *testing.T) {
 	s := New()
 
 	// Create and resolve a request, backdate it
-	req := s.Create("prometheus", "test", 1, "test")
+	req := s.Create("prometheus", "test", 1, "test", nil)
 	_ = s.Deny(req.ID)
 
 	s.mu.Lock()
@@ -189,7 +189,7 @@ func TestCleanup(t *testing.T) {
 func TestCleanupPreservesPending(t *testing.T) {
 	s := New()
 
-	req := s.Create("prometheus", "test", 1, "test")
+	req := s.Create("prometheus", "test", 1, "test", nil)
 	s.mu.Lock()
 	s.requests[req.ID].CreatedAt = time.Now().Add(-2 * time.Hour)
 	s.mu.Unlock()
@@ -206,8 +206,8 @@ func TestCount(t *testing.T) {
 		t.Errorf("expected 0, got %d", s.Count())
 	}
 
-	s.Create("prometheus", "a", 1, "a")
-	s.Create("prometheus", "b", 1, "b")
+	s.Create("prometheus", "a", 1, "a", nil)
+	s.Create("prometheus", "b", 1, "b", nil)
 
 	if s.Count() != 2 {
 		t.Errorf("expected 2, got %d", s.Count())

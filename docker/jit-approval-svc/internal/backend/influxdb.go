@@ -34,7 +34,7 @@ func NewInfluxDBBackend(baseURL string, vaultReader VaultSecretReader) *InfluxDB
 
 // MintCredential creates a read-only InfluxDB authorization token scoped to the org.
 // It also schedules a goroutine to delete the token after TTL expiry.
-func (b *InfluxDBBackend) MintCredential(resource string, tier int, ttl time.Duration) (*Credential, error) {
+func (b *InfluxDBBackend) MintCredential(resource string, tier int, ttl time.Duration, opts MintOptions) (*Credential, error) {
 	secrets, err := b.vaultReader.ReadSecret(b.vaultPath)
 	if err != nil {
 		return nil, fmt.Errorf("read vault secret: %w", err)

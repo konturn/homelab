@@ -33,7 +33,7 @@ func NewHomeAssistantBackend(baseURL string, vaultReader VaultSecretReader) *Hom
 }
 
 // MintCredential obtains a short-lived HA access token using the refresh token stored in Vault.
-func (b *HomeAssistantBackend) MintCredential(resource string, tier int, ttl time.Duration) (*Credential, error) {
+func (b *HomeAssistantBackend) MintCredential(resource string, tier int, ttl time.Duration, opts MintOptions) (*Credential, error) {
 	// Read refresh_token and client_id from Vault
 	secrets, err := b.vaultReader.ReadSecret(b.vaultPath)
 	if err != nil {

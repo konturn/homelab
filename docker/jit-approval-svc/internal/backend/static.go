@@ -24,7 +24,7 @@ func NewStaticBackend(vault VaultTokenMinter) *StaticBackend {
 }
 
 // MintCredential mints a standard scoped Vault token.
-func (b *StaticBackend) MintCredential(resource string, tier int, ttl time.Duration) (*Credential, error) {
+func (b *StaticBackend) MintCredential(resource string, tier int, ttl time.Duration, opts MintOptions) (*Credential, error) {
 	token, leaseID, err := b.vault.MintToken(resource, tier, ttl)
 	if err != nil {
 		return nil, fmt.Errorf("vault mint token: %w", err)

@@ -80,7 +80,7 @@ func TestHomeAssistantBackend_MintCredential(t *testing.T) {
 	}
 
 	b := NewHomeAssistantBackend(server.URL, reader)
-	cred, err := b.MintCredential("homeassistant", 2, 30*time.Minute)
+	cred, err := b.MintCredential("homeassistant", 2, 30*time.Minute, MintOptions{})
 	if err != nil {
 		t.Fatalf("MintCredential failed: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestHomeAssistantBackend_MintCredential_Error(t *testing.T) {
 	}
 
 	b := NewHomeAssistantBackend(server.URL, reader)
-	_, err := b.MintCredential("homeassistant", 2, 30*time.Minute)
+	_, err := b.MintCredential("homeassistant", 2, 30*time.Minute, MintOptions{})
 	if err == nil {
 		t.Fatal("expected error from bad HA response")
 	}
@@ -184,7 +184,7 @@ func TestGrafanaBackend_MintCredential(t *testing.T) {
 	}
 
 	b := NewGrafanaBackend(server.URL, reader)
-	cred, err := b.MintCredential("grafana", 0, 5*time.Minute)
+	cred, err := b.MintCredential("grafana", 0, 5*time.Minute, MintOptions{})
 	if err != nil {
 		t.Fatalf("MintCredential failed: %v", err)
 	}
@@ -217,7 +217,7 @@ func TestGrafanaBackend_MintCredential_Error(t *testing.T) {
 	}
 
 	b := NewGrafanaBackend(server.URL, reader)
-	_, err := b.MintCredential("grafana", 0, 5*time.Minute)
+	_, err := b.MintCredential("grafana", 0, 5*time.Minute, MintOptions{})
 	if err == nil {
 		t.Fatal("expected error from bad grafana response")
 	}
@@ -285,7 +285,7 @@ func TestInfluxDBBackend_MintCredential(t *testing.T) {
 	}
 
 	b := NewInfluxDBBackend(server.URL, reader)
-	cred, err := b.MintCredential("influxdb", 0, 5*time.Minute)
+	cred, err := b.MintCredential("influxdb", 0, 5*time.Minute, MintOptions{})
 	if err != nil {
 		t.Fatalf("MintCredential failed: %v", err)
 	}
@@ -318,7 +318,7 @@ func TestInfluxDBBackend_MintCredential_Error(t *testing.T) {
 	}
 
 	b := NewInfluxDBBackend(server.URL, reader)
-	_, err := b.MintCredential("influxdb", 0, 5*time.Minute)
+	_, err := b.MintCredential("influxdb", 0, 5*time.Minute, MintOptions{})
 	if err == nil {
 		t.Fatal("expected error from bad influxdb response")
 	}
@@ -352,7 +352,7 @@ func TestStaticBackend_MintCredential(t *testing.T) {
 	}
 
 	b := NewStaticBackend(minter)
-	cred, err := b.MintCredential("radarr", 1, 15*time.Minute)
+	cred, err := b.MintCredential("radarr", 1, 15*time.Minute, MintOptions{})
 	if err != nil {
 		t.Fatalf("MintCredential failed: %v", err)
 	}
@@ -374,7 +374,7 @@ func TestStaticBackend_MintCredential_Error(t *testing.T) {
 	}
 
 	b := NewStaticBackend(minter)
-	_, err := b.MintCredential("radarr", 1, 15*time.Minute)
+	_, err := b.MintCredential("radarr", 1, 15*time.Minute, MintOptions{})
 	if err == nil {
 		t.Fatal("expected error from vault")
 	}
@@ -415,7 +415,7 @@ func TestRegistry_FallbackToStatic(t *testing.T) {
 
 	// All should be static (no dynamic URLs configured)
 	b := r.For("radarr")
-	cred, err := b.MintCredential("radarr", 1, 15*time.Minute)
+	cred, err := b.MintCredential("radarr", 1, 15*time.Minute, MintOptions{})
 	if err != nil {
 		t.Fatalf("MintCredential failed: %v", err)
 	}
@@ -437,7 +437,7 @@ func TestHomeAssistantBackend_MissingVaultField(t *testing.T) {
 	}
 
 	b := NewHomeAssistantBackend("http://localhost", reader)
-	_, err := b.MintCredential("homeassistant", 2, 30*time.Minute)
+	_, err := b.MintCredential("homeassistant", 2, 30*time.Minute, MintOptions{})
 	if err == nil {
 		t.Fatal("expected error for missing client_id")
 	}
@@ -454,7 +454,7 @@ func TestGrafanaBackend_MissingVaultField(t *testing.T) {
 	}
 
 	b := NewGrafanaBackend("http://localhost", reader)
-	_, err := b.MintCredential("grafana", 0, 5*time.Minute)
+	_, err := b.MintCredential("grafana", 0, 5*time.Minute, MintOptions{})
 	if err == nil {
 		t.Fatal("expected error for missing service_account_id")
 	}
@@ -471,7 +471,7 @@ func TestInfluxDBBackend_MissingVaultField(t *testing.T) {
 	}
 
 	b := NewInfluxDBBackend("http://localhost", reader)
-	_, err := b.MintCredential("influxdb", 0, 5*time.Minute)
+	_, err := b.MintCredential("influxdb", 0, 5*time.Minute, MintOptions{})
 	if err == nil {
 		t.Fatal("expected error for missing org_id")
 	}
