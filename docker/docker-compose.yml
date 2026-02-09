@@ -450,6 +450,10 @@ services:
       start_period: 30s
   influxdb:
     container_name: influxdb
+    labels:
+      # Exclude from automated image updates — InfluxDB major version changes
+      # can break query compatibility and require manual migration. Update manually.
+      - com.centurylinklabs.watchtower.enable=false
     security_opt:
       - no-new-privileges:true
     ports:
@@ -588,6 +592,10 @@ services:
       start_period: 10s
   gitlab:
     container_name: gitlab
+    labels:
+      # Exclude from automated image updates — GitLab major upgrades require
+      # planned database migrations and can take 30+ minutes. Update manually.
+      - com.centurylinklabs.watchtower.enable=false
     ports:
       - "22/tcp"
       - "443:80"
