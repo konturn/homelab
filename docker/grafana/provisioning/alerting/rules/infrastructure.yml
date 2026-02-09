@@ -464,3 +464,109 @@ groups:
           severity: warning
           team: infrastructure
           alertname: LogErrorRate
+
+      - uid: restic-backup-failure
+        title: Restic Backup Failed (Error in Logs)
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            model:
+              datasource:
+                type: loki
+                uid: loki
+              expr: 'count_over_time({job="systemd-journal", unit="restic-backup.service"} |~ "(?i)(fatal|error|failed)" [1h])'
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 0
+              to: 0
+            model:
+              conditions:
+                - evaluator:
+                    params: [0]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: B
+              type: reduce
+        noDataState: NoData
+        execErrState: Alerting
+        for: 0s
+        annotations:
+          summary: "Restic backup failed with errors"
+          description: "The restic-backup.service logged error/fatal messages in the last hour, indicating a backup run failed. Check with: journalctl -u restic-backup.service --since '1 hour ago'"
+        labels:
+          severity: critical
+          team: infrastructure
+          alertname: ResticBackupFailure
+
+      - uid: restic-backup-no-recent-success
+        title: Restic No Successful Snapshot (24h)
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            model:
+              datasource:
+                type: loki
+                uid: loki
+              expr: 'count_over_time({job="systemd-journal", unit="restic-backup.service"} |= "snapshot" |= "saved" [24h])'
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 0
+              to: 0
+            model:
+              conditions:
+                - evaluator:
+                    params: [1]
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: B
+              type: reduce
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          summary: "No successful restic snapshot in 24 hours"
+          description: "No 'snapshot saved' message found in restic-backup.service logs in the last 24 hours. The 36h stale alert is a safety net — this earlier warning gives time to investigate before data loss risk increases."
+        labels:
+          severity: warning
+          team: infrastructure
+          alertname: ResticNoRecentSuccess
