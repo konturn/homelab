@@ -10,6 +10,7 @@ import (
 // VaultTokenMinter is the interface for minting Vault tokens (implemented by vault.Client).
 type VaultTokenMinter interface {
 	MintToken(resource string, tier int, ttl time.Duration) (token string, leaseID string, err error)
+	MintDynamicToken(policyName string, ttl time.Duration, requestID string) (token string, accessor string, err error)
 }
 
 // StaticBackend falls back to minting a standard Vault token.

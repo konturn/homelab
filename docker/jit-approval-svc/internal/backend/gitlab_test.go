@@ -176,7 +176,7 @@ func TestRegistry_GitLabDynamicBackend(t *testing.T) {
 	minter := &mockVaultMinter{token: "vault-token", leaseID: "acc-1"}
 	reader := &mockVaultReader{secrets: map[string]map[string]string{}}
 
-	r := NewRegistry(minter, reader, "", "", "", "https://gitlab.example.com", "admin-token")
+	r := NewRegistry(minter, reader, "", "", "", "https://gitlab.example.com", "admin-token", nil)
 
 	if !r.IsDynamic("gitlab") {
 		t.Error("expected gitlab to be dynamic")
@@ -188,7 +188,7 @@ func TestRegistry_GitLabFallbackWhenNoToken(t *testing.T) {
 	reader := &mockVaultReader{secrets: map[string]map[string]string{}}
 
 	// URL set but no token — should NOT register dynamic backend
-	r := NewRegistry(minter, reader, "", "", "", "https://gitlab.example.com", "")
+	r := NewRegistry(minter, reader, "", "", "", "https://gitlab.example.com", "", nil)
 
 	if r.IsDynamic("gitlab") {
 		t.Error("expected gitlab to NOT be dynamic when admin token is empty")
