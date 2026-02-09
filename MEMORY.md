@@ -312,3 +312,17 @@ This is the primary project. In 6 days: 186 commits (22.3% of total repo, 68.1% 
 ---
 
 *Last reviewed: 2026-02-06*
+
+## JIT Service Architecture (as of Feb 9)
+
+**Tiers:** T1 (auto-approve, 15min) | T2 (Telegram approval, 30min)
+
+**Resources:**
+- T1: grafana (dynamic), influxdb (dynamic), plex, radarr, sonarr, ombi, nzbget, deluge, paperless, prowlarr, mqtt (all static)
+- T2: gitlab (dynamic project tokens), homeassistant (dynamic OAuth), tailscale (dynamic OAuth), pihole (static), vault (dynamic inline policies)
+
+**Dynamic backends:** Create ephemeral credentials via service APIs. Static backends return scoped Vault tokens to read existing secrets.
+
+**Vault dynamic backend:** Requesters specify exact paths + capabilities. Service creates temporary policy `jit-vault-<req_id>`, mints orphan token, auto-cleans up after TTL. Paths must start with `homelab/data/`, only read/list/create/update caps, max 10 paths.
+
+**Key lesson:** Project bot users (from GitLab project access tokens) can't create other tokens. Need a real user's PAT for the admin token.
