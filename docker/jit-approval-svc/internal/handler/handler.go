@@ -155,6 +155,13 @@ func (h *Handler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate API key
+	apiKey := r.Header.Get("X-JIT-API-Key")
+	if apiKey == "" || apiKey != h.cfg.JITAPIKey {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
 	// Extract request ID from path: /status/{id}
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/status/"), "/")
 	if len(parts) == 0 || parts[0] == "" {

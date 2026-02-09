@@ -65,8 +65,11 @@ Response:
 
 Poll for approval status. Credential is returned exactly once (claimed on first poll after approval).
 
+Requires `X-JIT-API-Key` header (same as `/request`). Returns 401 if missing or invalid.
+
 ```bash
-curl http://jit-approval-svc:8080/status/req-a1b2c3d4e5f6
+curl http://jit-approval-svc:8080/status/req-a1b2c3d4e5f6 \
+  -H "X-JIT-API-Key: $JIT_API_KEY"
 ```
 
 Response (pending):
@@ -211,7 +214,7 @@ Events logged: `request_received`, `approval_sent`, `approved`, `denied`, `timeo
 ## Security
 
 - Webhook endpoint validates Telegram secret token (required)
-- `/request` endpoint requires `X-JIT-API-Key` header authentication
+- `/request` and `/status/:id` endpoints require `X-JIT-API-Key` header authentication
 - Only configured requesters can submit requests
 - Only callbacks from configured Telegram chat ID are processed
 - Credentials returned exactly once (claim-on-first-poll)
