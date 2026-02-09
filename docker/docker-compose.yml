@@ -574,6 +574,7 @@ services:
       - /etc/machine-id:/etc/machine-id:ro
       - {{ docker_persistent_data_path }}/promtail:/tmp/positions
       - {{ docker_persistent_data_path }}/promtail/config.yml:/etc/promtail/config.yml:ro
+      - {{ docker_persistent_data_path }}/vault/logs:/vault/logs:ro
     command: -config.file=/etc/promtail/config.yml
     networks:
       internal:
@@ -651,6 +652,7 @@ services:
       - '{{ docker_persistent_data_path }}/certs:/vault/certs:ro'
       - '{{ docker_persistent_data_path }}/vault/scripts/auto-unseal.sh:/vault/scripts/auto-unseal.sh:ro'
       - '{{ docker_persistent_data_path }}/vault/unseal:/vault/unseal:ro'
+      - '{{ docker_persistent_data_path }}/vault/logs:/vault/logs'
     environment:
       - VAULT_ADDR=https://127.0.0.1:8200
       - VAULT_API_ADDR=https://{{ vault_ip }}:8200

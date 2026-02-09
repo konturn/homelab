@@ -72,3 +72,22 @@ scrape_configs:
           stages:
             - labels:
                 unit:
+
+  # Vault audit logs (JSON format)
+  - job_name: vault-audit
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: vault-audit
+          host: router
+          __path__: /vault/logs/audit.log
+    pipeline_stages:
+      - json:
+          expressions:
+            type: type
+            auth_accessor: auth.accessor
+            operation: request.operation
+            path: request.path
+      - labels:
+          type:
+          operation:
