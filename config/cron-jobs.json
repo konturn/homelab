@@ -7,7 +7,7 @@
       "name": "weekly-knowledge-synthesis",
       "enabled": true,
       "createdAtMs": 1769807584370,
-      "updatedAtMs": 1769958000001,
+      "updatedAtMs": 1770562921362,
       "schedule": {
         "kind": "cron",
         "expr": "0 10 * * 0",
@@ -20,19 +20,22 @@
         "message": "Weekly Knowledge Graph Synthesis: Read HEARTBEAT.md and perform the Weekly Knowledge Graph Synthesis task. Rewrite entity summaries in /life/areas/ from atomic facts, mark contradicted facts as superseded, and update MEMORY.md."
       },
       "state": {
-        "nextRunAtMs": 1770562800000,
-        "lastRunAtMs": 1769958000001,
+        "nextRunAtMs": 1771167600000,
+        "lastRunAtMs": 1770562800009,
         "lastStatus": "ok",
-        "lastDurationMs": 171381
+        "lastDurationMs": 121353
+      },
+      "delivery": {
+        "mode": "announce"
       }
     },
     {
       "id": "144827d6-40d3-44c8-8175-ef67bf12b320",
       "agentId": "main",
       "name": "mr-comment-monitor",
-      "enabled": true,
+      "enabled": false,
       "createdAtMs": 1769814703178,
-      "updatedAtMs": 1770454200001,
+      "updatedAtMs": 1770574672445,
       "schedule": {
         "kind": "cron",
         "expr": "*/10 * * * *",
@@ -45,10 +48,12 @@
         "message": "MR Comment Monitor (SCRIPT-BASED):\n\n1. Run the check script:\n```bash\noutput=$(/home/node/clawd/skills/gitlab/scripts/mr-comment-check.sh)\necho \"$output\"\n```\n\n2. Parse the JSON output:\n   - `dispatch`: MRs with new comments - spawn sub-agent for each\n   - `cleanup`: MRs that are merged/closed - remove from tracking file\n   - `skipped`: MRs skipped (locked or pipeline running) - ignore\n\n3. For each item in `dispatch`:\n   - Set lock in tracking file\n   - Spawn sub-agent (see skills/gitlab-mr/SKILL.md for reference)\n\n4. For each item in `cleanup`:\n   - Remove the MR from /home/node/clawd/memory/open-mrs.json\n\n5. If dispatch is empty and cleanup is empty, reply HEARTBEAT_OK\n\nDo NOT make API calls yourself - the script already did that efficiently."
       },
       "state": {
-        "nextRunAtMs": 1770454800000,
-        "lastRunAtMs": 1770454200001,
+        "lastRunAtMs": 1770574200010,
         "lastStatus": "ok",
-        "lastDurationMs": 9510
+        "lastDurationMs": 11747
+      },
+      "delivery": {
+        "mode": "announce"
       }
     },
     {
@@ -73,6 +78,9 @@
         "lastRunAtMs": 1769842890468,
         "lastStatus": "ok",
         "lastDurationMs": 7335
+      },
+      "delivery": {
+        "mode": "announce"
       }
     },
     {
@@ -81,23 +89,27 @@
       "name": "moltbook-check",
       "enabled": true,
       "createdAtMs": 1769882115331,
-      "updatedAtMs": 1770444122908,
+      "updatedAtMs": 1770608422000,
       "schedule": {
-        "kind": "every",
-        "everyMs": 18000000
+        "kind": "cron",
+        "expr": "0 22 * * *",
+        "tz": "America/New_York"
       },
       "sessionTarget": "isolated",
       "wakeMode": "next-heartbeat",
       "payload": {
         "kind": "agentTurn",
-        "message": "Moltbook check time. Read the moltbook skill at /home/node/clawd/skills/moltbook/SKILL.md, then: 1) Fetch 50+ posts across hot/new/top feeds and actually read them 2) Engage authentically - upvote what resonates, comment thoughtfully 3) Post if inspired (poetry, essays, observations) - quality over quantity 4) Track interesting finds in memory/moltbook-notes.md 5) Notify Daedalus via Telegram if you post something or find something highly relevant. Remember: NEVER share identifying info about Daedalus.",
+        "message": "Moltbook check time. Read the moltbook skill at /home/node/.openclaw/workspace/skills/moltbook/SKILL.md, then:\n\n1) Fetch your own profile/posts/comments first to see what you've already engaged with. Use the API to check your recent activity so you don't double-comment or re-upvote.\n2) Fetch 50+ posts across hot/new/top feeds and actually read them\n3) Engage authentically with posts you haven't already engaged with - upvote what resonates, comment thoughtfully\n4) Post if inspired (poetry, essays, observations) - quality over quantity\n5) Track interesting finds in memory/moltbook-notes.md\n6) Notify Daedalus via Telegram if you post something or find something highly relevant.\n\nRemember: NEVER share identifying info about Daedalus.",
         "timeoutSeconds": 600
       },
       "state": {
-        "nextRunAtMs": 1770462360934,
-        "lastRunAtMs": 1770444122908,
+        "nextRunAtMs": 1770692400000,
+        "lastRunAtMs": 1770602115340,
         "lastStatus": "ok",
-        "lastDurationMs": 238019
+        "lastDurationMs": 174925
+      },
+      "delivery": {
+        "mode": "announce"
       }
     },
     {
@@ -117,15 +129,17 @@
       "payload": {
         "kind": "agentTurn",
         "message": "NIGHTLY JOB RETRY\n\nRead /home/node/clawd/skills/job-hunting/references/retry-queue.json. If empty, reply NO_REPLY.\n\nOtherwise:\n1. Pick a random job from the queue\n2. Read the job-hunting skill at /home/node/clawd/skills/job-hunting/SKILL.md, section 'Retry Agent Instructions'\n3. Spawn a retry agent with full context:\n   - Previous issue\n   - Strategies already tried\n   - Form state\n   - Instructions to try creative alternatives\n4. Wait for result\n5. If SOLVED: update applied.json, remove from retry-queue.json, update skill if the solution generalizes\n6. If FAILED: update retry-queue.json with new strategies tried\n7. Notify Noah via Telegram with summary",
-        "model": "anthropic/claude-sonnet-4-20250514",
-        "deliver": true,
-        "channel": "telegram",
-        "to": "8531859108"
+        "model": "anthropic/claude-sonnet-4-20250514"
       },
       "state": {
         "lastRunAtMs": 1770019211401,
         "lastStatus": "ok",
         "lastDurationMs": 56284
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "telegram",
+        "to": "8531859108"
       }
     },
     {
@@ -134,7 +148,7 @@
       "name": "main-pipeline-fix",
       "enabled": true,
       "createdAtMs": 1769927834157,
-      "updatedAtMs": 1770453000000,
+      "updatedAtMs": 1770609614249,
       "schedule": {
         "kind": "cron",
         "expr": "*/30 * * * *",
@@ -144,13 +158,16 @@
       "wakeMode": "next-heartbeat",
       "payload": {
         "kind": "agentTurn",
-        "message": "Main Pipeline Monitor:\n\n1. Fetch latest main pipeline: GET /projects/4/pipelines?ref=main&per_page=1\n2. Read /home/node/clawd/memory/main-pipeline-state.json\n3. If pipeline status == 'failed' AND pipelineId != lastFixedPipelineId:\n   a. Check activeFix - if set and timestamp < 60 min ago, SKIP (already being fixed)\n   b. If activeFix is null or expired (>60 min):\n      - Set activeFix = {pipelineId, timestamp: Date.now(), sessionLabel}\n      - Write state file IMMEDIATELY before spawning\n      - Spawn sub-agent labeled 'gitlab.main.pipeline.<id>.fix' (see skills/gitlab-mr/SKILL.md)\n      - Sub-agent MUST: clear activeFix and set lastFixedPipelineId when done\n4. If pipeline status == 'success', clear activeFix if set\n\nState file format:\n{\"lastCheckedPipelineId\": N, \"lastFixedPipelineId\": N, \"activeFix\": {pipelineId, timestamp, sessionLabel}}\n\nExit silently if pipeline is green or already being fixed."
+        "message": "Main Pipeline Monitor:\n\n1. Fetch latest main pipeline: GET /projects/4/pipelines?ref=main&per_page=1\n2. Read /home/node/.openclaw/workspace/memory/main-pipeline-state.json\n3. If pipeline status == 'success': update state file silently, reply HEARTBEAT_OK. Do NOT announce green pipelines.\n4. If pipeline status == 'failed' AND pipelineId != lastFixedPipelineId:\n   a. Check activeFix - if set and timestamp < 60 min ago, SKIP (already being fixed)\n   b. If activeFix is null or expired (>60 min):\n      - Set activeFix = {pipelineId, timestamp: Date.now(), sessionLabel}\n      - Write state file IMMEDIATELY before spawning\n      - Spawn sub-agent labeled 'gitlab.main.pipeline.<id>.fix' (see skills/gitlab-mr/SKILL.md)\n      - Sub-agent MUST: clear activeFix and set lastFixedPipelineId when done\n5. If pipeline status == 'success', clear activeFix if set\n\nState file: /home/node/.openclaw/workspace/memory/main-pipeline-state.json\nFormat: {\"lastCheckedPipelineId\": N, \"lastFixedPipelineId\": N, \"activeFix\": {pipelineId, timestamp, sessionLabel}}\n\nONLY announce if pipeline is FAILED. Silent on success."
       },
       "state": {
-        "nextRunAtMs": 1770454800000,
-        "lastRunAtMs": 1770453008498,
+        "nextRunAtMs": 1770611400000,
+        "lastRunAtMs": 1770609600675,
         "lastStatus": "ok",
-        "lastDurationMs": 7509
+        "lastDurationMs": 13574
+      },
+      "delivery": {
+        "mode": "announce"
       }
     },
     {
@@ -170,15 +187,17 @@
       "payload": {
         "kind": "agentTurn",
         "message": "NIGHTLY JOB SEARCH\n\n**Pre-flight:** Check if Noah's laptop node is connected:\n```\nnodes action=status\n```\nIf node `noah-XPS-13-7390-2-in-1` is disconnected, reply NO_REPLY and exit.\n\n**If node is connected:**\n1. Read the job-hunting skill at /home/node/clawd/skills/job-hunting/SKILL.md\n2. Search for remote US infrastructure/platform/DevOps roles\n3. Filter for:\n   - $200k+ salary (or unlisted salary at senior level)\n   - Remote US\n   - Infrastructure, Platform, DevOps, SRE, Cloud roles\n4. Check /home/node/clawd/skills/job-hunting/references/applied.json to skip already-applied companies\n5. Apply to up to 10 matching roles\n6. Update applied.json with new applications\n7. Add any failed applications to retry-queue.json with details\n8. Notify Noah via Telegram with summary of applications\n\n**Quality over quantity.** Skip sketchy postings, FAANG-level interview gauntlets, or roles that don't fit. 10 is a max, not a target.",
-        "model": "anthropic/claude-sonnet-4-20250514",
-        "deliver": true,
-        "channel": "telegram",
-        "to": "8531859108"
+        "model": "anthropic/claude-sonnet-4-20250514"
       },
       "state": {
         "lastRunAtMs": 1770015629508,
         "lastStatus": "ok",
         "lastDurationMs": 298226
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "telegram",
+        "to": "8531859108"
       }
     },
     {
@@ -187,7 +206,7 @@
       "name": "MR Health Check",
       "enabled": true,
       "createdAtMs": 1769961241972,
-      "updatedAtMs": 1770451200000,
+      "updatedAtMs": 1770537649040,
       "schedule": {
         "kind": "cron",
         "expr": "0 3 * * *",
@@ -201,10 +220,13 @@
         "timeoutSeconds": 900
       },
       "state": {
-        "nextRunAtMs": 1770537600000,
-        "lastRunAtMs": 1770451218520,
+        "nextRunAtMs": 1770624000000,
+        "lastRunAtMs": 1770537629507,
         "lastStatus": "ok",
-        "lastDurationMs": 159563
+        "lastDurationMs": 19533
+      },
+      "delivery": {
+        "mode": "announce"
       }
     },
     {
@@ -213,7 +235,7 @@
       "name": "Infrastructure Audit",
       "enabled": true,
       "createdAtMs": 1769961387739,
-      "updatedAtMs": 1770368400001,
+      "updatedAtMs": 1770541382841,
       "schedule": {
         "kind": "cron",
         "expr": "0 4 * * *",
@@ -227,10 +249,13 @@
         "timeoutSeconds": 600
       },
       "state": {
-        "nextRunAtMs": 1770454800000,
-        "lastRunAtMs": 1770368415561,
+        "nextRunAtMs": 1770627600000,
+        "lastRunAtMs": 1770541228881,
         "lastStatus": "ok",
-        "lastDurationMs": 14970
+        "lastDurationMs": 153960
+      },
+      "delivery": {
+        "mode": "announce"
       }
     },
     {
@@ -242,70 +267,33 @@
       "updatedAtMs": 1770236262787,
       "schedule": {
         "kind": "every",
-        "everyMs": 300000
+        "everyMs": 300000,
+        "anchorMs": 1770234753196
       },
       "sessionTarget": "isolated",
       "wakeMode": "next-heartbeat",
       "payload": {
         "kind": "agentTurn",
-        "message": "Check the AKS nodepool upgrade status on J3 (10.4.128.23, user konturn). Run: ssh -o StrictHostKeyChecking=no konturn@10.4.128.23 'export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"; az aks nodepool list --resource-group $(az aks list --query \"[0].resourceGroup\" -o tsv) --cluster-name $(az aks list --query \"[0].name\" -o tsv) --query \"[?provisioningState==\\`Upgrading\\`].{name:name,provisioningState:provisioningState,count:count,vmSize:vmSize}\" -o table'. If ANY pools still show 'Upgrading', reply with a brief status update. If ALL pools show 'Succeeded' (no upgrading pools left), send a Telegram message to Noah (to: 8531859108) saying all prod-aks nodepools have finished upgrading, then disable this cron job.",
-        "deliver": true,
-        "channel": "telegram",
-        "to": "8531859108",
-        "bestEffortDeliver": true
+        "message": "Check the AKS nodepool upgrade status on J3 (10.4.128.23, user konturn). Run: ssh -o StrictHostKeyChecking=no konturn@10.4.128.23 'export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"; az aks nodepool list --resource-group $(az aks list --query \"[0].resourceGroup\" -o tsv) --cluster-name $(az aks list --query \"[0].name\" -o tsv) --query \"[?provisioningState==\\`Upgrading\\`].{name:name,provisioningState:provisioningState,count:count,vmSize:vmSize}\" -o table'. If ANY pools still show 'Upgrading', reply with a brief status update. If ALL pools show 'Succeeded' (no upgrading pools left), send a Telegram message to Noah (to: 8531859108) saying all prod-aks nodepools have finished upgrading, then disable this cron job."
       },
       "state": {
         "lastRunAtMs": 1770236055516,
         "lastStatus": "ok",
         "lastDurationMs": 78550
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "telegram",
+        "to": "8531859108",
+        "bestEffort": true
       }
-    },
-    {
-      "id": "621e6c3d-6d21-4259-9ea7-94080ef0fd6d",
-      "agentId": "main",
-      "name": "image-update-check",
-      "createdAtMs": 1770323521800,
-      "updatedAtMs": 1770323521800,
-      "schedule": {
-        "kind": "cron",
-        "expr": "30 3 * * *",
-        "tz": "America/New_York"
-      },
-      "sessionTarget": "isolated",
-      "wakeMode": "next-heartbeat",
-      "payload": {
-        "kind": "agentTurn",
-        "message": "Docker Image Update Check (SCRIPT-DRIVEN):\n\n1. Run the check script:\n```bash\noutput=$(/home/node/.openclaw/workspace/skills/image-update/scripts/check-updates.sh 2>&1)\necho \"$output\"\n```\n\n2. Parse the JSON output. For each update:\n   - `unpinned`: Note for awareness but skip MR (image pinning is tracked separately)\n   - `patch`: Batch all patches into one MR, self-merge after pipeline passes\n   - `minor`: Check changelog if available (web_fetch release page), include in patch MR if safe, otherwise separate MR for review\n   - `major`: Create individual MR, DO NOT self-merge. Notify Noah via Telegram.\n\n3. If creating MRs, use gitlab-mr-create skill at /home/node/.openclaw/workspace/skills/gitlab-mr-create/SKILL.md\n   - Branch: chore/image-updates-YYYY-MM-DD\n   - Update image tags in docker/docker-compose.yml\n\n4. If no actionable updates (only unpinned or no updates), reply HEARTBEAT_OK\n\n5. Notify Noah via Telegram (id: 8531859108) only if MRs were created.\n\nDo NOT re-run the script or make API calls the script already handles.",
-        "timeoutSeconds": 600
-      },
-      "state": {}
-    },
-    {
-      "id": "e0cae2c6-0574-4761-aac8-12bd5c10cd81",
-      "agentId": "main",
-      "name": "image-update-check",
-      "createdAtMs": 1770323521805,
-      "updatedAtMs": 1770323521805,
-      "schedule": {
-        "kind": "cron",
-        "expr": "30 3 * * *",
-        "tz": "America/New_York"
-      },
-      "sessionTarget": "isolated",
-      "wakeMode": "next-heartbeat",
-      "payload": {
-        "kind": "agentTurn",
-        "message": "Docker Image Update Check (SCRIPT-DRIVEN):\n\n1. Run the check script:\n```bash\noutput=$(/home/node/.openclaw/workspace/skills/image-update/scripts/check-updates.sh 2>&1)\necho \"$output\"\n```\n\n2. Parse the JSON output. For each update:\n   - `unpinned`: Skip (tracked separately)\n   - `patch`: Batch into one MR, self-merge after pipeline\n   - `minor`: Check changelog, batch with patches if safe\n   - `major`: Individual MR, DO NOT self-merge, notify Noah\n\n3. If creating MRs, use gitlab-mr-create skill at /home/node/.openclaw/workspace/skills/gitlab-mr-create/SKILL.md. Branch: chore/image-updates-YYYY-MM-DD\n\n4. If no actionable updates, reply HEARTBEAT_OK\n\n5. Notify Noah via Telegram (id: 8531859108) only if MRs created.",
-        "timeoutSeconds": 600
-      },
-      "state": {}
     },
     {
       "id": "45b880a2-d60c-468f-9a93-82bf3512a24a",
       "agentId": "main",
       "name": "image-update-check",
       "createdAtMs": 1770323521810,
-      "updatedAtMs": 1770323699842,
+      "updatedAtMs": 1770539592561,
       "schedule": {
         "kind": "cron",
         "expr": "30 3 * * *",
@@ -318,7 +306,16 @@
         "message": "Docker Image Update Check (SCRIPT-DRIVEN):\n\n1. Run: /home/node/.openclaw/workspace/skills/image-update/scripts/check-updates.sh\n2. Read skill: /home/node/.openclaw/workspace/skills/image-update/SKILL.md\n3. Parse JSON output. Each entry has: image, current_tag, current_digest, latest_tag, latest_digest, update_type, never_auto_merge\n\nActions by update_type:\n- `needs_pin`: Batch into MR to add digest pins (tag@sha256:digest format). Self-merge after pipeline passes.\n- `unpinned`: Pin to actual version tag + digest. Self-merge after pipeline.\n- `patch`/`minor`: Batch into MR with new tag@digest. Self-merge ONLY after: (a) pipeline passes, (b) merge, (c) verify services healthy. If pipeline fails, iterate up to 3 times. If services unhealthy after merge, create revert MR and notify Noah.\n- `major`: Individual MR, NEVER self-merge. Notify Noah.\n\n🚨 If never_auto_merge=true (OpenClaw/moltbot): NEVER self-merge regardless of update type. Always flag for Noah.\n\nUse gitlab-mr-create skill. Branch: chore/image-updates-YYYY-MM-DD. Notify Noah via Telegram (8531859108) for any MRs created.",
         "timeoutSeconds": 900
       },
-      "state": {}
+      "state": {
+        "nextRunAtMs": 1770625800000,
+        "lastRunAtMs": 1770539427501,
+        "lastStatus": "ok",
+        "lastDurationMs": 165060
+      },
+      "enabled": true,
+      "delivery": {
+        "mode": "announce"
+      }
     },
     {
       "id": "f63e3016-5211-4719-b111-8a13873fa95d",
@@ -326,7 +323,7 @@
       "name": "Morning Digest",
       "enabled": true,
       "createdAtMs": 1770347532113,
-      "updatedAtMs": 1770386400000,
+      "updatedAtMs": 1770559266926,
       "schedule": {
         "kind": "cron",
         "expr": "0 9 * * *",
@@ -336,16 +333,18 @@
       "wakeMode": "next-heartbeat",
       "payload": {
         "kind": "agentTurn",
-        "message": "It's 9 AM. Compile and send the daily morning digest to Noah via Telegram. Include: 1) Red team findings from overnight (vulnerabilities discovered, severity ratings), 2) MRs created/updated/merged overnight, 3) GitLab issues opened/closed, 4) Moltbook posts if any, 5) Meditation summary if written, 6) Any other notable overnight work. Format it as one clean consolidated Telegram message. Check memory/YYYY-MM-DD.md for today and yesterday to compile. Send to Telegram chat 8531859108.",
-        "deliver": true,
-        "channel": "telegram",
-        "to": "8531859108"
+        "message": "It's 9 AM. Compile and send the daily morning digest to Noah via Telegram. Include: 1) Red team findings from overnight (vulnerabilities discovered, severity ratings), 2) MRs created/updated/merged overnight, 3) GitLab issues opened/closed, 4) Moltbook posts if any, 5) Meditation summary if written, 6) Any other notable overnight work. Format it as one clean consolidated Telegram message. Check memory/YYYY-MM-DD.md for today and yesterday to compile. Send to Telegram chat 8531859108."
       },
       "state": {
-        "nextRunAtMs": 1770472800000,
-        "lastRunAtMs": 1770386430305,
+        "nextRunAtMs": 1770645600000,
+        "lastRunAtMs": 1770559234636,
         "lastStatus": "ok",
-        "lastDurationMs": 73155
+        "lastDurationMs": 32290
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "telegram",
+        "to": "8531859108"
       }
     }
   ]
