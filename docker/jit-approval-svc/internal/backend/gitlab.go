@@ -55,14 +55,19 @@ type gitlabTokenResponse struct {
 }
 
 // MintCredential creates a short-lived GitLab project access token.
-func (b *GitLabBackend) MintCredential(resource string, tier int, ttl time.Duration) (*Credential, error) {
+func (b *GitLabBackend) MintCredential(resource string, tier int, ttl time.Duration, opts MintOptions) (*Credential, error) {
 	// GitLab PAT expiry is date-based (minimum 1 day). Set to tomorrow.
 	expiresAt := time.Now().Add(24 * time.Hour).UTC().Format("2006-01-02")
 	tokenName := fmt.Sprintf("jit-gitlab-%d", time.Now().Unix())
 
+	scopes := opts.Scopes
+	if len(scopes) == 0 {
+		scopes = []string{"api"}
+	}
+
 	payload := gitlabTokenRequest{
 		Name:        tokenName,
-		Scopes:      []string{"api"},
+		Scopes:      scopes,
 		ExpiresAt:   expiresAt,
 		AccessLevel: 30, // Developer
 	}

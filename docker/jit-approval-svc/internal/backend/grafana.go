@@ -33,7 +33,7 @@ func NewGrafanaBackend(baseURL string, vaultReader VaultSecretReader) *GrafanaBa
 }
 
 // MintCredential creates a short-lived Grafana service account token.
-func (b *GrafanaBackend) MintCredential(resource string, tier int, ttl time.Duration) (*Credential, error) {
+func (b *GrafanaBackend) MintCredential(resource string, tier int, ttl time.Duration, opts MintOptions) (*Credential, error) {
 	secrets, err := b.vaultReader.ReadSecret(b.vaultPath)
 	if err != nil {
 		return nil, fmt.Errorf("read vault secret: %w", err)

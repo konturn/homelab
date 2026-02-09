@@ -315,7 +315,7 @@ func TestHandleStatus_Pending(t *testing.T) {
 	h := mockHandler()
 
 	// Create a request directly in the store
-	storeReq := h.store.Create("prometheus", "gitlab", 2, "test")
+	storeReq := h.store.Create("prometheus", "gitlab", 2, "test", nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/status/"+storeReq.ID, nil)
 	req.Header.Set("X-JIT-API-Key", "test-api-key")
@@ -342,7 +342,7 @@ func TestHandleStatus_Pending(t *testing.T) {
 func TestHandleStatus_ApprovedClaims(t *testing.T) {
 	h := mockHandler()
 
-	storeReq := h.store.Create("prometheus", "gitlab", 2, "test")
+	storeReq := h.store.Create("prometheus", "gitlab", 2, "test", nil)
 	_ = h.store.Approve(storeReq.ID, &store.Credential{
 		Token:    "hvs.test-token",
 		LeaseTTL: 30 * time.Minute,
@@ -396,7 +396,7 @@ func TestHandleStatus_ApprovedClaims(t *testing.T) {
 func TestHandleStatus_CredentialMetadata(t *testing.T) {
 	h := mockHandler()
 
-	storeReq := h.store.Create("prometheus", "grafana", 0, "check dashboards")
+	storeReq := h.store.Create("prometheus", "grafana", 0, "check dashboards", nil)
 	_ = h.store.Approve(storeReq.ID, &store.Credential{
 		Token:    "glsa-test-token",
 		LeaseTTL: 5 * time.Minute,

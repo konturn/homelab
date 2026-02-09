@@ -39,10 +39,11 @@ func New(cfg *config.Config, s *store.Store, v *vault.Client, tg *telegram.Clien
 
 // CreateRequestBody is the JSON body for POST /request.
 type CreateRequestBody struct {
-	Requester string `json:"requester"`
-	Resource  string `json:"resource"`
-	Tier      int    `json:"tier"`
-	Reason    string `json:"reason"`
+	Requester string   `json:"requester"`
+	Resource  string   `json:"resource"`
+	Tier      int      `json:"tier"`
+	Reason    string   `json:"reason"`
+	Scopes    []string `json:"scopes,omitempty"`
 }
 
 // CreateRequestResponse is the JSON response for POST /request.
@@ -123,8 +124,14 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Default scopes to ["api"] for GitLab if not specified
+	scopes := body.Scopes
+	if len(scopes) == 0 {
+		scopes = []string{"api"}
+	}
+
 	// Create request in store
-	req := h.store.Create(body.Requester, body.Resource, body.Tier, body.Reason)
+	req := h.store.Create(body.Requester, body.Resource, body.Tier, body.Reason, scopes)
 
 	logger.Info("request_received", logger.Fields{
 		"request_id": req.ID,
@@ -132,6 +139,7 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		"resource":   body.Resource,
 		"tier":       body.Tier,
 		"reason":     body.Reason,
+		"scopes":     scopes,
 	})
 
 	// Auto-approve for tier 0-1
@@ -307,7 +315,8 @@ func (h *Handler) mintCredential(req *store.Request, tierCfg config.TierConfig) 
 	b := h.backends.For(req.Resource)
 	isDynamic := h.backends.IsDynamic(req.Resource)
 
-	cred, err := b.MintCredential(req.Resource, req.Tier, tierCfg.TTL)
+	opts := backend.MintOptions{Scopes: req.Scopes}
+	cred, err := b.MintCredential(req.Resource, req.Tier, tierCfg.TTL, opts)
 	if err != nil {
 		if isDynamic {
 			// Dynamic backend failed. Log and fall back to static.
@@ -317,7 +326,7 @@ func (h *Handler) mintCredential(req *store.Request, tierCfg config.TierConfig) 
 				"error":      err.Error(),
 			})
 			staticB := h.backends.For("__static_fallback__") // triggers fallback
-			cred, err = staticB.MintCredential(req.Resource, req.Tier, tierCfg.TTL)
+			cred, err = staticB.MintCredential(req.Resource, req.Tier, tierCfg.TTL, opts)
 			if err != nil {
 				return nil, fmt.Errorf("static fallback also failed: %w", err)
 			}
@@ -382,6 +391,7 @@ func (h *Handler) sendApprovalMessage(req *store.Request, tierCfg config.TierCon
 		req.Reason,
 		req.Requester,
 		tierCfg.TTL.String(),
+		req.Scopes,
 	)
 	if err != nil {
 		logger.Error("telegram_send_failed", logger.Fields{
