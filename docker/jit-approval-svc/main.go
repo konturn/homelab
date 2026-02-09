@@ -96,11 +96,6 @@ func main() {
 	defer cancel()
 	go cleanupLoop(ctx, reqStore)
 
-	// Start webhook keepalive if configured
-	if cfg.TelegramWebhookURL != "" {
-		go webhookKeepAlive(ctx, tgClient, cfg)
-	}
-
 	// Graceful shutdown
 	go func() {
 		sigCh := make(chan os.Signal, 1)
@@ -158,47 +153,6 @@ type responseWriter struct {
 func (rw *responseWriter) WriteHeader(code int) {
 	rw.statusCode = code
 	rw.ResponseWriter.WriteHeader(code)
-}
-
-// webhookKeepAlive periodically checks and re-registers the Telegram webhook.
-// Something external keeps clearing it via getUpdates, so we re-check every 60s.
-func webhookKeepAlive(ctx context.Context, tg *telegram.Client, cfg *config.Config) {
-	ticker := time.NewTicker(60 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			info, err := tg.GetWebhookInfo()
-			if err != nil {
-				logger.Error("webhook_check_failed", logger.Fields{
-					"error": err.Error(),
-				})
-				continue
-			}
-
-			if info.URL == cfg.TelegramWebhookURL {
-				continue
-			}
-
-			logger.Warn("webhook_cleared", logger.Fields{
-				"expected": cfg.TelegramWebhookURL,
-				"actual":   info.URL,
-			})
-
-			if err := tg.SetWebhook(cfg.TelegramWebhookURL, cfg.TelegramWebhookSecret); err != nil {
-				logger.Error("webhook_re_register_failed", logger.Fields{
-					"error": err.Error(),
-				})
-			} else {
-				logger.Info("webhook_re_registered", logger.Fields{
-					"url": cfg.TelegramWebhookURL,
-				})
-			}
-		}
-	}
 }
 
 // cleanupLoop periodically removes old resolved requests from the store.
