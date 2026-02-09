@@ -696,6 +696,7 @@ services:
       - REQUEST_TIMEOUT=300
       - ALLOWED_REQUESTERS=prometheus
       - JIT_API_KEY={{ vault_jit_api_key }}
+      - TELEGRAM_WEBHOOK_URL=https://jit-webhook.nkontur.com/telegram/webhook
     depends_on:
       - vault
     logging:

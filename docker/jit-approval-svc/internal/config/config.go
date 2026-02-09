@@ -24,6 +24,7 @@ type Config struct {
 	TelegramBotToken      string
 	TelegramChatID        int64
 	TelegramWebhookSecret string
+	TelegramWebhookURL    string
 
 	JITAPIKey string
 
@@ -65,6 +66,7 @@ func Load() (*Config, error) {
 		TelegramBotToken:      os.Getenv("TELEGRAM_BOT_TOKEN"),
 		TelegramChatID:        chatID,
 		TelegramWebhookSecret: os.Getenv("TELEGRAM_WEBHOOK_SECRET"),
+		TelegramWebhookURL:    os.Getenv("TELEGRAM_WEBHOOK_URL"),
 
 		JITAPIKey: os.Getenv("JIT_API_KEY"),
 

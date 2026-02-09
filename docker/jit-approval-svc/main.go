@@ -50,6 +50,20 @@ func main() {
 	// Initialize Telegram client
 	tgClient := telegram.New(cfg.TelegramBotToken, cfg.TelegramChatID)
 
+	// Register Telegram webhook if configured
+	if cfg.TelegramWebhookURL != "" {
+		if err := tgClient.SetWebhook(cfg.TelegramWebhookURL, cfg.TelegramWebhookSecret); err != nil {
+			logger.Error("webhook_register_failed", logger.Fields{
+				"error": err.Error(),
+				"url":   cfg.TelegramWebhookURL,
+			})
+		} else {
+			logger.Info("webhook_registered", logger.Fields{
+				"url": cfg.TelegramWebhookURL,
+			})
+		}
+	}
+
 	// Initialize backend registry (dynamic backends + static fallback)
 	backends := backend.NewRegistry(
 		vaultClient,
