@@ -34,6 +34,7 @@ func main() {
 		"ha_url":             cfg.HAURL,
 		"grafana_url":        cfg.GrafanaURL,
 		"influxdb_url":       cfg.InfluxDBURL,
+		"gitlab_url":         cfg.GitLabURL,
 	})
 
 	// Initialize request store
@@ -71,6 +72,8 @@ func main() {
 		cfg.HAURL,
 		cfg.GrafanaURL,
 		cfg.InfluxDBURL,
+		cfg.GitLabURL,
+		cfg.GitLabAdminToken,
 	)
 
 	// Initialize handler

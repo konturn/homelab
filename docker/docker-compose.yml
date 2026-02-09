@@ -701,6 +701,8 @@ services:
       - REQUEST_TIMEOUT=300
       - ALLOWED_REQUESTERS=prometheus
       - JIT_API_KEY={{ vault_jit_api_key }}
+      - GITLAB_URL=https://gitlab.lab.nkontur.com
+      - GITLAB_ADMIN_TOKEN={{ vault_jit_gitlab_admin_token }}
       - TELEGRAM_WEBHOOK_URL=https://jit-webhook.nkontur.com/telegram/webhook
     depends_on:
       - vault
