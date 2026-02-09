@@ -868,7 +868,10 @@ services:
       - /etc/localtime:/etc/localtime:ro
     command: ["/bin/bash", "-c", "ip route del default; ip route add default via 10.3.0.1 dev eth1; /init"]
     cap_add:
-      - NET_ADMIN # So we can override default route
+      # Required: the entrypoint command runs `ip route del default; ip route add default via 10.3.0.1 dev eth1`
+      # to override the default route so HA traffic goes through the internal VLAN (10.3.x.x) instead of
+      # whatever Docker assigns. Without NET_ADMIN, the ip route commands fail and HA gets wrong default gateway.
+      - NET_ADMIN
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8123/api/"]
