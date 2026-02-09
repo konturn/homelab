@@ -706,6 +706,7 @@ services:
       - GITLAB_URL=https://gitlab.lab.nkontur.com
       - GITLAB_ADMIN_TOKEN={{ vault_jit_gitlab_admin_token }}
       - SSH_VAULT_PATH=ssh-client-signer
+      - TAILSCALE_API_URL=https://api.tailscale.com
       - TELEGRAM_WEBHOOK_URL=https://jit-webhook.nkontur.com/telegram/webhook
     depends_on:
       - vault
