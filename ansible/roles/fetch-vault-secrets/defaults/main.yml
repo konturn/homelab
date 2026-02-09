@@ -63,6 +63,7 @@ vault_secret_paths:
   - path: "docker/nextcloud"
     fields:
       vault_nextcloud_db_password: "db_password"
+      vault_nextcloud_db_root_password: "db_root_password"
   - path: "docker/nzbget"
     fields:
       vault_nzbget_password: "password"
@@ -88,6 +89,7 @@ vault_secret_paths:
   - path: "docker/wordpress"
     fields:
       vault_wordpress_db_password: "db_password"
+      vault_wordpress_db_root_password: "db_root_password"
 
   # Camera secrets
   - path: "cameras/doorbell"

@@ -806,7 +806,7 @@ services:
       MYSQL_DATABASE: wordpress
       MYSQL_USER: wordpress
       MYSQL_PASSWORD: {{ vault_wordpress_db_password | default(lookup('env', 'WORDPRESS_DB_PASSWORD')) | trim }}
-      MYSQL_ROOT_PASSWORD: {{ vault_wordpress_db_password | default(lookup('env', 'WORDPRESS_DB_PASSWORD')) | trim }}
+      MYSQL_ROOT_PASSWORD: {{ vault_wordpress_db_root_password | default(vault_wordpress_db_password) | default(lookup('env', 'WORDPRESS_DB_PASSWORD')) | trim }}
     volumes:
       - wordpress_db:/var/lib/mysql
     healthcheck:
@@ -1271,7 +1271,7 @@ services:
     volumes:
       - nextcloud_db:/var/lib/mysql
     environment:
-      - MYSQL_ROOT_PASSWORD={{ vault_nextcloud_db_password | default(lookup('env', 'NEXTCLOUD_DB_PASSWORD')) | trim }}
+      - MYSQL_ROOT_PASSWORD={{ vault_nextcloud_db_root_password | default(vault_nextcloud_db_password) | default(lookup('env', 'NEXTCLOUD_DB_PASSWORD')) | trim }}
       - MYSQL_PASSWORD={{ vault_nextcloud_db_password | default(lookup('env', 'NEXTCLOUD_DB_PASSWORD')) | trim }}
       - MYSQL_DATABASE=nextcloud
       - MYSQL_USER=nextcloud
