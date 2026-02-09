@@ -185,6 +185,36 @@ func (c *Client) editMessage(messageID int, text string) error {
 	return nil
 }
 
+// WebhookInfo holds the response from getWebhookInfo.
+type WebhookInfo struct {
+	URL string `json:"url"`
+}
+
+// GetWebhookInfo returns the current webhook configuration.
+func (c *Client) GetWebhookInfo() (*WebhookInfo, error) {
+	resp, err := c.http.Get(c.baseURL + "/getWebhookInfo")
+	if err != nil {
+		return nil, fmt.Errorf("get webhook info: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+
+	var result struct {
+		OK     bool        `json:"ok"`
+		Result WebhookInfo `json:"result"`
+		Description string `json:"description"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("decode webhook info response: %w", err)
+	}
+	if !result.OK {
+		return nil, fmt.Errorf("telegram webhook info error: %s", result.Description)
+	}
+
+	return &result.Result, nil
+}
+
 // SetWebhook configures the Telegram webhook URL.
 func (c *Client) SetWebhook(url, secret string) error {
 	payload := map[string]interface{}{
