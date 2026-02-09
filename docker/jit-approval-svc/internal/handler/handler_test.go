@@ -60,8 +60,7 @@ func mockHandlerWithMinter(minter *mockVaultMinter) *Handler {
 		RequestTimeout:        5 * time.Minute,
 		AllowedRequesters:     []string{"prometheus"},
 		Tiers: map[int]config.TierConfig{
-			0: {TTL: 5 * time.Minute, AutoApprove: true, Description: "Read-only monitoring"},
-			1: {TTL: 15 * time.Minute, AutoApprove: true, Description: "Service management"},
+			1: {TTL: 15 * time.Minute, AutoApprove: true, Description: "Auto-approve services"},
 			2: {TTL: 30 * time.Minute, AutoApprove: false, Description: "Infrastructure"},
 			3: {TTL: 60 * time.Minute, AutoApprove: false, Description: "Critical"},
 		},
@@ -400,10 +399,10 @@ func TestHandleStatus_ApprovedClaims(t *testing.T) {
 func TestHandleStatus_CredentialMetadata(t *testing.T) {
 	h := mockHandler()
 
-	storeReq := h.store.Create("prometheus", "grafana", 0, "check dashboards", nil)
+	storeReq := h.store.Create("prometheus", "grafana", 1, "check dashboards", nil)
 	_ = h.store.Approve(storeReq.ID, &store.Credential{
 		Token:    "glsa-test-token",
-		LeaseTTL: 5 * time.Minute,
+		LeaseTTL: 15 * time.Minute,
 		Metadata: map[string]string{
 			"backend":            "grafana",
 			"type":               "service_account_token",

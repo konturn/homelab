@@ -133,9 +133,11 @@ Telegram webhook endpoint for inline button callbacks. Validates `X-Telegram-Bot
 
 | Tier | TTL | Approval | Resources |
 |------|-----|----------|-----------|
-| 0 | 5 min | Auto | Grafana, InfluxDB |
-| 1 | 15 min | Auto | Plex, Radarr, Sonarr, Ombi, NZBGet, Deluge, Paperless |
+| 1 | 15 min | Auto | Grafana, InfluxDB, Plex, Radarr, Sonarr, Ombi, NZBGet, Deluge, Paperless |
 | 2 | 30 min | Manual (Telegram) | GitLab, Home Assistant |
+| 3 | 60 min | Manual (Telegram) | Critical (reserved) |
+
+Tiers represent **approval trust level**, not backend type. Dynamic vs static credential backends are orthogonal to the tier system.
 
 ## Configuration
 

@@ -175,7 +175,7 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		"scopes":     scopes,
 	})
 
-	// Auto-approve for tier 0-1
+	// Auto-approve for tier 1
 	if tierCfg.AutoApprove {
 		h.autoApprove(req, tierCfg)
 	} else {
@@ -384,7 +384,7 @@ func (h *Handler) mintCredential(req *store.Request, tierCfg config.TierConfig) 
 	}, nil
 }
 
-// autoApprove immediately approves a tier 0-1 request by minting a credential.
+// autoApprove immediately approves a tier 1 request by minting a credential.
 func (h *Handler) autoApprove(req *store.Request, tierCfg config.TierConfig) {
 	logger.Info("auto_approve", logger.Fields{
 		"request_id": req.ID,

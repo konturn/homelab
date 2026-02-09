@@ -46,7 +46,7 @@ resource "vault_approle_auth_backend_role" "moltbot" {
 # =============================================================================
 # AppRole for the JIT approval service. The service brokers credential access
 # on behalf of the agent — it authenticates to Vault, then mints short-lived
-# scoped tokens (using jit-tier0/1/2 policies) when requests are approved.
+# scoped tokens (using jit-tier1/2 policies) when requests are approved.
 #
 # secret_id_ttl = 0 means secret IDs don't expire (manual rotation).
 # token_num_uses = 0 means unlimited token uses (long-running service).
