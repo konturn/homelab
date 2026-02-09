@@ -43,6 +43,9 @@ type Config struct {
 
 	// GitLab admin token for creating project access tokens (Maintainer-level)
 	GitLabAdminToken string
+
+	// SSH Vault path for certificate signing (default: ssh-client-signer)
+	SSHVaultPath string
 }
 
 // Load reads configuration from environment variables.
@@ -92,6 +95,8 @@ func Load() (*Config, error) {
 		GitLabURL:   getEnvOrEmpty("GITLAB_URL", "https://gitlab.lab.nkontur.com"),
 
 		GitLabAdminToken: os.Getenv("GITLAB_ADMIN_TOKEN"),
+
+		SSHVaultPath: getEnv("SSH_VAULT_PATH", "ssh-client-signer"),
 	}
 
 	if err := cfg.Validate(); err != nil {

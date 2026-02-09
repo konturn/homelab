@@ -1,5 +1,9 @@
 - hosts: satellite-2.lab.nkontur.com
   roles:
+    - role: fetch-vault-secrets
+      vars:
+        fetch_ssh_ca_key: true
+    - claude-user
     - configure-scanner
     - configure-docker
   become: yes

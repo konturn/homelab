@@ -129,6 +129,11 @@ resource "vault_policy" "vault_admin" {
       capabilities = ["create", "read", "update", "delete", "list"]
     }
 
+    # SSH secrets engine management
+    path "ssh-client-signer/*" {
+      capabilities = ["create", "read", "update", "delete", "list"]
+    }
+
     # -------------------------------------------------------------------------
     # DENY dangerous operations — defense in depth
     # -------------------------------------------------------------------------
@@ -192,6 +197,11 @@ resource "vault_policy" "vault_read" {
     # Allow looking up own token
     path "auth/token/lookup-self" {
       capabilities = ["read"]
+    }
+
+    # SSH secrets engine (read-only for plan)
+    path "ssh-client-signer/*" {
+      capabilities = ["read", "list"]
     }
   EOT
 }
@@ -271,6 +281,14 @@ resource "vault_policy" "jit_approval_svc" {
     # Dynamic Vault backend: manage temporary JIT policies
     path "sys/policies/acl/jit-vault-*" {
       capabilities = ["create", "read", "update", "delete"]
+    }
+
+    # SSH certificate signing for JIT SSH access
+    path "ssh-client-signer/sign/claude" {
+      capabilities = ["create", "update"]
+    }
+    path "ssh-client-signer/config/ca" {
+      capabilities = ["read"]
     }
   EOT
 }

@@ -75,6 +75,8 @@ func main() {
 		cfg.GitLabURL,
 		cfg.GitLabAdminToken,
 		vaultClient, // VaultPolicyManager for dynamic vault backend
+		vaultClient, // VaultSSHSigner for SSH certificate backend
+		cfg.SSHVaultPath,
 	)
 
 	// Initialize handler

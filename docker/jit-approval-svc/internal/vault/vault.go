@@ -266,6 +266,9 @@ var resourceTier = map[string]int{
 	"deluge":    1,
 	"paperless": 1,
 
+	// Tier 1: SSH access (auto-approve, 15 min TTL)
+	"ssh": 1,
+
 	// Tier 2: Infrastructure (requires approval, 30 min TTL)
 	"gitlab":        2,
 	"homeassistant": 2,
@@ -296,6 +299,51 @@ func policiesForResource(resource string, tier int) []string {
 	}
 
 	return []string{policy}
+}
+
+// SignSSHKey signs an SSH public key via Vault's SSH secrets engine.
+// Returns the signed certificate string.
+func (vc *Client) SignSSHKey(role string, publicKey string, validPrincipals string, ttl string) (string, error) {
+	path := fmt.Sprintf("ssh-client-signer/sign/%s", role)
+
+	resp, err := vc.client.Logical().Write(path, map[string]interface{}{
+		"public_key":       publicKey,
+		"valid_principals": validPrincipals,
+		"ttl":              ttl,
+	})
+	if err != nil {
+		// Re-authenticate and retry once
+		logger.Warn("vault_ssh_sign_failed_retrying", logger.Fields{
+			"error": err.Error(),
+		})
+		if authErr := vc.authenticate(); authErr != nil {
+			return "", fmt.Errorf("re-auth failed: %w (original: %v)", authErr, err)
+		}
+		resp, err = vc.client.Logical().Write(path, map[string]interface{}{
+			"public_key":       publicKey,
+			"valid_principals": validPrincipals,
+			"ttl":              ttl,
+		})
+		if err != nil {
+			return "", fmt.Errorf("vault ssh sign (after re-auth): %w", err)
+		}
+	}
+
+	if resp == nil || resp.Data == nil {
+		return "", fmt.Errorf("vault ssh sign returned nil response")
+	}
+
+	signedKey, ok := resp.Data["signed_key"].(string)
+	if !ok || signedKey == "" {
+		return "", fmt.Errorf("vault ssh sign returned empty signed_key")
+	}
+
+	logger.Info("ssh_certificate_signed", logger.Fields{
+		"role": role,
+		"ttl":  ttl,
+	})
+
+	return signedKey, nil
 }
 
 func boolPtr(b bool) *bool {
