@@ -37,13 +37,20 @@ func New(cfg *config.Config, s *store.Store, v *vault.Client, tg *telegram.Clien
 
 // --- Request types ---
 
+// VaultPathRequest mirrors store.VaultPathRequest for JSON deserialization.
+type VaultPathRequest struct {
+	Path         string   `json:"path"`
+	Capabilities []string `json:"capabilities"`
+}
+
 // CreateRequestBody is the JSON body for POST /request.
 type CreateRequestBody struct {
-	Requester string   `json:"requester"`
-	Resource  string   `json:"resource"`
-	Tier      int      `json:"tier"`
-	Reason    string   `json:"reason"`
-	Scopes    []string `json:"scopes,omitempty"`
+	Requester  string             `json:"requester"`
+	Resource   string             `json:"resource"`
+	Tier       int                `json:"tier"`
+	Reason     string             `json:"reason"`
+	Scopes     []string           `json:"scopes,omitempty"`
+	VaultPaths []VaultPathRequest `json:"vault_paths,omitempty"`
 }
 
 // CreateRequestResponse is the JSON response for POST /request.
@@ -124,6 +131,23 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate vault_paths for vault resource
+	if body.Resource == "vault" {
+		if len(body.VaultPaths) == 0 {
+			writeError(w, http.StatusBadRequest, "vault_paths is required when resource is vault")
+			return
+		}
+		// Convert to backend type for validation
+		bPaths := make([]backend.VaultPathRequest, len(body.VaultPaths))
+		for i, p := range body.VaultPaths {
+			bPaths[i] = backend.VaultPathRequest{Path: p.Path, Capabilities: p.Capabilities}
+		}
+		if err := backend.ValidateVaultPaths(bPaths); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+
 	// Default scopes to ["api"] for GitLab if not specified
 	scopes := body.Scopes
 	if len(scopes) == 0 {
@@ -132,6 +156,15 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Create request in store
 	req := h.store.Create(body.Requester, body.Resource, body.Tier, body.Reason, scopes)
+
+	// Attach vault paths if present
+	if len(body.VaultPaths) > 0 {
+		storePaths := make([]store.VaultPathRequest, len(body.VaultPaths))
+		for i, p := range body.VaultPaths {
+			storePaths[i] = store.VaultPathRequest{Path: p.Path, Capabilities: p.Capabilities}
+		}
+		req.VaultPaths = storePaths
+	}
 
 	logger.Info("request_received", logger.Fields{
 		"request_id": req.ID,
@@ -315,7 +348,15 @@ func (h *Handler) mintCredential(req *store.Request, tierCfg config.TierConfig) 
 	b := h.backends.For(req.Resource)
 	isDynamic := h.backends.IsDynamic(req.Resource)
 
-	opts := backend.MintOptions{Scopes: req.Scopes}
+	opts := backend.MintOptions{Scopes: req.Scopes, RequestID: req.ID}
+	// Convert vault paths for dynamic vault backend
+	if len(req.VaultPaths) > 0 {
+		bPaths := make([]backend.VaultPathRequest, len(req.VaultPaths))
+		for i, p := range req.VaultPaths {
+			bPaths[i] = backend.VaultPathRequest{Path: p.Path, Capabilities: p.Capabilities}
+		}
+		opts.VaultPaths = bPaths
+	}
 	cred, err := b.MintCredential(req.Resource, req.Tier, tierCfg.TTL, opts)
 	if err != nil {
 		if isDynamic {
@@ -384,6 +425,15 @@ func (h *Handler) sendApprovalMessage(req *store.Request, tierCfg config.TierCon
 		return
 	}
 
+	// Convert vault paths for Telegram display
+	var tgVaultPaths []telegram.VaultPathInfo
+	for _, vp := range req.VaultPaths {
+		tgVaultPaths = append(tgVaultPaths, telegram.VaultPathInfo{
+			Path:         vp.Path,
+			Capabilities: vp.Capabilities,
+		})
+	}
+
 	msgID, err := h.telegram.SendApprovalMessage(
 		req.ID,
 		req.Resource,
@@ -392,6 +442,7 @@ func (h *Handler) sendApprovalMessage(req *store.Request, tierCfg config.TierCon
 		req.Requester,
 		tierCfg.TTL.String(),
 		req.Scopes,
+		tgVaultPaths,
 	)
 	if err != nil {
 		logger.Error("telegram_send_failed", logger.Fields{

@@ -19,6 +19,12 @@ const (
 	StatusClaimed  Status = "claimed"
 )
 
+// VaultPathRequest represents a requested Vault path with capabilities.
+type VaultPathRequest struct {
+	Path         string   `json:"path"`
+	Capabilities []string `json:"capabilities"`
+}
+
 // Request represents a JIT access request.
 type Request struct {
 	ID        string    `json:"request_id"`
@@ -29,6 +35,9 @@ type Request struct {
 	Scopes    []string  `json:"scopes,omitempty"`
 	Status    Status    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
+
+	// Dynamic Vault backend: requested paths and capabilities
+	VaultPaths []VaultPathRequest `json:"vault_paths,omitempty"`
 
 	// Set on approval
 	ApprovedAt *time.Time `json:"approved_at,omitempty"`

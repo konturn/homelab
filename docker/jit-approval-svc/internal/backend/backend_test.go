@@ -33,6 +33,10 @@ func (m *mockVaultMinter) MintToken(resource string, tier int, ttl time.Duration
 	return m.token, m.leaseID, m.err
 }
 
+func (m *mockVaultMinter) MintDynamicToken(policyName string, ttl time.Duration, requestID string) (string, string, error) {
+	return m.token, m.leaseID, m.err
+}
+
 // --- HomeAssistant Tests ---
 
 func TestHomeAssistantBackend_MintCredential(t *testing.T) {
@@ -394,7 +398,7 @@ func TestRegistry_DynamicBackendSelection(t *testing.T) {
 	reader := &mockVaultReader{secrets: map[string]map[string]string{}}
 
 	// Only register grafana as dynamic
-	r := NewRegistry(minter, reader, "", "https://grafana.example.com", "", "", "")
+	r := NewRegistry(minter, reader, "", "https://grafana.example.com", "", "", "", nil)
 
 	if !r.IsDynamic("grafana") {
 		t.Error("expected grafana to be dynamic")
@@ -411,7 +415,7 @@ func TestRegistry_FallbackToStatic(t *testing.T) {
 	minter := &mockVaultMinter{token: "vault-token", leaseID: "acc-1"}
 	reader := &mockVaultReader{secrets: map[string]map[string]string{}}
 
-	r := NewRegistry(minter, reader, "", "", "", "", "")
+	r := NewRegistry(minter, reader, "", "", "", "", "", nil)
 
 	// All should be static (no dynamic URLs configured)
 	b := r.For("radarr")

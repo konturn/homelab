@@ -164,6 +164,81 @@ func (vc *Client) MintToken(resource string, tier int, ttl time.Duration) (strin
 	return resp.Auth.ClientToken, resp.Auth.Accessor, nil
 }
 
+// MintDynamicToken creates an orphan token with a named policy for the dynamic Vault backend.
+func (vc *Client) MintDynamicToken(policyName string, ttl time.Duration, requestID string) (string, string, error) {
+	displayName := fmt.Sprintf("jit-vault-%s", requestID)
+
+	req := &vaultapi.TokenCreateRequest{
+		Policies:    []string{"default", policyName},
+		TTL:         ttl.String(),
+		DisplayName: displayName,
+		Renewable:   boolPtr(false),
+		Metadata: map[string]string{
+			"requester":  "prometheus",
+			"resource":   "vault",
+			"request_id": requestID,
+			"source":     "jit-approval-svc",
+		},
+	}
+
+	resp, err := vc.client.Auth().Token().CreateOrphan(req)
+	if err != nil {
+		logger.Warn("vault_dynamic_token_create_failed_retrying", logger.Fields{
+			"error": err.Error(),
+		})
+		if authErr := vc.authenticate(); authErr != nil {
+			return "", "", fmt.Errorf("re-auth failed: %w (original: %v)", authErr, err)
+		}
+		resp, err = vc.client.Auth().Token().CreateOrphan(req)
+		if err != nil {
+			return "", "", fmt.Errorf("vault dynamic token create (after re-auth): %w", err)
+		}
+	}
+
+	if resp == nil || resp.Auth == nil {
+		return "", "", fmt.Errorf("vault dynamic token create returned nil auth")
+	}
+
+	logger.Info("dynamic_token_issued", logger.Fields{
+		"request_id":   requestID,
+		"policy_name":  policyName,
+		"ttl":          ttl.String(),
+		"display_name": displayName,
+	})
+
+	return resp.Auth.ClientToken, resp.Auth.Accessor, nil
+}
+
+// PutPolicy creates or updates an ACL policy in Vault.
+func (vc *Client) PutPolicy(name, rules string) error {
+	err := vc.client.Sys().PutPolicy(name, rules)
+	if err != nil {
+		if authErr := vc.authenticate(); authErr != nil {
+			return fmt.Errorf("re-auth failed: %w (original: %v)", authErr, err)
+		}
+		err = vc.client.Sys().PutPolicy(name, rules)
+		if err != nil {
+			return fmt.Errorf("put policy (after re-auth): %w", err)
+		}
+	}
+	return nil
+}
+
+// DeletePolicy deletes an ACL policy from Vault.
+func (vc *Client) DeletePolicy(name string) error {
+	err := vc.client.Sys().DeletePolicy(name)
+	if err != nil {
+		if authErr := vc.authenticate(); authErr != nil {
+			return fmt.Errorf("re-auth failed: %w (original: %v)", authErr, err)
+		}
+		err = vc.client.Sys().DeletePolicy(name)
+		if err != nil {
+			return fmt.Errorf("delete policy (after re-auth): %w", err)
+		}
+	}
+	return nil
+}
+
 // Health checks if Vault is reachable and the token is valid.
 func (vc *Client) Health() error {
 	_, err := vc.client.Auth().Token().LookupSelf()
@@ -196,6 +271,7 @@ var resourceTier = map[string]int{
 	// Tier 2: Infrastructure (requires approval, 30 min TTL)
 	"gitlab":        2,
 	"homeassistant": 2,
+	"vault":         2,
 }
 
 // tierPolicy maps tier levels to the Vault policy name assigned to minted tokens.

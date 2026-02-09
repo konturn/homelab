@@ -40,7 +40,13 @@ type InlineButton struct {
 
 // SendApprovalMessage sends an approval request to Noah with inline buttons.
 // Returns the message ID for later editing.
-func (c *Client) SendApprovalMessage(requestID, resource string, tier int, reason, requester string, ttlStr string, scopes []string) (int, error) {
+// VaultPathInfo holds path and capabilities for display in Telegram messages.
+type VaultPathInfo struct {
+	Path         string
+	Capabilities []string
+}
+
+func (c *Client) SendApprovalMessage(requestID, resource string, tier int, reason, requester string, ttlStr string, scopes []string, vaultPaths []VaultPathInfo) (int, error) {
 	emoji := "🔐"
 	tierDesc := "Quick Approve"
 	if tier >= 3 {
@@ -53,15 +59,23 @@ func (c *Client) SendApprovalMessage(requestID, resource string, tier int, reaso
 		scopeStr = fmt.Sprintf("\n<b>Scopes:</b> %s", strings.Join(scopes, ", "))
 	}
 
+	vaultPathStr := ""
+	if len(vaultPaths) > 0 {
+		vaultPathStr = "\n\n📂 <b>Vault Paths Requested:</b>"
+		for _, vp := range vaultPaths {
+			vaultPathStr += fmt.Sprintf("\n  • <code>%s</code> [%s]", vp.Path, strings.Join(vp.Capabilities, ", "))
+		}
+	}
+
 	text := fmt.Sprintf(
 		"%s <b>JIT Access Request</b> [%s]\n\n"+
 			"<b>Resource:</b> %s\n"+
 			"<b>Tier:</b> %d (%s)\n"+
 			"<b>TTL:</b> %s\n"+
 			"<b>Requester:</b> %s\n"+
-			"<b>Reason:</b> %s%s\n\n"+
+			"<b>Reason:</b> %s%s%s\n\n"+
 			"⏳ Awaiting approval...",
-		emoji, requestID, resource, tier, tierDesc, ttlStr, requester, reason, scopeStr,
+		emoji, requestID, resource, tier, tierDesc, ttlStr, requester, reason, scopeStr, vaultPathStr,
 	)
 
 	buttons := [][]InlineButton{

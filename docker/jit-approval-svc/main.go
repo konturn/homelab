@@ -74,6 +74,7 @@ func main() {
 		cfg.InfluxDBURL,
 		cfg.GitLabURL,
 		cfg.GitLabAdminToken,
+		vaultClient, // VaultPolicyManager for dynamic vault backend
 	)
 
 	// Initialize handler

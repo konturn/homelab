@@ -25,6 +25,10 @@ func (m *mockVaultMinter) MintToken(resource string, tier int, ttl time.Duration
 	return m.token, m.leaseID, m.err
 }
 
+func (m *mockVaultMinter) MintDynamicToken(policyName string, ttl time.Duration, requestID string) (string, string, error) {
+	return m.token, m.leaseID, m.err
+}
+
 // mockVaultReader implements backend.VaultSecretReader for tests.
 type mockVaultReader struct {
 	secrets map[string]map[string]string
@@ -66,7 +70,7 @@ func mockHandlerWithMinter(minter *mockVaultMinter) *Handler {
 	reader := &mockVaultReader{secrets: map[string]map[string]string{}}
 
 	// Create a backend registry with only static backends
-	backends := backend.NewRegistry(minter, reader, "", "", "", "", "")
+	backends := backend.NewRegistry(minter, reader, "", "", "", "", "", nil)
 
 	return &Handler{
 		cfg:      cfg,

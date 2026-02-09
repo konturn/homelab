@@ -275,6 +275,11 @@ resource "vault_policy" "jit_approval_svc" {
     path "homelab/data/agents/*" {
       capabilities = ["read"]
     }
+
+    # Dynamic Vault backend: manage temporary JIT policies
+    path "sys/policies/acl/jit-vault-*" {
+      capabilities = ["create", "read", "update", "delete"]
+    }
   EOT
 }
 
