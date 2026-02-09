@@ -255,11 +255,9 @@ func (vc *Client) Health() error {
 // resourceTier maps each known resource to its tier level.
 // This determines which Vault policy the minted token receives.
 var resourceTier = map[string]int{
-	// Tier 0: Monitoring (auto-approve, 5 min TTL)
-	"grafana":  0,
-	"influxdb": 0,
-
-	// Tier 1: Service management (auto-approve, 15 min TTL)
+	// Tier 1: Auto-approve services (15 min TTL)
+	"grafana":   1,
+	"influxdb":  1,
 	"plex":      1,
 	"radarr":    1,
 	"sonarr":    1,
@@ -277,7 +275,6 @@ var resourceTier = map[string]int{
 // tierPolicy maps tier levels to the Vault policy name assigned to minted tokens.
 // These policies must exist in Vault (defined in terraform/vault/policies.tf).
 var tierPolicy = map[int]string{
-	0: "jit-tier0-monitoring",
 	1: "jit-tier1-services",
 	2: "jit-tier2-infra",
 }

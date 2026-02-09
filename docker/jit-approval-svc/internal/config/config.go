@@ -80,8 +80,7 @@ func Load() (*Config, error) {
 		AllowedRequesters: requesters,
 
 		Tiers: map[int]TierConfig{
-			0: {TTL: 5 * time.Minute, AutoApprove: true, Description: "Read-only monitoring"},
-			1: {TTL: 15 * time.Minute, AutoApprove: true, Description: "Service management"},
+			1: {TTL: 15 * time.Minute, AutoApprove: true, Description: "Auto-approve services"},
 			2: {TTL: 30 * time.Minute, AutoApprove: false, Description: "Infrastructure"},
 			3: {TTL: 60 * time.Minute, AutoApprove: false, Description: "Critical"},
 		},

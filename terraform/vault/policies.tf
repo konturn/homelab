@@ -201,7 +201,7 @@ resource "vault_policy" "vault_read" {
 # =============================================================================
 # The JIT approval service brokers credential access on behalf of the agent.
 # It authenticates to Vault via AppRole, then mints short-lived child tokens
-# with scoped policies (jit-tier0/1/2) when requests are approved.
+# with scoped policies (jit-tier1/2) when requests are approved.
 #
 # This policy grants:
 # - Token lifecycle management (create, revoke, lookup-self)
@@ -227,15 +227,7 @@ resource "vault_policy" "jit_approval_svc" {
     }
 
     # Read secrets that the service may broker access to
-    # Tier 0: Monitoring (auto-approve)
-    path "homelab/data/docker/grafana" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/docker/influxdb" {
-      capabilities = ["read"]
-    }
-
-    # Tier 1: Service management (auto-approve)
+    # Tier 1: Auto-approve services
     path "homelab/data/docker/plex" {
       capabilities = ["read"]
     }
@@ -284,34 +276,24 @@ resource "vault_policy" "jit_approval_svc" {
 }
 
 # =============================================================================
-# Policy: jit-tier0-monitoring
+# Policy: jit-tier1-services
 # =============================================================================
 # Lightweight scoped policy for JIT-minted child tokens.
-# Tier 0: Read-only access to monitoring services (auto-approve).
+# Tier 1: Read access to auto-approve services (monitoring + operational).
 
-resource "vault_policy" "jit_tier0_monitoring" {
-  name = "jit-tier0-monitoring"
+resource "vault_policy" "jit_tier1_services" {
+  name = "jit-tier1-services"
 
   policy = <<-EOT
+    # Monitoring
     path "homelab/data/docker/grafana" {
       capabilities = ["read"]
     }
     path "homelab/data/docker/influxdb" {
       capabilities = ["read"]
     }
-  EOT
-}
 
-# =============================================================================
-# Policy: jit-tier1-services
-# =============================================================================
-# Lightweight scoped policy for JIT-minted child tokens.
-# Tier 1: Read access to operational services (auto-approve).
-
-resource "vault_policy" "jit_tier1_services" {
-  name = "jit-tier1-services"
-
-  policy = <<-EOT
+    # Operational services
     path "homelab/data/docker/plex" {
       capabilities = ["read"]
     }

@@ -447,7 +447,7 @@ The job:
 
 The JIT approval service authenticates to Vault using AppRole (`role_id` + `secret_id`).
 It brokers credential access for the agent by minting short-lived child tokens with
-scoped policies (`jit-tier0-monitoring`, `jit-tier1-services`, `jit-tier2-infra`).
+scoped policies (`jit-tier1-services`, `jit-tier2-infra`).
 
 **Policies attached:**
 - `jit-approval-svc` — service's own policy (token management + read brokered secrets)

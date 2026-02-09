@@ -9,8 +9,7 @@ import (
 func TestTierFor(t *testing.T) {
 	cfg := &Config{
 		Tiers: map[int]TierConfig{
-			0: {TTL: 5 * time.Minute, AutoApprove: true, Description: "Read-only monitoring"},
-			1: {TTL: 15 * time.Minute, AutoApprove: true, Description: "Service management"},
+			1: {TTL: 15 * time.Minute, AutoApprove: true, Description: "Auto-approve services"},
 			2: {TTL: 30 * time.Minute, AutoApprove: false, Description: "Infrastructure"},
 			3: {TTL: 60 * time.Minute, AutoApprove: false, Description: "Critical"},
 		},
@@ -22,10 +21,10 @@ func TestTierFor(t *testing.T) {
 		wantAuto bool
 		wantErr  bool
 	}{
-		{0, 5 * time.Minute, true, false},
 		{1, 15 * time.Minute, true, false},
 		{2, 30 * time.Minute, false, false},
 		{3, 60 * time.Minute, false, false},
+		{0, 0, false, true},
 		{4, 0, false, true},
 		{-1, 0, false, true},
 	}
