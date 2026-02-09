@@ -72,6 +72,9 @@ networks:
     driver: bridge
   nextcloud_internal:
     driver: bridge
+  jit-bridge:
+    driver: bridge
+    internal: true
 services:
   # Docker socket proxy - filtered access for CI builds
   # Only allows build/image operations, blocks exec/start/stop
@@ -201,6 +204,7 @@ services:
     networks:
       external:
         ipv4_address: {{ nginx_ip }}
+      jit-bridge:
     restart: unless-stopped
     deploy:
       resources:
@@ -681,6 +685,7 @@ services:
     networks:
       internal:
         ipv4_address: {{ jit_approval_svc_ip }}
+      jit-bridge:
     deploy:
       resources:
         limits:
