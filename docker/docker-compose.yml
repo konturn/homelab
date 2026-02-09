@@ -1095,7 +1095,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-    image: eclipse-mosquitto:2.1.1-alpine@sha256:9fec559dbc89664d171ac8e8230bbbeb50c2eb52615d631599ec31cbccbfb39
+    image: eclipse-mosquitto:2.1.1-alpine@sha256:9fec559dbc89664d171ac8ea8230bbbeb50c2eb52615d631599ec31cbccbfb39
     restart: unless-stopped
     networks:
       iot:
