@@ -1,3 +1,4 @@
+import os
 import requests
 import sys
 import argparse
@@ -7,14 +8,14 @@ parser.add_argument('-d', '--domain', type=str,
                     help='The domain to update DNS records for',
                     required=True)
 parser.add_argument('-k', '--key', type=str,
-                    help='The value of the Cloudflare API key',
-                    required=True)
+                    help='The value of the Cloudflare API key (prefer CLOUDFLARE_API_KEY env var)',
+                    default=None)
 parser.add_argument('-e', '--email', type=str,
-                    help='The email associated with your Cloudflare account',
-                    required=True)
+                    help='The email associated with your Cloudflare account (prefer CLOUDFLARE_EMAIL env var)',
+                    default=None)
 parser.add_argument('-z', '--zone_id', type=str,
-                    help='The Cloudflare zone ID for your domain',
-                    required=True)
+                    help='The Cloudflare zone ID for your domain (prefer CLOUDFLARE_ZONE_ID env var)',
+                    default=None)
 parser.add_argument('-r', '--rrhost', type=str,
                     help='The name of the rrhost',
                     nargs='+',
@@ -22,9 +23,20 @@ parser.add_argument('-r', '--rrhost', type=str,
 args = parser.parse_args()
 
 domain = args.domain
-key = args.key
-email = args.email
-zone_id = args.zone_id
+key = args.key or os.environ.get('CLOUDFLARE_API_KEY')
+email = args.email or os.environ.get('CLOUDFLARE_EMAIL')
+zone_id = args.zone_id or os.environ.get('CLOUDFLARE_ZONE_ID')
+
+if not key:
+    print('Error: Cloudflare API key not provided. Set CLOUDFLARE_API_KEY env var or use -k flag.')
+    sys.exit(1)
+if not email:
+    print('Error: Cloudflare email not provided. Set CLOUDFLARE_EMAIL env var or use -e flag.')
+    sys.exit(1)
+if not zone_id:
+    print('Error: Cloudflare zone ID not provided. Set CLOUDFLARE_ZONE_ID env var or use -z flag.')
+    sys.exit(1)
+
 rrhost = args.rrhost
 
 my_ip = requests.get('https://ifconfig.me').text
@@ -65,4 +77,3 @@ for host in rrhost:
                     print('Update failed--Cloudflare returned status code ' + str(response.content))
                 else:
                     print(response.json())
-
