@@ -5,6 +5,10 @@ services:
     restart: always
     tty: true
     stop_signal: SIGINT
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
       - HTTPS=false
       - ZWAVEJS_EXTERNAL_CONFIG=/usr/src/app/store/.config-db
