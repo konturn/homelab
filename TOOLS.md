@@ -236,6 +236,30 @@ VAULT_TOKEN=$(curl -s --request POST \
 - Auth header: `X-JIT-API-Key`
 - Endpoints: `GET /health`, `POST /request`, `GET /status/{id}`, `POST /telegram/webhook`
 
+## Loki (Direct Access — No Auth Required)
+
+**URL:** `https://loki.lab.nkontur.com/loki/api/v1/query_range`
+**Auth:** None needed from internal network. DO NOT go through Grafana proxy.
+
+```bash
+# Query container logs (last 15 min)
+curl -s "https://loki.lab.nkontur.com/loki/api/v1/query_range" \
+  --data-urlencode 'query={container_name="jit-approval-svc"}' \
+  --data-urlencode "start=$(date -d '15 minutes ago' +%s)" \
+  --data-urlencode "end=$(date +%s)" \
+  --data-urlencode 'limit=30' | jq -r '.data.result[].values[][1]'
+
+# Filter with regex
+--data-urlencode 'query={container_name="nginx"} |~ "error|500"'
+
+# By compose service
+--data-urlencode 'query={compose_service="grafana"}'
+```
+
+**ALWAYS use Loki for container debugging. It's the first tool to reach for.**
+
+---
+
 **JIT Helper — Reusable Pattern:**
 ```bash
 # Get JIT credentials in one shot (reuse across all services)
@@ -308,6 +332,43 @@ TOKEN=$(jit_status $REQ_ID | jq -r '.credential.token')
 curl -s "https://homeassistant.lab.nkontur.com/api/states" -H "Authorization: Bearer $TOKEN"
 ```
 
+T2 — SSH (JIT-signed certificate, 30min, needs Telegram approval):
+```bash
+# 1. Generate ephemeral keypair
+ssh-keygen -t ed25519 -f /tmp/jit-ssh-key -N "" -q
+PUB_KEY=$(cat /tmp/jit-ssh-key.pub)
+
+# 2. Request JIT SSH cert (include public_key in body!)
+RESP=$(curl -s "https://jit.lab.nkontur.com/request" \
+  -H "Content-Type: application/json" \
+  -H "X-JIT-API-Key: $JIT_KEY" \
+  -d "{\"resource\": \"ssh\", \"requester\": \"prometheus\", \"tier\": 2, \"reason\": \"SSH to router\", \"public_key\": \"$PUB_KEY\"}")
+REQ_ID=$(echo "$RESP" | jq -r '.request_id')
+
+# 3. Wait for Telegram approval, then poll with python3 (jq chokes on embedded newlines)
+curl -s "https://jit.lab.nkontur.com/status/$REQ_ID" -H "X-JIT-API-Key: $JIT_KEY" > /tmp/jit-resp.json
+python3 -c "
+import json
+d = json.load(open('/tmp/jit-resp.json'))
+cred = d['credential']
+with open('/tmp/jit-ssh-key', 'w') as f:
+    f.write(cred['token'])  # Private key is in 'token'
+with open('/tmp/jit-ssh-key-cert.pub', 'w') as f:
+    f.write(cred['metadata']['certificate'])  # Cert is in metadata
+"
+chmod 600 /tmp/jit-ssh-key /tmp/jit-ssh-key-cert.pub
+
+# 4. Connect
+ssh -o StrictHostKeyChecking=no -i /tmp/jit-ssh-key claude@10.4.0.1
+```
+
+**⚠️ SSH credential structure is DIFFERENT from other JIT resources:**
+- `credential.token` = ephemeral private key (NOT the cert)
+- `credential.metadata.certificate` = signed SSH certificate
+- Must write BOTH files for SSH to work
+- Use python3 to parse (jq breaks on embedded newlines in certs)
+- Router IP: `10.4.0.1` (mgmt VLAN), user: `claude`, shell: `rbash` (read-only)
+
 T2 — GitLab (dynamic project access token, 30min, needs Telegram approval):
 ```bash
 RESP=$(jit_request gitlab 2 "Check pipeline status")
@@ -317,7 +378,7 @@ TOKEN=$(jit_status $REQ_ID | jq -r '.credential.token')
 curl -s "https://gitlab.lab.nkontur.com/api/v4/projects/4/pipelines?per_page=5" -H "PRIVATE-TOKEN: $TOKEN"
 ```
 
-**Note:** T0/T1 return credentials immediately in the `/request` response. T2 returns `status: pending` — poll `/status/{id}` after Noah approves.
+**Note:** T1 auto-approves but credential may NOT be in the `/request` response (known bug, MR pending). ALWAYS poll `/status/{id}` to get credentials — works for both T1 and T2. T2 returns `status: pending` — poll after Noah approves via Telegram.
 
 ---
 
