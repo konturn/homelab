@@ -19,13 +19,9 @@
 #   moltbot:build  amcrest2mqtt:build  snapcast:build  snapclient:build  jit-approval-svc:build
 #
 #   DEPLOY (main only, parallel)
-#   ┌──────────────────────────┬──────────────┬──────────────┐
-#   router:deploy [id_tokens]  zwave:deploy  sat-2:deploy
-#   (needs vault:configure)
-#
-#   CONFIGURE (main only, runs early — no dependencies)
-#   ┌──────────────┬──────────────────────────┐
-#   vault:configure  vault:rotate-approles [manual]
+#   ┌──────────────────────────┬──────────────┬──────────────┬──────────────────────────┐
+#   router:deploy [id_tokens]  zwave:deploy  sat-2:deploy  vault:configure  vault:rotate [manual]
+#   (router:deploy needs vault:configure)
 #
 #   BOOTSTRAP (main only, manual)
 #   ┌──────────────┬──────────────┐
@@ -108,7 +104,6 @@ stages:
   - validate
   - build
   - deploy
-  - configure
 
 # =============================================================================
 # Bootstrap Stage - Manual disaster recovery (main only)
@@ -392,10 +387,10 @@ satellite-2:deploy:
     - if: $CI_COMMIT_BRANCH == "main"
 
 # =============================================================================
-# Configure Stage - Terraform (main only, after deploy)
+# Vault Configuration - Terraform (main only, deploy stage)
 # =============================================================================
 vault:configure:
-  stage: configure
+  stage: deploy
   image: alpine:3.19
   needs: []
   variables:
@@ -427,7 +422,7 @@ vault:configure:
         - terraform/vault/**/*
 
 vault:rotate-approles:
-  stage: configure
+  stage: deploy
   image: alpine:3.19
   needs:
     - job: router:deploy
