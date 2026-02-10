@@ -17,6 +17,11 @@ resource "vault_policy" "ci_deploy" {
     path "homelab/metadata/*" {
       capabilities = ["read", "list"]
     }
+
+    # SSH CA public key (for TrustedUserCAKeys on target hosts)
+    path "ssh-client-signer/config/ca" {
+      capabilities = ["read"]
+    }
   EOT
 }
 
@@ -237,6 +242,16 @@ resource "vault_policy" "jit_approval_svc" {
 
     # Email
     path "homelab/data/email/gmail" {
+      capabilities = ["read"]
+    }
+
+    # Dynamic backend admin credentials
+    # Grafana: reads jit_admin_token + service_account_id to create SA tokens
+    path "homelab/data/docker/grafana" {
+      capabilities = ["read"]
+    }
+    # InfluxDB: reads admin_token + org_id to create auth tokens
+    path "homelab/data/docker/influxdb" {
       capabilities = ["read"]
     }
 

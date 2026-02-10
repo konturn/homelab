@@ -19,12 +19,9 @@
 #   moltbot:build  amcrest2mqtt:build  snapcast:build  snapclient:build  jit-approval-svc:build
 #
 #   DEPLOY (main only, parallel)
-#   ┌──────────────────────────┬──────────────┬──────────────┐
-#   router:deploy [id_tokens]  zwave:deploy  sat-2:deploy
-#
-#   CONFIGURE (main only, after deploy)
-#   ┌──────────────┬──────────────────────────┐
-#   vault:configure  vault:rotate-approles [manual]
+#   ┌──────────────────────────┬──────────────┬──────────────┬──────────────────────────┐
+#   router:deploy [id_tokens]  zwave:deploy  sat-2:deploy  vault:configure  vault:rotate [manual]
+#   (router:deploy needs vault:configure)
 #
 #   BOOTSTRAP (main only, manual)
 #   ┌──────────────┬──────────────┐
@@ -107,7 +104,6 @@ stages:
   - validate
   - build
   - deploy
-  - configure
 
 # =============================================================================
 # Bootstrap Stage - Manual disaster recovery (main only)
@@ -359,6 +355,8 @@ router:deploy:
   needs:
     - job: router:validate
       optional: true
+    - job: vault:configure
+      optional: true
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml
   rules:
@@ -389,14 +387,12 @@ satellite-2:deploy:
     - if: $CI_COMMIT_BRANCH == "main"
 
 # =============================================================================
-# Configure Stage - Terraform (main only, after deploy)
+# Vault Configuration - Terraform (main only, deploy stage)
 # =============================================================================
 vault:configure:
-  stage: configure
+  stage: deploy
   image: alpine:3.19
-  needs:
-    - job: router:deploy
-      optional: true
+  needs: []
   variables:
     TF_VERSION: "1.7.5"
     VAULT_ADDR: "https://vault.lab.nkontur.com:8200"
@@ -426,7 +422,7 @@ vault:configure:
         - terraform/vault/**/*
 
 vault:rotate-approles:
-  stage: configure
+  stage: deploy
   image: alpine:3.19
   needs:
     - job: router:deploy
@@ -666,7 +662,7 @@ vault:validate:
         -backend-config="password=${CI_JOB_TOKEN}" \
         -backend-config="retry_wait_min=5"
     - terraform validate
-    - terraform plan -var="vault_addr=${VAULT_ADDR}" -var="vault_token=${VAULT_TOKEN}"
+    - terraform plan -lock=false -var="vault_addr=${VAULT_ADDR}" -var="vault_token=${VAULT_TOKEN}"
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
