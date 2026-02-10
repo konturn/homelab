@@ -646,6 +646,8 @@ services:
           memory: 768M
     cap_add:
       - IPC_LOCK  # Required for Vault to lock memory and prevent secrets from being swapped
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - vault_data:/vault/file
       - '{{ docker_persistent_data_path }}/vault/config:/vault/config:ro'
