@@ -44,6 +44,9 @@ type Config struct {
 	// GitLab admin token for creating project access tokens (Maintainer-level)
 	GitLabAdminToken string
 
+	// Tailscale API URL (enables dynamic OAuth token backend)
+	TailscaleAPIURL string
+
 	// SSH Vault path for certificate signing (default: ssh-client-signer)
 	SSHVaultPath string
 }
@@ -96,7 +99,8 @@ func Load() (*Config, error) {
 
 		GitLabAdminToken: os.Getenv("GITLAB_ADMIN_TOKEN"),
 
-		SSHVaultPath: getEnv("SSH_VAULT_PATH", "ssh-client-signer"),
+		TailscaleAPIURL: getEnvOrEmpty("TAILSCALE_API_URL", "https://api.tailscale.com"),
+		SSHVaultPath:    getEnv("SSH_VAULT_PATH", "ssh-client-signer"),
 	}
 
 	if err := cfg.Validate(); err != nil {

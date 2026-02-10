@@ -35,6 +35,7 @@ func main() {
 		"grafana_url":        cfg.GrafanaURL,
 		"influxdb_url":       cfg.InfluxDBURL,
 		"gitlab_url":         cfg.GitLabURL,
+		"tailscale_api_url":  cfg.TailscaleAPIURL,
 	})
 
 	// Initialize request store
@@ -74,6 +75,7 @@ func main() {
 		cfg.InfluxDBURL,
 		cfg.GitLabURL,
 		cfg.GitLabAdminToken,
+		cfg.TailscaleAPIURL,
 		vaultClient, // VaultPolicyManager for dynamic vault backend
 		vaultClient, // VaultSSHSigner for SSH certificate backend
 		cfg.SSHVaultPath,

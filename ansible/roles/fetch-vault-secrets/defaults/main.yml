@@ -39,6 +39,8 @@ vault_secret_paths:
       vault_jit_telegram_webhook_secret: "telegram_webhook_secret"
       vault_jit_api_key: "jit_api_key"
       vault_jit_gitlab_admin_token: "gitlab_admin_token"
+      vault_jit_tailscale_client_id: "tailscale_client_id"
+      vault_jit_tailscale_client_secret: "tailscale_client_secret"
 
   # Docker service secrets
   - path: "docker/audioserve"

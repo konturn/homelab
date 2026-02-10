@@ -270,6 +270,14 @@ resource "vault_policy" "jit_approval_svc" {
       capabilities = ["read"]
     }
 
+    # Tier 1: Additional services (auto-approve)
+    path "homelab/data/docker/prowlarr" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/mqtt/mosquitto" {
+      capabilities = ["read"]
+    }
+
     # Email
     path "homelab/data/email/gmail" {
       capabilities = ["read"]
@@ -280,6 +288,9 @@ resource "vault_policy" "jit_approval_svc" {
       capabilities = ["read"]
     }
     path "homelab/data/docker/homeassistant" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/infrastructure/pihole" {
       capabilities = ["read"]
     }
 
@@ -348,6 +359,12 @@ resource "vault_policy" "jit_tier1_services" {
     path "homelab/data/docker/paperless" {
       capabilities = ["read"]
     }
+    path "homelab/data/docker/prowlarr" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/mqtt/mosquitto" {
+      capabilities = ["read"]
+    }
 
     # Email
     path "homelab/data/email/gmail" {
@@ -370,6 +387,9 @@ resource "vault_policy" "jit_tier2_infra" {
       capabilities = ["read"]
     }
     path "homelab/data/docker/homeassistant" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/infrastructure/pihole" {
       capabilities = ["read"]
     }
   EOT
