@@ -1,3 +1,8 @@
 # vault_ssh_ca_public_key must be provided by the playbook.
 # Typically fetched from Vault: ssh-client-signer/config/ca -> public_key
 vault_ssh_ca_public_key: ""
+
+# SSH user configuration. Override these to create a different restricted user.
+claude_user_name: "claude"
+claude_user_group: "claude"
+claude_user_principal: "claude"

@@ -31,3 +31,78 @@ resource "vault_ssh_secret_backend_role" "claude" {
   }
   allowed_extensions = "permit-pty"
 }
+
+resource "vault_ssh_secret_backend_role" "satellite" {
+  name                    = "satellite"
+  backend                 = vault_mount.ssh.path
+  key_type                = "ca"
+  default_user            = "claude-satellite"
+  allowed_users           = "claude-satellite"
+  ttl                     = "900"
+  max_ttl                 = "1800"
+  allow_user_certificates = true
+  default_extensions = {
+    "permit-pty" = ""
+  }
+  allowed_extensions = "permit-pty"
+}
+
+resource "vault_ssh_secret_backend_role" "zwave" {
+  name                    = "zwave"
+  backend                 = vault_mount.ssh.path
+  key_type                = "ca"
+  default_user            = "claude-zwave"
+  allowed_users           = "claude-zwave"
+  ttl                     = "900"
+  max_ttl                 = "1800"
+  allow_user_certificates = true
+  default_extensions = {
+    "permit-pty" = ""
+  }
+  allowed_extensions = "permit-pty"
+}
+
+resource "vault_ssh_secret_backend_role" "nkontur_ws" {
+  name                    = "nkontur-ws"
+  backend                 = vault_mount.ssh.path
+  key_type                = "ca"
+  default_user            = "claude-nkontur"
+  allowed_users           = "claude-nkontur"
+  ttl                     = "900"
+  max_ttl                 = "1800"
+  allow_user_certificates = true
+  default_extensions = {
+    "permit-pty" = ""
+  }
+  allowed_extensions = "permit-pty"
+}
+
+resource "vault_ssh_secret_backend_role" "konoahko_ws" {
+  name                    = "konoahko-ws"
+  backend                 = vault_mount.ssh.path
+  key_type                = "ca"
+  default_user            = "claude-konoahko"
+  allowed_users           = "claude-konoahko"
+  ttl                     = "900"
+  max_ttl                 = "1800"
+  allow_user_certificates = true
+  default_extensions = {
+    "permit-pty" = ""
+  }
+  allowed_extensions = "permit-pty"
+}
+
+resource "vault_ssh_secret_backend_role" "konturn_ws" {
+  name                    = "konturn-ws"
+  backend                 = vault_mount.ssh.path
+  key_type                = "ca"
+  default_user            = "claude-konturn"
+  allowed_users           = "claude-konturn"
+  ttl                     = "900"
+  max_ttl                 = "1800"
+  allow_user_certificates = true
+  default_extensions = {
+    "permit-pty" = ""
+  }
+  allowed_extensions = "permit-pty"
+}
