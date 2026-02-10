@@ -8,37 +8,37 @@
 
 - name: Create claude group
   group:
-    name: claude
+    name: "{{ claude_user_group }}"
     state: present
 
 - name: Create claude user with restricted shell
   user:
-    name: claude
-    group: claude
+    name: "{{ claude_user_name }}"
+    group: "{{ claude_user_group }}"
     shell: /bin/rbash
-    home: /home/claude
+    home: "/home/{{ claude_user_name }}"
     create_home: yes
     comment: "Restricted read-only user for AI agent SSH access"
 
 - name: Set claude home directory permissions
   file:
-    path: /home/claude
+    path: "/home/{{ claude_user_name }}"
     mode: '0700'
-    owner: claude
-    group: claude
+    owner: "{{ claude_user_name }}"
+    group: "{{ claude_user_group }}"
 
 - name: Create restricted PATH bin directory
   file:
-    path: /home/claude/bin
+    path: "/home/{{ claude_user_name }}/bin"
     state: directory
     mode: '0755'
-    owner: claude
-    group: claude
+    owner: "{{ claude_user_name }}"
+    group: "{{ claude_user_group }}"
 
 - name: Symlink allowed commands into restricted PATH
   file:
     src: "{{ item.src }}"
-    dest: "/home/claude/bin/{{ item.name }}"
+    dest: "/home/{{ claude_user_name }}/bin/{{ item.name }}"
     state: link
   loop:
     - { src: /usr/bin/cat, name: cat }
@@ -73,14 +73,14 @@
 
 - name: Configure restricted .bashrc
   copy:
-    dest: /home/claude/.bashrc
-    owner: claude
-    group: claude
+    dest: "/home/{{ claude_user_name }}/.bashrc"
+    owner: "{{ claude_user_name }}"
+    group: "{{ claude_user_group }}"
     mode: '0644'
     content: |
       # Restricted shell configuration
-      export PATH=/home/claude/bin
-      export HISTFILE=/home/claude/.bash_history
+      export PATH=/home/{{ claude_user_name }}/bin
+      export HISTFILE=/home/{{ claude_user_name }}/.bash_history
       export HISTSIZE=1000
       readonly PATH
       # No cd allowed in rbash by default
@@ -88,30 +88,30 @@
 
 - name: Create .profile
   copy:
-    dest: /home/claude/.profile
-    owner: claude
-    group: claude
+    dest: "/home/{{ claude_user_name }}/.profile"
+    owner: "{{ claude_user_name }}"
+    group: "{{ claude_user_group }}"
     mode: '0644'
     content: |
       if [ -f ~/.bashrc ]; then
         . ~/.bashrc
       fi
 
-- name: Deny cron access for claude
+- name: Deny cron access for claude user
   lineinfile:
     path: /etc/cron.deny
-    line: claude
+    line: "{{ claude_user_name }}"
     create: yes
 
-- name: Deny at access for claude
+- name: Deny at access for claude user
   lineinfile:
     path: /etc/at.deny
-    line: claude
+    line: "{{ claude_user_name }}"
     create: yes
 
-- name: Ensure claude is NOT in docker group
+- name: Ensure claude user is NOT in docker group
   user:
-    name: claude
+    name: "{{ claude_user_name }}"
     groups: []
     append: no
 
@@ -158,4 +158,24 @@
     path: /etc/ssh/sshd_config
     line: "TrustedUserCAKeys /etc/ssh/trusted-user-ca-keys.pem"
     regexp: "^TrustedUserCAKeys"
+  notify: restart sshd
+
+- name: Create AuthorizedPrincipals directory
+  file:
+    path: /etc/ssh/auth_principals
+    state: directory
+    mode: '0755'
+
+- name: Configure AuthorizedPrincipals for claude user
+  copy:
+    dest: "/etc/ssh/auth_principals/{{ claude_user_name }}"
+    content: "{{ claude_user_principal }}\n"
+    mode: '0644'
+  notify: restart sshd
+
+- name: Add AuthorizedPrincipalsFile to sshd_config
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    line: "AuthorizedPrincipalsFile /etc/ssh/auth_principals/%u"
+    regexp: "^AuthorizedPrincipalsFile"
   notify: restart sshd

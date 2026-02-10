@@ -285,6 +285,21 @@ resource "vault_policy" "jit_approval_svc" {
     path "ssh-client-signer/sign/claude" {
       capabilities = ["create", "update"]
     }
+    path "ssh-client-signer/sign/satellite" {
+      capabilities = ["create", "update"]
+    }
+    path "ssh-client-signer/sign/zwave" {
+      capabilities = ["create", "update"]
+    }
+    path "ssh-client-signer/sign/j1" {
+      capabilities = ["create", "update"]
+    }
+    path "ssh-client-signer/sign/j2" {
+      capabilities = ["create", "update"]
+    }
+    path "ssh-client-signer/sign/j3" {
+      capabilities = ["create", "update"]
+    }
     path "ssh-client-signer/config/ca" {
       capabilities = ["read"]
     }

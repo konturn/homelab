@@ -31,3 +31,78 @@ resource "vault_ssh_secret_backend_role" "claude" {
   }
   allowed_extensions = "permit-pty"
 }
+
+resource "vault_ssh_secret_backend_role" "satellite" {
+  name                    = "satellite"
+  backend                 = vault_mount.ssh.path
+  key_type                = "ca"
+  default_user            = "claude-satellite"
+  allowed_users           = "claude-satellite"
+  ttl                     = "900"
+  max_ttl                 = "1800"
+  allow_user_certificates = true
+  default_extensions = {
+    "permit-pty" = ""
+  }
+  allowed_extensions = "permit-pty"
+}
+
+resource "vault_ssh_secret_backend_role" "zwave" {
+  name                    = "zwave"
+  backend                 = vault_mount.ssh.path
+  key_type                = "ca"
+  default_user            = "claude-zwave"
+  allowed_users           = "claude-zwave"
+  ttl                     = "900"
+  max_ttl                 = "1800"
+  allow_user_certificates = true
+  default_extensions = {
+    "permit-pty" = ""
+  }
+  allowed_extensions = "permit-pty"
+}
+
+resource "vault_ssh_secret_backend_role" "j1" {
+  name                    = "j1"
+  backend                 = vault_mount.ssh.path
+  key_type                = "ca"
+  default_user            = "claude-j1"
+  allowed_users           = "claude-j1"
+  ttl                     = "900"
+  max_ttl                 = "1800"
+  allow_user_certificates = true
+  default_extensions = {
+    "permit-pty" = ""
+  }
+  allowed_extensions = "permit-pty"
+}
+
+resource "vault_ssh_secret_backend_role" "j2" {
+  name                    = "j2"
+  backend                 = vault_mount.ssh.path
+  key_type                = "ca"
+  default_user            = "claude-j2"
+  allowed_users           = "claude-j2"
+  ttl                     = "900"
+  max_ttl                 = "1800"
+  allow_user_certificates = true
+  default_extensions = {
+    "permit-pty" = ""
+  }
+  allowed_extensions = "permit-pty"
+}
+
+resource "vault_ssh_secret_backend_role" "j3" {
+  name                    = "j3"
+  backend                 = vault_mount.ssh.path
+  key_type                = "ca"
+  default_user            = "claude-j3"
+  allowed_users           = "claude-j3"
+  ttl                     = "900"
+  max_ttl                 = "1800"
+  allow_user_certificates = true
+  default_extensions = {
+    "permit-pty" = ""
+  }
+  allowed_extensions = "permit-pty"
+}

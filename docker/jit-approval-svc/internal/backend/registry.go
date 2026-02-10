@@ -67,12 +67,14 @@ func NewRegistry(vaultMinter VaultTokenMinter, vaultReader VaultSecretReader, ha
 	}
 
 	if sshSigner != nil && sshVaultPath != "" {
-		b := NewSSHBackend(sshSigner, sshVaultPath)
-		r.backends["ssh"] = b
-		logger.Info("backend_registered", logger.Fields{
-			"resource": "ssh",
-			"backend":  "dynamic/ssh",
-		})
+		sshBackend := NewSSHBackend(sshSigner, sshVaultPath)
+		for _, res := range []string{"ssh", "ssh-satellite", "ssh-zwave", "ssh-j1", "ssh-j2", "ssh-j3"} {
+			r.backends[res] = sshBackend
+			logger.Info("backend_registered", logger.Fields{
+				"resource": res,
+				"backend":  "dynamic/ssh",
+			})
+		}
 	}
 
 	if vaultPolicyMgr != nil {
