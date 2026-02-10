@@ -318,7 +318,7 @@ func TestHandleStatus_Pending(t *testing.T) {
 	h := mockHandler()
 
 	// Create a request directly in the store
-	storeReq := h.store.Create("prometheus", "gitlab", 2, "test", nil)
+	storeReq, _ := h.store.Create("prometheus", "gitlab", 2, "test", nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/status/"+storeReq.ID, nil)
 	req.Header.Set("X-JIT-API-Key", "test-api-key")
@@ -345,7 +345,7 @@ func TestHandleStatus_Pending(t *testing.T) {
 func TestHandleStatus_ApprovedClaims(t *testing.T) {
 	h := mockHandler()
 
-	storeReq := h.store.Create("prometheus", "gitlab", 2, "test", nil)
+	storeReq, _ := h.store.Create("prometheus", "gitlab", 2, "test", nil)
 	_ = h.store.Approve(storeReq.ID, &store.Credential{
 		Token:    "hvs.test-token",
 		LeaseTTL: 30 * time.Minute,
@@ -399,7 +399,7 @@ func TestHandleStatus_ApprovedClaims(t *testing.T) {
 func TestHandleStatus_CredentialMetadata(t *testing.T) {
 	h := mockHandler()
 
-	storeReq := h.store.Create("prometheus", "grafana", 1, "check dashboards", nil)
+	storeReq, _ := h.store.Create("prometheus", "grafana", 1, "check dashboards", nil)
 	_ = h.store.Approve(storeReq.ID, &store.Credential{
 		Token:    "glsa-test-token",
 		LeaseTTL: 15 * time.Minute,
@@ -430,21 +430,28 @@ func TestHandleStatus_CredentialMetadata(t *testing.T) {
 	}
 }
 
-func TestHandleHealth(t *testing.T) {
+func TestHandleHealth_Unauthenticated(t *testing.T) {
 	h := mockHandler()
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 
-	// This will panic because vault client is nil.
-	// In real deployment, vault is always present.
-	defer func() {
-		if r := recover(); r != nil {
-			// Expected: vault client is nil in test
-		}
-	}()
-
 	h.HandleHealth(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+
+	var resp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp["status"] != "ok" {
+		t.Errorf("expected status ok, got %s", resp["status"])
+	}
+	if _, hasVault := resp["vault"]; hasVault {
+		t.Error("unauthenticated health should not expose vault status")
+	}
 }
 
 func TestHandleTelegramWebhook_SecretValidation(t *testing.T) {

@@ -3,10 +3,17 @@ package store
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 )
+
+// maxRequests is the upper bound on in-memory requests to prevent unbounded growth.
+const maxRequests = 1000
+
+// ErrStoreFull is returned when the store has reached its capacity.
+var ErrStoreFull = errors.New("request store is full")
 
 // Status represents the lifecycle state of an access request.
 type Status string
@@ -86,7 +93,8 @@ func GenerateID() string {
 }
 
 // Create stores a new request and returns it.
-func (s *Store) Create(requester, resource string, tier int, reason string, scopes []string) *Request {
+// Returns an error if the store has reached its capacity.
+func (s *Store) Create(requester, resource string, tier int, reason string, scopes []string) (*Request, error) {
 	req := &Request{
 		ID:        GenerateID(),
 		Requester: requester,
@@ -100,8 +108,11 @@ func (s *Store) Create(requester, resource string, tier int, reason string, scop
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if len(s.requests) >= maxRequests {
+		return nil, ErrStoreFull
+	}
 	s.requests[req.ID] = req
-	return req
+	return req, nil
 }
 
 // Get retrieves a request by ID. Returns nil if not found.
@@ -210,15 +221,21 @@ func (s *Store) PendingRequests() []*Request {
 	return pending
 }
 
-// Cleanup removes requests older than the given duration.
+// Cleanup removes resolved requests older than maxAge and
+// pending requests older than 1 hour (stale/abandoned).
 func (s *Store) Cleanup(maxAge time.Duration) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	cutoff := time.Now().Add(-maxAge)
+	now := time.Now()
+	cutoff := now.Add(-maxAge)
+	pendingCutoff := now.Add(-1 * time.Hour)
 	removed := 0
 	for id, req := range s.requests {
-		if req.CreatedAt.Before(cutoff) && req.Status != StatusPending {
+		if req.Status == StatusPending && req.CreatedAt.Before(pendingCutoff) {
+			delete(s.requests, id)
+			removed++
+		} else if req.Status != StatusPending && req.CreatedAt.Before(cutoff) {
 			delete(s.requests, id)
 			removed++
 		}
