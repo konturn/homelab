@@ -1395,36 +1395,7 @@ services:
       - CLAWDBOT_GATEWAY_TOKEN={{ vault_moltbot_gateway_token | default(lookup('env', 'MOLTBOT_GATEWAY_TOKEN')) | trim }}
       - TELEGRAM_BOT_TOKEN={{ vault_moltbot_telegram_token | default(lookup('env', 'MOLTBOT_TELEGRAM_TOKEN')) | trim }}
       - HASS_URL=http://homeassistant:8123
-      - HASS_TOKEN={{ vault_hass_token | default(lookup('env', 'HASS_TOKEN')) | trim }}
       - GITLAB_TOKEN={{ vault_moltbot_gitlab_token | default(lookup('env', 'MOLTBOT_GITLAB_TOKEN')) | trim }}
-      # Media management APIs (internal network)
-      - RADARR_URL=http://radarr:7878
-      - RADARR_API_KEY={{ vault_radarr_api_key | default(lookup('env', 'RADARR_API_KEY')) | trim }}
-      - SONARR_URL=http://sonarr:8989
-      - SONARR_API_KEY={{ vault_sonarr_api_key | default(lookup('env', 'SONARR_API_KEY')) | trim }}
-      - PROWLARR_URL=http://prowlarr:9696
-      - PROWLARR_API_KEY={{ vault_prowlarr_api_key | default(lookup('env', 'PROWLARR_API_KEY')) | trim }}
-      - PLEX_URL=http://plex:32400
-      - PLEX_TOKEN={{ vault_plex_token | default(lookup('env', 'PLEX_TOKEN')) | trim }}
-      - OMBI_URL=http://ombi:3579
-      - OMBI_API_KEY={{ vault_ombi_api_key | default(lookup('env', 'OMBI_API_KEY')) | trim }}
-      # Download clients
-      - NZBGET_URL=http://nzbget:6789
-      - NZBGET_USERNAME={{ vault_nzbget_username | default(lookup('env', 'NZBGET_USERNAME')) | trim }}
-      - NZBGET_PASSWORD={{ vault_nzbget_password | default(lookup('env', 'NZBGET_PASSWORD')) | trim }}
-      - DELUGE_URL=http://deluge:8112
-      - DELUGE_PASSWORD={{ vault_deluge_password | default(lookup('env', 'DELUGE_PASSWORD')) | trim }}
-      # Document management
-      - PAPERLESS_URL=http://paperless-ngx:8000
-      - PAPERLESS_TOKEN={{ vault_paperless_token | default(lookup('env', 'PAPERLESS_TOKEN')) | trim }}
-      # Metrics/monitoring
-      - INFLUXDB_URL=http://influxdb:8086
-      - INFLUXDB_TOKEN={{ vault_influxdb_token | default(lookup('env', 'INFLUXDB_TOKEN')) | trim }}
-      # Grafana API access
-      - GRAFANA_URL={{ grafana_url }}
-      - GRAFANA_TOKEN={{ grafana_token }}
-      # Tailscale API access
-      - TAILSCALE_API_TOKEN={{ vault_tailscale_api_token | default(lookup('env', 'TAILSCALE_API_TOKEN')) | trim }}
       # IPMI access for server management
       - IPMI_USER={{ vault_ipmi_user | default(lookup('env', 'IPMI_USER')) | trim }}
       - IPMI_PASSWORD={{ vault_ipmi_password | default(lookup('env', 'IPMI_PASSWORD')) | trim }}
@@ -1432,10 +1403,7 @@ services:
       - BRAVE_API_KEY={{ brave_api_key }}
       # Agent platforms
       - ACLAWDEMY_API_KEY={{ vault_aclawdemy_api_key | default(lookup('env', 'ACLAWDEMY_API_KEY')) | trim }}
-      # Email access (for job application verification codes, etc.)
-      - GMAIL_EMAIL={{ vault_gmail_email | default(lookup('env', 'GMAIL_EMAIL')) | trim }}
-      - GMAIL_APP_PASSWORD={{ vault_gmail_app_password | default(lookup('env', 'GMAIL_APP_PASSWORD')) | trim }}
-      # Vault AppRole credentials (for moltbot runtime Vault access)
+      # Vault AppRole credentials (for moltbot runtime Vault access & JIT)
       - VAULT_ADDR=https://vault.lab.nkontur.com:8200
       - VAULT_APPROLE_ROLE_ID={{ lookup('env', 'VAULT_APPROLE_ROLE_ID') }}
       - VAULT_APPROLE_SECRET_ID={{ lookup('env', 'VAULT_APPROLE_SECRET_ID') }}
