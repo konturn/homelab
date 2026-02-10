@@ -537,8 +537,8 @@ vault:rotate-approles:
         if [ -n "$GL_TOKEN" ]; then
           echo "  GitLab token fetched from Vault"
         else
-          echo "  WARN: Could not fetch GitLab token from Vault — falling back to CI variable"
-          GL_TOKEN="${MOLTBOT_GITLAB_TOKEN:-}"
+          echo "  ERROR: Could not fetch GitLab token from Vault"
+          FAILURES=$((FAILURES + 1))
         fi
         unset GL_SECRET_RESP
 
