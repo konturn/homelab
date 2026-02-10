@@ -156,14 +156,10 @@ Infrastructure services:
 
 ### 🔐 Security Recommendations
 
-1. **Restrict SSH Input**
-   - Current: SSH allowed from any interface
-   - Recommendation: Restrict to mgmt VLAN and WireGuard only
-   ```
-   -A INPUT -i {{ local_interface_name }}.4 -p tcp --dport 22 -j ACCEPT
-   -A INPUT -i wg0 -p tcp --dport 22 -j ACCEPT
-   -A INPUT -i wg1 -p tcp --dport 22 -j ACCEPT
-   ```
+1. **~~Restrict SSH Input~~** ✅ Partially addressed
+   - WAN SSH now has rate limiting (max 4 new connections/60s per source IP)
+   - mgmt VLAN and Tailscale access remains unrestricted (trusted networks)
+   - Future consideration: remove WAN SSH entirely if Tailscale proves reliable
 
 2. **Device-specific rules**
    - Shield TV and Apple TV have full forward access
@@ -183,7 +179,8 @@ Controls traffic TO the router itself:
 
 | Purpose | Interface | Ports |
 |---------|-----------|-------|
-| SSH | any | 22 |
+| SSH | mgmt, tailscale | 22 |
+| SSH (rate-limited) | WAN | 22 |
 | ICMP | any | - |
 | NFS | mgmt, iot, wg0 | 2049, 111 |
 | SMB | mgmt | 139, 445 |

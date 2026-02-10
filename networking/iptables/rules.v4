@@ -140,6 +140,10 @@ COMMIT
 # WAN: out-of-band access when Tailscale is down (key-only auth)
 -A INPUT -s 10.4.0.0/16 -p tcp -m tcp --dport 22 -j ACCEPT
 -A INPUT -s 100.64.0.0/10 -p tcp -m tcp --dport 22 -j ACCEPT
+# WAN SSH rate limiting: max 4 new connections per 60 seconds per source IP
+# Mitigates brute-force attacks on the out-of-band SSH access
+-A INPUT -i {{ inet_interface_name }} -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --set --name SSH
+-A INPUT -i {{ inet_interface_name }} -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --update --seconds 60 --hitcount 4 --name SSH -j DROP
 -A INPUT -i {{ inet_interface_name }} -p tcp -m tcp --dport 22 -j ACCEPT
 
 # Tailscale — allow DNS from tailnet clients to router (Pi-hole)
