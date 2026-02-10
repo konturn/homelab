@@ -48,6 +48,7 @@
 # === VAULT & SECRETS ===
 # Could access or redirect secret storage
 /docker/vault/                           @root
+/docker/jit-approval-svc/                @root
 /terraform/vault/                        @root
 
 # === SSL CERTS ===
