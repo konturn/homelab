@@ -265,6 +265,7 @@ var resourceTier = map[string]int{
 	"nzbget":    1,
 	"deluge":    1,
 	"paperless": 1,
+	"gmail":     1,
 
 	// Tier 2: Infrastructure (requires approval, 30 min TTL)
 	"gitlab":        2,

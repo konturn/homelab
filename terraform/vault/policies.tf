@@ -79,6 +79,11 @@ resource "vault_policy" "moltbot_ops" {
     path "homelab/data/agents/*" {
       capabilities = ["read"]
     }
+
+    # Moltbot own config (gitlab_token, etc.)
+    path "homelab/data/moltbot/*" {
+      capabilities = ["read"]
+    }
   EOT
 }
 
@@ -255,6 +260,11 @@ resource "vault_policy" "jit_approval_svc" {
       capabilities = ["read"]
     }
 
+    # Email
+    path "homelab/data/email/gmail" {
+      capabilities = ["read"]
+    }
+
     # Tier 2: Infrastructure (requires approval)
     path "homelab/data/docker/gitlab" {
       capabilities = ["read"]
@@ -318,6 +328,11 @@ resource "vault_policy" "jit_tier1_services" {
       capabilities = ["read"]
     }
     path "homelab/data/docker/paperless" {
+      capabilities = ["read"]
+    }
+
+    # Email
+    path "homelab/data/email/gmail" {
       capabilities = ["read"]
     }
   EOT

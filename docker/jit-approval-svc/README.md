@@ -32,6 +32,7 @@ The service supports two types of credential backends:
 | Plex | Static (Vault) | API key from Vault (transient token API deprecated in Plex 1.43+) |
 | Home Assistant | Dynamic (HomeAssistantBackend) | OAuth access token (30 min, via refresh flow) |
 | Radarr, Sonarr, Ombi, NZBGet, Deluge, Paperless, GitLab | Static (Vault) | Scoped Vault token |
+| Gmail | Static (Vault) | Email + app password from Vault |
 
 ## API
 
@@ -133,7 +134,7 @@ Telegram webhook endpoint for inline button callbacks. Validates `X-Telegram-Bot
 
 | Tier | TTL | Approval | Resources |
 |------|-----|----------|-----------|
-| 1 | 15 min | Auto | Grafana, InfluxDB, Plex, Radarr, Sonarr, Ombi, NZBGet, Deluge, Paperless |
+| 1 | 15 min | Auto | Grafana, InfluxDB, Plex, Radarr, Sonarr, Ombi, NZBGet, Deluge, Paperless, Gmail |
 | 2 | 30 min | Manual (Telegram) | GitLab, Home Assistant |
 | 3 | 60 min | Manual (Telegram) | Critical (reserved) |
 
@@ -180,6 +181,7 @@ Dynamic backends read their upstream credentials from Vault:
 | Grafana | `homelab/data/docker/grafana` | `jit_admin_token`, `service_account_id` |
 | Plex | `homelab/data/docker/plex` | `token` |
 | InfluxDB | `homelab/data/docker/influxdb` | `admin_token`, `org_id` |
+| Gmail | `homelab/data/email/gmail` | `email`, `app_password` |
 
 ## Build
 
