@@ -53,6 +53,7 @@ type CreateRequestBody struct {
 	Scopes     []string           `json:"scopes,omitempty"`
 	VaultPaths []VaultPathRequest `json:"vault_paths,omitempty"`
 	SSHHost    string             `json:"ssh_host,omitempty"`
+	ProjectID  string             `json:"project_id,omitempty"`
 }
 
 // CreateRequestResponse is the JSON response for POST /request.
@@ -169,6 +170,11 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	// Attach SSH host if present
 	if body.SSHHost != "" {
 		req.SSHHost = body.SSHHost
+	}
+
+	// Attach project ID override if present
+	if body.ProjectID != "" {
+		req.ProjectID = body.ProjectID
 	}
 
 	// Attach vault paths if present
@@ -373,7 +379,7 @@ func (h *Handler) mintCredential(req *store.Request, tierCfg config.TierConfig) 
 	b := h.backends.For(req.Resource)
 	isDynamic := h.backends.IsDynamic(req.Resource)
 
-	opts := backend.MintOptions{Scopes: req.Scopes, RequestID: req.ID}
+	opts := backend.MintOptions{Scopes: req.Scopes, RequestID: req.ID, ProjectID: req.ProjectID}
 	// Convert vault paths for dynamic vault backend
 	if len(req.VaultPaths) > 0 {
 		bPaths := make([]backend.VaultPathRequest, len(req.VaultPaths))

@@ -75,6 +75,7 @@ func main() {
 		cfg.InfluxDBURL,
 		cfg.GitLabURL,
 		cfg.GitLabAdminToken,
+		cfg.GitLabProjectID,
 		cfg.TailscaleAPIURL,
 		vaultClient, // VaultPolicyManager for dynamic vault backend
 		vaultClient, // VaultSSHSigner for SSH certificate backend

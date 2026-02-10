@@ -21,6 +21,9 @@ type MintOptions struct {
 	// RequestID is the JIT request ID, used for naming temporary resources.
 	RequestID string
 
+	// ProjectID overrides the default project for GitLab token creation.
+	ProjectID string
+
 	// VaultPaths specifies the Vault paths and capabilities for the dynamic Vault backend.
 	VaultPaths []VaultPathRequest
 }

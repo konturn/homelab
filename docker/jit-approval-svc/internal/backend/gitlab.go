@@ -28,10 +28,13 @@ type GitLabBackend struct {
 
 // NewGitLabBackend creates a GitLab dynamic backend.
 // adminToken is a Maintainer-level token that can create project access tokens.
-func NewGitLabBackend(baseURL, adminToken string) *GitLabBackend {
+func NewGitLabBackend(baseURL, adminToken, defaultProjectID string) *GitLabBackend {
+	if defaultProjectID == "" {
+		defaultProjectID = "4" // homelab project
+	}
 	return &GitLabBackend{
 		baseURL:    strings.TrimRight(baseURL, "/"),
-		projectID:  "4", // homelab project
+		projectID:  defaultProjectID,
 		adminToken: adminToken,
 		http: &http.Client{
 			Timeout: 10 * time.Second,
@@ -56,6 +59,12 @@ type gitlabTokenResponse struct {
 
 // MintCredential creates a short-lived GitLab project access token.
 func (b *GitLabBackend) MintCredential(resource string, tier int, ttl time.Duration, opts MintOptions) (*Credential, error) {
+	// Resolve project ID: per-request override or default.
+	projectID := b.projectID
+	if opts.ProjectID != "" {
+		projectID = opts.ProjectID
+	}
+
 	// GitLab PAT expiry is date-based (minimum 1 day). Set to tomorrow.
 	expiresAt := time.Now().Add(24 * time.Hour).UTC().Format("2006-01-02")
 	tokenName := fmt.Sprintf("jit-gitlab-%d", time.Now().Unix())
@@ -69,7 +78,7 @@ func (b *GitLabBackend) MintCredential(resource string, tier int, ttl time.Durat
 		Name:        tokenName,
 		Scopes:      scopes,
 		ExpiresAt:   expiresAt,
-		AccessLevel: 30, // Developer
+		AccessLevel: 40, // Maintainer
 	}
 
 	body, err := json.Marshal(payload)
@@ -77,7 +86,7 @@ func (b *GitLabBackend) MintCredential(resource string, tier int, ttl time.Durat
 		return nil, fmt.Errorf("marshal token request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/api/v4/projects/%s/access_tokens", b.baseURL, b.projectID)
+	url := fmt.Sprintf("%s/api/v4/projects/%s/access_tokens", b.baseURL, projectID)
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
@@ -119,7 +128,7 @@ func (b *GitLabBackend) MintCredential(resource string, tier int, ttl time.Durat
 		Metadata: map[string]string{
 			"type":       "project_access_token",
 			"backend":    "gitlab",
-			"project_id": b.projectID,
+			"project_id": projectID,
 			"token_id":   fmt.Sprintf("%d", tokenResp.ID),
 			"token_name": tokenResp.Name,
 		},
@@ -127,8 +136,12 @@ func (b *GitLabBackend) MintCredential(resource string, tier int, ttl time.Durat
 }
 
 // RevokeCredential attempts to revoke a project access token. Best-effort.
-func (b *GitLabBackend) RevokeCredential(tokenID string) error {
-	url := fmt.Sprintf("%s/api/v4/projects/%s/access_tokens/%s", b.baseURL, b.projectID, tokenID)
+// If projectID is empty, the backend's default project is used.
+func (b *GitLabBackend) RevokeCredential(tokenID, projectID string) error {
+	if projectID == "" {
+		projectID = b.projectID
+	}
+	url := fmt.Sprintf("%s/api/v4/projects/%s/access_tokens/%s", b.baseURL, projectID, tokenID)
 	req, err := http.NewRequest(http.MethodDelete, url, nil)
 	if err != nil {
 		return fmt.Errorf("create revoke request: %w", err)

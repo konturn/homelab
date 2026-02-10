@@ -34,8 +34,8 @@ func TestGitLabBackend_MintCredential(t *testing.T) {
 		if len(body.Scopes) != 1 || body.Scopes[0] != "api" {
 			t.Errorf("expected scopes [api], got %v", body.Scopes)
 		}
-		if body.AccessLevel != 30 {
-			t.Errorf("expected access_level 30, got %d", body.AccessLevel)
+		if body.AccessLevel != 40 {
+			t.Errorf("expected access_level 40, got %d", body.AccessLevel)
 		}
 		if body.ExpiresAt == "" {
 			t.Error("expected non-empty expires_at")
@@ -51,7 +51,7 @@ func TestGitLabBackend_MintCredential(t *testing.T) {
 	}))
 	defer server.Close()
 
-	b := NewGitLabBackend(server.URL, "gitlab-admin-token")
+	b := NewGitLabBackend(server.URL, "gitlab-admin-token", "4")
 	cred, err := b.MintCredential("gitlab", 2, 30*time.Minute, MintOptions{})
 	if err != nil {
 		t.Fatalf("MintCredential failed: %v", err)
@@ -92,7 +92,7 @@ func TestGitLabBackend_MintCredential_CustomScopes(t *testing.T) {
 	}))
 	defer server.Close()
 
-	b := NewGitLabBackend(server.URL, "gitlab-admin-token")
+	b := NewGitLabBackend(server.URL, "gitlab-admin-token", "4")
 	cred, err := b.MintCredential("gitlab", 2, 30*time.Minute, MintOptions{
 		Scopes: []string{"read_api", "read_repository"},
 	})
@@ -111,7 +111,7 @@ func TestGitLabBackend_MintCredential_Error(t *testing.T) {
 	}))
 	defer server.Close()
 
-	b := NewGitLabBackend(server.URL, "bad-token")
+	b := NewGitLabBackend(server.URL, "bad-token", "4")
 	_, err := b.MintCredential("gitlab", 2, 30*time.Minute, MintOptions{})
 	if err == nil {
 		t.Fatal("expected error from bad gitlab response")
@@ -134,8 +134,8 @@ func TestGitLabBackend_RevokeCredential(t *testing.T) {
 	}))
 	defer server.Close()
 
-	b := NewGitLabBackend(server.URL, "gitlab-admin-token")
-	err := b.RevokeCredential("99")
+	b := NewGitLabBackend(server.URL, "gitlab-admin-token", "4")
+	err := b.RevokeCredential("99", "4")
 	if err != nil {
 		t.Fatalf("RevokeCredential failed: %v", err)
 	}
@@ -148,8 +148,8 @@ func TestGitLabBackend_RevokeCredential_Error(t *testing.T) {
 	}))
 	defer server.Close()
 
-	b := NewGitLabBackend(server.URL, "gitlab-admin-token")
-	err := b.RevokeCredential("999")
+	b := NewGitLabBackend(server.URL, "gitlab-admin-token", "4")
+	err := b.RevokeCredential("999", "4")
 	if err == nil {
 		t.Fatal("expected error from revoke of non-existent token")
 	}
@@ -166,7 +166,7 @@ func TestGitLabBackend_Health(t *testing.T) {
 	}))
 	defer server.Close()
 
-	b := NewGitLabBackend(server.URL, "gitlab-admin-token")
+	b := NewGitLabBackend(server.URL, "gitlab-admin-token", "4")
 	if err := b.Health(); err != nil {
 		t.Errorf("Health() failed: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestRegistry_GitLabDynamicBackend(t *testing.T) {
 	minter := &mockVaultMinter{token: "vault-token", leaseID: "acc-1"}
 	reader := &mockVaultReader{secrets: map[string]map[string]string{}}
 
-	r := NewRegistry(minter, reader, "", "", "", "https://gitlab.example.com", "admin-token", "", nil, nil, "")
+	r := NewRegistry(minter, reader, "", "", "", "https://gitlab.example.com", "admin-token", "4", "", nil, nil, "")
 
 	if !r.IsDynamic("gitlab") {
 		t.Error("expected gitlab to be dynamic")
@@ -188,7 +188,7 @@ func TestRegistry_GitLabFallbackWhenNoToken(t *testing.T) {
 	reader := &mockVaultReader{secrets: map[string]map[string]string{}}
 
 	// URL set but no token — should NOT register dynamic backend
-	r := NewRegistry(minter, reader, "", "", "", "https://gitlab.example.com", "", "", nil, nil, "")
+	r := NewRegistry(minter, reader, "", "", "", "https://gitlab.example.com", "", "", "", nil, nil, "")
 
 	if r.IsDynamic("gitlab") {
 		t.Error("expected gitlab to NOT be dynamic when admin token is empty")
