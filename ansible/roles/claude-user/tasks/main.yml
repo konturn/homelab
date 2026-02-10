@@ -132,6 +132,20 @@
     - /etc/gshadow
   ignore_errors: yes
 
+- name: Disable root login with password
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?PermitRootLogin"
+    line: "PermitRootLogin prohibit-password"
+  notify: restart sshd
+
+- name: Disable password authentication
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?PasswordAuthentication"
+    line: "PasswordAuthentication no"
+  notify: restart sshd
+
 - name: Configure SSH to trust Vault CA
   copy:
     dest: /etc/ssh/trusted-user-ca-keys.pem
