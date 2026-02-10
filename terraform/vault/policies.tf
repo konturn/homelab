@@ -23,59 +23,16 @@ resource "vault_policy" "ci_deploy" {
 # =============================================================================
 # Policy: moltbot-ops
 # =============================================================================
-# Scoped read access to operational service secrets only.
-# Intentionally excludes infrastructure, networking, backup, SSH keys, LUKS.
+# Minimal access for moltbot: JIT API key + own config only.
+# All service secrets (media, monitoring, IoT, cameras, etc.) are now accessed
+# exclusively through the JIT approval service, which provides audit trails,
+# scoped tokens with short TTLs, and centralized access control.
 
 resource "vault_policy" "moltbot_ops" {
   name = "moltbot-ops"
 
   policy = <<-EOT
-    # Media services
-    path "homelab/data/docker/plex" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/docker/radarr" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/docker/sonarr" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/docker/ombi" {
-      capabilities = ["read"]
-    }
-
-    # Download clients
-    path "homelab/data/docker/nzbget" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/docker/deluge" {
-      capabilities = ["read"]
-    }
-
-    # Monitoring
-    path "homelab/data/docker/grafana" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/docker/influxdb" {
-      capabilities = ["read"]
-    }
-
-    # Document management
-    path "homelab/data/docker/paperless" {
-      capabilities = ["read"]
-    }
-
-    # IoT / messaging
-    path "homelab/data/mqtt" {
-      capabilities = ["read"]
-    }
-
-    # Cameras
-    path "homelab/data/cameras" {
-      capabilities = ["read"]
-    }
-
-    # Agent shared secrets (JIT API key, etc.)
+    # Agent shared secrets (JIT API key for requesting credentials)
     path "homelab/data/agents/*" {
       capabilities = ["read"]
     }
