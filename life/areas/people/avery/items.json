@@ -17,7 +17,7 @@
   },
   {
     "id": "avery-003",
-    "fact": "Noah knew her from high school (Northfield, OH area) — they reconnected when she was in town over Christmas 2025",
+    "fact": "Noah knew her from high school (Northfield, OH area) \u2014 they reconnected when she was in town over Christmas 2025",
     "category": "relationship",
     "timestamp": "2026-02-04",
     "source": "conversation",
@@ -33,7 +33,7 @@
   },
   {
     "id": "avery-005",
-    "fact": "PhD student at Arizona State University — Ira A. Fulton School of Engineering",
+    "fact": "PhD student at Arizona State University \u2014 Ira A. Fulton School of Engineering",
     "category": "education",
     "timestamp": "2026-02-04",
     "source": "web-research",
@@ -49,7 +49,7 @@
   },
   {
     "id": "avery-007",
-    "fact": "Long-distance relationship (Ohio ↔ Arizona)",
+    "fact": "Long-distance relationship (Ohio \u2194 Arizona)",
     "category": "status",
     "timestamp": "2026-02-04",
     "source": "conversation",
@@ -92,6 +92,86 @@
     "fact": "ASU email: abrewe18@asu.edu",
     "category": "identity",
     "timestamp": "2026-02-04",
+    "source": "web-research",
+    "status": "active"
+  },
+  {
+    "id": "avery-013",
+    "fact": "Reddit username: u/cataclysick",
+    "category": "identity",
+    "timestamp": "2026-02-10",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "avery-014",
+    "fact": "Undergrad at Ohio State University (OSU) \u2014 involved in iGEM synthetic biology competition, tried starting mycology club",
+    "category": "education",
+    "timestamp": "2026-02-10",
+    "source": "web-research",
+    "status": "active"
+  },
+  {
+    "id": "avery-015",
+    "fact": "Passionate mushroom forager (boletes, wood ears) \u2014 NE Ohio roots, deeply knowledgeable",
+    "category": "preference",
+    "timestamp": "2026-02-10",
+    "source": "web-research",
+    "status": "active"
+  },
+  {
+    "id": "avery-016",
+    "fact": "Film photography enthusiast \u2014 Ektar H35N, Lomochrome purple film, interested in darkroom work",
+    "category": "preference",
+    "timestamp": "2026-02-10",
+    "source": "web-research",
+    "status": "active"
+  },
+  {
+    "id": "avery-017",
+    "fact": "Did trail work with Southwest Conservation Corps in Colorado, got a tattoo for it",
+    "category": "milestone",
+    "timestamp": "2026-02-10",
+    "source": "web-research",
+    "status": "active"
+  },
+  {
+    "id": "avery-018",
+    "fact": "Strongly progressive politics, follows PSL Phoenix, advocates for women in STEM and NIH funding",
+    "category": "preference",
+    "timestamp": "2026-02-10",
+    "source": "web-research",
+    "status": "active"
+  },
+  {
+    "id": "avery-019",
+    "fact": "Has a cat (neutered male, ~1 year old as of Dec 2025)",
+    "category": "status",
+    "timestamp": "2026-02-10",
+    "source": "web-research",
+    "status": "active"
+  },
+  {
+    "id": "avery-020",
+    "fact": "Has a lip piercing, uses it as litmus test for people",
+    "category": "preference",
+    "timestamp": "2026-02-10",
+    "source": "web-research",
+    "status": "active"
+  },
+  {
+    "id": "avery-021",
+    "fact": "Interested in solarpunk, Hundertwasser organic architecture, degrowth/regenerative agriculture",
+    "category": "preference",
+    "timestamp": "2026-02-10",
+    "source": "web-research",
+    "status": "active"
+  },
+  {
+    "id": "avery-022",
+    "fact": "Interested in PNNL PhD internship for summer 2025",
+    "category": "status",
+    "timestamp": "2026-02-10",
     "source": "web-research",
     "status": "active"
   }
