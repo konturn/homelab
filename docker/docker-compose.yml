@@ -366,7 +366,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.1074@sha256:d6025bd3140a767a47cb69e8aaa02b480ef46203a88575ee279a6a341a8d229f
+    image: linuxserver/jackett:0.24.1089@sha256:eef3e1ad068e6d810e5e6631c02d975d88d2ee075e3b2dfb08099b2451294a0a
     container_name: jackett
     security_opt:
       - no-new-privileges:true
@@ -1116,7 +1116,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-    image: eclipse-mosquitto:2.1.1-alpine@sha256:9fec559dbc89664d171ac8ea8230bbbeb50c2eb52615d631599ec31cbccbfb39
+    image: eclipse-mosquitto:2.1.2-alpine@sha256:9cfdd46ad59f3e3e5f592f6baf57ab23e1ad00605509d0f5c1e9b179c5314d87
     restart: unless-stopped
     networks:
       iot:
