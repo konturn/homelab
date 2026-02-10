@@ -135,7 +135,7 @@ Pushing triggers GitLab CI → Ansible deploys to router. See `CLAUDE.md` in the
 
 ## Infrastructure Overview
 
-**Router host:** router.lab.nkontur.com  
+**Router host:** router.lab.nkontur.com (SSH: `claude@10.4.0.1` via JIT signed certs)  
 **Networks (VLANs):**
 - `external` (10.2.x.x) — Internet-facing (nginx, Nextcloud, Bitwarden)
 - `internal` (10.3.x.x) — Lab services (GitLab, Plex, Radarr, me)
