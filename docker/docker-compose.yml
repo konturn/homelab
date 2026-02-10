@@ -249,6 +249,7 @@ services:
       - {{ docker_persistent_data_path }}/lab_nginx/conf:/etc/nginx
       - /var/log/lab_nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
+      - {{ docker_persistent_data_path }}/nginx/webroot:/data/webroot:ro
   iot_nginx: 
     image: nginx:1.29.5-alpine3.23-perl@sha256:db0a3121225ffbc32fa36cc7a02c6c11002fec0c7fd2596ba204a811cc4a71dc
     container_name: iot_nginx
