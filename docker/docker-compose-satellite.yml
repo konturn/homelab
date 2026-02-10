@@ -4,6 +4,17 @@ services:
   nginx: 
     image: nginx:latest@sha256:514a9c2814250e61396ef4d6125ece1a8fbb3b0964a2ab441e9f7acf0b66b8b5
     container_name: nginx
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+      - /var/cache/nginx
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
     networks:
       - zwave
     ports:
@@ -25,6 +36,13 @@ services:
   room-assistant:
     image: mkerix/room-assistant:latest@sha256:e09275d619025fa7905e60a432ecb4cb3f1fad46c20bd033734808d565dfc78a
     container_name: room-assistant
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
     restart: unless-stopped
     network_mode: host
     volumes:
