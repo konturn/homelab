@@ -252,8 +252,9 @@ func (vc *Client) Health() error {
 	return nil
 }
 
-// resourceTier maps each known resource to its tier level.
-// This determines which Vault policy the minted token receives.
+// resourceTier maps each known resource to its minimum tier level.
+// This determines which Vault policy the minted token receives and
+// enforces minimum approval requirements per resource.
 var resourceTier = map[string]int{
 	// Tier 1: Auto-approve services (15 min TTL)
 	"grafana":   1,
@@ -266,14 +267,23 @@ var resourceTier = map[string]int{
 	"deluge":    1,
 	"paperless": 1,
 	"gmail":     1,
-
-	// Tier 1: SSH access (auto-approve, 15 min TTL)
-	"ssh": 1,
+	"prowlarr":  1,
+	"mqtt":      1,
 
 	// Tier 2: Infrastructure (requires approval, 30 min TTL)
+	"ssh":           2,
+	"tailscale":     2,
+	"pihole":        2,
 	"gitlab":        2,
 	"homeassistant": 2,
 	"vault":         2,
+}
+
+// MinTierForResource returns the minimum tier required for a resource.
+// Returns 0 if the resource is unknown (caller should allow unknown resources
+// to pass through so tier validation still applies via config).
+func MinTierForResource(resource string) int {
+	return resourceTier[resource]
 }
 
 // tierPolicy maps tier levels to the Vault policy name assigned to minted tokens.

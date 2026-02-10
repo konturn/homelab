@@ -124,6 +124,21 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Enforce minimum tier per resource
+	if minTier := vault.MinTierForResource(body.Resource); minTier > 0 && body.Tier < minTier {
+		logger.Warn("request_rejected_tier_below_minimum", logger.Fields{
+			"requester":     body.Requester,
+			"resource":      body.Resource,
+			"requested_tier": body.Tier,
+			"minimum_tier":  minTier,
+		})
+		writeError(w, http.StatusBadRequest, fmt.Sprintf(
+			"requested tier %d below minimum tier %d for resource %s",
+			body.Tier, minTier, body.Resource,
+		))
+		return
+	}
+
 	// Validate required fields
 	if body.Resource == "" {
 		writeError(w, http.StatusBadRequest, "resource is required")

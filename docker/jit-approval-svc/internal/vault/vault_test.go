@@ -5,7 +5,7 @@ import (
 )
 
 func TestPoliciesForResource_Tier1(t *testing.T) {
-	tier1Resources := []string{"grafana", "influxdb", "plex", "radarr", "sonarr", "ombi", "nzbget", "deluge", "paperless"}
+	tier1Resources := []string{"grafana", "influxdb", "plex", "radarr", "sonarr", "ombi", "nzbget", "deluge", "paperless", "prowlarr", "mqtt"}
 
 	for _, res := range tier1Resources {
 		policies := policiesForResource(res, 1)
@@ -20,7 +20,7 @@ func TestPoliciesForResource_Tier1(t *testing.T) {
 }
 
 func TestPoliciesForResource_Tier2(t *testing.T) {
-	tier2Resources := []string{"gitlab", "homeassistant"}
+	tier2Resources := []string{"gitlab", "homeassistant", "ssh", "tailscale", "pihole"}
 
 	for _, res := range tier2Resources {
 		policies := policiesForResource(res, 2)
@@ -35,7 +35,7 @@ func TestPoliciesForResource_Tier2(t *testing.T) {
 }
 
 func TestPoliciesForResource_RemovedResources(t *testing.T) {
-	removedResources := []string{"mqtt", "cameras"}
+	removedResources := []string{"cameras"}
 
 	for _, res := range removedResources {
 		for tier := 0; tier <= 3; tier++ {
@@ -65,6 +65,18 @@ func TestPoliciesForResource_WrongTier(t *testing.T) {
 	policies = policiesForResource("radarr", 0)
 	if policies != nil {
 		t.Errorf("expected nil for wrong tier, got %v", policies)
+	}
+}
+
+func TestMinTierForResource(t *testing.T) {
+	if got := MinTierForResource("ssh"); got != 2 {
+		t.Errorf("SSH min tier: expected 2, got %d", got)
+	}
+	if got := MinTierForResource("grafana"); got != 1 {
+		t.Errorf("grafana min tier: expected 1, got %d", got)
+	}
+	if got := MinTierForResource("unknown"); got != 0 {
+		t.Errorf("unknown min tier: expected 0, got %d", got)
 	}
 }
 
