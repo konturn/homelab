@@ -263,12 +263,11 @@ jit_status() {
 }
 ```
 
-**JIT Tiers:**
+**JIT Tiers (after !174 merged T0 into T1):**
 | Tier | TTL | Approval | Resources |
 |------|-----|----------|-----------|
-| T0 | 5min | Auto | grafana (dynamic SA token), influxdb (dynamic auth token) |
-| T1 | 15min | Auto | plex, radarr, sonarr, ombi, nzbget, deluge, paperless (scoped Vault token) |
-| T2 | 30min | Telegram | gitlab (dynamic project access token), homeassistant (dynamic OAuth) |
+| T1 | 15min | Auto | grafana (dynamic SA token), influxdb (dynamic auth token), plex, radarr, sonarr, ombi, nzbget, deluge, paperless (static Vault) |
+| T2 | 30min | Telegram | gitlab (dynamic project token), homeassistant (dynamic OAuth), vault (dynamic) |
 
 **Using JIT credentials per service:**
 
