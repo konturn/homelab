@@ -311,7 +311,37 @@ This is the primary project. In 6 days: 186 commits (22.3% of total repo, 68.1% 
 
 ---
 
-*Last reviewed: 2026-02-06*
+## JIT Elevated Access — USE PROACTIVELY
+
+I have JIT credential access for these services. **Use them when needed without being asked.** Don't use stale env vars or skip a task because "I don't have access" — request JIT credentials.
+
+**T1 (auto-approve, 15min TTL):**
+- `grafana` — dynamic SA token. Dashboards, metrics, Loki log queries.
+- `influxdb` — dynamic auth token. Time-series queries, performance data.
+- `plex` — static Vault read. Library, sessions, playback.
+- `radarr` — static Vault read. Movie management.
+- `sonarr` — static Vault read. TV show management.
+- `ombi` — static Vault read. Media requests.
+- `nzbget` — static Vault read. Usenet downloads.
+- `deluge` — static Vault read. Torrent downloads.
+- `paperless` — static Vault read. Document management.
+- `prowlarr` — static Vault read. Indexer management.
+- `mqtt` — static Vault read. IoT messaging.
+- `gmail` — static Vault read. Email credentials.
+
+**T2 (Telegram approval from Noah, 30min TTL):**
+- `gitlab` — dynamic project access token. Repo operations beyond my standing token.
+- `homeassistant` — dynamic OAuth token. Smart home control.
+- `tailscale` — dynamic OAuth token. VPN management.
+- `vault` — dynamic scoped token. Arbitrary Vault reads (specify paths).
+- `ssh` — ephemeral signed SSH certificate. Router access as `claude-user`.
+- `pihole` — static Vault read. DNS management.
+
+**JIT helper in TOOLS.md** has the `jit_request`/`jit_status` functions. Use them.
+
+---
+
+*Last reviewed: 2026-02-10*
 
 ## JIT Service Architecture (as of Feb 9)
 
