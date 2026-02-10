@@ -170,6 +170,11 @@ resource "vault_policy" "vault_read" {
       capabilities = ["read", "list"]
     }
 
+    # Read audit config for plan
+    path "sys/audit" {
+      capabilities = ["read", "list"]
+    }
+
     # Read mounts for plan
     path "sys/mounts" {
       capabilities = ["read", "list"]
