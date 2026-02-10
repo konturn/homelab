@@ -662,7 +662,7 @@ vault:validate:
         -backend-config="password=${CI_JOB_TOKEN}" \
         -backend-config="retry_wait_min=5"
     - terraform validate
-    - terraform plan -var="vault_addr=${VAULT_ADDR}" -var="vault_token=${VAULT_TOKEN}"
+    - terraform plan -lock=false -var="vault_addr=${VAULT_ADDR}" -var="vault_token=${VAULT_TOKEN}"
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
