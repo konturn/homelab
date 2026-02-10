@@ -109,18 +109,27 @@
     group: root
     mode: '0700'
 
+- name: Deploy DDNS credentials to environment file
+  ansible.builtin.copy:
+    content: |
+      CLOUDFLARE_API_KEY={{ (vault_cloudflare_api_key | default(lookup('env', 'CLOUDFLARE_API_KEY'))) | trim }}
+      CLOUDFLARE_ZONE_ID={{ (vault_cloudflare_zone_id | default(lookup('env', 'CLOUDFLARE_ZONE_ID'))) | trim }}
+      CLOUDFLARE_EMAIL=konoahko@gmail.com
+    dest: /root/cron/.ddns.env
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+
 - name: Sets up cronjob for DDNS
   ansible.builtin.cron:
     name: "Update public DNS records"
     minute: "*/5"
     job: >-
-      {{ ('/usr/bin/python3 /root/cron/ddns.py -k '
-      + ((vault_cloudflare_api_key | default(lookup('env', 'CLOUDFLARE_API_KEY'))) | trim)
-      + ' -z '
-      + ((vault_cloudflare_zone_id | default(lookup('env', 'CLOUDFLARE_ZONE_ID'))) | trim)
-      + " -d nkontur.com -r '' '*' -e konoahko@gmail.com >> /root/cron/logs/ddns.log 2>&1")
+      {{ ("bash -c 'set -a; source /root/cron/.ddns.env; set +a;"
+      + " /usr/bin/python3 /root/cron/ddns.py -d nkontur.com"
+      + " -r \"\" \"*\" >> /root/cron/logs/ddns.log 2>&1'")
       | regex_replace('[\r\n]', '') }}
-  no_log: true
 
 - name: Template out cron script for SSL renewal
   ansible.builtin.template:
