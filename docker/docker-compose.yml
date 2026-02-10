@@ -75,6 +75,12 @@ networks:
   jit-bridge:
     driver: bridge
     internal: true
+  moltbot-nginx-bridge:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
 services:
   # Docker socket proxy - filtered access for CI builds
   # Only allows build/image operations, blocks exec/start/stop
@@ -205,6 +211,8 @@ services:
       external:
         ipv4_address: {{ nginx_ip }}
       jit-bridge:
+      moltbot-nginx-bridge:
+        ipv4_address: 172.30.0.10
     restart: unless-stopped
     deploy:
       resources:
@@ -1374,6 +1382,10 @@ services:
       iot:
       mgmt:
         ipv4_address: {{ moltbot_gateway_ip }}
+      moltbot-nginx-bridge:
+    extra_hosts:
+      - "nkontur.com:172.30.0.10"
+      - "www.nkontur.com:172.30.0.10"
     ports:
       - "18789:18789"
     deploy:
