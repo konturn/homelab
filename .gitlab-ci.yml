@@ -21,8 +21,9 @@
 #   DEPLOY (main only, parallel)
 #   ┌──────────────────────────┬──────────────┬──────────────┐
 #   router:deploy [id_tokens]  zwave:deploy  sat-2:deploy
+#   (needs vault:configure)
 #
-#   CONFIGURE (main only, after deploy)
+#   CONFIGURE (main only, runs early — no dependencies)
 #   ┌──────────────┬──────────────────────────┐
 #   vault:configure  vault:rotate-approles [manual]
 #
@@ -359,6 +360,8 @@ router:deploy:
   needs:
     - job: router:validate
       optional: true
+    - job: vault:configure
+      optional: true
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml
   rules:
@@ -394,9 +397,7 @@ satellite-2:deploy:
 vault:configure:
   stage: configure
   image: alpine:3.19
-  needs:
-    - job: router:deploy
-      optional: true
+  needs: []
   variables:
     TF_VERSION: "1.7.5"
     VAULT_ADDR: "https://vault.lab.nkontur.com:8200"

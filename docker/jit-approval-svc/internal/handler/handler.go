@@ -391,20 +391,13 @@ func (h *Handler) mintCredential(req *store.Request, tierCfg config.TierConfig) 
 	cred, err := b.MintCredential(req.Resource, req.Tier, tierCfg.TTL, opts)
 	if err != nil {
 		if isDynamic {
-			// Dynamic backend failed. Log and fall back to static.
-			logger.Warn("dynamic_backend_failed_fallback", logger.Fields{
+			logger.Error("dynamic_backend_failed", logger.Fields{
 				"request_id": req.ID,
 				"resource":   req.Resource,
 				"error":      err.Error(),
 			})
-			staticB := h.backends.For("__static_fallback__") // triggers fallback
-			cred, err = staticB.MintCredential(req.Resource, req.Tier, tierCfg.TTL, opts)
-			if err != nil {
-				return nil, fmt.Errorf("static fallback also failed: %w", err)
-			}
-		} else {
-			return nil, err
 		}
+		return nil, err
 	}
 
 	storeCred := &store.Credential{
