@@ -170,9 +170,9 @@ resource "vault_policy" "vault_read" {
       capabilities = ["read", "list"]
     }
 
-    # Read audit config for plan
+    # Read audit config for plan (requires sudo)
     path "sys/audit" {
-      capabilities = ["read", "list"]
+      capabilities = ["read", "list", "sudo"]
     }
 
     # Read mounts for plan
