@@ -54,7 +54,8 @@ type Request struct {
 	Credential *Credential `json:"-"`
 
 	// SSH host (for display/audit, not enforced by certificate)
-	SSHHost string `json:"ssh_host,omitempty"`
+	SSHHost   string `json:"ssh_host,omitempty"`
+	ProjectID string `json:"project_id,omitempty"`
 
 	// Telegram tracking
 	TelegramMessageID int `json:"-"`

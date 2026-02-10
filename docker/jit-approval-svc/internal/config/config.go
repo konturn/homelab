@@ -44,6 +44,9 @@ type Config struct {
 	// GitLab admin token for creating project access tokens (Maintainer-level)
 	GitLabAdminToken string
 
+	// GitLab default project ID for access token creation (default: "4")
+	GitLabProjectID string
+
 	// Tailscale API URL (enables dynamic OAuth token backend)
 	TailscaleAPIURL string
 
@@ -98,6 +101,7 @@ func Load() (*Config, error) {
 		GitLabURL:   getEnvOrEmpty("GITLAB_URL", "https://gitlab.lab.nkontur.com"),
 
 		GitLabAdminToken: os.Getenv("GITLAB_ADMIN_TOKEN"),
+		GitLabProjectID:  getEnvOrEmpty("GITLAB_PROJECT_ID", "4"),
 
 		TailscaleAPIURL: getEnvOrEmpty("TAILSCALE_API_URL", "https://api.tailscale.com"),
 		SSHVaultPath:    getEnv("SSH_VAULT_PATH", "ssh-client-signer"),
