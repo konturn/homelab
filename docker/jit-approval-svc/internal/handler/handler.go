@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -94,7 +95,7 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Validate API key
 	apiKey := r.Header.Get("X-JIT-API-Key")
-	if apiKey == "" || apiKey != h.cfg.JITAPIKey {
+	if apiKey == "" || subtle.ConstantTimeCompare([]byte(apiKey), []byte(h.cfg.JITAPIKey)) != 1 {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
@@ -156,7 +157,14 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create request in store
-	req := h.store.Create(body.Requester, body.Resource, body.Tier, body.Reason, scopes)
+	req, err := h.store.Create(body.Requester, body.Resource, body.Tier, body.Reason, scopes)
+	if err != nil {
+		logger.Error("store_create_failed", logger.Fields{
+			"error": err.Error(),
+		})
+		writeError(w, http.StatusServiceUnavailable, "service at capacity, try again later")
+		return
+	}
 
 	// Attach SSH host if present
 	if body.SSHHost != "" {
@@ -205,7 +213,7 @@ func (h *Handler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 
 	// Validate API key
 	apiKey := r.Header.Get("X-JIT-API-Key")
-	if apiKey == "" || apiKey != h.cfg.JITAPIKey {
+	if apiKey == "" || subtle.ConstantTimeCompare([]byte(apiKey), []byte(h.cfg.JITAPIKey)) != 1 {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
@@ -257,9 +265,19 @@ func (h *Handler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleHealth handles GET /health.
+// Unauthenticated callers get minimal info; full details require API key.
 func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	// Check if caller provided a valid API key for full details
+	apiKey := r.Header.Get("X-JIT-API-Key")
+	authenticated := apiKey != "" && subtle.ConstantTimeCompare([]byte(apiKey), []byte(h.cfg.JITAPIKey)) == 1
+
+	if !authenticated {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		return
 	}
 
@@ -289,7 +307,7 @@ func (h *Handler) HandleTelegramWebhook(w http.ResponseWriter, r *http.Request) 
 
 	// Verify webhook secret (always required)
 	secretHeader := r.Header.Get("X-Telegram-Bot-Api-Secret-Token")
-	if secretHeader != h.cfg.TelegramWebhookSecret {
+	if subtle.ConstantTimeCompare([]byte(secretHeader), []byte(h.cfg.TelegramWebhookSecret)) != 1 {
 		logger.Warn("webhook_unauthorized", logger.Fields{
 			"remote_addr": r.RemoteAddr,
 		})
