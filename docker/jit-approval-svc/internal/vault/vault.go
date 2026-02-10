@@ -272,6 +272,11 @@ var resourceTier = map[string]int{
 
 	// Tier 2: Infrastructure (requires approval, 30 min TTL)
 	"ssh":           2,
+	"ssh-satellite": 2,
+	"ssh-zwave":     2,
+	"ssh-nkontur":        2,
+	"ssh-konoahko":        2,
+	"ssh-konturn":        2,
 	"tailscale":     2,
 	"pihole":        2,
 	"gitlab":        2,

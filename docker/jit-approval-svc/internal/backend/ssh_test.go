@@ -50,6 +50,46 @@ func TestSSHBackend_MintCredential(t *testing.T) {
 	}
 }
 
+func TestSSHBackend_MintCredential_PerHostRoles(t *testing.T) {
+	tests := []struct {
+		resource  string
+		principal string
+	}{
+		{"ssh-satellite", "claude-satellite"},
+		{"ssh-zwave", "claude-zwave"},
+		{"ssh-nkontur", "claude-nkontur"},
+		{"ssh-konoahko", "claude-konoahko"},
+		{"ssh-konturn", "claude-konturn"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.resource, func(t *testing.T) {
+			signer := &mockVaultSSHSigner{
+				signedKey: "ssh-ed25519-cert-v01@openssh.com AAAAMockSignedCert",
+			}
+			b := NewSSHBackend(signer, "ssh-client-signer")
+			cred, err := b.MintCredential(tt.resource, 2, 30*time.Minute, MintOptions{})
+			if err != nil {
+				t.Fatalf("MintCredential(%s) failed: %v", tt.resource, err)
+			}
+			if cred.Metadata["principal"] != tt.principal {
+				t.Errorf("expected principal %s, got %s", tt.principal, cred.Metadata["principal"])
+			}
+		})
+	}
+}
+
+func TestSSHBackend_MintCredential_UnknownResource(t *testing.T) {
+	signer := &mockVaultSSHSigner{
+		signedKey: "cert",
+	}
+	b := NewSSHBackend(signer, "ssh-client-signer")
+	_, err := b.MintCredential("ssh-unknown", 2, 30*time.Minute, MintOptions{})
+	if err == nil {
+		t.Fatal("expected error for unknown SSH resource")
+	}
+}
+
 func TestSSHBackend_MintCredential_SignError(t *testing.T) {
 	signer := &mockVaultSSHSigner{
 		err: fmt.Errorf("vault ssh sign failed"),

@@ -3,7 +3,11 @@
     - role: fetch-vault-secrets
       vars:
         fetch_ssh_ca_key: true
-    - claude-user
+    - role: claude-user
+      vars:
+        claude_user_name: claude-satellite
+        claude_user_group: claude-satellite
+        claude_user_principal: claude-satellite
     - configure-scanner
     - configure-docker
   become: yes
