@@ -188,7 +188,15 @@ func TestHandleRequest_AutoApprove_WithStaticBackend(t *testing.T) {
 		t.Errorf("expected status approved (auto-approve tier 1), got %s", resp.Status)
 	}
 
-	// Verify credential can be claimed
+	// Credential should be returned inline for auto-approved requests
+	if resp.Credential == nil {
+		t.Fatal("expected credential inline in auto-approved response")
+	}
+	if resp.Credential.Token != "hvs.mock-token" {
+		t.Errorf("expected inline token hvs.mock-token, got %s", resp.Credential.Token)
+	}
+
+	// Verify credential can also be claimed via /status
 	statusReq := httptest.NewRequest(http.MethodGet, "/status/"+resp.RequestID, nil)
 	statusReq.Header.Set("X-JIT-API-Key", "test-api-key")
 	statusW := httptest.NewRecorder()
