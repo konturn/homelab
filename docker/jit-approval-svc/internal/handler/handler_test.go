@@ -515,6 +515,34 @@ func TestHandleTelegramWebhook_UnauthorizedUser(t *testing.T) {
 	}
 }
 
+func TestHandleRequest_RejectsSSHBelowMinTier(t *testing.T) {
+	h := mockHandler()
+
+	body, _ := json.Marshal(CreateRequestBody{
+		Requester: "prometheus",
+		Resource:  "ssh",
+		Tier:      1,
+		Reason:    "need shell access",
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-JIT-API-Key", "test-api-key")
+	w := httptest.NewRecorder()
+
+	h.HandleRequest(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for SSH at tier 1, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]string
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["error"] == "" {
+		t.Error("expected error message in response")
+	}
+}
+
 func TestMethodNotAllowed(t *testing.T) {
 	h := mockHandler()
 
