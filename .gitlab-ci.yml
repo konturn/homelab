@@ -650,10 +650,9 @@ vault:validate:
       if [ -n "$JWT_TOKEN" ]; then
         echo "JWT authentication succeeded — using scoped vault-read token"
         export VAULT_TOKEN="$JWT_TOKEN"
-      elif [ -n "${VAULT_TOKEN:-}" ]; then
-        echo "JWT auth failed — falling back to VAULT_TOKEN variable (bootstrap mode)"
       else
-        echo "ERROR: No authentication method available"
+        echo "ERROR: JWT authentication failed — no fallback allowed for MR pipelines"
+        echo "Ensure the vault-read JWT role is configured and VAULT_ID_TOKEN is available"
         exit 1
       fi
     - |
