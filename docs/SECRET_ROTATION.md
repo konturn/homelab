@@ -111,7 +111,9 @@ To remove CI variable fallback (after Vault is proven stable):
 | `GRAFANA_ADMIN_PASSWORD` | `docker/grafana` | `admin_password` | Grafana |
 | `GRAFANA_SMTP_PASSWORD` | `docker/grafana` | `smtp_password` | Grafana |
 | `WORDPRESS_DB_PASSWORD` | `docker/wordpress` | `db_password` | WordPress, MySQL |
+| `WORDPRESS_DB_ROOT_PASSWORD` | `docker/wordpress` | `db_root_password` | MySQL (root) |
 | `NEXTCLOUD_DB_PASSWORD` | `docker/nextcloud` | `db_password` | Nextcloud, MariaDB |
+| `NEXTCLOUD_DB_ROOT_PASSWORD` | `docker/nextcloud` | `db_root_password` | MariaDB (root) |
 | `DOORBELL_PASS` | `cameras/doorbell` | `password` | amcrest2mqtt |
 | `MQTT_PASS` | `mqtt/mosquitto` | `password` | amcrest2mqtt, ambientweather |
 | `AUDIOSERVE_SECRET` | `docker/audioserve` | `secret` | audioserve |
@@ -226,23 +228,45 @@ To remove CI variable fallback (after Vault is proven stable):
 
 ### WORDPRESS_DB_PASSWORD
 
-**Description:** MySQL database password for WordPress.
+**Description:** MySQL database password for the WordPress application user.
 
 **Used by:**
 - `blog` (WordPress) container (`WORDPRESS_DB_PASSWORD`)
-- `wordpress_db` (MySQL) container (`MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD`)
+- `wordpress_db` (MySQL) container (`MYSQL_PASSWORD`)
 
 **How to rotate:**
 1. Stop WordPress container
 2. Connect to MySQL and change the password:
    ```sql
    ALTER USER 'wordpress'@'%' IDENTIFIED BY 'newpassword';
-   ALTER USER 'root'@'%' IDENTIFIED BY 'newpassword';
    FLUSH PRIVILEGES;
    ```
 3. Update in Vault: `homelab/docker/wordpress` → `db_password`
 4. Update GitLab CI variable `WORDPRESS_DB_PASSWORD`
 5. Redeploy both containers
+
+**Complexity:** 🔴 Hard (requires MySQL command execution + coordinated update)
+
+---
+
+### WORDPRESS_DB_ROOT_PASSWORD
+
+**Description:** MySQL root password for the WordPress database container.
+
+**Used by:**
+- `wordpress_db` (MySQL) container (`MYSQL_ROOT_PASSWORD`)
+
+**How to rotate:**
+1. Stop WordPress container
+2. Connect to MySQL and change the root password:
+   ```sql
+   ALTER USER 'root'@'%' IDENTIFIED BY 'newpassword';
+   ALTER USER 'root'@'localhost' IDENTIFIED BY 'newpassword';
+   FLUSH PRIVILEGES;
+   ```
+3. Update in Vault: `homelab/docker/wordpress` → `db_root_password`
+4. Update GitLab CI variable `WORDPRESS_DB_ROOT_PASSWORD`
+5. Redeploy container
 
 **Complexity:** 🔴 Hard (requires MySQL command execution + coordinated update)
 
@@ -295,21 +319,39 @@ To remove CI variable fallback (after Vault is proven stable):
 
 ### NEXTCLOUD_DB_PASSWORD
 
-**Description:** MariaDB password for Nextcloud.
+**Description:** MariaDB application user password for Nextcloud.
 
 **Used by:**
 - `nextcloud` container (via internal config)
-- `nextcloud_db` (MariaDB) container (`MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD`)
+- `nextcloud_db` (MariaDB) container (`MYSQL_PASSWORD`)
 
 **How to rotate:**
 1. Stop Nextcloud container
-2. Connect to MariaDB and change password
+2. Connect to MariaDB and change password for the `nextcloud` user
 3. Update Nextcloud's `config/config.php` with new password
 4. Update in Vault: `homelab/docker/nextcloud` → `db_password`
 5. Update GitLab CI variable `NEXTCLOUD_DB_PASSWORD`
 6. Redeploy both containers
 
 **Complexity:** 🔴 Hard (requires DB commands + Nextcloud config update)
+
+---
+
+### NEXTCLOUD_DB_ROOT_PASSWORD
+
+**Description:** MariaDB root password for the Nextcloud database container.
+
+**Used by:**
+- `nextcloud_db` (MariaDB) container (`MYSQL_ROOT_PASSWORD`)
+
+**How to rotate:**
+1. Stop Nextcloud container
+2. Connect to MariaDB and change root password
+3. Update in Vault: `homelab/docker/nextcloud` → `db_root_password`
+4. Update GitLab CI variable `NEXTCLOUD_DB_ROOT_PASSWORD`
+5. Redeploy container
+
+**Complexity:** 🔴 Hard (requires DB command execution + coordinated update)
 
 ---
 
