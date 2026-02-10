@@ -1,0 +1,147 @@
+# =============================================================================
+# Role: claude-user
+# =============================================================================
+# Creates a restricted 'claude' user for AI agent SSH access via Vault-signed
+# certificates. The user runs rbash with a curated set of read-only commands.
+# SSH trust is established via Vault's SSH CA public key.
+# =============================================================================
+
+- name: Create claude group
+  group:
+    name: claude
+    state: present
+
+- name: Create claude user with restricted shell
+  user:
+    name: claude
+    group: claude
+    shell: /bin/rbash
+    home: /home/claude
+    create_home: yes
+    comment: "Restricted read-only user for AI agent SSH access"
+
+- name: Set claude home directory permissions
+  file:
+    path: /home/claude
+    mode: '0700'
+    owner: claude
+    group: claude
+
+- name: Create restricted PATH bin directory
+  file:
+    path: /home/claude/bin
+    state: directory
+    mode: '0755'
+    owner: claude
+    group: claude
+
+- name: Symlink allowed commands into restricted PATH
+  file:
+    src: "{{ item.src }}"
+    dest: "/home/claude/bin/{{ item.name }}"
+    state: link
+  loop:
+    - { src: /usr/bin/cat, name: cat }
+    - { src: /usr/bin/ls, name: ls }
+    - { src: /usr/bin/head, name: head }
+    - { src: /usr/bin/tail, name: tail }
+    - { src: /usr/bin/grep, name: grep }
+    - { src: /usr/bin/find, name: find }
+    - { src: /usr/bin/df, name: df }
+    - { src: /usr/bin/du, name: du }
+    - { src: /usr/bin/ps, name: ps }
+    - { src: /usr/bin/uptime, name: uptime }
+    - { src: /usr/bin/free, name: free }
+    - { src: /usr/bin/id, name: id }
+    - { src: /usr/bin/whoami, name: whoami }
+    - { src: /usr/bin/hostname, name: hostname }
+    - { src: /usr/bin/date, name: date }
+    - { src: /usr/bin/wc, name: wc }
+    - { src: /usr/bin/sort, name: sort }
+    - { src: /usr/bin/uniq, name: uniq }
+    - { src: /usr/bin/less, name: less }
+    - { src: /usr/bin/stat, name: stat }
+    - { src: /usr/bin/file, name: file }
+    - { src: /usr/bin/journalctl, name: journalctl }
+    - { src: /usr/bin/systemctl, name: systemctl }
+    - { src: /usr/bin/ip, name: ip }
+    - { src: /usr/bin/ss, name: ss }
+    - { src: /usr/bin/dig, name: dig }
+    - { src: /usr/bin/ping, name: ping }
+    - { src: /usr/bin/traceroute, name: traceroute }
+  ignore_errors: yes  # Some binaries may not exist on all hosts
+
+- name: Configure restricted .bashrc
+  copy:
+    dest: /home/claude/.bashrc
+    owner: claude
+    group: claude
+    mode: '0644'
+    content: |
+      # Restricted shell configuration
+      export PATH=/home/claude/bin
+      export HISTFILE=/home/claude/.bash_history
+      export HISTSIZE=1000
+      readonly PATH
+      # No cd allowed in rbash by default
+      echo "Restricted shell - read-only access. Commands: cat ls head tail grep find df du ps journalctl systemctl ip ss dig"
+
+- name: Create .profile
+  copy:
+    dest: /home/claude/.profile
+    owner: claude
+    group: claude
+    mode: '0644'
+    content: |
+      if [ -f ~/.bashrc ]; then
+        . ~/.bashrc
+      fi
+
+- name: Deny cron access for claude
+  lineinfile:
+    path: /etc/cron.deny
+    line: claude
+    create: yes
+
+- name: Deny at access for claude
+  lineinfile:
+    path: /etc/at.deny
+    line: claude
+    create: yes
+
+- name: Ensure claude is NOT in docker group
+  user:
+    name: claude
+    groups: []
+    append: no
+
+- name: Ensure sensitive directories are not world-readable
+  file:
+    path: "{{ item }}"
+    mode: '0700'
+  loop:
+    - /root
+  ignore_errors: yes
+
+- name: Ensure sensitive files are not world-readable
+  file:
+    path: "{{ item }}"
+    mode: '0600'
+  loop:
+    - /etc/shadow
+    - /etc/gshadow
+  ignore_errors: yes
+
+- name: Configure SSH to trust Vault CA
+  copy:
+    dest: /etc/ssh/trusted-user-ca-keys.pem
+    content: "{{ vault_ssh_ca_public_key }}"
+    mode: '0644'
+  notify: restart sshd
+
+- name: Add TrustedUserCAKeys to sshd_config
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    line: "TrustedUserCAKeys /etc/ssh/trusted-user-ca-keys.pem"
+    regexp: "^TrustedUserCAKeys"
+  notify: restart sshd

@@ -1,0 +1,3 @@
+# vault_ssh_ca_public_key must be provided by the playbook.
+# Typically fetched from Vault: ssh-client-signer/config/ca -> public_key
+vault_ssh_ca_public_key: ""

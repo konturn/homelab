@@ -46,6 +46,9 @@ type Request struct {
 	// Credential data (only returned once via claim)
 	Credential *Credential `json:"-"`
 
+	// SSH host (for display/audit, not enforced by certificate)
+	SSHHost string `json:"ssh_host,omitempty"`
+
 	// Telegram tracking
 	TelegramMessageID int `json:"-"`
 }

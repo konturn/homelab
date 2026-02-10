@@ -51,6 +51,7 @@ type CreateRequestBody struct {
 	Reason     string             `json:"reason"`
 	Scopes     []string           `json:"scopes,omitempty"`
 	VaultPaths []VaultPathRequest `json:"vault_paths,omitempty"`
+	SSHHost    string             `json:"ssh_host,omitempty"`
 }
 
 // CreateRequestResponse is the JSON response for POST /request.
@@ -157,6 +158,11 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	// Create request in store
 	req := h.store.Create(body.Requester, body.Resource, body.Tier, body.Reason, scopes)
 
+	// Attach SSH host if present
+	if body.SSHHost != "" {
+		req.SSHHost = body.SSHHost
+	}
+
 	// Attach vault paths if present
 	if len(body.VaultPaths) > 0 {
 		storePaths := make([]store.VaultPathRequest, len(body.VaultPaths))
@@ -173,6 +179,7 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		"tier":       body.Tier,
 		"reason":     body.Reason,
 		"scopes":     scopes,
+		"ssh_host":   body.SSHHost,
 	})
 
 	// Auto-approve for tier 1
@@ -376,12 +383,19 @@ func (h *Handler) mintCredential(req *store.Request, tierCfg config.TierConfig) 
 		}
 	}
 
-	return &store.Credential{
+	storeCred := &store.Credential{
 		Token:    cred.Token,
 		LeaseTTL: cred.LeaseTTL,
 		LeaseID:  cred.Metadata["lease_id"],
 		Metadata: cred.Metadata,
-	}, nil
+	}
+
+	// Add SSH host to metadata if present on the request
+	if req.SSHHost != "" && storeCred.Metadata != nil {
+		storeCred.Metadata["host"] = req.SSHHost
+	}
+
+	return storeCred, nil
 }
 
 // autoApprove immediately approves a tier 1 request by minting a credential.
@@ -434,11 +448,17 @@ func (h *Handler) sendApprovalMessage(req *store.Request, tierCfg config.TierCon
 		})
 	}
 
+	// Include SSH host in reason for display
+	reason := req.Reason
+	if req.SSHHost != "" {
+		reason = fmt.Sprintf("%s (host: %s)", req.Reason, req.SSHHost)
+	}
+
 	msgID, err := h.telegram.SendApprovalMessage(
 		req.ID,
 		req.Resource,
 		req.Tier,
-		req.Reason,
+		reason,
 		req.Requester,
 		tierCfg.TTL.String(),
 		req.Scopes,

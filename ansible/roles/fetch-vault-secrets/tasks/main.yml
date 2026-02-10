@@ -123,3 +123,38 @@
     - name: Mark Vault as unavailable after fetch failure
       ansible.builtin.set_fact:
         _vault_available: false
+
+# ---------------------------------------------------------------------------
+# Step 3: Fetch SSH CA public key (non-KV secret)
+# ---------------------------------------------------------------------------
+
+- name: Fetch SSH CA public key from Vault
+  when:
+    - _vault_available
+    - fetch_ssh_ca_key | default(false) | bool
+  block:
+    - name: Read SSH CA public key
+      ansible.builtin.uri:
+        url: "{{ _vault_url }}/ssh-client-signer/config/ca"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ _vault_token }}"
+        validate_certs: "{{ not vault_skip_verify }}"
+        timeout: "{{ vault_timeout }}"
+        status_code: [200]
+      register: _vault_ssh_ca_response
+      no_log: true
+
+    - name: Set SSH CA public key variable
+      ansible.builtin.set_fact:
+        vault_ssh_ca_public_key: "{{ _vault_ssh_ca_response.json.data.public_key }}"
+      no_log: true
+
+  rescue:
+    - name: SSH CA public key fetch failed
+      ansible.builtin.debug:
+        msg: "Failed to fetch SSH CA public key from Vault — claude-user role will skip SSH CA configuration"
+
+    - name: Set empty SSH CA key on failure
+      ansible.builtin.set_fact:
+        vault_ssh_ca_public_key: ""

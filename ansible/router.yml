@@ -1,7 +1,10 @@
 - hosts: router.lab.nkontur.com
   roles:
-  - fetch-vault-secrets
+  - role: fetch-vault-secrets
+    vars:
+      fetch_ssh_ca_key: true
   - configure-base
+  - claude-user
   - configure-router-network
   - role: configure-tailscale
     vars:
