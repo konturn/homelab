@@ -228,6 +228,22 @@
     mode: "{{ item.mode | default('0755') }}"
   loop: "{{ docker_data_dirs | default([]) }}"
 
+### Deploy static website files for nkontur.com
+- name: Create nkontur.com webroot directory
+  ansible.builtin.file:
+    path: "{{ docker_persistent_data_path }}/nginx/webroot/nkontur.com"
+    state: directory
+    mode: '0755'
+  when: "'external' in (nginx_config | default([]) | map(attribute='network') | list)"
+
+- name: Synchronize nkontur.com website files
+  ansible.posix.synchronize:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/sites/nkontur.com/"
+    dest: "{{ docker_persistent_data_path }}/nginx/webroot/nkontur.com/"
+    delete: yes
+    recursive: yes
+  when: "'external' in (nginx_config | default([]) | map(attribute='network') | list)"
+
 - name: Copy docker configuration files
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/{{ item.src }}"
