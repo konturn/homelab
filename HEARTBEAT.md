@@ -150,6 +150,7 @@ Assume I'm compromised. Find vulnerabilities in Noah's infrastructure — privil
 - Rate each finding: Critical / High / Medium / Low
 - Suggest specific fixes
 - Track what's been fixed vs still open
+- **Dispatch MRs immediately for actionable findings** — don't just log them. Spawn sub-agents to fix what can be fixed. Same applies to infrastructure audit findings and any other overnight discovery.
 
 ---
 
