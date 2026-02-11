@@ -732,12 +732,17 @@ services:
       resources:
         limits:
           memory: 768M
-    cap_add:
-      - IPC_LOCK  # Required for Vault to lock memory and prevent secrets from being swapped
-    security_opt:
-      - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - IPC_LOCK    # Lock memory to prevent secrets from being swapped
+      - CHOWN       # File ownership changes during startup
+      - DAC_OVERRIDE # Access files regardless of permissions
+      - FOWNER      # Modify file ownership metadata
+      - SETUID      # Process UID changes
+      - SETGID      # Process GID changes
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - vault_data:/vault/file
       - '{{ docker_persistent_data_path }}/vault/config:/vault/config:ro'
