@@ -357,10 +357,6 @@ resource "vault_policy" "jit_tier1_services" {
       capabilities = ["read"]
     }
 
-    # Email
-    path "homelab/data/email/gmail" {
-      capabilities = ["read"]
-    }
   EOT
 }
 
@@ -384,6 +380,11 @@ resource "vault_policy" "jit_tier2_infra" {
       capabilities = ["read"]
     }
     path "homelab/data/infrastructure/ipmi" {
+      capabilities = ["read"]
+    }
+
+    # Email
+    path "homelab/data/email/gmail" {
       capabilities = ["read"]
     }
   EOT
