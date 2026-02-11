@@ -58,7 +58,7 @@ build_sed_script() {
 s/hvs\.[A-Za-z0-9]+/[REDACTED]/g
 
 # GitLab tokens
-s/glpat-[A-Za-z0-9_-]+/[REDACTED]/g
+s/glpat-[A-Za-z0-9._-]+/[REDACTED]/g
 
 # GitHub tokens
 s/ghp_[A-Za-z0-9]+/[REDACTED]/g
@@ -84,11 +84,20 @@ s/[0-9]+:AA[A-Za-z0-9_-]{30,40}/[REDACTED]/g
 # JWT tokens
 s/eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/[REDACTED]/g
 
-# Private key blocks (single-line match for JSON-escaped keys)
+# Private key blocks (literal newlines)
 s/-----BEGIN[^-]*PRIVATE KEY-----.*-----END[^-]*PRIVATE KEY-----/[REDACTED]/g
+
+# Private key blocks in JSON strings (newlines encoded as literal \\n)
+s/-----BEGIN[^-]*PRIVATE KEY-----([^"]*\\\\n)*[^"]*-----END[^-]*PRIVATE KEY-----/[REDACTED]/g
+
+# Catch any remaining JSON-escaped private key fragments (BEGIN...\\n...END pattern)
+s/-----BEGIN[^-]*PRIVATE KEY-----(\\\\n[^"]*)*\\\\n-----END[^-]*PRIVATE KEY-----/[REDACTED]/g
 
 # UUID secrets after keywords (secret_id, secret, password)
 s/(secret_id|secret|password)(["':= ]+)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/\1\2[REDACTED]/gI
+
+# Vault AppRole secret_id (UUID format in JSON: "secret_id":"<uuid>" or secret_id = <uuid>)
+s/(secret_id)(\\?["'"'"']?\s*[:=]\s*\\?["'"'"']?)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/\1\2[REDACTED]/gI
 
 # Generic long hex strings (>32 chars) after credential keywords
 s/(token|password|secret|key)(["':= ]+)[0-9a-fA-F]{32,}/\1\2[REDACTED]/gI
@@ -103,9 +112,9 @@ SED_SCRIPT=$(build_sed_script)
 # Find all transcript files: active .jsonl and archived .deleted. files
 while IFS= read -r -d '' file; do
   # Check if file contains any matches before modifying (preserve mtime)
-  if grep -qE '(hvs\.[A-Za-z0-9]+|glpat-[A-Za-z0-9_-]+|gh[pos]_[A-Za-z0-9]+|sk-[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9_-]+|xox[bp]-[A-Za-z0-9-]+|AKIA[A-Z0-9]{16}|[0-9]+:AA[A-Za-z0-9_-]{30,}|eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|-----BEGIN.*PRIVATE KEY-----|((secret_id|secret|password|token|key)["'"'"':= ]+[0-9a-fA-F]{32,})|(app[._]password|GMAIL_APP_PASSWORD))' "$file" 2>/dev/null; then
+  if grep -qE '(hvs\.[A-Za-z0-9]+|glpat-[A-Za-z0-9._-]+|gh[pos]_[A-Za-z0-9]+|sk-[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9_-]+|xox[bp]-[A-Za-z0-9-]+|AKIA[A-Z0-9]{16}|[0-9]+:AA[A-Za-z0-9_-]{30,}|eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|-----BEGIN.*PRIVATE KEY-----|((secret_id|secret|password|token|key)["'"'"':= ]+[0-9a-fA-F]{32,})|(app[._]password|GMAIL_APP_PASSWORD))' "$file" 2>/dev/null; then
     # Count lines with matches before redaction
-    match_count=$(grep -cE '(hvs\.[A-Za-z0-9]+|glpat-[A-Za-z0-9_-]+|gh[pos]_[A-Za-z0-9]+|sk-[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9_-]+|xox[bp]-[A-Za-z0-9-]+|AKIA[A-Z0-9]{16}|[0-9]+:AA[A-Za-z0-9_-]{30,}|eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|-----BEGIN.*PRIVATE KEY-----|((secret_id|secret|password|token|key)["'"'"':= ]+[0-9a-fA-F]{32,})|(app[._]password|GMAIL_APP_PASSWORD))' "$file" 2>/dev/null || true)
+    match_count=$(grep -cE '(hvs\.[A-Za-z0-9]+|glpat-[A-Za-z0-9._-]+|gh[pos]_[A-Za-z0-9]+|sk-[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9_-]+|xox[bp]-[A-Za-z0-9-]+|AKIA[A-Z0-9]{16}|[0-9]+:AA[A-Za-z0-9_-]{30,}|eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|-----BEGIN.*PRIVATE KEY-----|((secret_id|secret|password|token|key)["'"'"':= ]+[0-9a-fA-F]{32,})|(app[._]password|GMAIL_APP_PASSWORD))' "$file" 2>/dev/null || true)
 
     # Apply redactions in-place
     sed -i -E "$SED_SCRIPT" "$file"
