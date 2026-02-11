@@ -74,6 +74,9 @@ def generate_port_mappings(services, network):
             if network in service['networks']:
                 if 'ports' in service:
                     for port in service['ports']:
+                        # Skip localhost-only bindings (not externally accessible)
+                        if port.startswith('127.0.0.1:'):
+                            continue
                         if port.endswith('/tcp'):
                             stream_port_mappings[service_name] = port.split('/')[0]
                         else:
