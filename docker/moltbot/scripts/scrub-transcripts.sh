@@ -84,11 +84,20 @@ s/[0-9]+:AA[A-Za-z0-9_-]{30,40}/[REDACTED]/g
 # JWT tokens
 s/eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/[REDACTED]/g
 
-# Private key blocks (single-line match for JSON-escaped keys)
+# Private key blocks (literal newlines)
 s/-----BEGIN[^-]*PRIVATE KEY-----.*-----END[^-]*PRIVATE KEY-----/[REDACTED]/g
+
+# Private key blocks in JSON strings (newlines encoded as literal \\n)
+s/-----BEGIN[^-]*PRIVATE KEY-----([^"]*\\\\n)*[^"]*-----END[^-]*PRIVATE KEY-----/[REDACTED]/g
+
+# Catch any remaining JSON-escaped private key fragments (BEGIN...\\n...END pattern)
+s/-----BEGIN[^-]*PRIVATE KEY-----(\\\\n[^"]*)*\\\\n-----END[^-]*PRIVATE KEY-----/[REDACTED]/g
 
 # UUID secrets after keywords (secret_id, secret, password)
 s/(secret_id|secret|password)(["':= ]+)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/\1\2[REDACTED]/gI
+
+# Vault AppRole secret_id (UUID format in JSON: "secret_id":"<uuid>" or secret_id = <uuid>)
+s/(secret_id)(\\?["'"'"']?\s*[:=]\s*\\?["'"'"']?)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/\1\2[REDACTED]/gI
 
 # Generic long hex strings (>32 chars) after credential keywords
 s/(token|password|secret|key)(["':= ]+)[0-9a-fA-F]{32,}/\1\2[REDACTED]/gI

@@ -61,7 +61,7 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("invalid TELEGRAM_CHAT_ID: %w", err)
 	}
 
-	timeoutSec, err := strconv.Atoi(getEnv("REQUEST_TIMEOUT", "300"))
+	timeoutSec, err := strconv.Atoi(getEnv("REQUEST_TIMEOUT", "1800"))
 	if err != nil {
 		return nil, fmt.Errorf("invalid REQUEST_TIMEOUT: %w", err)
 	}
