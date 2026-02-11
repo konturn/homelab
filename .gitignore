@@ -11,11 +11,13 @@
 !.gitignore
 !*.md
 
-# Track scripts in skills
+# Track scripts in skills and tools
 !skills/**/lib.sh
 !skills/**/scripts/*.sh
 !skills/**/scripts/*.py
 !skills/**/scripts/*.js
+!tools/*.sh
+!tools/*.md
 
 # JIT Approval Service (full Go project)
 !jit-approval-svc/**
