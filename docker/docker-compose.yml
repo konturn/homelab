@@ -164,6 +164,12 @@ services:
     cap_add:
       - NET_ADMIN
       - NET_RAW
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+      - NET_BIND_SERVICE
+      - SYS_NICE
     image: pihole/pihole:2025.11.1@sha256:848cf5af61397e6976e2fc356aa00aaa3d3a53b2ac90a956675779ff1f4bdf34
     ports:
       - "443:80"
@@ -215,6 +221,12 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+      - NET_BIND_SERVICE
     read_only: true
     tmpfs:
       - /tmp
@@ -249,6 +261,12 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+      - NET_BIND_SERVICE
     read_only: true
     tmpfs:
       - /tmp
@@ -279,6 +297,12 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+      - NET_BIND_SERVICE
     read_only: true
     tmpfs:
       - /tmp
@@ -497,6 +521,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
     ports:
       - "443:8086"
     networks:
@@ -647,6 +676,15 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - KILL
+      - SETUID
+      - SETGID
+      - NET_BIND_SERVICE
+      - SYS_RESOURCE
     ports:
       - "22/tcp"
       - "443:80"
@@ -878,7 +916,11 @@ services:
       - wordpress_internal
     restart: unless-stopped
     cap_add:
-      - SYS_NICE  # CAP_SYS_NICE
+      - SYS_NICE
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
     deploy:
       resources:
         limits:
@@ -996,6 +1038,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SYS_RAWIO
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -1054,6 +1101,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SYS_RAWIO
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -1083,6 +1135,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SYS_RAWIO
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -1112,6 +1169,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SYS_RAWIO
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -1141,6 +1203,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SYS_RAWIO
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -1170,6 +1237,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SYS_RAWIO
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -1201,6 +1273,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
     read_only: true
     tmpfs:
       - /tmp
@@ -1383,6 +1460,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
     command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
     restart: unless-stopped
     networks:
