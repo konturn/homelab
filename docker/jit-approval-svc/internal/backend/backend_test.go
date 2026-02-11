@@ -480,3 +480,125 @@ func TestInfluxDBBackend_MissingVaultField(t *testing.T) {
 		t.Fatal("expected error for missing org_id")
 	}
 }
+
+// --- Paperless Tests ---
+
+func TestPaperlessBackend_MintCredential(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/token/" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("expected application/json content type, got %s", r.Header.Get("Content-Type"))
+		}
+
+		var payload struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Errorf("decode request body: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if payload.Username != "admin" {
+			t.Errorf("unexpected username: %s", payload.Username)
+		}
+		if payload.Password != "secret123" {
+			t.Errorf("unexpected password: %s", payload.Password)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"token": "paperless-api-token-abc123",
+		})
+	}))
+	defer server.Close()
+
+	reader := &mockVaultReader{
+		secrets: map[string]map[string]string{
+			"homelab/data/docker/paperless": {
+				"username": "admin",
+				"password": "secret123",
+			},
+		},
+	}
+
+	b := NewPaperlessBackend(server.URL, reader)
+	cred, err := b.MintCredential("paperless", 2, 30*time.Minute, MintOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cred.Token != "paperless-api-token-abc123" {
+		t.Errorf("expected token paperless-api-token-abc123, got %s", cred.Token)
+	}
+	if cred.Metadata["backend"] != "paperless" {
+		t.Errorf("expected backend=paperless, got %s", cred.Metadata["backend"])
+	}
+	if cred.Metadata["type"] != "api_token" {
+		t.Errorf("expected type=api_token, got %s", cred.Metadata["type"])
+	}
+}
+
+func TestPaperlessBackend_MintCredential_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, "invalid credentials")
+	}))
+	defer server.Close()
+
+	reader := &mockVaultReader{
+		secrets: map[string]map[string]string{
+			"homelab/data/docker/paperless": {
+				"username": "admin",
+				"password": "wrong",
+			},
+		},
+	}
+
+	b := NewPaperlessBackend(server.URL, reader)
+	_, err := b.MintCredential("paperless", 2, 30*time.Minute, MintOptions{})
+	if err == nil {
+		t.Fatal("expected error for 403 response")
+	}
+}
+
+func TestPaperlessBackend_Health(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	b := NewPaperlessBackend(server.URL, nil)
+	if err := b.Health(); err != nil {
+		t.Fatalf("unexpected health error: %v", err)
+	}
+}
+
+func TestPaperlessBackend_MissingVaultField(t *testing.T) {
+	reader := &mockVaultReader{
+		secrets: map[string]map[string]string{
+			"homelab/data/docker/paperless": {
+				"username": "admin",
+			},
+		},
+	}
+
+	b := NewPaperlessBackend("http://localhost", reader)
+	_, err := b.MintCredential("paperless", 2, 30*time.Minute, MintOptions{})
+	if err == nil {
+		t.Fatal("expected error for missing password")
+	}
+}

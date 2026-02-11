@@ -50,6 +50,9 @@ type Config struct {
 	// Tailscale API URL (enables dynamic OAuth token backend)
 	TailscaleAPIURL string
 
+	// Paperless-ngx URL (enables dynamic API token backend)
+	PaperlessURL string
+
 	// SSH Vault path for certificate signing (default: ssh-client-signer)
 	SSHVaultPath string
 }
@@ -104,6 +107,7 @@ func Load() (*Config, error) {
 		GitLabProjectID:  getEnvOrEmpty("GITLAB_PROJECT_ID", "4"),
 
 		TailscaleAPIURL: getEnvOrEmpty("TAILSCALE_API_URL", "https://api.tailscale.com"),
+		PaperlessURL:    getEnvOrEmpty("PAPERLESS_URL", ""),
 		SSHVaultPath:    getEnv("SSH_VAULT_PATH", "ssh-client-signer"),
 	}
 
