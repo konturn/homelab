@@ -11,6 +11,7 @@ import (
 
 	"github.com/nkontur/jit-approval-svc/internal/backend"
 	"github.com/nkontur/jit-approval-svc/internal/config"
+	"github.com/nkontur/jit-approval-svc/internal/ratelimit"
 	"github.com/nkontur/jit-approval-svc/internal/store"
 )
 
@@ -75,6 +76,7 @@ func mockHandlerWithMinter(minter *mockVaultMinter) *Handler {
 		cfg:      cfg,
 		store:    store.New(),
 		backends: backends,
+		limiter:  ratelimit.New(5, 15*time.Minute),
 		// vault and telegram are nil - only test paths that don't call them
 	}
 }
@@ -574,5 +576,43 @@ func TestMethodNotAllowed(t *testing.T) {
 				t.Errorf("expected 405, got %d", w.Code)
 			}
 		})
+	}
+}
+
+func TestHandleRequest_RateLimited(t *testing.T) {
+	h := mockHandler()
+	// Override with a tight limiter for testing: 2 requests per 1 minute
+	h.limiter = ratelimit.New(2, 1*time.Minute)
+
+	makeReq := func() *httptest.ResponseRecorder {
+		body := CreateRequestBody{
+			Requester: "prometheus",
+			Resource:  "grafana",
+			Tier:      1,
+			Reason:    "test",
+		}
+		b, _ := json.Marshal(body)
+		req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(b))
+		req.Header.Set("X-JIT-API-Key", "test-api-key")
+		w := httptest.NewRecorder()
+		h.HandleRequest(w, req)
+		return w
+	}
+
+	// First 2 should succeed
+	for i := 0; i < 2; i++ {
+		w := makeReq()
+		if w.Code != http.StatusCreated {
+			t.Fatalf("request %d: expected 201, got %d: %s", i+1, w.Code, w.Body.String())
+		}
+	}
+
+	// 3rd should be rate limited
+	w := makeReq()
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429, got %d: %s", w.Code, w.Body.String())
+	}
+	if w.Header().Get("Retry-After") == "" {
+		t.Error("expected Retry-After header")
 	}
 }
