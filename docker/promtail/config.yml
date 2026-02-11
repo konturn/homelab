@@ -9,52 +9,8 @@ clients:
   - url: http://loki:3100/loki/api/v1/push
 
 scrape_configs:
-  # System logs
-  - job_name: syslog
-    static_configs:
-      - targets: [localhost]
-        labels:
-          job: syslog
-          host: router
-          __path__: /var/log/syslog
-
-  # Auth logs (SSH, sudo)
-  - job_name: auth
-    static_configs:
-      - targets: [localhost]
-        labels:
-          job: auth
-          host: router
-          __path__: /var/log/auth.log
-
-  # Kernel messages
-  - job_name: kernel
-    static_configs:
-      - targets: [localhost]
-        labels:
-          job: kernel
-          host: router
-          __path__: /var/log/kern.log
-
-  # Cron logs
-  - job_name: cron
-    static_configs:
-      - targets: [localhost]
-        labels:
-          job: cron
-          host: router
-          __path__: /var/log/cron.log
-
-  # Credential scrubber audit log
-  - job_name: scrub-transcripts
-    static_configs:
-      - targets: [localhost]
-        labels:
-          job: scrub-transcripts
-          host: router
-          __path__: /var/log/scrub-transcripts/*.log
-
-  # Systemd journal (restic backup and check services)
+  # Systemd journal - scrapes all host logs directly from journal
+  # Replaces rsyslog-dependent file jobs (syslog, auth, kernel, cron)
   - job_name: journal
     journal:
       json: false
@@ -66,12 +22,19 @@ scrape_configs:
     relabel_configs:
       - source_labels: ['__journal__systemd_unit']
         target_label: 'unit'
-    pipeline_stages:
-      - match:
-          selector: '{unit=~"restic-.*"}'
-          stages:
-            - labels:
-                unit:
+      - source_labels: ['__journal_syslog_identifier']
+        target_label: 'syslog_identifier'
+      - source_labels: ['__journal_priority_keyword']
+        target_label: 'level'
+
+  # Credential scrubber audit log
+  - job_name: scrub-transcripts
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: scrub-transcripts
+          host: router
+          __path__: /var/log/scrub-transcripts/*.log
 
   # Vault audit logs (JSON format)
   - job_name: vault-audit
