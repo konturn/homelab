@@ -379,5 +379,8 @@ resource "vault_policy" "jit_tier2_infra" {
     path "homelab/data/infrastructure/pihole" {
       capabilities = ["read"]
     }
+    path "homelab/data/infrastructure/ipmi" {
+      capabilities = ["read"]
+    }
   EOT
 }
