@@ -1605,9 +1605,7 @@ services:
       - TELEGRAM_BOT_TOKEN={{ vault_moltbot_telegram_token | default(lookup('env', 'MOLTBOT_TELEGRAM_TOKEN')) | trim }}
       - HASS_URL=http://homeassistant:8123
       - GITLAB_TOKEN={{ vault_moltbot_gitlab_token | default(lookup('env', 'MOLTBOT_GITLAB_TOKEN')) | trim }}
-      # IPMI access for server management
-      - IPMI_USER={{ vault_ipmi_user | default(lookup('env', 'IPMI_USER')) | trim }}
-      - IPMI_PASSWORD={{ vault_ipmi_password | default(lookup('env', 'IPMI_PASSWORD')) | trim }}
+      # IPMI credentials removed — use JIT T2 (ipmi resource) instead
       # Web search
       - BRAVE_API_KEY={{ brave_api_key }}
       # Agent platforms

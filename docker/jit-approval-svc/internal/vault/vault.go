@@ -282,6 +282,7 @@ var resourceTier = map[string]int{
 	"gitlab":        2,
 	"homeassistant": 2,
 	"vault":         2,
+	"ipmi":          2,
 }
 
 // MinTierForResource returns the minimum tier required for a resource.
