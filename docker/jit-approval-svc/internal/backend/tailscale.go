@@ -1,11 +1,11 @@
 package backend
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -13,7 +13,9 @@ import (
 )
 
 // TailscaleBackend mints short-lived OAuth access tokens via the Tailscale API.
-// Credentials (client_id, client_secret) are read from Vault at runtime.
+// Credentials (oauth_client_id, oauth_client_secret) are read from Vault at
+// path infrastructure/tailscale. The token endpoint uses a standard OAuth 2.0
+// client_credentials grant with form-encoded parameters.
 type TailscaleBackend struct {
 	apiURL      string
 	vaultReader VaultSecretReader
@@ -26,18 +28,11 @@ func NewTailscaleBackend(apiURL string, vaultReader VaultSecretReader) *Tailscal
 	return &TailscaleBackend{
 		apiURL:      strings.TrimRight(apiURL, "/"),
 		vaultReader: vaultReader,
-		vaultPath:   "homelab/data/docker/jit-approval-svc",
+		vaultPath:   "homelab/data/infrastructure/tailscale",
 		http: &http.Client{
 			Timeout: 10 * time.Second,
 		},
 	}
-}
-
-// tailscaleTokenRequest is the OAuth token request body.
-type tailscaleTokenRequest struct {
-	ClientID     string `json:"client_id"`
-	ClientSecret string `json:"client_secret"`
-	GrantType    string `json:"grant_type"`
 }
 
 // tailscaleTokenResponse is the OAuth token response.
@@ -55,32 +50,29 @@ func (b *TailscaleBackend) MintCredential(resource string, tier int, ttl time.Du
 		return nil, fmt.Errorf("read vault secret: %w", err)
 	}
 
-	clientID, ok := secrets["tailscale_client_id"]
+	clientID, ok := secrets["oauth_client_id"]
 	if !ok || clientID == "" {
-		return nil, fmt.Errorf("missing tailscale_client_id in vault path %s", b.vaultPath)
+		return nil, fmt.Errorf("missing oauth_client_id in vault path %s", b.vaultPath)
 	}
-	clientSecret, ok := secrets["tailscale_client_secret"]
+	clientSecret, ok := secrets["oauth_client_secret"]
 	if !ok || clientSecret == "" {
-		return nil, fmt.Errorf("missing tailscale_client_secret in vault path %s", b.vaultPath)
+		return nil, fmt.Errorf("missing oauth_client_secret in vault path %s", b.vaultPath)
 	}
 
-	// Request OAuth token using client credentials grant
-	payload := tailscaleTokenRequest{
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-		GrantType:    "client_credentials",
-	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
+	// Request OAuth token using client credentials grant.
+	// Tailscale's token endpoint expects application/x-www-form-urlencoded.
+	form := url.Values{
+		"client_id":     {clientID},
+		"client_secret": {clientSecret},
+		"grant_type":    {"client_credentials"},
 	}
 
-	url := b.apiURL + "/api/v2/oauth/token"
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	endpoint := b.apiURL + "/api/v2/oauth/token"
+	req, err := http.NewRequest(http.MethodPost, endpoint, strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := b.http.Do(req)
 	if err != nil {

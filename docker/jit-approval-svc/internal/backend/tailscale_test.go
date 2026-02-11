@@ -20,18 +20,21 @@ func TestTailscaleBackend_MintCredential(t *testing.T) {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-
-		var body tailscaleTokenRequest
-		json.NewDecoder(r.Body).Decode(&body)
-
-		if body.ClientID != "ts-client-id" {
-			t.Errorf("expected client_id ts-client-id, got %s", body.ClientID)
+		if ct := r.Header.Get("Content-Type"); ct != "application/x-www-form-urlencoded" {
+			t.Errorf("expected Content-Type application/x-www-form-urlencoded, got %s", ct)
 		}
-		if body.ClientSecret != "ts-client-secret" {
-			t.Errorf("expected client_secret ts-client-secret, got %s", body.ClientSecret)
+
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("failed to parse form: %v", err)
 		}
-		if body.GrantType != "client_credentials" {
-			t.Errorf("expected grant_type client_credentials, got %s", body.GrantType)
+		if v := r.FormValue("client_id"); v != "ts-client-id" {
+			t.Errorf("expected client_id ts-client-id, got %s", v)
+		}
+		if v := r.FormValue("client_secret"); v != "ts-client-secret" {
+			t.Errorf("expected client_secret ts-client-secret, got %s", v)
+		}
+		if v := r.FormValue("grant_type"); v != "client_credentials" {
+			t.Errorf("expected grant_type client_credentials, got %s", v)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -45,9 +48,9 @@ func TestTailscaleBackend_MintCredential(t *testing.T) {
 
 	reader := &mockVaultReader{
 		secrets: map[string]map[string]string{
-			"homelab/data/docker/jit-approval-svc": {
-				"tailscale_client_id":     "ts-client-id",
-				"tailscale_client_secret": "ts-client-secret",
+			"homelab/data/infrastructure/tailscale": {
+				"oauth_client_id":     "ts-client-id",
+				"oauth_client_secret": "ts-client-secret",
 			},
 		},
 	}
@@ -81,9 +84,9 @@ func TestTailscaleBackend_MintCredential_APIError(t *testing.T) {
 
 	reader := &mockVaultReader{
 		secrets: map[string]map[string]string{
-			"homelab/data/docker/jit-approval-svc": {
-				"tailscale_client_id":     "bad-id",
-				"tailscale_client_secret": "bad-secret",
+			"homelab/data/infrastructure/tailscale": {
+				"oauth_client_id":     "bad-id",
+				"oauth_client_secret": "bad-secret",
 			},
 		},
 	}
@@ -98,9 +101,9 @@ func TestTailscaleBackend_MintCredential_APIError(t *testing.T) {
 func TestTailscaleBackend_MintCredential_MissingVaultSecret(t *testing.T) {
 	reader := &mockVaultReader{
 		secrets: map[string]map[string]string{
-			"homelab/data/docker/jit-approval-svc": {
-				"tailscale_client_id": "ts-id",
-				// missing client_secret
+			"homelab/data/infrastructure/tailscale": {
+				"oauth_client_id": "ts-id",
+				// missing oauth_client_secret
 			},
 		},
 	}
