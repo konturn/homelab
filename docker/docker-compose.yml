@@ -162,14 +162,14 @@ services:
     cap_drop:
       - ALL
     cap_add:
-      - CHOWN
-      - DAC_OVERRIDE
-      - FOWNER
-      - NET_ADMIN
-      - NET_BIND_SERVICE
-      - NET_RAW
-      - SETGID
-      - SETUID
+      - CHOWN            # pihole user/group setup changes file ownership
+      - DAC_OVERRIDE     # access config files across pihole/root users
+      - FOWNER           # chmod on gravity.db during gravity updates
+      - NET_ADMIN        # DHCP server and network interface management
+      - NET_BIND_SERVICE # DNS listener on port 53
+      - NET_RAW          # DHCP raw socket access
+      - SETGID           # drop to pihole group
+      - SETUID           # drop to pihole user
     image: pihole/pihole:2025.11.1@sha256:848cf5af61397e6976e2fc356aa00aaa3d3a53b2ac90a956675779ff1f4bdf34
     ports:
       - "443:80"
@@ -222,12 +222,13 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # nginx master runs as root, workers drop to nginx user; binds to port 80
     cap_add:
-      - CHOWN
-      - DAC_OVERRIDE
-      - SETUID
-      - SETGID
-      - NET_BIND_SERVICE
+      - CHOWN            # manage log/pid file ownership
+      - DAC_OVERRIDE     # read config and write logs across users
+      - NET_BIND_SERVICE # bind to port 80
+      - SETGID           # worker processes drop to nginx group
+      - SETUID           # worker processes drop to nginx user
     read_only: true
     tmpfs:
       - /tmp
@@ -262,12 +263,13 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # Same as nginx above
     cap_add:
       - CHOWN
       - DAC_OVERRIDE
-      - SETUID
-      - SETGID
       - NET_BIND_SERVICE
+      - SETGID
+      - SETUID
     read_only: true
     tmpfs:
       - /tmp
@@ -298,12 +300,13 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # Same as nginx above
     cap_add:
       - CHOWN
       - DAC_OVERRIDE
-      - SETUID
-      - SETGID
       - NET_BIND_SERVICE
+      - SETGID
+      - SETUID
     read_only: true
     tmpfs:
       - /tmp
@@ -522,11 +525,12 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # Entrypoint chowns data dirs and switches to influxdb user
     cap_add:
       - CHOWN
       - DAC_OVERRIDE
-      - SETUID
       - SETGID
+      - SETUID
     ports:
       - "443:8086"
     networks:
@@ -677,17 +681,19 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # Omnibus GitLab runs ~10 internal services (postgres, redis, nginx, puma, etc.)
+    # each as separate users, requiring broad privilege management
     cap_add:
-      - CHOWN
-      - DAC_OVERRIDE
-      - FOWNER
-      - FSETID
-      - KILL
-      - NET_BIND_SERVICE
-      - SETGID
-      - SETUID
-      - SYS_CHROOT
-      - SYS_RESOURCE
+      - CHOWN            # data dir ownership across service users (git, postgres, redis)
+      - DAC_OVERRIDE     # cross-user file access for internal services
+      - FOWNER           # chmod/chown across service users
+      - FSETID           # preserve setgid bits on shared directories
+      - KILL             # signal management for internal service supervision (runsvdir)
+      - NET_BIND_SERVICE # bind to ports 80 and 22
+      - SETGID           # switch between internal service groups
+      - SETUID           # switch between internal service users
+      - SYS_CHROOT       # PostgreSQL and other services use chroot
+      - SYS_RESOURCE     # set ulimits for internal services (runsvdir-start)
     ports:
       - "22/tcp"
       - "443:80"
@@ -923,12 +929,13 @@ services:
     networks:
       - wordpress_internal
     restart: unless-stopped
+    # MySQL entrypoint chowns data dir and drops to mysql user
     cap_add:
-      - SYS_NICE
       - CHOWN
       - DAC_OVERRIDE
-      - SETUID
       - SETGID
+      - SETUID
+      - SYS_NICE         # MySQL IO thread scheduling priority
     deploy:
       resources:
         limits:
@@ -1046,10 +1053,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # Audio clients need user switching and real-time scheduling for playback
     cap_add:
-      - SETGID
-      - SETUID
-      - SYS_NICE
+      - SETGID    # drop to audio group
+      - SETUID    # drop to audio user
+      - SYS_NICE  # real-time audio scheduling priority
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -1108,6 +1116,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # Same as snapclient_office
     cap_add:
       - SETGID
       - SETUID
@@ -1141,6 +1150,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # Same as snapclient_office
     cap_add:
       - SETGID
       - SETUID
@@ -1174,6 +1184,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # Same as snapclient_office
     cap_add:
       - SETGID
       - SETUID
@@ -1207,6 +1218,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # Same as snapclient_office
     cap_add:
       - SETGID
       - SETUID
@@ -1240,6 +1252,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # Same as snapclient_office
     cap_add:
       - SETGID
       - SETUID
@@ -1275,11 +1288,12 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # Entrypoint chowns data/config and drops to mosquitto user
     cap_add:
       - CHOWN
       - DAC_OVERRIDE
-      - SETUID
       - SETGID
+      - SETUID
     read_only: true
     tmpfs:
       - /tmp
@@ -1462,11 +1476,12 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # MariaDB entrypoint chowns data dir and drops to mysql user
     cap_add:
       - CHOWN
       - DAC_OVERRIDE
-      - SETUID
       - SETGID
+      - SETUID
     command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
     restart: unless-stopped
     networks:
