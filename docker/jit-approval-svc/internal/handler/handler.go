@@ -11,6 +11,7 @@ import (
 	"github.com/nkontur/jit-approval-svc/internal/backend"
 	"github.com/nkontur/jit-approval-svc/internal/config"
 	"github.com/nkontur/jit-approval-svc/internal/logger"
+	"github.com/nkontur/jit-approval-svc/internal/ratelimit"
 	"github.com/nkontur/jit-approval-svc/internal/store"
 	"github.com/nkontur/jit-approval-svc/internal/telegram"
 	"github.com/nkontur/jit-approval-svc/internal/vault"
@@ -23,6 +24,7 @@ type Handler struct {
 	vault    *vault.Client
 	telegram *telegram.Client
 	backends *backend.Registry
+	limiter  *ratelimit.Limiter
 }
 
 // New creates a new Handler.
@@ -33,6 +35,7 @@ func New(cfg *config.Config, s *store.Store, v *vault.Client, tg *telegram.Clien
 		vault:    v,
 		telegram: tg,
 		backends: backends,
+		limiter:  ratelimit.New(5, 15*time.Minute),
 	}
 }
 
@@ -147,6 +150,18 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Reason == "" {
 		writeError(w, http.StatusBadRequest, "reason is required")
+		return
+	}
+
+	// Rate limit: max 5 requests per resource per requester per 15 minutes
+	if ok, retryAfter := h.limiter.Allow(body.Resource, body.Requester); !ok {
+		logger.Warn("request_rate_limited", logger.Fields{
+			"requester":     body.Requester,
+			"resource":      body.Resource,
+			"retry_after_s": int(retryAfter.Seconds()) + 1,
+		})
+		w.Header().Set("Retry-After", fmt.Sprintf("%d", int(retryAfter.Seconds())+1))
+		writeError(w, http.StatusTooManyRequests, ratelimit.Message(body.Resource, body.Requester, retryAfter))
 		return
 	}
 
