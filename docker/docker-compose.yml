@@ -562,8 +562,10 @@ services:
       - GF_SMTP_FROM_NAME=Grafana Homelab
       - GF_SMTP_STARTTLS_POLICY=MandatoryStartTLS
     depends_on:
-      - influxdb
-      - loki
+      influxdb:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s
@@ -612,7 +614,8 @@ services:
       - ALL
     restart: unless-stopped
     depends_on:
-      - loki
+      loki:
+        condition: service_healthy
     volumes:
       - /var/log:/var/log:ro
       - /run/log/journal:/run/log/journal:ro
@@ -760,7 +763,8 @@ services:
       - TAILSCALE_API_URL=https://api.tailscale.com
       - TELEGRAM_WEBHOOK_URL=https://jit-webhook.nkontur.com/telegram/webhook
     depends_on:
-      - vault
+      vault:
+        condition: service_healthy
     logging:
       driver: loki
       options:
@@ -921,9 +925,12 @@ services:
       - iot
       - external
     depends_on:
-      - plex
-      - amcrest2mqtt
-      - snapserver
+      plex:
+        condition: service_healthy
+      amcrest2mqtt:
+        condition: service_healthy
+      snapserver:
+        condition: service_healthy
     ports:
       - "443:8123"
     devices: 
@@ -1224,7 +1231,8 @@ services:
       - ALL
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/amcrest2mqtt:latest"
     depends_on:
-      - mosquitto
+      mosquitto:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       iot:
@@ -1287,7 +1295,8 @@ services:
     restart: unless-stopped
     image: koenkk/zigbee2mqtt:2@sha256:89cf02f379aa743a68494388e3a26fba7b8c9101f8b452038cc07aeff3fc983c
     depends_on:
-      - mosquitto
+      mosquitto:
+        condition: service_healthy
     networks:
       iot:
     ports:
