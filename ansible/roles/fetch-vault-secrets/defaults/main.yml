@@ -115,6 +115,8 @@ vault_secret_paths:
     fields:
       vault_tailscale_api_token: "api_token"
       vault_tailscale_auth_key: "auth_key"
+      vault_tailscale_oauth_client_id: "oauth_client_id"
+      vault_tailscale_oauth_client_secret: "oauth_client_secret"
   - path: "infrastructure/luks"
     fields:
       vault_luks_password_base64: "password_base64"

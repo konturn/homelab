@@ -55,12 +55,30 @@
     - tailscale_status.rc != 0 or (tailscale_status.stdout | from_json).BackendState != "Running"
   no_log: true  # Hide auth key from logs
 
+- name: Obtain Tailscale OAuth access token
+  ansible.builtin.uri:
+    url: "https://api.tailscale.com/api/v2/oauth/token"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      client_id: "{{ tailscale_oauth_client_id | trim }}"
+      client_secret: "{{ tailscale_oauth_client_secret | trim }}"
+      grant_type: "client_credentials"
+    status_code: 200
+  register: _tailscale_oauth_response
+  when:
+    - not ansible_check_mode
+    - tailscale_split_dns is defined
+    - tailscale_oauth_client_id is defined
+    - tailscale_oauth_client_secret is defined
+  no_log: true
+
 - name: Configure Tailscale split DNS
   ansible.builtin.uri:
     url: "https://api.tailscale.com/api/v2/tailnet/{{ tailscale_tailnet }}/dns/split-dns"
     method: PATCH
     headers:
-      Authorization: "Bearer {{ tailscale_api_token | trim }}"
+      Authorization: "Bearer {{ _tailscale_oauth_response.json.access_token }}"
       Content-Type: "application/json"
     body_format: json
     body: "{{ tailscale_split_dns }}"
@@ -68,4 +86,5 @@
   when:
     - not ansible_check_mode
     - tailscale_split_dns is defined
+    - _tailscale_oauth_response is not skipped
   no_log: true  # Hide API token from logs
