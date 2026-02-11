@@ -1595,7 +1595,6 @@ services:
       - OPENAI_API_KEY={{ vault_openai_api_key | default(lookup('env', 'OPENAI_API_KEY')) | trim }}
       - CLAWDBOT_GATEWAY_TOKEN={{ vault_moltbot_gateway_token | default(lookup('env', 'MOLTBOT_GATEWAY_TOKEN')) | trim }}
       - TELEGRAM_BOT_TOKEN={{ vault_moltbot_telegram_token | default(lookup('env', 'MOLTBOT_TELEGRAM_TOKEN')) | trim }}
-      - HASS_URL=http://homeassistant:8123
       - GITLAB_TOKEN={{ vault_moltbot_gitlab_token | default(lookup('env', 'MOLTBOT_GITLAB_TOKEN')) | trim }}
       # IPMI credentials removed — use JIT T2 (ipmi resource) instead
       # Web search
