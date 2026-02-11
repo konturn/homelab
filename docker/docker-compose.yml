@@ -88,6 +88,8 @@ services:
     container_name: docker-socket-proxy
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     image: tecnativa/docker-socket-proxy:0.3@sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476
     restart: unless-stopped
     networks:
@@ -122,6 +124,8 @@ services:
     container_name: plex
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "32400/tcp"
     image: plexinc/pms-docker:1.43.0.10467-2b1ba6e69@sha256:d38767ec3b948e860bcf1abfe16512bd638e6ac01230f5b65b64e2ef09052267
@@ -155,6 +159,11 @@ services:
     container_name: pihole
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
     image: pihole/pihole:2025.11.1@sha256:848cf5af61397e6976e2fc356aa00aaa3d3a53b2ac90a956675779ff1f4bdf34
     ports:
       - "443:80"
@@ -182,6 +191,8 @@ services:
     container_name: iperf3
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     read_only: true
     tmpfs:
       - /tmp
@@ -202,6 +213,8 @@ services:
     container_name: nginx
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     read_only: true
     tmpfs:
       - /tmp
@@ -234,6 +247,8 @@ services:
     container_name: lab_nginx
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     read_only: true
     tmpfs:
       - /tmp
@@ -262,6 +277,8 @@ services:
     container_name: iot_nginx
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     read_only: true
     tmpfs:
       - /tmp
@@ -290,6 +307,8 @@ services:
     container_name: ombi
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       - external
       - internal
@@ -318,6 +337,8 @@ services:
     container_name: nzbget
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "6789:6789"
     networks:
@@ -346,6 +367,8 @@ services:
     container_name: radarr
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "443:7878"
     networks:
@@ -378,6 +401,8 @@ services:
     container_name: jackett
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "443:9117"
     networks:
@@ -404,6 +429,8 @@ services:
     container_name: sonarr
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "443:8989"
     networks:
@@ -436,6 +463,8 @@ services:
     container_name: audioserve
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "443:3000"
     networks:
@@ -466,6 +495,8 @@ services:
     container_name: influxdb
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "443:8086"
     networks:
@@ -499,6 +530,8 @@ services:
     container_name: grafana
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     image: grafana/grafana:12.4.0-21693836646-ubuntu@sha256:ba93c9d192e58b23e064c7f501d453426ccf4a85065bf25b705ab1e98602bfb1
     ports:
       - "443:3000"
@@ -541,6 +574,8 @@ services:
     container_name: loki
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     image: grafana/loki:3.6@sha256:847c287ada0e12603910589f42038c5cdaaad04e248bd1dc6c6e0920a235f427
     ports:
       - "3100:3100"
@@ -573,6 +608,8 @@ services:
     container_name: promtail
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
     depends_on:
       - loki
@@ -605,6 +642,8 @@ services:
     container_name: gitlab
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "22/tcp"
       - "443:80"
@@ -656,6 +695,8 @@ services:
       - IPC_LOCK  # Required for Vault to lock memory and prevent secrets from being swapped
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     volumes:
       - vault_data:/vault/file
       - '{{ docker_persistent_data_path }}/vault/config:/vault/config:ro'
@@ -740,6 +781,8 @@ services:
     container_name: deluge
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "443:8112"
     image: 'lscr.io/linuxserver/deluge:latest@sha256:2392a75ce975de1b50c03344b05a858c5da36c1c41ba1f61a5fe6198ea88ef18'
@@ -767,6 +810,8 @@ services:
     container_name: bitwarden
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "443:80"
     image: 'vaultwarden/server:1.35.3-alpine@sha256:c40957876ec13c1cb0d2b08f86e8f738e6d06f7460bad9cdae216cded174c10d'
@@ -792,6 +837,8 @@ services:
     container_name: wordpress
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "443:80"
     networks:
@@ -821,6 +868,8 @@ services:
     container_name: wordpress_db
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       - wordpress_internal
     restart: unless-stopped
@@ -847,6 +896,8 @@ services:
     container_name: diagram
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "443:8080"
     networks:
@@ -889,6 +940,8 @@ services:
       - "{{ docker_persistent_data_path }}/homeassistant:/config"
       - /etc/localtime:/etc/localtime:ro
     command: ["/bin/bash", "-c", "ip route del default; ip route add default via 10.3.0.1 dev eth1; /init"]
+    cap_drop:
+      - ALL
     cap_add:
       # Required: the entrypoint command runs `ip route del default; ip route add default via 10.3.0.1 dev eth1`
       # to override the default route so HA traffic goes through the internal VLAN (10.3.x.x) instead of
@@ -905,6 +958,8 @@ services:
     container_name: snapserver
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     hostname: snapserver
     networks:
       iot:
@@ -932,6 +987,8 @@ services:
     container_name: snapclient_office
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -959,6 +1016,8 @@ services:
     container_name: snapclient_global
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -986,6 +1045,8 @@ services:
     container_name: snapclient_kitchen
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -1013,6 +1074,8 @@ services:
     container_name: snapclient_main_bedroom
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -1040,6 +1103,8 @@ services:
     container_name: snapclient_main_bathroom
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -1067,6 +1132,8 @@ services:
     container_name: snapclient_guest_bathroom
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -1094,6 +1161,8 @@ services:
     container_name: snapclient_guest_bedroom
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -1123,6 +1192,8 @@ services:
     container_name: mosquitto
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     read_only: true
     tmpfs:
       - /tmp
@@ -1149,6 +1220,8 @@ services:
     container_name: amcrest2mqtt
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/amcrest2mqtt:latest"
     depends_on:
       - mosquitto
@@ -1182,6 +1255,8 @@ services:
     container_name: ambientweather
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       iot:
         ipv4_address: {{ weather_mqtt_bridge_ip }}
@@ -1207,6 +1282,8 @@ services:
     container_name: zigbee2mqtt
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
     image: koenkk/zigbee2mqtt:2@sha256:89cf02f379aa743a68494388e3a26fba7b8c9101f8b452038cc07aeff3fc983c
     depends_on:
@@ -1234,6 +1311,8 @@ services:
     container_name: paperless-ngx
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       internal:
     deploy:
@@ -1260,6 +1339,8 @@ services:
     container_name: mopidy
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       iot:
         ipv4_address: {{ mopidy_address }}
@@ -1291,6 +1372,8 @@ services:
     container_name: nextcloud_database
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
     restart: unless-stopped
     networks:
@@ -1319,6 +1402,8 @@ services:
     container_name: nextcloud
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       - external
       - nextcloud_internal
@@ -1350,6 +1435,8 @@ services:
     container_name: prowlarr
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
     ports:
       - "443:7878"
@@ -1376,6 +1463,8 @@ services:
     container_name: moltbot-gateway
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
     networks:
       internal:
