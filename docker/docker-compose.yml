@@ -595,11 +595,6 @@ services:
       - GF_SMTP_FROM_ADDRESS=konoahko@gmail.com
       - GF_SMTP_FROM_NAME=Grafana Homelab
       - GF_SMTP_STARTTLS_POLICY=MandatoryStartTLS
-    depends_on:
-      influxdb:
-        condition: service_healthy
-      loki:
-        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s
@@ -643,9 +638,6 @@ services:
     cap_drop:
       - ALL
     restart: unless-stopped
-    depends_on:
-      loki:
-        condition: service_started
     volumes:
       - /var/log:/var/log:ro
       - /run/log/journal:/run/log/journal:ro
@@ -973,13 +965,6 @@ services:
       - internal
       - iot
       - external
-    depends_on:
-      plex:
-        condition: service_healthy
-      amcrest2mqtt:
-        condition: service_healthy
-      snapserver:
-        condition: service_healthy
     ports:
       - "443:8123"
     devices: 
