@@ -1,3 +1,2 @@
 -e 
 # DNS update key (secret)
-networking/dhcp/rndc.key
