@@ -162,8 +162,14 @@ services:
     cap_drop:
       - ALL
     cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
       - NET_ADMIN
+      - NET_BIND_SERVICE
       - NET_RAW
+      - SETGID
+      - SETUID
     image: pihole/pihole:2025.11.1@sha256:848cf5af61397e6976e2fc356aa00aaa3d3a53b2ac90a956675779ff1f4bdf34
     ports:
       - "443:80"
@@ -177,6 +183,7 @@ services:
     environment:
       TZ: America/New_York
       WEBPASSWORD: {{ vault_pihole_password | default(lookup('env', 'PIHOLE_PASSWORD')) | trim }}
+      DNSMASQ_USER: root
     volumes:
       - {{ docker_persistent_data_path }}/pihole/conf:/etc/pihole
       - {{ docker_persistent_data_path }}/pihole/dnsmasq:/etc/dnsmasq.d
@@ -215,6 +222,12 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+      - NET_BIND_SERVICE
     read_only: true
     tmpfs:
       - /tmp
@@ -249,6 +262,12 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+      - NET_BIND_SERVICE
     read_only: true
     tmpfs:
       - /tmp
@@ -279,6 +298,12 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+      - NET_BIND_SERVICE
     read_only: true
     tmpfs:
       - /tmp
@@ -497,6 +522,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
     ports:
       - "443:8086"
     networks:
@@ -647,6 +677,17 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - FSETID
+      - KILL
+      - NET_BIND_SERVICE
+      - SETGID
+      - SETUID
+      - SYS_CHROOT
+      - SYS_RESOURCE
     ports:
       - "22/tcp"
       - "443:80"
@@ -694,12 +735,17 @@ services:
       resources:
         limits:
           memory: 768M
-    cap_add:
-      - IPC_LOCK  # Required for Vault to lock memory and prevent secrets from being swapped
-    security_opt:
-      - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - IPC_LOCK    # Lock memory to prevent secrets from being swapped
+      - CHOWN       # File ownership changes during startup
+      - DAC_OVERRIDE # Access files regardless of permissions
+      - FOWNER      # Modify file ownership metadata
+      - SETUID      # Process UID changes
+      - SETGID      # Process GID changes
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - vault_data:/vault/file
       - '{{ docker_persistent_data_path }}/vault/config:/vault/config:ro'
@@ -878,7 +924,11 @@ services:
       - wordpress_internal
     restart: unless-stopped
     cap_add:
-      - SYS_NICE  # CAP_SYS_NICE
+      - SYS_NICE
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
     deploy:
       resources:
         limits:
@@ -996,6 +1046,10 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+      - SYS_NICE
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -1054,6 +1108,10 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+      - SYS_NICE
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -1083,6 +1141,10 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+      - SYS_NICE
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -1112,6 +1174,10 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+      - SYS_NICE
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -1141,6 +1207,10 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+      - SYS_NICE
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -1170,6 +1240,10 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+      - SYS_NICE
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -1201,6 +1275,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
     read_only: true
     tmpfs:
       - /tmp
@@ -1383,6 +1462,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
     command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
     restart: unless-stopped
     networks:
