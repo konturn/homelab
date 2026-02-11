@@ -265,6 +265,10 @@ resource "vault_policy" "jit_approval_svc" {
     path "homelab/data/infrastructure/pihole" {
       capabilities = ["read"]
     }
+    # Tailscale: reads OAuth client creds to mint short-lived API tokens
+    path "homelab/data/infrastructure/tailscale" {
+      capabilities = ["read"]
+    }
 
     # Read own service secrets
     path "homelab/data/docker/jit-approval-svc" {
