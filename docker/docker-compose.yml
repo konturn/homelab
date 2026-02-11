@@ -975,7 +975,7 @@ services:
       - external
     depends_on:
       plex:
-        condition: service_healthy
+        condition: service_started
       amcrest2mqtt:
         condition: service_healthy
       snapserver:
