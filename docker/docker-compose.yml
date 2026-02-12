@@ -1623,6 +1623,7 @@ services:
       start_period: 30s
     environment:
       - TZ=America/New_York
+      - VNC_PASSWORD={{ vault_chromium_vnc_password | default('changeme') }}
   moltbot-gateway:
     image: gitlab-registry.lab.nkontur.com:443/root/homelab/moltbot:{{ moltbot_image_tag | default('latest') }}
     container_name: moltbot-gateway

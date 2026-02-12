@@ -31,9 +31,15 @@ done
 # Start dbus session
 eval "$(dbus-launch --sh-syntax)" 2>/dev/null || true
 
-# Start x11vnc
+# Start x11vnc (with password if set)
 echo "Starting x11vnc..."
-x11vnc -display "${DISPLAY}" -forever -shared -nopw -rfbport 5900 -q &
+VNC_ARGS="-display ${DISPLAY} -forever -shared -rfbport 5900 -q"
+if [ -n "${VNC_PASSWORD:-}" ]; then
+    x11vnc $VNC_ARGS -passwd "${VNC_PASSWORD}" &
+else
+    echo "WARNING: No VNC_PASSWORD set — VNC is unprotected!"
+    x11vnc $VNC_ARGS -nopw &
+fi
 
 # Start noVNC via websockify
 echo "Starting noVNC on port 6080..."

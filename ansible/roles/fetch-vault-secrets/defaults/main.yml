@@ -163,3 +163,8 @@ vault_secret_paths:
     fields:
       vault_spotify_dc: "sp_dc"
       vault_spotify_key: "sp_key"
+
+  # Chromium browser VNC password
+  - path: "docker/chromium-browser"
+    fields:
+      vault_chromium_vnc_password: "vnc_password"
