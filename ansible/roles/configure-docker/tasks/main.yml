@@ -156,10 +156,23 @@
     path: "{{ docker_persistent_data_path }}/docker-proxy-tls/ca.pem"
   register: docker_proxy_tls_ca
 
+- name: Clean up docker-proxy-tls directory artifacts
+  ansible.builtin.file:
+    path: "{{ docker_persistent_data_path }}/docker-proxy-tls/{{ item }}"
+    state: absent
+  loop:
+    - ca.pem
+    - cert.pem
+    - key.pem
+    - ca-key.pem
+    - server-cert.pem
+    - server-key.pem
+  when: docker_proxy_tls_ca.stat.exists and docker_proxy_tls_ca.stat.isdir
+
 - name: Generate docker-proxy-tls certificates
   ansible.builtin.script:
     cmd: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/docker-socket-proxy-tls/generate-certs.sh {{ docker_persistent_data_path }}/docker-proxy-tls"
-  when: not docker_proxy_tls_ca.stat.exists and not ansible_check_mode
+  when: (not docker_proxy_tls_ca.stat.exists or docker_proxy_tls_ca.stat.isdir) and not ansible_check_mode
 
 - name: Log in to GitLab container registry
   docker_login:
