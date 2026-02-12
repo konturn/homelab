@@ -9,6 +9,11 @@ cleanup() {
 }
 trap cleanup SIGTERM SIGINT SIGQUIT
 
+# Fix profile directory permissions (volume mount creates as root)
+if [ -d /data/chrome-profile ]; then
+    chown -R chrome:chrome /data/chrome-profile
+fi
+
 # Clean up stale lock files from previous crashes
 rm -f /tmp/.X99-lock /tmp/.X11-unix/X99
 
@@ -50,7 +55,7 @@ websockify --web /usr/share/novnc 6080 localhost:5900 &
 
 # Start Chromium
 echo "Starting Chromium..."
-exec chromium \
+exec gosu chrome chromium \
     --no-sandbox \
     --disable-blink-features=AutomationControlled \
     --disable-dev-shm-usage \

@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     dbus-x11 \
     procps \
     curl \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
@@ -25,8 +26,6 @@ RUN groupadd -r chrome && useradd -r -g chrome -G audio,video -m -s /bin/bash ch
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
-
-USER chrome
 
 EXPOSE 6080 9222
 
