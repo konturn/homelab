@@ -25,6 +25,7 @@ check_interval = 0
     image = "docker:24"
     network_mode = "docker_docker-proxy"
     privileged = false
+    dns = ["10.4.0.1"]
     volumes = ["/cache/gitlab-runner:/cache"]
-  # Use docker-socket-proxy on dedicated isolated bridge network
+  # Use docker-socket-proxy on dedicated bridge network (non-internal for internet/DNS)
   environment = ["DOCKER_HOST=tcp://docker-socket-proxy:2375"]
