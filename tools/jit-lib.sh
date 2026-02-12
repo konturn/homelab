@@ -122,6 +122,15 @@ jit_get() {
   return 1
 }
 
+# Convenience: get a Vault T2 token with custom paths
+# Usage: jit_vault <reason> <vault_paths_json>
+# Example: jit_vault "Search vault" '[{"path":"homelab/data/","capabilities":["list"]}]'
+# Returns: Vault token on stdout (blocks until approved)
+jit_vault() {
+  local reason=$1 paths=$2
+  jit_get vault 2 "$reason" "{\"vault_paths\":$paths}"
+}
+
 # Convenience: get a Vault-backed service API key (T1)
 # Usage: jit_service_key <service>  (radarr, sonarr, plex, ombi, nzbget, deluge, paperless, prowlarr)
 # Returns: API key on stdout

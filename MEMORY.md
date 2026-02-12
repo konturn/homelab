@@ -76,6 +76,7 @@ These are the ones I keep re-learning. Full operational discipline rules are in 
 - **Always query APIs, never trust memory** for statuses/counts
 - **Never block main session** — delegate to sub-agents
 - **Poll JIT, don't ask Noah to approve** — he gets Telegram notifications
+- **Never ask before making JIT requests** — if context requires it, just do it. Don't prompt Noah for permission first.
 - **Git worktree for sub-agents** — never checkout branches in shared clone
 - **Sub-agents must verify pipeline green** before reporting done
 - **Shell scripts for mechanical work, LLM for judgment** — don't stream raw data into context
