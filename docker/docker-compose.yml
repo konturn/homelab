@@ -613,8 +613,6 @@ services:
     cap_drop:
       - ALL
     image: grafana/loki:3.6@sha256:847c287ada0e12603910589f42038c5cdaaad04e248bd1dc6c6e0920a235f427
-    ports:
-      - "127.0.0.1:3100:3100"
     networks:
       internal:
         ipv4_address: {{ loki_ip }}
