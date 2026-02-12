@@ -9,7 +9,9 @@ mkdir -p "$CERT_DIR"
 # CA
 openssl genrsa -out "$CERT_DIR/ca-key.pem" 4096
 openssl req -new -x509 -days 3650 -key "$CERT_DIR/ca-key.pem" -sha256 \
-    -out "$CERT_DIR/ca.pem" -subj "/CN=docker-proxy-ca"
+    -out "$CERT_DIR/ca.pem" -subj "/CN=docker-proxy-ca" \
+    -addext "basicConstraints=critical,CA:TRUE" \
+    -addext "keyUsage=critical,keyCertSign,cRLSign"
 
 # Server cert (for the TLS sidecar)
 openssl genrsa -out "$CERT_DIR/server-key.pem" 4096
@@ -45,6 +47,10 @@ rm -f "$CERT_DIR"/*.csr "$CERT_DIR"/*.cnf "$CERT_DIR"/*.srl
 # Restrict private key permissions
 chmod 600 "$CERT_DIR/ca-key.pem" "$CERT_DIR/server-key.pem" "$CERT_DIR/key.pem"
 chmod 644 "$CERT_DIR/ca.pem" "$CERT_DIR/server-cert.pem" "$CERT_DIR/cert.pem"
+
+# Verify cert chains
+openssl verify -CAfile "$CERT_DIR/ca.pem" "$CERT_DIR/server-cert.pem"
+openssl verify -CAfile "$CERT_DIR/ca.pem" "$CERT_DIR/cert.pem"
 
 echo "Docker proxy TLS certs generated in $CERT_DIR"
 echo "  CA:     ca.pem / ca-key.pem"
