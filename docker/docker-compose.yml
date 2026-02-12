@@ -831,6 +831,7 @@ services:
       - SSH_VAULT_PATH=ssh-client-signer
       - TAILSCALE_API_URL=https://api.tailscale.com
       - TELEGRAM_WEBHOOK_URL=https://jit-webhook.nkontur.com/telegram/webhook
+      - PAPERLESS_URL=https://paperless-ngx.lab.nkontur.com
     depends_on:
       vault:
         condition: service_healthy
