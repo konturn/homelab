@@ -78,7 +78,7 @@ networks:
   moltbot-nginx-bridge:
     driver: bridge
     internal: true
-  docker-proxy:
+  proxy-internal:
     driver: bridge
     internal: true
 services:
@@ -94,7 +94,7 @@ services:
     image: tecnativa/docker-socket-proxy:0.3@sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476
     restart: unless-stopped
     networks:
-      docker-proxy:
+      proxy-internal:
     deploy:
       resources:
         limits:
@@ -144,7 +144,7 @@ services:
     networks:
       mgmt:
         ipv4_address: "{{ docker_socket_proxy_ip }}"
-      docker-proxy:
+      proxy-internal:
     deploy:
       resources:
         limits:
