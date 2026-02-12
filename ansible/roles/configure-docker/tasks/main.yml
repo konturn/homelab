@@ -364,6 +364,6 @@
       docker run --rm
       --name scrub-transcripts
       -v /usr/local/bin/scrub-transcripts.sh:/scrub.sh:ro
-      -v {{ docker_persistent_data_path }}/moltbot-gateway/agents/main/sessions:/transcripts
+      -v {{ docker_persistent_data_path }}/moltbot/data/agents/main/sessions:/transcripts
       -v /var/log/scrub-transcripts:/var/log/scrub-transcripts
       bash:5 bash /scrub.sh /transcripts 2>&1 | logger -t scrub-transcripts
