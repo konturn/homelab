@@ -626,7 +626,7 @@ func (h *Handler) handleApprove(req *store.Request) {
 
 	// Edit Telegram message to reflect approval
 	if req.TelegramMessageID != 0 {
-		if err := h.telegram.EditMessageApproved(req.TelegramMessageID, req.ID, req.Resource); err != nil {
+		if err := h.telegram.EditMessageApproved(req.TelegramMessageID, h.buildDisplayInfo(req, tierCfg)); err != nil {
 			logger.Error("telegram_edit_failed", logger.Fields{
 				"request_id": req.ID,
 				"error":      err.Error(),
@@ -652,7 +652,8 @@ func (h *Handler) handleDeny(req *store.Request) {
 
 	// Edit Telegram message to reflect denial
 	if req.TelegramMessageID != 0 {
-		if err := h.telegram.EditMessageDenied(req.TelegramMessageID, req.ID, req.Resource); err != nil {
+		tierCfg, _ := h.cfg.TierFor(req.Tier)
+		if err := h.telegram.EditMessageDenied(req.TelegramMessageID, h.buildDisplayInfo(req, tierCfg)); err != nil {
 			logger.Error("telegram_edit_failed", logger.Fields{
 				"request_id": req.ID,
 				"error":      err.Error(),
@@ -692,12 +693,40 @@ func (h *Handler) watchTimeout(requestID string) {
 
 	// Edit Telegram message to show timeout
 	if req.TelegramMessageID != 0 {
-		if err := h.telegram.EditMessageTimeout(req.TelegramMessageID, requestID, req.Resource); err != nil {
+		tierCfg, _ := h.cfg.TierFor(req.Tier)
+		if err := h.telegram.EditMessageTimeout(req.TelegramMessageID, h.buildDisplayInfo(req, tierCfg)); err != nil {
 			logger.Error("telegram_edit_failed", logger.Fields{
 				"request_id": requestID,
 				"error":      err.Error(),
 			})
 		}
+	}
+}
+
+// buildDisplayInfo creates a RequestDisplayInfo from a store request and tier config.
+func (h *Handler) buildDisplayInfo(req *store.Request, tierCfg config.TierConfig) telegram.RequestDisplayInfo {
+	var tgVaultPaths []telegram.VaultPathInfo
+	for _, vp := range req.VaultPaths {
+		tgVaultPaths = append(tgVaultPaths, telegram.VaultPathInfo{
+			Path:         vp.Path,
+			Capabilities: vp.Capabilities,
+		})
+	}
+
+	reason := req.Reason
+	if req.SSHHost != "" {
+		reason = fmt.Sprintf("%s (host: %s)", req.Reason, req.SSHHost)
+	}
+
+	return telegram.RequestDisplayInfo{
+		RequestID:  req.ID,
+		Resource:   req.Resource,
+		Tier:       req.Tier,
+		Reason:     reason,
+		Requester:  req.Requester,
+		TTL:        tierCfg.TTL.String(),
+		Scopes:     req.Scopes,
+		VaultPaths: tgVaultPaths,
 	}
 }
 
