@@ -151,28 +151,36 @@
     state: directory
     mode: '0755'
 
-- name: Check if docker-proxy-tls CA cert exists
+- name: Check docker-proxy-tls cert files
   ansible.builtin.stat:
-    path: "{{ docker_persistent_data_path }}/docker-proxy-tls/ca.pem"
-  register: docker_proxy_tls_ca
-
-- name: Clean up docker-proxy-tls directory artifacts
-  ansible.builtin.file:
     path: "{{ docker_persistent_data_path }}/docker-proxy-tls/{{ item }}"
-    state: absent
   loop:
     - ca.pem
     - cert.pem
     - key.pem
-    - ca-key.pem
     - server-cert.pem
     - server-key.pem
-  when: docker_proxy_tls_ca.stat.exists and docker_proxy_tls_ca.stat.isdir
+  register: docker_proxy_tls_certs
+
+- name: Purge docker-proxy-tls directory if any cert is missing or a directory
+  ansible.builtin.file:
+    path: "{{ docker_persistent_data_path }}/docker-proxy-tls"
+    state: absent
+  when: docker_proxy_tls_certs.results | selectattr('stat.exists', 'equalto', false) | list | length > 0 or
+        docker_proxy_tls_certs.results | selectattr('stat.isdir', 'defined') | selectattr('stat.isdir', 'equalto', true) | list | length > 0
+
+- name: Recreate docker-proxy-tls cert directory after purge
+  ansible.builtin.file:
+    path: "{{ docker_persistent_data_path }}/docker-proxy-tls"
+    state: directory
+    mode: '0755'
 
 - name: Generate docker-proxy-tls certificates
   ansible.builtin.script:
     cmd: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/docker-socket-proxy-tls/generate-certs.sh {{ docker_persistent_data_path }}/docker-proxy-tls"
-  when: (not docker_proxy_tls_ca.stat.exists or docker_proxy_tls_ca.stat.isdir) and not ansible_check_mode
+  when: docker_proxy_tls_certs.results | selectattr('stat.exists', 'equalto', false) | list | length > 0 or
+        docker_proxy_tls_certs.results | selectattr('stat.isdir', 'defined') | selectattr('stat.isdir', 'equalto', true) | list | length > 0
+  register: docker_proxy_tls_generated
 
 - name: Log in to GitLab container registry
   docker_login:
