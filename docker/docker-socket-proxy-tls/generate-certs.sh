@@ -17,7 +17,7 @@ openssl req -new -key "$CERT_DIR/server-key.pem" \
     -out "$CERT_DIR/server.csr" -subj "/CN=lab-nginx-docker-proxy"
 
 cat > "$CERT_DIR/extfile.cnf" <<EOF
-subjectAltName=DNS:lab_nginx,DNS:lab-nginx
+subjectAltName=DNS:lab.nkontur.com,DNS:lab_nginx,DNS:lab-nginx
 extendedKeyUsage=serverAuth
 EOF
 

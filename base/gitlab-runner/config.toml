@@ -13,17 +13,6 @@ check_interval = 0
   [runners.docker]
     image = "ubuntu:20.04"
     network_mode = "host"
-    volumes = ["/cache/gitlab-runner:/cache"]
-
-[[runners]]
-  name = "images"
-  url = "https://gitlab.lab.nkontur.com/"
-  tls-ca-file = "/persistent_data/application/certs/nkontur.com/live/iot.lab.nkontur.com-0003/chain.pem"
-  token = "{{ lookup('env', 'IMAGES_GITLAB_RUNNER_TOKEN') }}"
-  executor = "docker"
-  [runners.docker]
-    image = "docker:27"
-    network_mode = "docker_proxy-internal"
     privileged = false
     volumes = ["/cache/gitlab-runner:/cache", "/persistent_data/application/docker-proxy-tls/ca.pem:/certs/ca.pem:ro", "/persistent_data/application/docker-proxy-tls/cert.pem:/certs/cert.pem:ro", "/persistent_data/application/docker-proxy-tls/key.pem:/certs/key.pem:ro"]
-  environment = ["DOCKER_HOST=tcp://lab_nginx:2376", "DOCKER_TLS_VERIFY=1", "DOCKER_CERT_PATH=/certs"]
+    environment = ["DOCKER_HOST=tcp://lab.nkontur.com:2376", "DOCKER_TLS_VERIFY=1", "DOCKER_CERT_PATH=/certs"]
