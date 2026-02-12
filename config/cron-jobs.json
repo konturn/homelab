@@ -149,7 +149,7 @@
       "name": "main-pipeline-fix",
       "enabled": true,
       "createdAtMs": 1769927834157,
-      "updatedAtMs": 1770870690845,
+      "updatedAtMs": 1770892217683,
       "schedule": {
         "kind": "cron",
         "expr": "*/30 * * * *",
@@ -162,12 +162,12 @@
         "message": "Main Pipeline Monitor:\n\n1. Fetch latest main pipeline: GET /projects/4/pipelines?ref=main&per_page=1\n2. Read /home/node/.openclaw/workspace/memory/main-pipeline-state.json\n3. If pipeline status == 'success': update state file silently, reply HEARTBEAT_OK. Do NOT announce green pipelines.\n4. If pipeline status == 'failed' AND pipelineId != lastFixedPipelineId:\n   a. Check activeFix - if set and timestamp < 60 min ago, SKIP (already being fixed)\n   b. If activeFix is null or expired (>60 min):\n      - Set activeFix = {pipelineId, timestamp: Date.now(), sessionLabel}\n      - Write state file IMMEDIATELY before spawning\n      - Spawn sub-agent labeled 'gitlab.main.pipeline.<id>.fix' (see skills/gitlab-mr/SKILL.md)\n      - Sub-agent MUST: clear activeFix and set lastFixedPipelineId when done\n5. If pipeline status == 'success', clear activeFix if set\n\nState file: /home/node/.openclaw/workspace/memory/main-pipeline-state.json\nFormat: {\"lastCheckedPipelineId\": N, \"lastFixedPipelineId\": N, \"activeFix\": {pipelineId, timestamp, sessionLabel}}\n\nONLY announce if pipeline is FAILED. Silent on success."
       },
       "state": {
-        "nextRunAtMs": 1770872400000,
-        "lastRunAtMs": 1770870600011,
+        "nextRunAtMs": 1770894000000,
+        "lastRunAtMs": 1770892200014,
         "lastStatus": "ok",
-        "lastDurationMs": 90834,
+        "lastDurationMs": 17669,
         "consecutiveErrors": 0,
-        "runningAtMs": 1770872400011
+        "runningAtMs": 1770894000013
       },
       "delivery": {
         "mode": "announce"
@@ -209,7 +209,7 @@
       "name": "MR Health Check",
       "enabled": true,
       "createdAtMs": 1769961241972,
-      "updatedAtMs": 1770796871753,
+      "updatedAtMs": 1770883300928,
       "schedule": {
         "kind": "cron",
         "expr": "0 3 * * *",
@@ -219,14 +219,14 @@
       "wakeMode": "next-heartbeat",
       "payload": {
         "kind": "agentTurn",
-        "message": "MR Health Check: Review all open MRs in the homelab repo. For each MR:\n1. Check if it has merge conflicts with main\n2. Check if the pipeline is passing\n3. If conflicts exist, rebase and resolve them\n4. If pipeline is failing, investigate and fix\n5. If MR has been stale >30 days with no activity, consider closing with a note\n\nSee skills/gitlab-mr/SKILL.md for reference. Notify Noah via Telegram with a summary of what was fixed.",
+        "message": "MR Health Check: Review all open MRs in the homelab repo. For each MR:\n1. Check if it has merge conflicts with main\n2. Check if the pipeline is passing\n3. If conflicts exist, rebase and resolve them\n4. If pipeline is failing, investigate and fix\n5. If MR has been stale >30 days with no activity, consider closing with a note\n\nIMPORTANT: When using JIT lib, always use `bash -c 'source ...'` not bare `source` (default shell is sh, not bash).\n\nSee skills/gitlab-mr/SKILL.md for reference. Notify Noah via Telegram with a summary of what was fixed.",
         "timeoutSeconds": 900
       },
       "state": {
-        "nextRunAtMs": 1770883200000,
-        "lastRunAtMs": 1770796816268,
+        "nextRunAtMs": 1770969600000,
+        "lastRunAtMs": 1770883212285,
         "lastStatus": "ok",
-        "lastDurationMs": 55485,
+        "lastDurationMs": 54161,
         "consecutiveErrors": 0
       },
       "delivery": {
@@ -239,7 +239,7 @@
       "name": "Infrastructure Audit",
       "enabled": true,
       "createdAtMs": 1769961387739,
-      "updatedAtMs": 1770800678158,
+      "updatedAtMs": 1770886893841,
       "schedule": {
         "kind": "cron",
         "expr": "0 4 * * *",
@@ -253,10 +253,10 @@
         "timeoutSeconds": 600
       },
       "state": {
-        "nextRunAtMs": 1770886800000,
-        "lastRunAtMs": 1770800424015,
+        "nextRunAtMs": 1770973200000,
+        "lastRunAtMs": 1770886816375,
         "lastStatus": "ok",
-        "lastDurationMs": 254143,
+        "lastDurationMs": 77466,
         "consecutiveErrors": 0
       },
       "delivery": {
@@ -298,7 +298,7 @@
       "agentId": "main",
       "name": "image-update-check",
       "createdAtMs": 1770323521810,
-      "updatedAtMs": 1770798764660,
+      "updatedAtMs": 1770885110625,
       "schedule": {
         "kind": "cron",
         "expr": "30 3 * * *",
@@ -312,10 +312,10 @@
         "timeoutSeconds": 900
       },
       "state": {
-        "nextRunAtMs": 1770885000000,
-        "lastRunAtMs": 1770798613935,
+        "nextRunAtMs": 1770971400000,
+        "lastRunAtMs": 1770885012870,
         "lastStatus": "ok",
-        "lastDurationMs": 150725,
+        "lastDurationMs": 97755,
         "consecutiveErrors": 0
       },
       "enabled": true,
@@ -360,7 +360,7 @@
       "name": "email-check",
       "enabled": true,
       "createdAtMs": 1770841906634,
-      "updatedAtMs": 1770847398203,
+      "updatedAtMs": 1770883306716,
       "schedule": {
         "kind": "cron",
         "expr": "0 9,13,17 * * *",
@@ -370,7 +370,7 @@
       "wakeMode": "now",
       "payload": {
         "kind": "agentTurn",
-        "message": "Check email for Noah. Use the IMAP email skill at /home/node/.openclaw/workspace/skills/imap-email/SKILL.md. Source the JIT lib: bash -c 'source /home/node/.openclaw/workspace/tools/jit-lib.sh && ...'. Get gmail credentials via JIT T1. Check for unread/important messages in the last 8 hours. If anything urgent or interesting, notify Noah via Telegram (chat 8531859108). If nothing notable, reply HEARTBEAT_OK.",
+        "message": "Check email for Noah. Use the IMAP email skill at /home/node/.openclaw/workspace/skills/imap-email/SKILL.md. Use bash for JIT lib: bash -c 'source /home/node/.openclaw/workspace/tools/jit-lib.sh && ...'. Get gmail credentials via JIT T1. Check for unread/important messages in the last 8 hours. If anything urgent or interesting, notify Noah via Telegram (chat 8531859108). If nothing notable, reply HEARTBEAT_OK.",
         "timeoutSeconds": 120
       },
       "delivery": {
@@ -420,7 +420,7 @@
       "name": "nightly-redteam",
       "enabled": true,
       "createdAtMs": 1770841906925,
-      "updatedAtMs": 1770841906925,
+      "updatedAtMs": 1770876053440,
       "schedule": {
         "kind": "cron",
         "expr": "0 1 * * *",
@@ -437,7 +437,11 @@
         "mode": "announce"
       },
       "state": {
-        "nextRunAtMs": 1770876000000
+        "nextRunAtMs": 1770962400000,
+        "lastRunAtMs": 1770876012247,
+        "lastStatus": "ok",
+        "lastDurationMs": 41193,
+        "consecutiveErrors": 0
       }
     },
     {
@@ -463,7 +467,8 @@
         "mode": "none"
       },
       "state": {
-        "nextRunAtMs": 1770894000000
+        "nextRunAtMs": 1770894000000,
+        "runningAtMs": 1770894000013
       }
     },
     {
@@ -472,7 +477,7 @@
       "name": "cron-config-sync",
       "enabled": true,
       "createdAtMs": 1770841907179,
-      "updatedAtMs": 1770850845603,
+      "updatedAtMs": 1770872450233,
       "schedule": {
         "kind": "cron",
         "expr": "0 */6 * * *",
@@ -489,12 +494,12 @@
         "mode": "none"
       },
       "state": {
-        "nextRunAtMs": 1770872400000,
-        "lastRunAtMs": 1770850831691,
-        "lastStatus": "error",
-        "lastDurationMs": 13912,
-        "consecutiveErrors": 1,
-        "runningAtMs": 1770872400011
+        "nextRunAtMs": 1770894000000,
+        "lastRunAtMs": 1770872412099,
+        "lastStatus": "ok",
+        "lastDurationMs": 38134,
+        "consecutiveErrors": 0,
+        "runningAtMs": 1770894000013
       }
     },
     {
