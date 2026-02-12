@@ -5,7 +5,7 @@ import (
 )
 
 func TestPoliciesForResource_Tier1(t *testing.T) {
-	tier1Resources := []string{"grafana", "influxdb", "plex", "radarr", "sonarr", "ombi", "nzbget", "deluge", "paperless", "prowlarr", "mqtt"}
+	tier1Resources := []string{"grafana", "influxdb", "plex", "radarr", "sonarr", "ombi", "nzbget", "deluge", "prowlarr", "mqtt"}
 
 	for _, res := range tier1Resources {
 		policies := policiesForResource(res, 1)
@@ -20,7 +20,7 @@ func TestPoliciesForResource_Tier1(t *testing.T) {
 }
 
 func TestPoliciesForResource_Tier2(t *testing.T) {
-	tier2Resources := []string{"gitlab", "homeassistant", "ssh", "tailscale", "pihole"}
+	tier2Resources := []string{"gitlab", "homeassistant", "ssh", "tailscale", "pihole", "paperless"}
 
 	for _, res := range tier2Resources {
 		policies := policiesForResource(res, 2)

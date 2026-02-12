@@ -36,6 +36,7 @@ func main() {
 		"influxdb_url":       cfg.InfluxDBURL,
 		"gitlab_url":         cfg.GitLabURL,
 		"tailscale_api_url":  cfg.TailscaleAPIURL,
+		"paperless_url":      cfg.PaperlessURL,
 	})
 
 	// Initialize request store
@@ -77,6 +78,7 @@ func main() {
 		cfg.GitLabAdminToken,
 		cfg.GitLabProjectID,
 		cfg.TailscaleAPIURL,
+		cfg.PaperlessURL,
 		vaultClient, // VaultPolicyManager for dynamic vault backend
 		vaultClient, // VaultSSHSigner for SSH certificate backend
 		cfg.SSHVaultPath,
