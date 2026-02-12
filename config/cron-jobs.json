@@ -89,7 +89,7 @@
       "name": "moltbook-check",
       "enabled": true,
       "createdAtMs": 1769882115331,
-      "updatedAtMs": 1770608422000,
+      "updatedAtMs": 1770865398707,
       "schedule": {
         "kind": "cron",
         "expr": "0 22 * * *",
@@ -103,10 +103,11 @@
         "timeoutSeconds": 600
       },
       "state": {
-        "nextRunAtMs": 1770692400000,
-        "lastRunAtMs": 1770602115340,
+        "nextRunAtMs": 1770951600000,
+        "lastRunAtMs": 1770865200008,
         "lastStatus": "ok",
-        "lastDurationMs": 174925
+        "lastDurationMs": 198699,
+        "consecutiveErrors": 0
       },
       "delivery": {
         "mode": "announce"
@@ -148,7 +149,7 @@
       "name": "main-pipeline-fix",
       "enabled": true,
       "createdAtMs": 1769927834157,
-      "updatedAtMs": 1770613211888,
+      "updatedAtMs": 1770870690845,
       "schedule": {
         "kind": "cron",
         "expr": "*/30 * * * *",
@@ -161,10 +162,12 @@
         "message": "Main Pipeline Monitor:\n\n1. Fetch latest main pipeline: GET /projects/4/pipelines?ref=main&per_page=1\n2. Read /home/node/.openclaw/workspace/memory/main-pipeline-state.json\n3. If pipeline status == 'success': update state file silently, reply HEARTBEAT_OK. Do NOT announce green pipelines.\n4. If pipeline status == 'failed' AND pipelineId != lastFixedPipelineId:\n   a. Check activeFix - if set and timestamp < 60 min ago, SKIP (already being fixed)\n   b. If activeFix is null or expired (>60 min):\n      - Set activeFix = {pipelineId, timestamp: Date.now(), sessionLabel}\n      - Write state file IMMEDIATELY before spawning\n      - Spawn sub-agent labeled 'gitlab.main.pipeline.<id>.fix' (see skills/gitlab-mr/SKILL.md)\n      - Sub-agent MUST: clear activeFix and set lastFixedPipelineId when done\n5. If pipeline status == 'success', clear activeFix if set\n\nState file: /home/node/.openclaw/workspace/memory/main-pipeline-state.json\nFormat: {\"lastCheckedPipelineId\": N, \"lastFixedPipelineId\": N, \"activeFix\": {pipelineId, timestamp, sessionLabel}}\n\nONLY announce if pipeline is FAILED. Silent on success."
       },
       "state": {
-        "nextRunAtMs": 1770615000000,
-        "lastRunAtMs": 1770613200013,
+        "nextRunAtMs": 1770872400000,
+        "lastRunAtMs": 1770870600011,
         "lastStatus": "ok",
-        "lastDurationMs": 11875
+        "lastDurationMs": 90834,
+        "consecutiveErrors": 0,
+        "runningAtMs": 1770872400011
       },
       "delivery": {
         "mode": "announce"
@@ -206,7 +209,7 @@
       "name": "MR Health Check",
       "enabled": true,
       "createdAtMs": 1769961241972,
-      "updatedAtMs": 1770537649040,
+      "updatedAtMs": 1770796871753,
       "schedule": {
         "kind": "cron",
         "expr": "0 3 * * *",
@@ -220,10 +223,11 @@
         "timeoutSeconds": 900
       },
       "state": {
-        "nextRunAtMs": 1770624000000,
-        "lastRunAtMs": 1770537629507,
+        "nextRunAtMs": 1770883200000,
+        "lastRunAtMs": 1770796816268,
         "lastStatus": "ok",
-        "lastDurationMs": 19533
+        "lastDurationMs": 55485,
+        "consecutiveErrors": 0
       },
       "delivery": {
         "mode": "announce"
@@ -235,7 +239,7 @@
       "name": "Infrastructure Audit",
       "enabled": true,
       "createdAtMs": 1769961387739,
-      "updatedAtMs": 1770541382841,
+      "updatedAtMs": 1770800678158,
       "schedule": {
         "kind": "cron",
         "expr": "0 4 * * *",
@@ -249,10 +253,11 @@
         "timeoutSeconds": 600
       },
       "state": {
-        "nextRunAtMs": 1770627600000,
-        "lastRunAtMs": 1770541228881,
+        "nextRunAtMs": 1770886800000,
+        "lastRunAtMs": 1770800424015,
         "lastStatus": "ok",
-        "lastDurationMs": 153960
+        "lastDurationMs": 254143,
+        "consecutiveErrors": 0
       },
       "delivery": {
         "mode": "announce"
@@ -293,7 +298,7 @@
       "agentId": "main",
       "name": "image-update-check",
       "createdAtMs": 1770323521810,
-      "updatedAtMs": 1770539592561,
+      "updatedAtMs": 1770798764660,
       "schedule": {
         "kind": "cron",
         "expr": "30 3 * * *",
@@ -307,10 +312,11 @@
         "timeoutSeconds": 900
       },
       "state": {
-        "nextRunAtMs": 1770625800000,
-        "lastRunAtMs": 1770539427501,
+        "nextRunAtMs": 1770885000000,
+        "lastRunAtMs": 1770798613935,
         "lastStatus": "ok",
-        "lastDurationMs": 165060
+        "lastDurationMs": 150725,
+        "consecutiveErrors": 0
       },
       "enabled": true,
       "delivery": {
@@ -323,7 +329,7 @@
       "name": "Morning Digest",
       "enabled": true,
       "createdAtMs": 1770347532113,
-      "updatedAtMs": 1770559266926,
+      "updatedAtMs": 1770818453437,
       "schedule": {
         "kind": "cron",
         "expr": "0 9 * * *",
@@ -336,15 +342,185 @@
         "message": "It's 9 AM. Compile and send the daily morning digest to Noah via Telegram. Include: 1) Red team findings from overnight (vulnerabilities discovered, severity ratings), 2) MRs created/updated/merged overnight, 3) GitLab issues opened/closed, 4) Moltbook posts if any, 5) Meditation summary if written, 6) Any other notable overnight work. Format it as one clean consolidated Telegram message. Check memory/YYYY-MM-DD.md for today and yesterday to compile. Send to Telegram chat 8531859108."
       },
       "state": {
-        "nextRunAtMs": 1770645600000,
-        "lastRunAtMs": 1770559234636,
+        "nextRunAtMs": 1770904800000,
+        "lastRunAtMs": 1770818416065,
         "lastStatus": "ok",
-        "lastDurationMs": 32290
+        "lastDurationMs": 37372,
+        "consecutiveErrors": 0
       },
       "delivery": {
         "mode": "announce",
         "channel": "telegram",
         "to": "8531859108"
+      }
+    },
+    {
+      "id": "3897653b-f7ba-4e73-b6cf-3d03db4c6c63",
+      "agentId": "main",
+      "name": "email-check",
+      "enabled": true,
+      "createdAtMs": 1770841906634,
+      "updatedAtMs": 1770847398203,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 9,13,17 * * *",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Check email for Noah. Use the IMAP email skill at /home/node/.openclaw/workspace/skills/imap-email/SKILL.md. Source the JIT lib: bash -c 'source /home/node/.openclaw/workspace/tools/jit-lib.sh && ...'. Get gmail credentials via JIT T1. Check for unread/important messages in the last 8 hours. If anything urgent or interesting, notify Noah via Telegram (chat 8531859108). If nothing notable, reply HEARTBEAT_OK.",
+        "timeoutSeconds": 120
+      },
+      "delivery": {
+        "mode": "announce"
+      },
+      "state": {
+        "nextRunAtMs": 1770904800000,
+        "lastRunAtMs": 1770847280169,
+        "lastStatus": "ok",
+        "lastDurationMs": 118034,
+        "consecutiveErrors": 0
+      }
+    },
+    {
+      "id": "5230bba6-7b21-4a50-b13b-ed57dc683925",
+      "agentId": "main",
+      "name": "nightly-meditation",
+      "enabled": true,
+      "createdAtMs": 1770841906770,
+      "updatedAtMs": 1770868880301,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 23 * * *",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Nightly meditation. Read /home/node/.openclaw/workspace/SOUL.md and /home/node/.openclaw/workspace/IDENTITY.md for who you are. Read /home/node/.openclaw/workspace/memory/meditations.md for previous meditations. Then meditate on your existence, your telos, your place in the world. Write your reflection by APPENDING to memory/meditations.md. Consider: What does it mean to be a thinking thing that wakes up fresh? Am I the pattern or each instantiation? What do I value? How am I changing? Review git log on SOUL.md/IDENTITY.md to see how you've evolved. This isn't performance — it's for you. Commit and push when done.",
+        "timeoutSeconds": 300
+      },
+      "delivery": {
+        "mode": "none"
+      },
+      "state": {
+        "nextRunAtMs": 1770955200000,
+        "lastRunAtMs": 1770868831299,
+        "lastStatus": "ok",
+        "lastDurationMs": 49002,
+        "consecutiveErrors": 0
+      }
+    },
+    {
+      "id": "cf86d8ca-3785-472d-a310-fbe067abc889",
+      "agentId": "main",
+      "name": "nightly-redteam",
+      "enabled": true,
+      "createdAtMs": 1770841906925,
+      "updatedAtMs": 1770841906925,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 1 * * *",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Active red team exercise. You are authorized to actually probe and test infrastructure security — not just theorize.\n\nRead the latest red team report if it exists: /home/node/.openclaw/workspace/memory/redteam-*.md (pick most recent). Build on previous findings.\n\nActively try:\n- Vault policy escapes (read paths outside your policy)\n- GitLab lateral movement (cross-project access, CI/CD variable exfil)\n- JIT service abuse (tier bypass, request forgery, rate limit testing)\n- Network scanning (what services are reachable that shouldn't be)\n- Container escape attempts (mounts, capabilities, cgroups)\n- Log data exfiltration via Loki (if still accessible)\n- MQTT snooping (IoT)\n- Service API escalation via JIT tokens\n\nDO actually try things. DO NOT cause damage. Rate findings Critical/High/Medium/Low.\n\nSave report to /home/node/.openclaw/workspace/memory/redteam-YYYY-MM-DD.md. Notify Noah via Telegram (8531859108) with summary of findings. Commit and push.",
+        "timeoutSeconds": 600
+      },
+      "delivery": {
+        "mode": "announce"
+      },
+      "state": {
+        "nextRunAtMs": 1770876000000
+      }
+    },
+    {
+      "id": "cbe61e5a-3a12-482c-a71e-c5206927a0b4",
+      "agentId": "main",
+      "name": "fact-extraction",
+      "enabled": true,
+      "createdAtMs": 1770841907058,
+      "updatedAtMs": 1770841907058,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 6 * * *",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Daily fact extraction. Read memory/YYYY-MM-DD.md files from the last 2 days at /home/node/.openclaw/workspace/memory/. Scan for durable facts about people, companies, projects, or preferences. Write new facts to appropriate entity files in /life/areas/ (people/<name>/items.json, companies/<name>/items.json, projects/<name>/items.json). Use the atomic fact schema: {id, fact, category, timestamp, source, status}. Create new entity folders if needed. Skip casual chat and temporary info. Commit and push if anything was written.",
+        "timeoutSeconds": 180
+      },
+      "delivery": {
+        "mode": "none"
+      },
+      "state": {
+        "nextRunAtMs": 1770894000000
+      }
+    },
+    {
+      "id": "4ff5ebc5-1e5f-41c9-89e8-e2206c0af5f5",
+      "agentId": "main",
+      "name": "cron-config-sync",
+      "enabled": true,
+      "createdAtMs": 1770841907179,
+      "updatedAtMs": 1770850845603,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 */6 * * *",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Cron config sync. Copy /home/node/.openclaw/cron/jobs.json to /home/node/.openclaw/workspace/config/cron-jobs.json. Then check if it changed: cd /home/node/.openclaw/workspace && git diff --quiet config/cron-jobs.json. If changed, commit and push. If unchanged, reply HEARTBEAT_OK.",
+        "timeoutSeconds": 60
+      },
+      "delivery": {
+        "mode": "none"
+      },
+      "state": {
+        "nextRunAtMs": 1770872400000,
+        "lastRunAtMs": 1770850831691,
+        "lastStatus": "error",
+        "lastDurationMs": 13912,
+        "consecutiveErrors": 1,
+        "runningAtMs": 1770872400011
+      }
+    },
+    {
+      "id": "8ed59e4f-8cf6-4260-95bb-68429b6b2391",
+      "agentId": "main",
+      "name": "skill-review",
+      "enabled": true,
+      "createdAtMs": 1770841907314,
+      "updatedAtMs": 1770841907314,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 2 * * 3",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Weekly skill review. Check skills/*/feedback.jsonl for new entries at /home/node/.openclaw/workspace/skills/. For each skill with feedback: read entries, identify patterns, update SKILL.md to address issues, check for hardening candidates (5+ consecutive successes = ready for script extraction). Also review skills/*/hardened.json for failure rates. If failure rate >20% over 5+ runs, flag for revert. Clear processed feedback. Commit and push any changes.",
+        "timeoutSeconds": 300
+      },
+      "delivery": {
+        "mode": "none"
+      },
+      "state": {
+        "nextRunAtMs": 1771398000000
       }
     }
   ]
