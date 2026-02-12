@@ -1607,6 +1607,11 @@ services:
       - ALL
     cap_add:
       - SYS_ADMIN
+      - CHOWN
+      - SETUID
+      - SETGID
+      - FOWNER
+      - DAC_OVERRIDE
     networks:
       internal:
     deploy:
