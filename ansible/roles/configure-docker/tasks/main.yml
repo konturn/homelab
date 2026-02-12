@@ -144,7 +144,7 @@
 
 ### Docker socket proxy TLS certificates
 # Generate self-signed CA + server + client certs for mTLS between CI runners
-# and the docker-socket-proxy TLS sidecar. Certs are 10-year validity.
+# and lab_nginx (which proxies to docker-socket-proxy). Certs are 10-year validity.
 - name: Create docker-proxy-tls cert directory
   ansible.builtin.file:
     path: "{{ docker_persistent_data_path }}/docker-proxy-tls"

@@ -14,10 +14,10 @@ openssl req -new -x509 -days 3650 -key "$CERT_DIR/ca-key.pem" -sha256 \
 # Server cert (for the TLS sidecar)
 openssl genrsa -out "$CERT_DIR/server-key.pem" 4096
 openssl req -new -key "$CERT_DIR/server-key.pem" \
-    -out "$CERT_DIR/server.csr" -subj "/CN=docker-socket-proxy-tls"
+    -out "$CERT_DIR/server.csr" -subj "/CN=lab-nginx-docker-proxy"
 
 cat > "$CERT_DIR/extfile.cnf" <<EOF
-subjectAltName=IP:${DOCKER_PROXY_IP:-10.4.32.2},DNS:docker-socket-proxy-tls
+subjectAltName=IP:${DOCKER_PROXY_IP:-10.4.32.2},DNS:lab_nginx,DNS:lab-nginx
 extendedKeyUsage=serverAuth
 EOF
 

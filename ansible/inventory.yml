@@ -166,9 +166,9 @@ all:
         - src: "docker/gitlab/license_encryption_key.pub"
           dest: "{{ docker_persistent_data_path }}/gitlab/license_encryption_key.pub"
           name: "gitlab"
-        - src: "docker/docker-socket-proxy-tls/nginx.conf"
-          dest: "{{ docker_persistent_data_path }}/docker-proxy-tls/nginx.conf"
-          name: "docker-socket-proxy-tls"
+        - src: "docker/docker-socket-proxy-tls/docker-proxy-tls.stream.conf"
+          dest: "{{ docker_persistent_data_path }}/lab_nginx/conf/stream.d/docker-proxy-tls.conf"
+          name: "lab_nginx"
       docker_data_dirs:
         - path: "{{ docker_persistent_data_path }}/loki/data"
           owner: "10001"
