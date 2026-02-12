@@ -236,7 +236,7 @@ jit-approval-svc:test:
   stage: build
   image: docker:27
   variables:
-    DOCKER_HOST: "tcp://10.4.32.2:2375"
+    DOCKER_HOST: "tcp://docker-socket-proxy:2375"
     DOCKER_BUILDKIT: "0"
   before_script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
