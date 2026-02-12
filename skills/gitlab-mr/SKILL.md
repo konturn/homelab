@@ -71,7 +71,15 @@ source /home/node/clawd/skills/gitlab/lib.sh  # Always source first
 
 3. **409 Conflict errors** — `gitlab_api_call` handles retry automatically.
 
-4. **Pipeline stages:** validate → build → deploy → configure → bootstrap (deploy+ main only)
+4. **Pipeline green is NOT enough.** After pipeline passes, ALWAYS check for merge conflicts before reporting done:
+   ```bash
+   # Check via API
+   curl -s "${GITLAB_API}/projects/4/merge_requests/$MR_IID" \
+     -H "PRIVATE-TOKEN: $GITLAB_TOKEN" | jq '{has_conflicts, merge_status}'
+   ```
+   If `has_conflicts: true`, rebase onto main and resolve before reporting success. A green pipeline with merge conflicts is NOT done.
+
+5. **Pipeline stages:** validate → build → deploy → configure → bootstrap (deploy+ main only)
 
 5. **Every MR must update relevant docs.** Changed pipeline structure → update ASCII diagram in `.gitlab-ci.yml` header. New secrets/auth → update `docs/SECRET_ROTATION.md`. Network rules → update `docs/FIREWALL.md`. New services → update `docs/DISASTER_RECOVERY.md`. Code without doc updates will be sent back.
 
