@@ -1595,6 +1595,35 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+  chromium-browser:
+    build:
+      context: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/chromium-browser' }}"
+    image: gitlab-registry.lab.nkontur.com:443/root/homelab/chromium-browser:latest
+    container_name: chromium-browser
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_ADMIN
+    networks:
+      internal:
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    volumes:
+      - "{{ docker_persistent_data_path }}/chromium-browser/profile:/data/chrome-profile"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9222/json/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    environment:
+      - TZ=America/New_York
+      - VNC_PASSWORD={{ vault_chromium_vnc_password | default('changeme') }}
   moltbot-gateway:
     image: gitlab-registry.lab.nkontur.com:443/root/homelab/moltbot:{{ moltbot_image_tag | default('latest') }}
     container_name: moltbot-gateway

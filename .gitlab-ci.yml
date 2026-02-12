@@ -345,6 +345,26 @@ snapclient:build:
       when: manual
       allow_failure: true
 
+chromium-browser:build:
+  extends: .docker_build
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE/chromium-browser:latest -t $CI_REGISTRY_IMAGE/chromium-browser:$CI_COMMIT_SHORT_SHA docker/chromium-browser/
+    - docker push $CI_REGISTRY_IMAGE/chromium-browser:latest
+    - docker push $CI_REGISTRY_IMAGE/chromium-browser:$CI_COMMIT_SHORT_SHA
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - docker/chromium-browser/**/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - docker/chromium-browser/**/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
+
 # =============================================================================
 # Deploy Stage - Parallel deployment (main only)
 # =============================================================================
