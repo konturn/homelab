@@ -358,8 +358,8 @@
     name: "Scrub credentials from moltbot transcripts"
     minute: "*/10"
     # Runs every 10 minutes. The --rm container's stdout vanishes on exit,
-    # so we pipe all output through logger to land in syslog, which Promtail
-    # already scrapes via the syslog job → Loki.
+    # so we pipe all output through logger to land in the systemd journal,
+    # which Promtail already scrapes via the journal job → Loki.
     job: >-
       docker run --rm
       --name scrub-transcripts

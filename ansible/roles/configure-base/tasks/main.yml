@@ -205,6 +205,12 @@
     group: root
     mode: 0644
 
+- name: Disable rsyslog (replaced by Promtail journal scraping)
+  ansible.builtin.systemd:
+    name: rsyslog
+    state: stopped
+    enabled: false
+
 - name: Add loopback alsa module
   ansible.builtin.lineinfile:
     path: /etc/modules
