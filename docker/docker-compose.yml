@@ -126,6 +126,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETUID         # s6-overlay drops to PUID/configured user
+      - SETGID         # s6-overlay drops to PGID/configured group
+      - CHOWN          # s6-overlay chowns data directories at startup
+      - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
     ports:
       - "32400/tcp"
     image: plexinc/pms-docker:1.43.0.10467-2b1ba6e69@sha256:d38767ec3b948e860bcf1abfe16512bd638e6ac01230f5b65b64e2ef09052267
@@ -337,6 +342,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETUID         # s6-overlay drops to PUID/configured user
+      - SETGID         # s6-overlay drops to PGID/configured group
+      - CHOWN          # s6-overlay chowns data directories at startup
+      - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
     networks:
       - external
       - internal
@@ -367,6 +377,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETUID         # s6-overlay drops to PUID/configured user
+      - SETGID         # s6-overlay drops to PGID/configured group
+      - CHOWN          # s6-overlay chowns data directories at startup
+      - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
     ports:
       - "6789:6789"
     networks:
@@ -397,6 +412,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETUID         # s6-overlay drops to PUID/configured user
+      - SETGID         # s6-overlay drops to PGID/configured group
+      - CHOWN          # s6-overlay chowns data directories at startup
+      - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
     ports:
       - "443:7878"
     networks:
@@ -431,6 +451,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETUID         # s6-overlay drops to PUID/configured user
+      - SETGID         # s6-overlay drops to PGID/configured group
+      - CHOWN          # s6-overlay chowns data directories at startup
+      - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
     ports:
       - "443:9117"
     networks:
@@ -459,6 +484,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETUID         # s6-overlay drops to PUID/configured user
+      - SETGID         # s6-overlay drops to PGID/configured group
+      - CHOWN          # s6-overlay chowns data directories at startup
+      - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
     ports:
       - "443:8989"
     networks:
@@ -821,6 +851,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETUID         # s6-overlay drops to PUID/configured user
+      - SETGID         # s6-overlay drops to PGID/configured group
+      - CHOWN          # s6-overlay chowns data directories at startup
+      - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
     ports:
       - "443:8112"
     image: 'lscr.io/linuxserver/deluge:latest@sha256:2392a75ce975de1b50c03344b05a858c5da36c1c41ba1f61a5fe6198ea88ef18'
@@ -1062,6 +1097,10 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETGID         # drop to audio group
+      - SETUID         # drop to audio user
+      - SYS_NICE       # real-time audio scheduling priority
     networks:
       iot:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
@@ -1525,6 +1564,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETUID         # s6-overlay drops to PUID/configured user
+      - SETGID         # s6-overlay drops to PGID/configured group
+      - CHOWN          # s6-overlay chowns data directories at startup
+      - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
     restart: unless-stopped
     ports:
       - "443:7878"
