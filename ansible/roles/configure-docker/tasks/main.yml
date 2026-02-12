@@ -159,8 +159,6 @@
 - name: Generate docker-proxy-tls certificates
   ansible.builtin.script:
     cmd: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/docker-socket-proxy-tls/generate-certs.sh {{ docker_persistent_data_path }}/docker-proxy-tls"
-  environment:
-    DOCKER_PROXY_IP: "{{ docker_socket_proxy_ip }}"
   when: not docker_proxy_tls_ca.stat.exists and not ansible_check_mode
 
 - name: Log in to GitLab container registry

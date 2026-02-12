@@ -23,7 +23,7 @@ check_interval = 0
   executor = "docker"
   [runners.docker]
     image = "docker:27"
-    network_mode = "docker_mgmt"
+    network_mode = "docker_proxy-internal"
     privileged = false
     volumes = ["/cache/gitlab-runner:/cache", "/persistent_data/application/docker-proxy-tls/ca.pem:/certs/ca.pem:ro", "/persistent_data/application/docker-proxy-tls/cert.pem:/certs/cert.pem:ro", "/persistent_data/application/docker-proxy-tls/key.pem:/certs/key.pem:ro"]
-  environment = ["DOCKER_HOST=tcp://{{ docker_socket_proxy_ip }}:2376", "DOCKER_TLS_VERIFY=1", "DOCKER_CERT_PATH=/certs"]
+  environment = ["DOCKER_HOST=tcp://lab_nginx:2376", "DOCKER_TLS_VERIFY=1", "DOCKER_CERT_PATH=/certs"]

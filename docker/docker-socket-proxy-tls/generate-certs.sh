@@ -1,6 +1,6 @@
 #!/bin/bash
 # Generate CA, server, and client certs for Docker socket proxy mTLS
-# Usage: DOCKER_PROXY_IP=10.4.32.2 ./generate-certs.sh [cert_dir]
+# Usage: ./generate-certs.sh [cert_dir]
 set -euo pipefail
 
 CERT_DIR="${1:-.}"
@@ -17,7 +17,7 @@ openssl req -new -key "$CERT_DIR/server-key.pem" \
     -out "$CERT_DIR/server.csr" -subj "/CN=lab-nginx-docker-proxy"
 
 cat > "$CERT_DIR/extfile.cnf" <<EOF
-subjectAltName=IP:${DOCKER_PROXY_IP:-10.4.32.2},DNS:lab_nginx,DNS:lab-nginx
+subjectAltName=DNS:lab_nginx,DNS:lab-nginx
 extendedKeyUsage=serverAuth
 EOF
 

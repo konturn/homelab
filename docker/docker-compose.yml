@@ -283,8 +283,6 @@ services:
     networks:
       internal:
         ipv4_address: {{ lab_nginx_ip }}
-      mgmt:
-        ipv4_address: "{{ docker_socket_proxy_ip }}"
       proxy-internal:
     restart: unless-stopped
     depends_on:
