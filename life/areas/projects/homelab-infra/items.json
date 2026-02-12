@@ -63,6 +63,86 @@
       "timestamp": "2026-01-30",
       "source": "conversation",
       "status": "active"
+    },
+    {
+      "id": "homelab-009",
+      "fact": "Router (router.lab.nkontur.com) IS the Docker host — everything runs on one machine. satellite-2 is a separate device.",
+      "category": "status",
+      "timestamp": "2026-02-11",
+      "source": "conversation",
+      "status": "active"
+    },
+    {
+      "id": "homelab-010",
+      "fact": "Homelab has 44 containers, 9 dependency edges, 3 clusters (IoT/Home, Observability, Security). Deepest chain: 3 levels.",
+      "category": "status",
+      "timestamp": "2026-02-11",
+      "source": "file",
+      "status": "active"
+    },
+    {
+      "id": "homelab-011",
+      "fact": "JIT service listens on port 8080 from moltbot container. Auth header: X-JIT-API-Key with key from Vault at agents/jit-api-key.",
+      "category": "status",
+      "timestamp": "2026-02-11",
+      "source": "conversation",
+      "status": "active"
+    },
+    {
+      "id": "homelab-012",
+      "fact": "SSH certs from JIT have principal 'claude', only works on hosts with Vault CA trusted.",
+      "category": "status",
+      "timestamp": "2026-02-11",
+      "source": "conversation",
+      "status": "active"
+    },
+    {
+      "id": "homelab-013",
+      "fact": "Vault runs at 10.3.32.6:8200. Uses auto-unseal. cap_drop ALL requires IPC_LOCK, CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID.",
+      "category": "status",
+      "timestamp": "2026-02-11",
+      "source": "conversation",
+      "status": "active"
+    },
+    {
+      "id": "homelab-014",
+      "fact": "Docker cap_drop persists until container recreation — reverting compose file doesn't restore capabilities on running containers.",
+      "category": "status",
+      "timestamp": "2026-02-11",
+      "source": "conversation",
+      "status": "active"
+    },
+    {
+      "id": "homelab-015",
+      "fact": "GitLab PAT has full api scope + cross-project access including project 8 (images). Critical security finding — should be replaced with scoped project token.",
+      "category": "status",
+      "timestamp": "2026-02-11",
+      "source": "file",
+      "status": "active"
+    },
+    {
+      "id": "homelab-016",
+      "fact": "Gmail migrating from app password to Google OAuth2. Two JIT resources: gmail-read (T2, gmail.readonly) and gmail-send (T2, gmail.send). MR !220.",
+      "category": "status",
+      "timestamp": "2026-02-11",
+      "source": "conversation",
+      "status": "active"
+    },
+    {
+      "id": "homelab-017",
+      "fact": "Loki accessible via https://loki.lab.nkontur.com (nginx proxy). MR !214 binds to localhost only — container-to-container still works via Docker network.",
+      "category": "status",
+      "timestamp": "2026-02-11",
+      "source": "conversation",
+      "status": "active"
+    },
+    {
+      "id": "homelab-018",
+      "fact": "Scrub-transcripts cron runs every 10min on host. Script at docker/moltbot/scripts/scrub-transcripts.sh. Had wrong volume mount (moltbot-gateway vs moltbot/data). Fixed in MR !224.",
+      "category": "status",
+      "timestamp": "2026-02-11",
+      "source": "file",
+      "status": "active"
     }
   ]
 }
