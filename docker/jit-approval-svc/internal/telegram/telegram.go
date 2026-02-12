@@ -12,6 +12,49 @@ import (
 	"github.com/nkontur/jit-approval-svc/internal/logger"
 )
 
+// RequestDisplayInfo holds the display fields for a JIT request,
+// used by both initial send and subsequent edit messages.
+type RequestDisplayInfo struct {
+	RequestID  string
+	Resource   string
+	Tier       int
+	Reason     string
+	Requester  string
+	TTL        string
+	Scopes     []string
+	VaultPaths []VaultPathInfo
+}
+
+// formatRequestDetails returns the HTML-formatted detail block for a request.
+func formatRequestDetails(info RequestDisplayInfo) string {
+	tierDesc := "Quick Approve"
+	if info.Tier >= 3 {
+		tierDesc = "Elevated"
+	}
+
+	scopeStr := ""
+	if len(info.Scopes) > 0 {
+		scopeStr = fmt.Sprintf("\n<b>Scopes:</b> %s", strings.Join(info.Scopes, ", "))
+	}
+
+	vaultPathStr := ""
+	if len(info.VaultPaths) > 0 {
+		vaultPathStr = "\n\n📂 <b>Vault Paths Requested:</b>"
+		for _, vp := range info.VaultPaths {
+			vaultPathStr += fmt.Sprintf("\n  • <code>%s</code> [%s]", vp.Path, strings.Join(vp.Capabilities, ", "))
+		}
+	}
+
+	return fmt.Sprintf(
+		"<b>Resource:</b> %s\n"+
+			"<b>Tier:</b> %d (%s)\n"+
+			"<b>TTL:</b> %s\n"+
+			"<b>Requester:</b> %s\n"+
+			"<b>Reason:</b> %s%s%s",
+		info.Resource, info.Tier, tierDesc, info.TTL, info.Requester, info.Reason, scopeStr, vaultPathStr,
+	)
+}
+
 // Client wraps the Telegram Bot API.
 type Client struct {
 	token   string
@@ -48,34 +91,24 @@ type VaultPathInfo struct {
 
 func (c *Client) SendApprovalMessage(requestID, resource string, tier int, reason, requester string, ttlStr string, scopes []string, vaultPaths []VaultPathInfo) (int, error) {
 	emoji := "🔐"
-	tierDesc := "Quick Approve"
 	if tier >= 3 {
 		emoji = "🔒"
-		tierDesc = "Elevated"
 	}
 
-	scopeStr := ""
-	if len(scopes) > 0 {
-		scopeStr = fmt.Sprintf("\n<b>Scopes:</b> %s", strings.Join(scopes, ", "))
-	}
-
-	vaultPathStr := ""
-	if len(vaultPaths) > 0 {
-		vaultPathStr = "\n\n📂 <b>Vault Paths Requested:</b>"
-		for _, vp := range vaultPaths {
-			vaultPathStr += fmt.Sprintf("\n  • <code>%s</code> [%s]", vp.Path, strings.Join(vp.Capabilities, ", "))
-		}
+	info := RequestDisplayInfo{
+		RequestID:  requestID,
+		Resource:   resource,
+		Tier:       tier,
+		Reason:     reason,
+		Requester:  requester,
+		TTL:        ttlStr,
+		Scopes:     scopes,
+		VaultPaths: vaultPaths,
 	}
 
 	text := fmt.Sprintf(
-		"%s <b>JIT Access Request</b> [%s]\n\n"+
-			"<b>Resource:</b> %s\n"+
-			"<b>Tier:</b> %d (%s)\n"+
-			"<b>TTL:</b> %s\n"+
-			"<b>Requester:</b> %s\n"+
-			"<b>Reason:</b> %s%s%s\n\n"+
-			"⏳ Awaiting approval...",
-		emoji, requestID, resource, tier, tierDesc, ttlStr, requester, reason, scopeStr, vaultPathStr,
+		"%s <b>JIT Access Request</b> [%s]\n\n%s\n\n⏳ Awaiting approval...",
+		emoji, requestID, formatRequestDetails(info),
 	)
 
 	buttons := [][]InlineButton{
@@ -89,34 +122,28 @@ func (c *Client) SendApprovalMessage(requestID, resource string, tier int, reaso
 }
 
 // EditMessageApproved edits an approval message to show it was approved.
-func (c *Client) EditMessageApproved(messageID int, requestID, resource string) error {
+func (c *Client) EditMessageApproved(messageID int, info RequestDisplayInfo) error {
 	text := fmt.Sprintf(
-		"✅ <b>Approved</b> [%s]\n\n"+
-			"<b>Resource:</b> %s\n"+
-			"<b>Approved at:</b> %s",
-		requestID, resource, time.Now().Format("15:04:05 MST"),
+		"✅ <b>Approved</b> [%s]\n\n%s\n\n<b>Approved at:</b> %s",
+		info.RequestID, formatRequestDetails(info), time.Now().Format("15:04:05 MST"),
 	)
 	return c.editMessage(messageID, text)
 }
 
 // EditMessageDenied edits an approval message to show it was denied.
-func (c *Client) EditMessageDenied(messageID int, requestID, resource string) error {
+func (c *Client) EditMessageDenied(messageID int, info RequestDisplayInfo) error {
 	text := fmt.Sprintf(
-		"❌ <b>Denied</b> [%s]\n\n"+
-			"<b>Resource:</b> %s\n"+
-			"<b>Denied at:</b> %s",
-		requestID, resource, time.Now().Format("15:04:05 MST"),
+		"❌ <b>Denied</b> [%s]\n\n%s\n\n<b>Denied at:</b> %s",
+		info.RequestID, formatRequestDetails(info), time.Now().Format("15:04:05 MST"),
 	)
 	return c.editMessage(messageID, text)
 }
 
 // EditMessageTimeout edits an approval message to show it timed out.
-func (c *Client) EditMessageTimeout(messageID int, requestID, resource string) error {
+func (c *Client) EditMessageTimeout(messageID int, info RequestDisplayInfo) error {
 	text := fmt.Sprintf(
-		"⏰ <b>Expired</b> [%s]\n\n"+
-			"<b>Resource:</b> %s\n"+
-			"<b>Reason:</b> Request timed out",
-		requestID, resource,
+		"⏰ <b>Expired</b> [%s]\n\n%s\n\n<b>Expired at:</b> %s",
+		info.RequestID, formatRequestDetails(info), time.Now().Format("15:04:05 MST"),
 	)
 	return c.editMessage(messageID, text)
 }
