@@ -149,7 +149,7 @@
       "name": "main-pipeline-fix",
       "enabled": true,
       "createdAtMs": 1769927834157,
-      "updatedAtMs": 1770913834168,
+      "updatedAtMs": 1770935421386,
       "schedule": {
         "kind": "cron",
         "expr": "*/30 * * * *",
@@ -162,12 +162,12 @@
         "message": "Main Pipeline Monitor:\n\n1. Fetch latest main pipeline: GET /projects/4/pipelines?ref=main&per_page=1\n2. Read /home/node/.openclaw/workspace/memory/main-pipeline-state.json\n3. If pipeline status == 'success': update state file silently, reply HEARTBEAT_OK. Do NOT announce green pipelines.\n4. If pipeline status == 'failed' AND pipelineId != lastFixedPipelineId:\n   a. Check activeFix - if set and timestamp < 60 min ago, SKIP (already being fixed)\n   b. If activeFix is null or expired (>60 min):\n      - Set activeFix = {pipelineId, timestamp: Date.now(), sessionLabel}\n      - Write state file IMMEDIATELY before spawning\n      - Spawn sub-agent labeled 'gitlab.main.pipeline.<id>.fix' (see skills/gitlab-mr/SKILL.md)\n      - Sub-agent MUST: clear activeFix and set lastFixedPipelineId when done\n5. If pipeline status == 'success', clear activeFix if set\n\nState file: /home/node/.openclaw/workspace/memory/main-pipeline-state.json\nFormat: {\"lastCheckedPipelineId\": N, \"lastFixedPipelineId\": N, \"activeFix\": {pipelineId, timestamp, sessionLabel}}\n\nONLY announce if pipeline is FAILED. Silent on success."
       },
       "state": {
-        "nextRunAtMs": 1770915600000,
-        "lastRunAtMs": 1770913800012,
+        "nextRunAtMs": 1770937200000,
+        "lastRunAtMs": 1770935400010,
         "lastStatus": "ok",
-        "lastDurationMs": 34156,
+        "lastDurationMs": 21376,
         "consecutiveErrors": 0,
-        "runningAtMs": 1770915600017
+        "runningAtMs": 1770937200010
       },
       "delivery": {
         "mode": "announce"
@@ -360,7 +360,7 @@
       "name": "email-check",
       "enabled": true,
       "createdAtMs": 1770841906634,
-      "updatedAtMs": 1770904965271,
+      "updatedAtMs": 1770933784685,
       "schedule": {
         "kind": "cron",
         "expr": "0 9,13,17 * * *",
@@ -377,11 +377,11 @@
         "mode": "announce"
       },
       "state": {
-        "nextRunAtMs": 1770919200000,
-        "lastRunAtMs": 1770904845258,
+        "nextRunAtMs": 1770991200000,
+        "lastRunAtMs": 1770933662130,
         "lastStatus": "error",
-        "lastDurationMs": 120013,
-        "consecutiveErrors": 1,
+        "lastDurationMs": 122555,
+        "consecutiveErrors": 3,
         "lastError": "Error: cron: job execution timed out"
       }
     },
@@ -481,7 +481,7 @@
       "name": "cron-config-sync",
       "enabled": true,
       "createdAtMs": 1770841907179,
-      "updatedAtMs": 1770894089310,
+      "updatedAtMs": 1770915656285,
       "schedule": {
         "kind": "cron",
         "expr": "0 */6 * * *",
@@ -498,12 +498,12 @@
         "mode": "none"
       },
       "state": {
-        "nextRunAtMs": 1770915600000,
-        "lastRunAtMs": 1770894070972,
+        "nextRunAtMs": 1770937200000,
+        "lastRunAtMs": 1770915637910,
         "lastStatus": "ok",
-        "lastDurationMs": 18338,
+        "lastDurationMs": 18375,
         "consecutiveErrors": 0,
-        "runningAtMs": 1770915600017
+        "runningAtMs": 1770937200010
       }
     },
     {
