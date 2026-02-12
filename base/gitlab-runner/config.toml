@@ -23,8 +23,8 @@ check_interval = 0
   executor = "docker"
   [runners.docker]
     image = "docker:24"
-    network_mode = "docker_mgmt"
+    network_mode = "docker_docker-proxy"
     privileged = false
     volumes = ["/cache/gitlab-runner:/cache"]
-  # Use docker-socket-proxy instead of direct socket (static IP on mgmt network)
-  environment = ["DOCKER_HOST=tcp://{{ docker_socket_proxy_ip }}:2375"]
+  # Use docker-socket-proxy on dedicated isolated bridge network
+  environment = ["DOCKER_HOST=tcp://docker-socket-proxy:2375"]
