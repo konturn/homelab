@@ -9,6 +9,9 @@ cleanup() {
 }
 trap cleanup SIGTERM SIGINT SIGQUIT
 
+# Clean up stale lock files from previous crashes
+rm -f /tmp/.X99-lock /tmp/.X11-unix/X99
+
 # Start Xvfb
 echo "Starting Xvfb on display ${DISPLAY}..."
 Xvfb "${DISPLAY}" -screen 0 "${SCREEN_WIDTH}x${SCREEN_HEIGHT}x${SCREEN_DEPTH}" \
