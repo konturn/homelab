@@ -78,15 +78,13 @@ networks:
   moltbot-nginx-bridge:
     driver: bridge
     internal: true
-  docker-proxy:
+  proxy-internal:
     driver: bridge
     internal: true
-    ipam:
-      config:
-        - subnet: 172.30.0.0/24
 services:
   # Docker socket proxy - filtered access for CI builds
   # Only allows build/image operations, blocks exec/start/stop
+  # TLS termination handled by lab_nginx on the proxy-internal network
   docker-socket-proxy:
     container_name: docker-socket-proxy
     security_opt:
@@ -96,7 +94,7 @@ services:
     image: tecnativa/docker-socket-proxy:0.3@sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476
     restart: unless-stopped
     networks:
-      docker-proxy:
+      proxy-internal:
     deploy:
       resources:
         limits:
@@ -285,7 +283,11 @@ services:
     networks:
       internal:
         ipv4_address: {{ lab_nginx_ip }}
+      proxy-internal:
     restart: unless-stopped
+    depends_on:
+      docker-socket-proxy:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -300,6 +302,7 @@ services:
       - {{ docker_persistent_data_path }}/lab_nginx/conf:/etc/nginx
       - /var/log/lab_nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
+      - {{ docker_persistent_data_path }}/docker-proxy-tls:/data/docker-proxy-tls:ro
   iot_nginx: 
     image: nginx:1.29.5-alpine3.23-perl@sha256:db0a3121225ffbc32fa36cc7a02c6c11002fec0c7fd2596ba204a811cc4a71dc
     container_name: iot_nginx
