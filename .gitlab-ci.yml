@@ -239,6 +239,8 @@ jit-approval-svc:test:
     DOCKER_HOST: "tcp://lab.nkontur.com:2376"
     DOCKER_TLS_VERIFY: "1"
     DOCKER_CERT_PATH: "/certs"
+    # Legacy builder required — BuildKit uses APIs not allowed by docker-socket-proxy
+    DOCKER_BUILDKIT: "0"
   before_script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   needs: []
