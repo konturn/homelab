@@ -53,14 +53,18 @@ fi
 echo "Starting noVNC on port 6080..."
 websockify --web /usr/share/novnc 6080 localhost:5900 &
 
+# Start socat proxy: expose CDP on 0.0.0.0:9222, forwarding to chromium on 127.0.0.1:9223
+# Chromium ignores --remote-debugging-address=0.0.0.0 and binds to 127.0.0.1 only
+echo "Starting socat CDP proxy (0.0.0.0:9222 -> 127.0.0.1:9223)..."
+socat TCP-LISTEN:9222,fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:9223 &
+
 # Start Chromium
 echo "Starting Chromium..."
 exec gosu chrome chromium \
     --no-sandbox \
     --disable-blink-features=AutomationControlled \
     --disable-dev-shm-usage \
-    --remote-debugging-port=9222 \
-    --remote-debugging-address=0.0.0.0 \
+    --remote-debugging-port=9223 \
     --user-data-dir=/data/chrome-profile \
     --window-size="${SCREEN_WIDTH},${SCREEN_HEIGHT}" \
     --start-maximized \
