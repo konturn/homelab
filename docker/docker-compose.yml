@@ -81,12 +81,10 @@ networks:
   docker-proxy:
     driver: bridge
     internal: true
-    ipam:
-      config:
-        - subnet: 172.30.0.0/24
 services:
   # Docker socket proxy - filtered access for CI builds
   # Only allows build/image operations, blocks exec/start/stop
+  # TLS termination handled by docker-socket-proxy-tls sidecar
   docker-socket-proxy:
     container_name: docker-socket-proxy
     security_opt:
@@ -121,6 +119,48 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  # TLS termination sidecar for docker-socket-proxy
+  # Provides mTLS on port 2376, proxies to docker-socket-proxy:2375
+  docker-socket-proxy-tls:
+    container_name: docker-socket-proxy-tls
+    image: nginx:1.29.5-alpine3.23-perl@sha256:db0a3121225ffbc32fa36cc7a02c6c11002fec0c7fd2596ba204a811cc4a71dc
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE  # bind to port 2376
+      - CHOWN             # nginx startup chowns dirs
+      - DAC_OVERRIDE      # nginx reads config/certs
+      - SETGID            # worker drops to nginx group
+      - SETUID            # worker drops to nginx user
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+      - /var/cache/nginx
+    restart: unless-stopped
+    networks:
+      mgmt:
+        ipv4_address: "{{ docker_socket_proxy_ip }}"
+      docker-proxy:
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    volumes:
+      - {{ docker_persistent_data_path }}/docker-proxy-tls:/certs:ro
+      - {{ docker_persistent_data_path }}/docker-proxy-tls/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      docker-socket-proxy:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep nginx > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   plex:
     container_name: plex

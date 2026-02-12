@@ -22,9 +22,8 @@ check_interval = 0
   token = "{{ lookup('env', 'IMAGES_GITLAB_RUNNER_TOKEN') }}"
   executor = "docker"
   [runners.docker]
-    image = "docker:24"
-    network_mode = "docker_docker-proxy"
+    image = "docker:27"
+    network_mode = "docker_mgmt"
     privileged = false
-    volumes = ["/cache/gitlab-runner:/cache"]
-  # Use docker-socket-proxy on dedicated isolated bridge network
-  environment = ["DOCKER_HOST=tcp://docker-socket-proxy:2375"]
+    volumes = ["/cache/gitlab-runner:/cache", "/persistent_data/application/docker-proxy-tls/ca.pem:/certs/ca.pem:ro", "/persistent_data/application/docker-proxy-tls/cert.pem:/certs/cert.pem:ro", "/persistent_data/application/docker-proxy-tls/key.pem:/certs/key.pem:ro"]
+  environment = ["DOCKER_HOST=tcp://{{ docker_socket_proxy_ip }}:2376", "DOCKER_TLS_VERIFY=1", "DOCKER_CERT_PATH=/certs"]

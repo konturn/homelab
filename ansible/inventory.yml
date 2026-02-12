@@ -11,6 +11,7 @@ all:
     vault_ip: 10.3.32.6
     promtail_ip: 10.3.32.7
     jit_approval_svc_ip: 10.3.32.8
+    docker_socket_proxy_ip: 10.4.32.2
     docker_persistent_data_path: /persistent_data/application
     docker_compose_version: '3.9'
     movie_switch_mac: 8c:3b:ad:6f:0e:d0
@@ -165,6 +166,9 @@ all:
         - src: "docker/gitlab/license_encryption_key.pub"
           dest: "{{ docker_persistent_data_path }}/gitlab/license_encryption_key.pub"
           name: "gitlab"
+        - src: "docker/docker-socket-proxy-tls/nginx.conf"
+          dest: "{{ docker_persistent_data_path }}/docker-proxy-tls/nginx.conf"
+          name: "docker-socket-proxy-tls"
       docker_data_dirs:
         - path: "{{ docker_persistent_data_path }}/loki/data"
           owner: "10001"

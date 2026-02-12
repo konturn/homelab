@@ -142,6 +142,27 @@
 #      - PyYAML
 #      - docker-compose
 
+### Docker socket proxy TLS certificates
+# Generate self-signed CA + server + client certs for mTLS between CI runners
+# and the docker-socket-proxy TLS sidecar. Certs are 10-year validity.
+- name: Create docker-proxy-tls cert directory
+  ansible.builtin.file:
+    path: "{{ docker_persistent_data_path }}/docker-proxy-tls"
+    state: directory
+    mode: '0755'
+
+- name: Check if docker-proxy-tls CA cert exists
+  ansible.builtin.stat:
+    path: "{{ docker_persistent_data_path }}/docker-proxy-tls/ca.pem"
+  register: docker_proxy_tls_ca
+
+- name: Generate docker-proxy-tls certificates
+  ansible.builtin.script:
+    cmd: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/docker-socket-proxy-tls/generate-certs.sh {{ docker_persistent_data_path }}/docker-proxy-tls"
+  environment:
+    DOCKER_PROXY_IP: "{{ docker_socket_proxy_ip }}"
+  when: not docker_proxy_tls_ca.stat.exists and not ansible_check_mode
+
 - name: Log in to GitLab container registry
   docker_login:
     username: "{{ lookup('env', 'CI_REGISTRY_USER') }}"
