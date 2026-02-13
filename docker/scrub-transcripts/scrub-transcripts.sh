@@ -7,23 +7,27 @@
 #
 # Usage: scrub-transcripts.sh <transcript_directory>
 #
-# Designed to run inside a bash:5 Docker container with gitleaks binary
-# cached at /cache/gitleaks.
+# Prerequisites: gitleaks binary at /usr/local/bin/gitleaks,
+#                config at /etc/scrub-transcripts/gitleaks-transcripts.toml
 
 set -euo pipefail
 
 TRANSCRIPT_DIR="${1:?Usage: scrub-transcripts.sh <transcript_directory>}"
 LOG_DIR="/var/log/scrub-transcripts"
 LOG_FILE="${LOG_DIR}/scrub.log"
-GITLEAKS_BIN="/cache/gitleaks"
-GITLEAKS_VERSION="8.24.3"
-GITLEAKS_CONFIG="/gitleaks-config.toml"
+GITLEAKS_BIN="/usr/local/bin/gitleaks"
+GITLEAKS_CONFIG="/etc/scrub-transcripts/gitleaks-transcripts.toml"
 REPORT_FILE="/tmp/gitleaks-report.json"
 
-mkdir -p "$LOG_DIR" /cache
+mkdir -p "$LOG_DIR"
 
 if [[ ! -d "$TRANSCRIPT_DIR" ]]; then
   echo "ERROR: Directory does not exist: $TRANSCRIPT_DIR" >&2
+  exit 1
+fi
+
+if [[ ! -x "$GITLEAKS_BIN" ]]; then
+  echo "ERROR: gitleaks not found at $GITLEAKS_BIN" >&2
   exit 1
 fi
 
@@ -37,33 +41,10 @@ log_event() {
 }
 
 # Rotate log if > 10MB
-if [[ -f "$LOG_FILE" ]] && [[ $(stat -f%z "$LOG_FILE" 2>/dev/null || stat -c%s "$LOG_FILE" 2>/dev/null) -gt 10485760 ]]; then
+if [[ -f "$LOG_FILE" ]] && [[ $(stat -c%s "$LOG_FILE" 2>/dev/null || stat -f%z "$LOG_FILE" 2>/dev/null) -gt 10485760 ]]; then
   mv "$LOG_FILE" "${LOG_FILE}.1"
   log_event "INFO" "log_rotated" "previous log archived"
 fi
-
-# --- Install gitleaks if not cached ---
-ensure_gitleaks() {
-  if [[ -x "$GITLEAKS_BIN" ]]; then
-    return 0
-  fi
-
-  log_event "INFO" "gitleaks_install" "version=${GITLEAKS_VERSION}"
-  local url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_amd64.tar.gz"
-  local tarball="/tmp/gitleaks.tar.gz"
-
-  if ! wget -q -O "$tarball" "$url"; then
-    log_event "ERROR" "gitleaks_download_failed" "url=${url}"
-    exit 1
-  fi
-
-  tar xzf "$tarball" -C /cache gitleaks
-  chmod +x "$GITLEAKS_BIN"
-  rm -f "$tarball"
-  log_event "INFO" "gitleaks_installed" "path=${GITLEAKS_BIN}"
-}
-
-ensure_gitleaks
 
 log_event "INFO" "scrub_started" "dir=${TRANSCRIPT_DIR}"
 
@@ -93,19 +74,6 @@ TOTAL_FILES=0
 TOTAL_REDACTED=0
 
 if [[ -f "$REPORT_FILE" ]] && [[ -s "$REPORT_FILE" ]]; then
-  # Extract unique file+secret pairs and redact each one.
-  # Use awk to deduplicate and produce tab-separated file\tsecret lines.
-  # jq would be ideal but isn't in bash:5; we parse JSON minimally.
-
-  # bash:5 doesn't have jq, so we install it or parse manually.
-  # Actually, let's use a lightweight approach: grep + sed to extract fields.
-  # The JSON is an array of objects. We need File and Secret fields.
-
-  # Install jq if not available (it's tiny)
-  if ! command -v jq &>/dev/null; then
-    apk add --no-cache jq >/dev/null 2>&1 || true
-  fi
-
   if command -v jq &>/dev/null; then
     # Deduplicate by file+secret, then redact
     jq -r '.[] | [.File, .Secret] | @tsv' "$REPORT_FILE" | sort -u | while IFS=$'\t' read -r filepath secret; do
