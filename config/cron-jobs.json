@@ -89,7 +89,7 @@
       "name": "moltbook-check",
       "enabled": true,
       "createdAtMs": 1769882115331,
-      "updatedAtMs": 1770865398707,
+      "updatedAtMs": 1770951833895,
       "schedule": {
         "kind": "cron",
         "expr": "0 22 * * *",
@@ -103,10 +103,10 @@
         "timeoutSeconds": 600
       },
       "state": {
-        "nextRunAtMs": 1770951600000,
-        "lastRunAtMs": 1770865200008,
+        "nextRunAtMs": 1771038000000,
+        "lastRunAtMs": 1770951600017,
         "lastStatus": "ok",
-        "lastDurationMs": 198699,
+        "lastDurationMs": 233878,
         "consecutiveErrors": 0
       },
       "delivery": {
@@ -149,7 +149,7 @@
       "name": "main-pipeline-fix",
       "enabled": true,
       "createdAtMs": 1769927834157,
-      "updatedAtMs": 1770935421386,
+      "updatedAtMs": 1770957060541,
       "schedule": {
         "kind": "cron",
         "expr": "*/30 * * * *",
@@ -162,12 +162,12 @@
         "message": "Main Pipeline Monitor:\n\n1. Fetch latest main pipeline: GET /projects/4/pipelines?ref=main&per_page=1\n2. Read /home/node/.openclaw/workspace/memory/main-pipeline-state.json\n3. If pipeline status == 'success': update state file silently, reply HEARTBEAT_OK. Do NOT announce green pipelines.\n4. If pipeline status == 'failed' AND pipelineId != lastFixedPipelineId:\n   a. Check activeFix - if set and timestamp < 60 min ago, SKIP (already being fixed)\n   b. If activeFix is null or expired (>60 min):\n      - Set activeFix = {pipelineId, timestamp: Date.now(), sessionLabel}\n      - Write state file IMMEDIATELY before spawning\n      - Spawn sub-agent labeled 'gitlab.main.pipeline.<id>.fix' (see skills/gitlab-mr/SKILL.md)\n      - Sub-agent MUST: clear activeFix and set lastFixedPipelineId when done\n5. If pipeline status == 'success', clear activeFix if set\n\nState file: /home/node/.openclaw/workspace/memory/main-pipeline-state.json\nFormat: {\"lastCheckedPipelineId\": N, \"lastFixedPipelineId\": N, \"activeFix\": {pipelineId, timestamp, sessionLabel}}\n\nONLY announce if pipeline is FAILED. Silent on success."
       },
       "state": {
-        "nextRunAtMs": 1770937200000,
-        "lastRunAtMs": 1770935400010,
+        "nextRunAtMs": 1770958800000,
+        "lastRunAtMs": 1770957000044,
         "lastStatus": "ok",
-        "lastDurationMs": 21376,
+        "lastDurationMs": 60497,
         "consecutiveErrors": 0,
-        "runningAtMs": 1770937200010
+        "runningAtMs": 1770958800012
       },
       "delivery": {
         "mode": "announce"
@@ -391,7 +391,7 @@
       "name": "nightly-meditation",
       "enabled": true,
       "createdAtMs": 1770841906770,
-      "updatedAtMs": 1770868880301,
+      "updatedAtMs": 1770955280452,
       "schedule": {
         "kind": "cron",
         "expr": "0 23 * * *",
@@ -408,10 +408,10 @@
         "mode": "none"
       },
       "state": {
-        "nextRunAtMs": 1770955200000,
-        "lastRunAtMs": 1770868831299,
+        "nextRunAtMs": 1771041600000,
+        "lastRunAtMs": 1770955225417,
         "lastStatus": "ok",
-        "lastDurationMs": 49002,
+        "lastDurationMs": 55035,
         "consecutiveErrors": 0
       }
     },
@@ -481,7 +481,7 @@
       "name": "cron-config-sync",
       "enabled": true,
       "createdAtMs": 1770841907179,
-      "updatedAtMs": 1770915656285,
+      "updatedAtMs": 1770937237827,
       "schedule": {
         "kind": "cron",
         "expr": "0 */6 * * *",
@@ -498,12 +498,12 @@
         "mode": "none"
       },
       "state": {
-        "nextRunAtMs": 1770937200000,
-        "lastRunAtMs": 1770915637910,
+        "nextRunAtMs": 1770958800000,
+        "lastRunAtMs": 1770937213818,
         "lastStatus": "ok",
-        "lastDurationMs": 18375,
+        "lastDurationMs": 24009,
         "consecutiveErrors": 0,
-        "runningAtMs": 1770937200010
+        "runningAtMs": 1770958800012
       }
     },
     {
