@@ -24,34 +24,32 @@ description: Search and apply for remote software engineering jobs. Use when sea
 
 **Before doing ANY work, verify browser availability in this order:**
 
-1. **FIRST: Check if sandbox browser is running:**
+1. **FIRST: Check if chromium-browser sidecar is running:**
    ```
-   exec command="curl -s http://127.0.0.1:9222/json/version" timeout=5
+   exec command="curl -s --max-time 5 http://$(getent hosts chromium-browser | awk '{print $1}'):9222/json/version" timeout=10
    ```
    
-   - If successful → Use `profile=sandbox` (headless Chromium in container)
-   - If connection refused → Try to launch sandbox browser:
-     ```
-     exec command="chromium --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --remote-debugging-port=9222 --remote-debugging-address=127.0.0.1 --window-size=1280,900 about:blank &" background=true
-     exec command="sleep 3"
-     exec command="curl -s http://127.0.0.1:9222/json/version" timeout=5
-     ```
+   - If successful → Use the chromium sidecar (headed Chromium with VNC)
+   - The sidecar is a Docker container on the internal network, accessible at `chromium-browser:9222`
+   - **⚠️ CDP Host header quirk:** Must connect via IP address, not hostname. Chromium rejects non-localhost/non-IP Host headers.
+   - Get the IP: `getent hosts chromium-browser` → use that IP for all CDP connections
+   - The OpenClaw `browser` tool handles this automatically when using `profile=sandbox`
 
-2. **FALLBACK: Check Noah's laptop node if sandbox unavailable:**
+2. **FALLBACK: Check Noah's laptop node if sidecar unavailable:**
    ```
    nodes action=status
    ```
    Look for `noah-XPS-13-7390-2-in-1` in the response with `"connected": true`.
 
-**If BOTH sandbox and node are unavailable:**
+**If BOTH chromium sidecar and node are unavailable:**
 1. **DO NOT attempt workarounds** (no web_fetch, no curl, no alternative approaches)
 2. **IMMEDIATELY terminate** with this exact report:
    ```
-   BLOCKED: No browser available. Sandbox browser failed to start and node `noah-XPS-13-7390-2-in-1` is disconnected. Cannot proceed with browser automation.
+   BLOCKED: No browser available. Chromium sidecar is down and node `noah-XPS-13-7390-2-in-1` is disconnected. Cannot proceed with browser automation.
    ```
 3. The main agent will notify Noah and retry when browser access is restored
 
-**Why this matters:** Job applications REQUIRE browser automation. Sandbox browser (headless Chromium in container) is preferred as it doesn't depend on Noah's laptop being online.
+**Why this matters:** Job applications REQUIRE browser automation. The chromium sidecar is preferred as it runs 24/7 and doesn't depend on Noah's laptop being online.
 
 ---
 
@@ -59,13 +57,15 @@ description: Search and apply for remote software engineering jobs. Use when sea
 
 **Two browser profiles are available:**
 
-### Primary: Sandbox Browser (in container)
+### Primary: Chromium Sidecar (Docker container)
 ```
 profile=sandbox
 ```
-- **Pros:** Always available, no node dependency, faster startup
-- **Cons:** Headless only (no visual debugging), limited file system access
-- **Resume path:** `/home/node/.openclaw/workspace/skills/job-hunting/assets/Resume (Kontur, Noah).pdf`
+- **Headed Chromium** with Xvfb display, VNC access at `browser.lab.nkontur.com`
+- **Always available** — runs 24/7, no dependency on Noah's laptop
+- **CDP endpoint:** `http://<chromium-browser-ip>:9222` (get IP via `getent hosts chromium-browser`)
+- **Resume path:** `/home/node/.openclaw/workspace/skills/job-hunting/assets/Resume (Kontur, Noah).pdf` (uploaded from moltbot via browser tool)
+- **VNC:** noVNC at `https://browser.lab.nkontur.com/vnc.html` for visual debugging
 - **Usage:** `browser action=<action> profile=sandbox`
 
 ### Fallback: Node Browser (Noah's laptop)
@@ -74,12 +74,12 @@ profile=clawd
 target=node  
 node=noah-XPS-13-7390-2-in-1
 ```
-- **Pros:** Full UI access, can use xdotool for complex interactions
+- **Pros:** Real Chrome with Google login, cookies, extensions — stealthiest option
 - **Cons:** Requires Noah's laptop to be online and connected
 - **Resume path:** `/home/noah/Downloads/Resume (Kontur, Noah).pdf`
 - **Usage:** `browser action=<action> profile=clawd target=node node=noah-XPS-13-7390-2-in-1`
 
-**Default strategy:** Always try sandbox first. Use node fallback only if sandbox browser fails to start or encounters issues that require visual debugging.
+**Default strategy:** Use chromium sidecar for scouting and most applications. Use Noah's laptop for Ashby or sites with aggressive bot detection where a real Chrome profile matters.
 
 ---
 
@@ -110,7 +110,7 @@ These scripts handle deterministic operations. Use them instead of reimplementin
 
 | Script | Usage | Purpose |
 |--------|-------|---------|
-| `check-browser.sh` | `./scripts/check-browser.sh` | Returns "sandbox" (exit 0), "node" (exit 1), or "unavailable" (exit 2) |
+| `check-browser.sh` | `./scripts/check-browser.sh` | Returns "chromium" or "sandbox" (exit 0), or "unavailable" (exit 2) |
 | `detect-ats.sh` | `./scripts/detect-ats.sh <url>` | Returns: ashby\|greenhouse\|lever\|workday\|workable\|unknown |
 | `check-applied.sh` | `./scripts/check-applied.sh <job-id>` | Exit 0 if not applied, exit 1 if already applied |
 | `check-blocklist.sh` | `./scripts/check-blocklist.sh <company>` | Exit 0 if not blocked, exit 1 if blocked |
