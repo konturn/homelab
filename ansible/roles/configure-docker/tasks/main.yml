@@ -389,13 +389,13 @@
 - name: Install gitleaks binary
   ansible.builtin.shell: |
     set -euo pipefail
-    GITLEAKS_VERSION="8.24.3"
+    GITLEAKS_VERSION="8.30.0"
     DEST="/usr/local/bin/gitleaks"
     if [[ -x "$DEST" ]] && "$DEST" version 2>/dev/null | grep -q "$GITLEAKS_VERSION"; then
       echo "gitleaks ${GITLEAKS_VERSION} already installed"
       exit 0
     fi
-    URL="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_amd64.tar.gz"
+    URL="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
     TMP=$(mktemp -d)
     curl -fsSL -o "${TMP}/gitleaks.tar.gz" "$URL"
     tar xzf "${TMP}/gitleaks.tar.gz" -C "$TMP" gitleaks
