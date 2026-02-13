@@ -42,6 +42,9 @@ jit_api_key() {
 jit_request() {
   local resource=$1 tier=$2 reason=$3
   local extra=${4:-}
+  # Strip 't' prefix (accept both "t2" and "2")
+  tier="${tier#t}"
+  tier="${tier#T}"
   local key
   key=$(jit_api_key)
   
