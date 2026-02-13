@@ -154,6 +154,23 @@ vault_write() {
     -d "{\"data\":$json_data}"
 }
 
+# Convenience: get a Gmail access token via JIT + OAuth refresh
+# Usage: jit_gmail_token
+# Returns: Gmail API access token on stdout (blocks until JIT approved)
+jit_gmail_token() {
+  local vault_token gmail_creds client_id client_secret refresh_token
+  vault_token=$(jit_get gmail 2 "Gmail API access for email verification")
+  gmail_creds=$(curl -s -H "X-Vault-Token: $vault_token" "$VAULT_ADDR/v1/homelab/data/email/gmail" | jq -r '.data.data')
+  client_id=$(echo "$gmail_creds" | jq -r '.client_id')
+  client_secret=$(echo "$gmail_creds" | jq -r '.client_secret')
+  refresh_token=$(echo "$gmail_creds" | jq -r '.refresh_token')
+  curl -s -X POST https://oauth2.googleapis.com/token \
+    -d "client_id=$client_id" \
+    -d "client_secret=$client_secret" \
+    -d "refresh_token=$refresh_token" \
+    -d "grant_type=refresh_token" | jq -r '.access_token'
+}
+
 # Convenience: get a Vault-backed service API key (T1)
 # Usage: jit_service_key <service>  (radarr, sonarr, plex, ombi, nzbget, deluge, paperless, prowlarr)
 # Returns: API key on stdout
@@ -175,4 +192,4 @@ jit_influxdb_token() {
   jit_get influxdb 1 "InfluxDB query access"
 }
 
-echo "JIT lib loaded. Functions: jit_request, jit_status, jit_get, jit_vault, jit_vault_write, vault_write, jit_service_key, jit_grafana_token, jit_influxdb_token, vault_login, vault_read" >&2
+echo "JIT lib loaded. Functions: jit_request, jit_status, jit_get, jit_vault, jit_vault_write, vault_write, jit_gmail_token, jit_service_key, jit_grafana_token, jit_influxdb_token, vault_login, vault_read" >&2
