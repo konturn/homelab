@@ -159,7 +159,7 @@ vault_write() {
 # Returns: Gmail API access token on stdout (blocks until JIT approved)
 jit_gmail_token() {
   # gmail-read backend returns OAuth2 access token directly
-  jit_get gmail-read 2 "Gmail API access for email reading"
+  jit_get gmail-read 1 "Gmail API access for email reading"
 }
 
 # Convenience: get a Gmail send token via JIT
