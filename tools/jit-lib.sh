@@ -159,16 +159,8 @@ vault_write() {
 # Returns: Gmail API access token on stdout (blocks until JIT approved)
 jit_gmail_token() {
   local vault_token gmail_creds client_id client_secret refresh_token
-  vault_token=$(jit_get gmail 2 "Gmail API access for email verification")
-  gmail_creds=$(curl -s -H "X-Vault-Token: $vault_token" "$VAULT_ADDR/v1/homelab/data/email/gmail" | jq -r '.data.data')
-  client_id=$(echo "$gmail_creds" | jq -r '.client_id')
-  client_secret=$(echo "$gmail_creds" | jq -r '.client_secret')
-  refresh_token=$(echo "$gmail_creds" | jq -r '.refresh_token')
-  curl -s -X POST https://oauth2.googleapis.com/token \
-    -d "client_id=$client_id" \
-    -d "client_secret=$client_secret" \
-    -d "refresh_token=$refresh_token" \
-    -d "grant_type=refresh_token" | jq -r '.access_token'
+  # gmail-read backend returns OAuth2 access token directly (no Vault token needed)
+  jit_get gmail-read 2 "Gmail API access for email reading"
 }
 
 # Convenience: get a Vault-backed service API key (T1)
