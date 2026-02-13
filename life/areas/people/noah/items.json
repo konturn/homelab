@@ -809,5 +809,21 @@
     "timestamp": "2026-02-04",
     "source": "email",
     "status": "active"
+  },
+  {
+    "id": "noah-pref-jit",
+    "fact": "Never ask permission before making JIT requests \u2014 if context requires it, just do it. Noah gets Telegram approval notification anyway.",
+    "category": "preference",
+    "timestamp": "2026-02-12",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "noah-pref-push",
+    "fact": "Always commit+push to clawd-memory immediately after file changes. Don't wait.",
+    "category": "preference",
+    "timestamp": "2026-02-12",
+    "source": "conversation",
+    "status": "active"
   }
 ]

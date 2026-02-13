@@ -26,7 +26,7 @@
     },
     {
       "id": "homelab-004",
-      "fact": "Push to repo triggers GitLab CI → Ansible deploys to router",
+      "fact": "Push to repo triggers GitLab CI \u2192 Ansible deploys to router",
       "category": "status",
       "timestamp": "2026-01-30",
       "source": "file",
@@ -66,7 +66,7 @@
     },
     {
       "id": "homelab-009",
-      "fact": "Router (router.lab.nkontur.com) IS the Docker host — everything runs on one machine. satellite-2 is a separate device.",
+      "fact": "Router (router.lab.nkontur.com) IS the Docker host \u2014 everything runs on one machine. satellite-2 is a separate device.",
       "category": "status",
       "timestamp": "2026-02-11",
       "source": "conversation",
@@ -106,7 +106,7 @@
     },
     {
       "id": "homelab-014",
-      "fact": "Docker cap_drop persists until container recreation — reverting compose file doesn't restore capabilities on running containers.",
+      "fact": "Docker cap_drop persists until container recreation \u2014 reverting compose file doesn't restore capabilities on running containers.",
       "category": "status",
       "timestamp": "2026-02-11",
       "source": "conversation",
@@ -114,7 +114,7 @@
     },
     {
       "id": "homelab-015",
-      "fact": "GitLab PAT has full api scope + cross-project access including project 8 (images). Critical security finding — should be replaced with scoped project token.",
+      "fact": "GitLab PAT has full api scope + cross-project access including project 8 (images). Critical security finding \u2014 should be replaced with scoped project token.",
       "category": "status",
       "timestamp": "2026-02-11",
       "source": "file",
@@ -130,7 +130,7 @@
     },
     {
       "id": "homelab-017",
-      "fact": "Loki accessible via https://loki.lab.nkontur.com (nginx proxy). MR !214 binds to localhost only — container-to-container still works via Docker network.",
+      "fact": "Loki accessible via https://loki.lab.nkontur.com (nginx proxy). MR !214 binds to localhost only \u2014 container-to-container still works via Docker network.",
       "category": "status",
       "timestamp": "2026-02-11",
       "source": "conversation",
@@ -142,6 +142,62 @@
       "category": "status",
       "timestamp": "2026-02-11",
       "source": "file",
+      "status": "active"
+    },
+    {
+      "id": "homelab-019",
+      "fact": "Docker socket proxy uses TLS+mTLS. Runner connects via DOCKER_HOST=tcp://lab.nkontur.com:2376. DOCKER_BUILDKIT=0 required (BuildKit APIs not allowed by Tecnativa socket proxy).",
+      "category": "status",
+      "timestamp": "2026-02-12",
+      "source": "conversation",
+      "status": "active"
+    },
+    {
+      "id": "homelab-020",
+      "fact": "Consolidated from 2 gitlab-runners (main+images) to single runner on host network.",
+      "category": "milestone",
+      "timestamp": "2026-02-12",
+      "source": "conversation",
+      "status": "active"
+    },
+    {
+      "id": "homelab-021",
+      "fact": "Chromium browser sidecar operational. noVNC on port 6080, CDP on 9222, static IP 10.3.32.9. VNC password in Vault at homelab/data/docker/chromium-browser.",
+      "category": "status",
+      "timestamp": "2026-02-12",
+      "source": "conversation",
+      "status": "active"
+    },
+    {
+      "id": "homelab-022",
+      "fact": "Loki reachable directly at http://loki:3100 (internal Docker DNS). HTTPS via nginx has 301 redirect loop.",
+      "category": "status",
+      "timestamp": "2026-02-12",
+      "source": "conversation",
+      "status": "active"
+    },
+    {
+      "id": "homelab-023",
+      "fact": "CODEOWNERS gap: ansible/roles/configure-docker/ was unprotected. MR !252 adds /ansible/ @root wildcard.",
+      "category": "status",
+      "timestamp": "2026-02-12",
+      "source": "conversation",
+      "status": "active"
+    },
+    {
+      "id": "homelab-024",
+      "fact": "Gmail OAuth creds in Vault at homelab/data/docker/gmail (client_id, client_secret, refresh_token). Scope gmail.readonly. Workers can fetch verification codes autonomously.",
+      "category": "milestone",
+      "timestamp": "2026-02-12",
+      "source": "conversation",
+      "status": "active"
+    },
+    {
+      "id": "homelab-025",
+      "fact": "agent-browser CLI at /usr/local/bin/agent-browser \u2014 Playwright-based, connects to chromium container CDP. Commands: open, snapshot, fill, type, click, upload, eval.",
+      "category": "status",
+      "timestamp": "2026-02-12",
+      "source": "conversation",
       "status": "active"
     }
   ]

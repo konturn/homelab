@@ -94,5 +94,29 @@
     "timestamp": "2026-02-01",
     "source": "session-notes",
     "status": "active"
+  },
+  {
+    "id": "job-013",
+    "fact": "Job hunting skill refactored: 1635\u2192641 lines. All agent-browser, removed node/xdotool paths. Scout uses OpenClaw browser tool, workers use agent-browser CLI.",
+    "category": "milestone",
+    "timestamp": "2026-02-12",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "job-014",
+    "fact": "Resume located at /uploads/Resume (Kontur, Noah).pdf in chromium container. Volume mounted via MR !249.",
+    "category": "status",
+    "timestamp": "2026-02-12",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "job-015",
+    "fact": "41 prior applications tracked in applied.json as of Feb 12, 2026.",
+    "category": "status",
+    "timestamp": "2026-02-12",
+    "source": "conversation",
+    "status": "active"
   }
 ]
