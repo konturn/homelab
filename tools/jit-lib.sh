@@ -158,9 +158,15 @@ vault_write() {
 # Usage: jit_gmail_token
 # Returns: Gmail API access token on stdout (blocks until JIT approved)
 jit_gmail_token() {
-  local vault_token gmail_creds client_id client_secret refresh_token
-  # gmail-read backend returns OAuth2 access token directly (no Vault token needed)
+  # gmail-read backend returns OAuth2 access token directly
   jit_get gmail-read 2 "Gmail API access for email reading"
+}
+
+# Convenience: get a Gmail send token via JIT
+# Usage: jit_gmail_send_token
+# Returns: Gmail API access token with send scope on stdout
+jit_gmail_send_token() {
+  jit_get gmail-send 2 "Gmail API access for sending email"
 }
 
 # Convenience: get a Vault-backed service API key (T1)
@@ -184,4 +190,4 @@ jit_influxdb_token() {
   jit_get influxdb 1 "InfluxDB query access"
 }
 
-echo "JIT lib loaded. Functions: jit_request, jit_status, jit_get, jit_vault, jit_vault_write, vault_write, jit_gmail_token, jit_service_key, jit_grafana_token, jit_influxdb_token, vault_login, vault_read" >&2
+echo "JIT lib loaded. Functions: jit_request, jit_status, jit_get, jit_vault, jit_vault_write, vault_write, jit_gmail_token, jit_gmail_send_token, jit_service_key, jit_grafana_token, jit_influxdb_token, vault_login, vault_read" >&2
