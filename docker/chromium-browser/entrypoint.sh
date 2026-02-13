@@ -58,6 +58,9 @@ websockify --web /usr/share/novnc 6080 localhost:5900 &
 echo "Starting socat CDP proxy (0.0.0.0:9222 -> 127.0.0.1:9223)..."
 socat TCP-LISTEN:9222,fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:9223 &
 
+# Clean up stale Chromium profile locks from previous container instances
+rm -f /data/chrome-profile/SingletonLock /data/chrome-profile/SingletonSocket /data/chrome-profile/SingletonCookie
+
 # Start Chromium
 echo "Starting Chromium..."
 exec gosu chrome chromium \
