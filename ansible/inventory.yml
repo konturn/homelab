@@ -63,6 +63,7 @@ all:
     weather_mqtt_bridge_ip: 10.6.32.6
     mopidy_address: 10.6.32.7
     moltbot_gateway_ip: 10.4.0.50
+    moltbot_image_tag: "2026.2.12"
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     omapi_secret: "{{ (vault_omapi_secret | default(lookup('env', 'OMAPI_SECRET'))) | trim }}"
     tailscale_api_token: "{{ (vault_tailscale_api_token | default(lookup('env', 'TAILSCALE_API_TOKEN'))) | trim }}"
