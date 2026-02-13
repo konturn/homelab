@@ -1620,6 +1620,7 @@ services:
           memory: 2G
     volumes:
       - "{{ docker_persistent_data_path }}/chromium-browser/profile:/data/chrome-profile"
+      - "{{ docker_persistent_data_path }}/chromium-browser/uploads:/uploads:ro"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9222/json/version"]
