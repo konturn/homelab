@@ -120,7 +120,6 @@ Main updates tracking, spawns next worker
 ```
 sessions_spawn(
   label: "jobs.scout",
-  model: "anthropic/claude-sonnet-4-20250514",
   task: "You are a job scout. Read the job-hunting skill. Search Hiring Cafe LIST VIEW ONLY for up to [N] jobs matching criteria. Return a structured list with: company, role, salary, job ID, URL. Do NOT open job pages or apply.",
   runTimeoutSeconds: 600
 )
@@ -130,7 +129,6 @@ sessions_spawn(
 ```
 sessions_spawn(
   label: "jobs.apply.<company>",
-  model: "anthropic/claude-sonnet-4-20250514", 
   task: "Apply to <Company> - <Role>. Job ID: <id>. URL: <url>. Read job-hunting skill, section WORKER INSTRUCTIONS.",
   runTimeoutSeconds: 1800
 )
