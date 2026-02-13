@@ -76,12 +76,7 @@ agent-browser wait <ms>
 agent-browser screenshot [path]
 ```
 
-**Scout/lightweight use (OpenClaw `browser` tool):**
-```
-browser action=open profile=sandbox targetUrl=<url>
-browser action=tabs profile=sandbox
-browser action=snapshot profile=sandbox targetId=<id>
-```
+**All agents (scout and worker) use `agent-browser` CLI.**
 
 ---
 
@@ -162,10 +157,11 @@ sessions_spawn(
 ╚══════════════════════════════════════════════════════════════════╝
 ```
 
-**Scout uses OpenClaw `browser` tool** (`profile=sandbox`), NOT `agent-browser`.
+**Scout uses `agent-browser` CLI**, same as workers.
 
 **Workflow:**
-1. Open Hiring Cafe search URL (see Browser Workflow section), LIST VIEW ONLY
+1. Connect: `agent-browser connect http://10.3.0.17:9222`
+2. Open Hiring Cafe search URL (see Browser Workflow section), LIST VIEW ONLY
 2. Extract job titles, companies, salaries, URLs from the list
 3. Filter against `references/blocklist.md`, `references/applied.json`, and `references/rejected.json`
 4. **Max 10 jobs per search** — pick best 10 if more found
