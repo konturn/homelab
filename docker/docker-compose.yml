@@ -450,7 +450,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.1098@sha256:14eccea2966811ed8bfa5e635b2de965d22e5ec43da4f7fc15212ababd65ad86
+    image: linuxserver/jackett:0.24.1103@sha256:5906ec80f00735b5ee8246ec21e98d424ac7a224331047ad50a19e4d583be7b0
     container_name: jackett
     security_opt:
       - no-new-privileges:true
@@ -1495,7 +1495,7 @@ services:
       retries: 3
       start_period: 30s
   nextcloud_db:
-    image: mariadb:12.1.2-ubi10@sha256:5ad51257d1c586397a7c86449d1cae9c684989e7efda435c377f8457c296e1e9
+    image: mariadb:12.2.2-ubi10@sha256:8dc38e142d058f1ee2faf0fdb9ccd324da79c2f06e2a3300e9b80a123d843214
     container_name: nextcloud_database
     security_opt:
       - no-new-privileges:true
