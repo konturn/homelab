@@ -1,0 +1,8 @@
+---
+# configure-homelab-services requires Docker to be installed first.
+# Ensure configure-docker runs before this role in the playbook.
+# We don't use a meta dependency here because configure-docker is
+# already listed explicitly in the playbook with host-specific vars
+# (e.g. nvidia_container_runtime), and Ansible role deduplication
+# could skip one of the two invocations.
+dependencies: []

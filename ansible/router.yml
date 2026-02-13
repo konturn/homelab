@@ -13,6 +13,7 @@
   - role: configure-docker
     vars:
       nvidia_container_runtime: true
+  - configure-homelab-services
   - configure-notifications
   - configure-mullvad-failover
   - role: restic
