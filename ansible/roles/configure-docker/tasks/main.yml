@@ -383,8 +383,10 @@
   when: deluge_dir.stat.exists and deluge_config is changed and not ansible_check_mode
 
 ### Transcript credential scrubbing cron
-# Deploys a script that redacts secrets from OpenClaw session transcripts
-# and purges archived sub-agent transcripts older than 7 days.
+# Uses gitleaks (~160 rules) to detect and redact secrets from OpenClaw
+# session transcripts. Also purges archived sub-agent transcripts older
+# than 7 days. The gitleaks binary is cached in /cache to avoid
+# re-downloading on every run.
 - name: Deploy transcript scrub script
   ansible.builtin.copy:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/moltbot/scripts/scrub-transcripts.sh' }}"
@@ -393,17 +395,36 @@
     group: root
     mode: '0755'
 
+- name: Deploy gitleaks config for transcript scrubbing
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/moltbot/scripts/gitleaks-transcripts.toml' }}"
+    dest: "{{ docker_persistent_data_path }}/moltbot/scripts/gitleaks-transcripts.toml"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Create gitleaks binary cache directory
+  ansible.builtin.file:
+    path: "{{ docker_persistent_data_path }}/moltbot/cache"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
 - name: Set up transcript scrub cron job (every 10 minutes)
   ansible.builtin.cron:
     name: "Scrub credentials from moltbot transcripts"
     minute: "*/10"
-    # Runs every 10 minutes. The --rm container's stdout vanishes on exit,
-    # so we pipe all output through logger to land in the systemd journal,
-    # which Promtail already scrapes via the journal job → Loki.
+    # Runs every 10 minutes. Uses gitleaks for secret detection.
+    # The --rm container's stdout vanishes on exit, so we pipe all output
+    # through logger to land in the systemd journal, which Promtail
+    # already scrapes via the journal job → Loki.
     job: >-
       docker run --rm
       --name scrub-transcripts
       -v /usr/local/bin/scrub-transcripts.sh:/scrub.sh:ro
+      -v {{ docker_persistent_data_path }}/moltbot/scripts/gitleaks-transcripts.toml:/gitleaks-config.toml:ro
+      -v {{ docker_persistent_data_path }}/moltbot/cache:/cache
       -v {{ docker_persistent_data_path }}/moltbot/data/agents/main/sessions:/transcripts
       -v /var/log/scrub-transcripts:/var/log/scrub-transcripts
       bash:5 bash /scrub.sh /transcripts 2>&1 | logger -t scrub-transcripts

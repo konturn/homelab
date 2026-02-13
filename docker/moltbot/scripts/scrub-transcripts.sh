@@ -1,40 +1,38 @@
 #!/usr/bin/env bash
 # scrub-transcripts.sh — Redact credentials from OpenClaw session transcripts
 #
+# Uses gitleaks to detect secrets across ~160 rule patterns, then redacts
+# each finding in-place. Also purges archived sub-agent transcripts older
+# than 7 days.
+#
 # Usage: scrub-transcripts.sh <transcript_directory>
 #
-# Scans *.jsonl (and *.deleted.*) files for credential patterns and replaces
-# them with [REDACTED] in-place. Also purges archived sub-agent transcripts
-# older than 7 days.
-#
-# Designed to run as a periodic cron job on the host where moltbot persistent
-# data is mounted.
+# Designed to run inside a bash:5 Docker container with gitleaks binary
+# cached at /cache/gitleaks.
 
 set -euo pipefail
 
 TRANSCRIPT_DIR="${1:?Usage: scrub-transcripts.sh <transcript_directory>}"
 LOG_DIR="/var/log/scrub-transcripts"
 LOG_FILE="${LOG_DIR}/scrub.log"
+GITLEAKS_BIN="/cache/gitleaks"
+GITLEAKS_VERSION="8.24.3"
+GITLEAKS_CONFIG="/gitleaks-config.toml"
+REPORT_FILE="/tmp/gitleaks-report.json"
 
-mkdir -p "$LOG_DIR"
+mkdir -p "$LOG_DIR" /cache
 
 if [[ ! -d "$TRANSCRIPT_DIR" ]]; then
   echo "ERROR: Directory does not exist: $TRANSCRIPT_DIR" >&2
   exit 1
 fi
 
-# Structured logging function
-# Writes JSON to log file AND human-readable to both stdout and stderr.
-# Stderr ensures output is captured by the container's log driver / syslog
-# even when the log file volume isn't monitored by Promtail.
+# Structured logging
 log_event() {
-  local level="$1"
-  local event="$2"
-  local details="${3:-}"
+  local level="$1" event="$2" details="${3:-}"
   local ts
   ts=$(date -Iseconds)
-  local entry="{\"ts\":\"${ts}\",\"level\":\"${level}\",\"event\":\"${event}\",\"details\":\"${details}\"}"
-  echo "$entry" >> "$LOG_FILE"
+  echo "{\"ts\":\"${ts}\",\"level\":\"${level}\",\"event\":\"${event}\",\"details\":\"${details}\"}" >> "$LOG_FILE"
   echo "[$ts] $level: $event $details" | tee /dev/stderr
 }
 
@@ -44,88 +42,96 @@ if [[ -f "$LOG_FILE" ]] && [[ $(stat -f%z "$LOG_FILE" 2>/dev/null || stat -c%s "
   log_event "INFO" "log_rotated" "previous log archived"
 fi
 
-TOTAL_FILES=0
-TOTAL_REDACTED=0
+# --- Install gitleaks if not cached ---
+ensure_gitleaks() {
+  if [[ -x "$GITLEAKS_BIN" ]]; then
+    return 0
+  fi
+
+  log_event "INFO" "gitleaks_install" "version=${GITLEAKS_VERSION}"
+  local url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_amd64.tar.gz"
+  local tarball="/tmp/gitleaks.tar.gz"
+
+  if ! wget -q -O "$tarball" "$url"; then
+    log_event "ERROR" "gitleaks_download_failed" "url=${url}"
+    exit 1
+  fi
+
+  tar xzf "$tarball" -C /cache gitleaks
+  chmod +x "$GITLEAKS_BIN"
+  rm -f "$tarball"
+  log_event "INFO" "gitleaks_installed" "path=${GITLEAKS_BIN}"
+}
+
+ensure_gitleaks
 
 log_event "INFO" "scrub_started" "dir=${TRANSCRIPT_DIR}"
 
-# Build a combined sed expression for all credential patterns.
-# We use extended regex (-E) for readability.
-# Each pattern replaces the match with [REDACTED].
-build_sed_script() {
-  cat <<'SEDSCRIPT'
-# Vault tokens
-s/hvs\.[A-Za-z0-9]+/[REDACTED]/g
+# --- Run gitleaks scan ---
+GITLEAKS_ARGS=(dir --source "$TRANSCRIPT_DIR" --report-format json --report-path "$REPORT_FILE" --no-git --exit-code 1)
 
-# GitLab tokens
-s/glpat-[A-Za-z0-9._-]+/[REDACTED]/g
+if [[ -f "$GITLEAKS_CONFIG" ]]; then
+  GITLEAKS_ARGS+=(--config "$GITLEAKS_CONFIG")
+fi
 
-# GitHub tokens
-s/ghp_[A-Za-z0-9]+/[REDACTED]/g
-s/gho_[A-Za-z0-9]+/[REDACTED]/g
-s/ghs_[A-Za-z0-9]+/[REDACTED]/g
+set +e
+"$GITLEAKS_BIN" "${GITLEAKS_ARGS[@]}" 2>/dev/null
+GITLEAKS_EXIT=$?
+set -e
 
-# Anthropic keys (must come before generic sk- to avoid partial match)
-s/sk-ant-[A-Za-z0-9_-]+/[REDACTED]/g
+if [[ $GITLEAKS_EXIT -eq 0 ]]; then
+  log_event "INFO" "no_secrets_found" "gitleaks found nothing to redact"
+elif [[ $GITLEAKS_EXIT -eq 1 ]]; then
+  log_event "INFO" "secrets_found" "processing gitleaks report"
+else
+  log_event "ERROR" "gitleaks_error" "exit_code=${GITLEAKS_EXIT}"
+  exit 1
+fi
 
-# OpenAI keys (sk- followed by 20+ alphanum, but not sk-ant which is handled above)
-s/sk-[A-Za-z0-9]{20,}/[REDACTED]/g
+# --- Redact secrets from report ---
+TOTAL_FILES=0
+TOTAL_REDACTED=0
 
-# Slack tokens
-s/xoxb-[A-Za-z0-9-]+/[REDACTED]/g
-s/xoxp-[A-Za-z0-9-]+/[REDACTED]/g
+if [[ -f "$REPORT_FILE" ]] && [[ -s "$REPORT_FILE" ]]; then
+  # Extract unique file+secret pairs and redact each one.
+  # Use awk to deduplicate and produce tab-separated file\tsecret lines.
+  # jq would be ideal but isn't in bash:5; we parse JSON minimally.
 
-# AWS access keys
-s/AKIA[A-Z0-9]{16}/[REDACTED]/g
+  # bash:5 doesn't have jq, so we install it or parse manually.
+  # Actually, let's use a lightweight approach: grep + sed to extract fields.
+  # The JSON is an array of objects. We need File and Secret fields.
 
-# Telegram bot tokens (digits:AA followed by 30-40 chars)
-s/[0-9]+:AA[A-Za-z0-9_-]{30,40}/[REDACTED]/g
-
-# JWT tokens
-s/eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/[REDACTED]/g
-
-# Private key blocks (literal newlines)
-s/-----BEGIN[^-]*PRIVATE KEY-----.*-----END[^-]*PRIVATE KEY-----/[REDACTED]/g
-
-# Private key blocks in JSON strings (newlines encoded as literal \\n)
-s/-----BEGIN[^-]*PRIVATE KEY-----([^"]*\\\\n)*[^"]*-----END[^-]*PRIVATE KEY-----/[REDACTED]/g
-
-# Catch any remaining JSON-escaped private key fragments (BEGIN...\\n...END pattern)
-s/-----BEGIN[^-]*PRIVATE KEY-----(\\\\n[^"]*)*\\\\n-----END[^-]*PRIVATE KEY-----/[REDACTED]/g
-
-# UUID secrets after keywords (secret_id, secret, password)
-s/(secret_id|secret|password)(["':= ]+)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/\1\2[REDACTED]/gI
-
-# Vault AppRole secret_id (UUID format in JSON: "secret_id":"<uuid>" or secret_id = <uuid>)
-s/(secret_id)(\\?["'"'"']?\s*[:=]\s*\\?["'"'"']?)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/\1\2[REDACTED]/gI
-
-# Generic long hex strings (>32 chars) after credential keywords
-s/(token|password|secret|key)(["':= ]+)[0-9a-fA-F]{32,}/\1\2[REDACTED]/gI
-
-# App password patterns (16-char alpha near app.password / GMAIL_APP_PASSWORD)
-s/(app[._]password|GMAIL_APP_PASSWORD)(["':= ]+)[A-Za-z]{16}/\1\2[REDACTED]/gI
-SEDSCRIPT
-}
-
-SED_SCRIPT=$(build_sed_script)
-
-# Find all transcript files: active .jsonl and archived .deleted. files
-while IFS= read -r -d '' file; do
-  # Check if file contains any matches before modifying (preserve mtime)
-  if grep -qE '(hvs\.[A-Za-z0-9]+|glpat-[A-Za-z0-9._-]+|gh[pos]_[A-Za-z0-9]+|sk-[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9_-]+|xox[bp]-[A-Za-z0-9-]+|AKIA[A-Z0-9]{16}|[0-9]+:AA[A-Za-z0-9_-]{30,}|eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|-----BEGIN.*PRIVATE KEY-----|((secret_id|secret|password|token|key)["'"'"':= ]+[0-9a-fA-F]{32,})|(app[._]password|GMAIL_APP_PASSWORD))' "$file" 2>/dev/null; then
-    # Count lines with matches before redaction
-    match_count=$(grep -cE '(hvs\.[A-Za-z0-9]+|glpat-[A-Za-z0-9._-]+|gh[pos]_[A-Za-z0-9]+|sk-[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9_-]+|xox[bp]-[A-Za-z0-9-]+|AKIA[A-Z0-9]{16}|[0-9]+:AA[A-Za-z0-9_-]{30,}|eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|-----BEGIN.*PRIVATE KEY-----|((secret_id|secret|password|token|key)["'"'"':= ]+[0-9a-fA-F]{32,})|(app[._]password|GMAIL_APP_PASSWORD))' "$file" 2>/dev/null || true)
-
-    # Apply redactions in-place
-    sed -i -E "$SED_SCRIPT" "$file"
-
-    log_event "SCRUB" "file_redacted" "file=$(basename "$file"),lines=${match_count}"
-    TOTAL_FILES=$((TOTAL_FILES + 1))
-    TOTAL_REDACTED=$((TOTAL_REDACTED + match_count))
+  # Install jq if not available (it's tiny)
+  if ! command -v jq &>/dev/null; then
+    apk add --no-cache jq >/dev/null 2>&1 || true
   fi
-done < <(find "$TRANSCRIPT_DIR" \( -name "*.jsonl" -o -name "*.deleted.*" \) -type f -print0 2>/dev/null)
 
-log_event "INFO" "scrub_complete" "files=${TOTAL_FILES},lines_redacted=${TOTAL_REDACTED}"
+  if command -v jq &>/dev/null; then
+    # Deduplicate by file+secret, then redact
+    jq -r '.[] | [.File, .Secret] | @tsv' "$REPORT_FILE" | sort -u | while IFS=$'\t' read -r filepath secret; do
+      if [[ -z "$secret" ]] || [[ -z "$filepath" ]]; then
+        continue
+      fi
+
+      # Escape special characters for sed
+      escaped_secret=$(printf '%s\n' "$secret" | sed 's/[&/\]/\\&/g; s/[[\.*^$()+?{|]/\\&/g')
+      escaped_redacted='[REDACTED]'
+
+      if sed -i "s|${escaped_secret}|${escaped_redacted}|g" "$filepath" 2>/dev/null; then
+        log_event "SCRUB" "secret_redacted" "file=$(basename "$filepath")"
+        TOTAL_REDACTED=$((TOTAL_REDACTED + 1))
+      fi
+    done
+
+    TOTAL_FILES=$(jq -r '[.[].File] | unique | length' "$REPORT_FILE")
+  else
+    log_event "WARN" "jq_unavailable" "cannot parse gitleaks report without jq"
+  fi
+
+  rm -f "$REPORT_FILE"
+fi
+
+log_event "INFO" "scrub_complete" "files=${TOTAL_FILES},secrets_redacted=${TOTAL_REDACTED}"
 
 # --- Purge old archived sub-agent transcripts (older than 7 days) ---
 PURGE_COUNT=0
