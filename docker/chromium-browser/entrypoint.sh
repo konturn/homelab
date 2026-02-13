@@ -68,6 +68,7 @@ exec gosu chrome chromium \
     --disable-blink-features=AutomationControlled \
     --disable-dev-shm-usage \
     --remote-debugging-port=9223 \
+    --remote-allow-origins=* \
     --user-data-dir=/data/chrome-profile \
     --window-size="${SCREEN_WIDTH},${SCREEN_HEIGHT}" \
     --start-maximized \
