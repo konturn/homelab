@@ -1,0 +1,29 @@
+# gitleaks-transcripts.toml — Custom gitleaks config for transcript scrubbing
+#
+# Extends the default gitleaks ruleset (~160 rules) with homelab-specific
+# patterns. The [extend] directive merges these rules with the built-in ones.
+
+[extend]
+# Use all default rules (covers AWS, GCP, GitHub, GitLab, Slack, Vault,
+# Anthropic, OpenAI, Telegram, JWTs, private keys, and hundreds more)
+
+# Allowlist paths that aren't transcripts
+[allowlist]
+  description = "Global allowlist"
+  paths = [
+    '''\.git/''',
+  ]
+
+# Additional homelab-specific rules
+
+[[rules]]
+  id = "gmail-app-password"
+  description = "Gmail App Password (16-char alpha)"
+  regex = '''(?i)(gmail[_.]?app[_.]?password|app[_.]password)[\s'"`:=]+([a-zA-Z]{16})'''
+  keywords = ["gmail", "app_password", "app.password"]
+
+[[rules]]
+  id = "generic-uuid-secret"
+  description = "UUID after secret/password keywords"
+  regex = '''(?i)(secret_id|secret|password)[\s'"`:=]+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'''
+  keywords = ["secret_id", "secret", "password"]
