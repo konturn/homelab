@@ -4,6 +4,7 @@
 # patterns. The [extend] directive merges these rules with the built-in ones.
 
 [extend]
+useDefault = true
 # Use all default rules (covers AWS, GCP, GitHub, GitLab, Slack, Vault,
 # Anthropic, OpenAI, Telegram, JWTs, private keys, and hundreds more)
 
