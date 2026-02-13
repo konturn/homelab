@@ -466,18 +466,24 @@ Don't spend more than 60 seconds on CAPTCHA attempts.
 ### Handling Flow
 
 1. **Recognize verification prompt** — "Enter the code sent to konoahko@gmail.com"
-2. **Fetch code from Gmail:**
+2. **Fetch code from Gmail via JIT (T1 auto-approve):**
    ```bash
    sleep 15
-   # Search for recent verification emails
-   curl -s --url "imaps://imap.gmail.com:993/INBOX" \
-     --user "$GMAIL_EMAIL:$GMAIL_APP_PASSWORD" \
-     -X "SEARCH UNSEEN FROM greenhouse-mail.io" 2>&1
+   source /home/node/.openclaw/workspace/tools/jit-lib.sh
+   TOKEN=$(jit_gmail_token)  # T1 auto-approve, no approval tap needed
+   
+   # Search for recent verification emails (last 5 min)
+   MSGS=$(curl -s -H "Authorization: Bearer $TOKEN" \
+     "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=5&q=newer_than:5m+from:greenhouse-mail.io" \
+     | jq -r '.messages[]?.id')
    
    # Fetch body and extract code
-   curl -s --url "imaps://imap.gmail.com:993/INBOX;MAILINDEX=$MSG;SECTION=TEXT" \
-     --user "$GMAIL_EMAIL:$GMAIL_APP_PASSWORD" 2>/dev/null | \
-     grep -oP '\b\d{6,8}\b' | head -1
+   for id in $MSGS; do
+     curl -s -H "Authorization: Bearer $TOKEN" \
+       "https://gmail.googleapis.com/gmail/v1/users/me/messages/$id?format=full" \
+       | jq -r '.payload.body.data // .payload.parts[0].body.data' \
+       | base64 -d 2>/dev/null | grep -oP '\b\d{6,8}\b' | head -1
+   done
    ```
 3. **Fallback:** Ask Noah via Telegram if auto-fetch fails after 60s
 4. **Enter code** — For character-by-character inputs, use individual key presses
@@ -485,16 +491,17 @@ Don't spend more than 60 seconds on CAPTCHA attempts.
 ### Email Access
 
 ```bash
-# Environment: $GMAIL_EMAIL, $GMAIL_APP_PASSWORD
+# Gmail API via JIT (T1 auto-approve for reads)
+source /home/node/.openclaw/workspace/tools/jit-lib.sh
+TOKEN=$(jit_gmail_token)
 
 # Search emails
-curl -s --url "imaps://imap.gmail.com:993/INBOX" \
-  --user "$GMAIL_EMAIL:$GMAIL_APP_PASSWORD" \
-  -X "SEARCH FROM somecompany.com" 2>&1
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=10&q=from:somecompany.com"
 
 # Read email body
-curl -s --url "imaps://imap.gmail.com:993/INBOX;MAILINDEX=54288;SECTION=TEXT" \
-  --user "$GMAIL_EMAIL:$GMAIL_APP_PASSWORD" 2>/dev/null
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://gmail.googleapis.com/gmail/v1/users/me/messages/MSG_ID?format=full"
 ```
 
 ---
