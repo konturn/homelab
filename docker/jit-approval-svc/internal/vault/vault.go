@@ -266,7 +266,7 @@ var resourceTier = map[string]int{
 	"nzbget":    1,
 	"deluge":    1,
 	"paperless":  2,
-	"gmail-read": 2,
+	"gmail-read": 1,
 	"gmail-send": 2,
 	"prowlarr":  1,
 	"mqtt":      1,
