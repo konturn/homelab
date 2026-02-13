@@ -407,3 +407,10 @@
       -v {{ docker_persistent_data_path }}/moltbot/data/agents/main/sessions:/transcripts
       -v /var/log/scrub-transcripts:/var/log/scrub-transcripts
       bash:5 bash /scrub.sh /transcripts 2>&1 | logger -t scrub-transcripts
+
+- name: Daily chromium-browser restart (clear tabs and free memory)
+  ansible.builtin.cron:
+    name: "Restart chromium-browser daily"
+    minute: "0"
+    hour: "4"
+    job: "docker restart chromium-browser 2>&1 | logger -t chromium-restart"
