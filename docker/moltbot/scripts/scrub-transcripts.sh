@@ -93,17 +93,38 @@ s/-----BEGIN[^-]*PRIVATE KEY-----([^"]*\\\\n)*[^"]*-----END[^-]*PRIVATE KEY-----
 # Catch any remaining JSON-escaped private key fragments (BEGIN...\\n...END pattern)
 s/-----BEGIN[^-]*PRIVATE KEY-----(\\\\n[^"]*)*\\\\n-----END[^-]*PRIVATE KEY-----/[REDACTED]/g
 
-# UUID secrets after keywords (secret_id, secret, password)
-s/(secret_id|secret|password)(["':= ]+)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/\1\2[REDACTED]/gI
+# Google OAuth access tokens (ya29.xxx — highest priority, frequent in Gmail JIT)
+s/ya29\.[A-Za-z0-9_-]+/[REDACTED]/g
+
+# Google OAuth refresh tokens (1//xxx)
+s|1//[A-Za-z0-9_-]+|[REDACTED]|g
+
+# Bearer token headers
+s/(Authorization:\s*Bearer\s+)[A-Za-z0-9._-]+/\1[REDACTED]/g
+
+# Tailscale keys
+s/tskey-[A-Za-z0-9-]+/[REDACTED]/g
+
+# OAuth client secrets (client_secret followed by 10+ chars)
+s/(client_secret)(["':= ]+)[A-Za-z0-9_-]{10,}/\1\2[REDACTED]/gI
+
+# Vault lease IDs
+s/(lease_id["':= ]+)[A-Za-z0-9/_.-]+/\1[REDACTED]/gI
+
+# Base64-encoded secrets after keywords
+s/(password_base64|private_key_base64)(["':= ]+)[A-Za-z0-9+/=]{20,}/\1\2[REDACTED]/gI
+
+# UUID secrets after keywords (expanded keyword list)
+s/(secret_id|secret|password|client_secret|api_key|access_token|refresh_token|auth_key|role_id)(["':= ]+)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/\1\2[REDACTED]/gI
 
 # Vault AppRole secret_id (UUID format in JSON: "secret_id":"<uuid>" or secret_id = <uuid>)
 s/(secret_id)(\\?["'"'"']?\s*[:=]\s*\\?["'"'"']?)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/\1\2[REDACTED]/gI
 
-# Generic long hex strings (>32 chars) after credential keywords
-s/(token|password|secret|key)(["':= ]+)[0-9a-fA-F]{32,}/\1\2[REDACTED]/gI
+# Generic long hex strings (>32 chars) after credential keywords (expanded)
+s/(token|password|secret|key|client_secret|api_key|access_token|refresh_token|auth_key|private_key_base64|password_base64|role_id)(["':= ]+)[0-9a-fA-F]{32,}/\1\2[REDACTED]/gI
 
-# App password patterns (16-char alpha near app.password / GMAIL_APP_PASSWORD)
-s/(app[._]password|GMAIL_APP_PASSWORD)(["':= ]+)[A-Za-z]{16}/\1\2[REDACTED]/gI
+# App password patterns (16-char alpha near app.password / GMAIL_APP_PASSWORD and similar keywords)
+s/(app[._]password|GMAIL_APP_PASSWORD|client_secret|api_key|access_token|refresh_token|auth_key)(["':= ]+)[A-Za-z]{16}/\1\2[REDACTED]/gI
 SEDSCRIPT
 }
 
@@ -112,9 +133,9 @@ SED_SCRIPT=$(build_sed_script)
 # Find all transcript files: active .jsonl and archived .deleted. files
 while IFS= read -r -d '' file; do
   # Check if file contains any matches before modifying (preserve mtime)
-  if grep -qE '(hvs\.[A-Za-z0-9]+|glpat-[A-Za-z0-9._-]+|gh[pos]_[A-Za-z0-9]+|sk-[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9_-]+|xox[bp]-[A-Za-z0-9-]+|AKIA[A-Z0-9]{16}|[0-9]+:AA[A-Za-z0-9_-]{30,}|eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|-----BEGIN.*PRIVATE KEY-----|((secret_id|secret|password|token|key)["'"'"':= ]+[0-9a-fA-F]{32,})|(app[._]password|GMAIL_APP_PASSWORD))' "$file" 2>/dev/null; then
+  if grep -qE '(hvs\.[A-Za-z0-9]+|glpat-[A-Za-z0-9._-]+|gh[pos]_[A-Za-z0-9]+|sk-[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9_-]+|xox[bp]-[A-Za-z0-9-]+|AKIA[A-Z0-9]{16}|[0-9]+:AA[A-Za-z0-9_-]{30,}|eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|-----BEGIN.*PRIVATE KEY-----|ya29\.[A-Za-z0-9_-]+|1//[A-Za-z0-9_-]+|Authorization:\s*Bearer\s+[A-Za-z0-9._-]+|tskey-[A-Za-z0-9-]+|lease_id["'"'"':= ]+[A-Za-z0-9/_.-]+|(client_secret|password_base64|private_key_base64)["'"'"':= ]+[A-Za-z0-9+/=_-]{10,}|((secret_id|secret|password|token|key|client_secret|api_key|access_token|refresh_token|auth_key|role_id)["'"'"':= ]+[0-9a-fA-F]{32,})|(app[._]password|GMAIL_APP_PASSWORD))' "$file" 2>/dev/null; then
     # Count lines with matches before redaction
-    match_count=$(grep -cE '(hvs\.[A-Za-z0-9]+|glpat-[A-Za-z0-9._-]+|gh[pos]_[A-Za-z0-9]+|sk-[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9_-]+|xox[bp]-[A-Za-z0-9-]+|AKIA[A-Z0-9]{16}|[0-9]+:AA[A-Za-z0-9_-]{30,}|eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|-----BEGIN.*PRIVATE KEY-----|((secret_id|secret|password|token|key)["'"'"':= ]+[0-9a-fA-F]{32,})|(app[._]password|GMAIL_APP_PASSWORD))' "$file" 2>/dev/null || true)
+    match_count=$(grep -cE '(hvs\.[A-Za-z0-9]+|glpat-[A-Za-z0-9._-]+|gh[pos]_[A-Za-z0-9]+|sk-[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9_-]+|xox[bp]-[A-Za-z0-9-]+|AKIA[A-Z0-9]{16}|[0-9]+:AA[A-Za-z0-9_-]{30,}|eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|-----BEGIN.*PRIVATE KEY-----|ya29\.[A-Za-z0-9_-]+|1//[A-Za-z0-9_-]+|Authorization:\s*Bearer\s+[A-Za-z0-9._-]+|tskey-[A-Za-z0-9-]+|lease_id["'"'"':= ]+[A-Za-z0-9/_.-]+|(client_secret|password_base64|private_key_base64)["'"'"':= ]+[A-Za-z0-9+/=_-]{10,}|((secret_id|secret|password|token|key|client_secret|api_key|access_token|refresh_token|auth_key|role_id)["'"'"':= ]+[0-9a-fA-F]{32,})|(app[._]password|GMAIL_APP_PASSWORD))' "$file" 2>/dev/null || true)
 
     # Apply redactions in-place
     sed -i -E "$SED_SCRIPT" "$file"
