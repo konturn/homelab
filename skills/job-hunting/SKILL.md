@@ -24,12 +24,12 @@ description: Search and apply for remote software engineering jobs. Use when sea
 
 **Workers connect via `agent-browser` CLI:**
 ```bash
-agent-browser connect http://10.3.0.17:9222
+agent-browser connect http://10.3.32.9:9222
 ```
 
 If connection fails → **BLOCKED. IMMEDIATELY terminate** with:
 ```
-BLOCKED: Cannot connect to browser at 10.3.0.17:9222. Cannot proceed.
+BLOCKED: Cannot connect to browser at 10.3.32.9:9222. Cannot proceed.
 ```
 
 **Do NOT attempt workarounds** (no web_fetch, no curl, no alternative approaches).
@@ -57,13 +57,13 @@ sessions_list activeMinutes=10
 
 - **Headed Chromium** sidecar with Xvfb, VNC at `browser.lab.nkontur.com`
 - **Always available** — runs 24/7
-- **CDP endpoint:** `http://10.3.0.17:9222`
+- **CDP endpoint:** `http://10.3.32.9:9222`
 - **Resume path:** `/uploads/Resume (Kontur, Noah).pdf`
 - **VNC:** noVNC at `https://browser.lab.nkontur.com/vnc.html` for visual debugging
 
 **Worker commands (`agent-browser` via `exec` tool):**
 ```bash
-agent-browser connect http://10.3.0.17:9222
+agent-browser connect http://10.3.32.9:9222
 agent-browser open <url>
 agent-browser snapshot -i -c        # interactive-only, compact
 agent-browser fill @ref "text"
@@ -160,7 +160,7 @@ sessions_spawn(
 **Scout uses `agent-browser` CLI**, same as workers.
 
 **Workflow:**
-1. Connect: `agent-browser connect http://10.3.0.17:9222`
+1. Connect: `agent-browser connect http://10.3.32.9:9222`
 2. Open Hiring Cafe search URL (see Browser Workflow section), LIST VIEW ONLY
 2. Extract job titles, companies, salaries, URLs from the list
 3. Filter against `references/blocklist.md`, `references/applied.json`, and `references/rejected.json`
@@ -389,7 +389,7 @@ message action=send channel=telegram target=8531859108 message="🚨 Resume uplo
 
 ```bash
 # 1. Connect to browser
-agent-browser connect http://10.3.0.17:9222
+agent-browser connect http://10.3.32.9:9222
 
 # 2. Open application URL
 agent-browser open "<application-url>"
@@ -576,7 +576,7 @@ Save progress to `references/in_progress/<jobId>.json` after major steps. On suc
 
 **You are a worker if your task mentions a specific company/role to apply to.**
 
-1. **Connect browser:** `agent-browser connect http://10.3.0.17:9222` — if fails, report BLOCKED
+1. **Connect browser:** `agent-browser connect http://10.3.32.9:9222` — if fails, report BLOCKED
 2. **Read the skill** for voice guidance and standard fields
 3. **Validate job criteria:** Open posting, verify salary ≥$200k and Remote US. If not → `SKIPPED: <reason>`
 4. **Navigate** to application URL
