@@ -24,11 +24,8 @@
 /base/systemd/                           @root
 
 # === ANSIBLE INFRASTRUCTURE ===
-# Playbooks and inventory control what runs where with what permissions
-/ansible/*.yml                           @root
-/ansible/roles/configure-router-network/ @root
-/ansible/roles/configure-base/           @root
-/ansible/roles/configure-tailscale/      @root
+# All Ansible content executes as root on hosts — protect everything
+/ansible/                                @root
 
 # === CI PIPELINE ===
 # Could run arbitrary commands during CI, exfiltrate secrets
