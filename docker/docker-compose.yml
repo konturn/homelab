@@ -1614,6 +1614,7 @@ services:
       - DAC_OVERRIDE
     networks:
       internal:
+        ipv4_address: "{{ chromium_browser_ip }}"
     deploy:
       resources:
         limits:
