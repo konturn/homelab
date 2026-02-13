@@ -49,7 +49,7 @@ fi
 log_event "INFO" "scrub_started" "dir=${TRANSCRIPT_DIR}"
 
 # --- Run gitleaks scan ---
-GITLEAKS_ARGS=(dir --source "$TRANSCRIPT_DIR" --report-format json --report-path "$REPORT_FILE" --no-git --exit-code 1)
+GITLEAKS_ARGS=(dir "$TRANSCRIPT_DIR" --report-format json --report-path "$REPORT_FILE" --exit-code 1 --no-banner)
 
 if [[ -f "$GITLEAKS_CONFIG" ]]; then
   GITLEAKS_ARGS+=(--config "$GITLEAKS_CONFIG")
