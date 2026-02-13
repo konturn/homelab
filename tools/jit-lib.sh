@@ -131,6 +131,29 @@ jit_vault() {
   jit_get vault 2 "$reason" "{\"vault_paths\":$paths}"
 }
 
+# Convenience: get a Vault token with write access to a specific path
+# Usage: jit_vault_write <reason> <path>
+# Example: jit_vault_write "Store Gmail creds" "homelab/data/docker/gmail"
+# Returns: Vault token on stdout (blocks until approved)
+jit_vault_write() {
+  local reason=$1 path=$2
+  jit_vault "$reason" "[{\"path\":\"$path\",\"capabilities\":[\"create\",\"update\",\"read\"]}]"
+}
+
+# Write a secret to Vault via JIT
+# Usage: vault_write <path> <json_data>
+# Example: vault_write "homelab/data/docker/gmail" '{"client_id":"...","refresh_token":"..."}'
+# Requests JIT write access, waits for approval, then writes
+vault_write() {
+  local path=$1 json_data=$2
+  local token
+  token=$(jit_vault_write "Write secret to $path" "$path")
+  curl -s -X POST "$VAULT_ADDR/v1/$path" \
+    -H "X-Vault-Token: $token" \
+    -H "Content-Type: application/json" \
+    -d "{\"data\":$json_data}"
+}
+
 # Convenience: get a Vault-backed service API key (T1)
 # Usage: jit_service_key <service>  (radarr, sonarr, plex, ombi, nzbget, deluge, paperless, prowlarr)
 # Returns: API key on stdout
@@ -152,4 +175,4 @@ jit_influxdb_token() {
   jit_get influxdb 1 "InfluxDB query access"
 }
 
-echo "JIT lib loaded. Functions: jit_request, jit_status, jit_get, jit_service_key, jit_grafana_token, jit_influxdb_token, vault_login, vault_read" >&2
+echo "JIT lib loaded. Functions: jit_request, jit_status, jit_get, jit_vault, jit_vault_write, vault_write, jit_service_key, jit_grafana_token, jit_influxdb_token, vault_login, vault_read" >&2
