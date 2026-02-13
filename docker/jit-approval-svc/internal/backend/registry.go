@@ -12,7 +12,7 @@ type Registry struct {
 
 // NewRegistry creates a backend registry with the static fallback.
 // Dynamic backends are added for resources where the service URL is configured.
-func NewRegistry(vaultMinter VaultTokenMinter, vaultReader VaultSecretReader, haURL, grafanaURL, influxdbURL, gitlabURL, gitlabAdminToken, gitlabProjectID, tailscaleAPIURL, paperlessURL string, vaultPolicyMgr VaultPolicyManager, sshSigner VaultSSHSigner, sshVaultPath string) *Registry {
+func NewRegistry(vaultMinter VaultTokenMinter, vaultReader VaultSecretReader, haURL, grafanaURL, influxdbURL, gitlabURL, gitlabAdminToken, gitlabProjectID, tailscaleAPIURL, paperlessURL string, vaultPolicyMgr VaultPolicyManager, sshSigner VaultSSHSigner, sshVaultPath, googleTokenURL string) *Registry {
 	static := NewStaticBackend(vaultMinter)
 
 	r := &Registry{
@@ -84,6 +84,22 @@ func NewRegistry(vaultMinter VaultTokenMinter, vaultReader VaultSecretReader, ha
 				"backend":  "dynamic/ssh",
 			})
 		}
+	}
+
+	if googleTokenURL != "" {
+		readBackend := NewGmailBackend(googleTokenURL, vaultReader, GmailScopeRead)
+		r.backends["gmail-read"] = readBackend
+		logger.Info("backend_registered", logger.Fields{
+			"resource": "gmail-read",
+			"backend":  "dynamic/gmail",
+		})
+
+		sendBackend := NewGmailBackend(googleTokenURL, vaultReader, GmailScopeSend)
+		r.backends["gmail-send"] = sendBackend
+		logger.Info("backend_registered", logger.Fields{
+			"resource": "gmail-send",
+			"backend":  "dynamic/gmail",
+		})
 	}
 
 	if vaultPolicyMgr != nil {

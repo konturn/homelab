@@ -240,8 +240,8 @@ resource "vault_policy" "jit_approval_svc" {
       capabilities = ["read"]
     }
 
-    # Email
-    path "homelab/data/email/gmail" {
+    # Email (Gmail OAuth2 dynamic backend reads creds at runtime)
+    path "homelab/data/email/google-oauth" {
       capabilities = ["read"]
     }
 

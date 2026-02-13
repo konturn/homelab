@@ -55,6 +55,9 @@ type Config struct {
 
 	// SSH Vault path for certificate signing (default: ssh-client-signer)
 	SSHVaultPath string
+
+	// Google OAuth2 token URL (enables Gmail dynamic backends)
+	GoogleTokenURL string
 }
 
 // Load reads configuration from environment variables.
@@ -109,6 +112,7 @@ func Load() (*Config, error) {
 		TailscaleAPIURL: getEnvOrEmpty("TAILSCALE_API_URL", "https://api.tailscale.com"),
 		PaperlessURL:    getEnvOrEmpty("PAPERLESS_URL", ""),
 		SSHVaultPath:    getEnv("SSH_VAULT_PATH", "ssh-client-signer"),
+		GoogleTokenURL:  getEnvOrEmpty("GOOGLE_TOKEN_URL", "https://oauth2.googleapis.com/token"),
 	}
 
 	if err := cfg.Validate(); err != nil {

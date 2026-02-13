@@ -82,6 +82,7 @@ func main() {
 		vaultClient, // VaultPolicyManager for dynamic vault backend
 		vaultClient, // VaultSSHSigner for SSH certificate backend
 		cfg.SSHVaultPath,
+		cfg.GoogleTokenURL,
 	)
 
 	// Initialize handler
