@@ -65,88 +65,20 @@ jit_status() {
   curl -s "$JIT_URL/status/$req_id" -H "X-JIT-API-Key: $key"
 }
 
-# Parse lease_ttl string (e.g. "59m59s", "15m0s", "1h30m") into seconds
-_parse_ttl() {
-  local ttl=$1 seconds=0
-  local h m s
-  h=$(echo "$ttl" | grep -oP '\d+(?=h)' || true)
-  m=$(echo "$ttl" | grep -oP '\d+(?=m)' || true)
-  s=$(echo "$ttl" | grep -oP '\d+(?=s)' || true)
-  [ -n "$h" ] && seconds=$((seconds + h * 3600))
-  [ -n "$m" ] && seconds=$((seconds + m * 60))
-  [ -n "$s" ] && seconds=$((seconds + s))
-  echo "$seconds"
-}
-
-# In-memory credential cache using fd-backed temp file (survives subshells)
-# The cache file is created with mktemp, opened on fd 7, then unlinked.
-# It exists only in /proc/self/fd/7 — no path on disk to steal from.
-_JIT_CACHE_FILE=$(mktemp)
-echo "{}" > "$_JIT_CACHE_FILE"
-
-# Check in-memory cache for a resource
-# Returns: cached token on stdout if valid, or returns 1
-_cache_check() {
-  local resource=$1
-  local entry expires_at token now
-  entry=$(jq -r --arg r "$resource" '.[$r] // empty' "$_JIT_CACHE_FILE")
-  [ -z "$entry" ] && return 1
-  expires_at=$(echo "$entry" | jq -r '.expires_at')
-  now=$(date +%s)
-  if [ "$now" -lt "$expires_at" ]; then
-    echo "$entry" | jq -r '.token'
-    return 0
-  fi
-  return 1
-}
-
-# Store credential in cache
-_cache_store() {
-  local resource=$1 token=$2 ttl_seconds=$3
-  local margin=$((ttl_seconds / 10))
-  [ "$margin" -gt 60 ] && margin=60
-  [ "$margin" -lt 10 ] && margin=10
-  local expires_at=$(( $(date +%s) + ttl_seconds - margin ))
-  local tmp
-  tmp=$(jq --arg r "$resource" --arg t "$token" --argjson e "$expires_at" \
-    '.[$r] = {"token": $t, "expires_at": $e}' "$_JIT_CACHE_FILE")
-  echo "$tmp" > "$_JIT_CACHE_FILE"
-}
-
-# Cleanup cache file on exit
-trap 'rm -f "$_JIT_CACHE_FILE" 2>/dev/null' EXIT
-
-# Request and poll until credential is ready, with in-memory caching
-# Cache is per-process only — no cross-session credential leakage
+# Request and poll until credential is ready
 # Usage: jit_get <resource> <tier> <reason> [extra_json_fields]
 # Returns: credential token on stdout, or exits 1
 jit_get() {
   local resource=$1 tier=$2 reason=$3
   local extra=${4:-}
-
-  # Check in-memory cache first (skip for vault — each request may have different paths)
-  if [ "$resource" != "vault" ]; then
-    local cached
-    if cached=$(_cache_check "$resource"); then
-      echo "$cached"
-      return 0
-    fi
-  fi
   
   local resp
   resp=$(jit_request "$resource" "$tier" "$reason" "$extra")
   
   # Check if credential is inline (T1 with inline response)
-  local token lease_ttl
+  local token
   token=$(echo "$resp" | jq -r '.credential.token // empty')
   if [ -n "$token" ]; then
-    # Cache using lease_ttl from response
-    lease_ttl=$(echo "$resp" | jq -r '.credential.lease_ttl // empty')
-    if [ -n "$lease_ttl" ] && [ "$resource" != "vault" ]; then
-      local ttl_secs
-      ttl_secs=$(_parse_ttl "$lease_ttl")
-      [ "$ttl_secs" -gt 0 ] && _cache_store "$resource" "$token" "$ttl_secs"
-    fi
     echo "$token"
     return 0
   fi
@@ -172,14 +104,7 @@ jit_get() {
     
     case "$status" in
       approved)
-        token=$(echo "$resp" | jq -r '.credential.token')
-        lease_ttl=$(echo "$resp" | jq -r '.credential.lease_ttl // empty')
-        if [ -n "$lease_ttl" ] && [ "$resource" != "vault" ]; then
-          local ttl_secs
-          ttl_secs=$(_parse_ttl "$lease_ttl")
-          [ "$ttl_secs" -gt 0 ] && _cache_store "$resource" "$token" "$ttl_secs"
-        fi
-        echo "$token"
+        echo "$resp" | jq -r '.credential.token'
         return 0
         ;;
       denied|timeout)
