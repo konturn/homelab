@@ -118,5 +118,45 @@
     "timestamp": "2026-02-12",
     "source": "conversation",
     "status": "active"
+  },
+  {
+    "id": "jh-001",
+    "fact": "Job hunting skill refactored from 1622 to 642 lines - all agent-browser, no node/xdotool",
+    "category": "milestone",
+    "timestamp": "2026-02-13",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "jh-002",
+    "fact": "Resume uploaded to chromium container at /uploads/Resume (Kontur, Noah).pdf",
+    "category": "status",
+    "timestamp": "2026-02-13",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "jh-003",
+    "fact": "CrowdStrike rejected - listed as Hybrid despite showing Remote on Hiring Cafe",
+    "category": "status",
+    "timestamp": "2026-02-13",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "jh-004",
+    "fact": "41 previous applications in applied.json as of Feb 13",
+    "category": "status",
+    "timestamp": "2026-02-13",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "jh-005",
+    "fact": "Gmail OAuth working for workers to fetch verification codes autonomously",
+    "category": "milestone",
+    "timestamp": "2026-02-13",
+    "source": "conversation",
+    "status": "active"
   }
 ]

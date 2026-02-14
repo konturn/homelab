@@ -174,5 +174,13 @@
     "timestamp": "2026-02-10",
     "source": "web-research",
     "status": "active"
+  },
+  {
+    "id": "avery-023",
+    "fact": "Noah bought red/orange roses for Avery for Valentines Day 2026 (cat-safe)",
+    "category": "milestone",
+    "timestamp": "2026-02-13",
+    "source": "conversation",
+    "status": "active"
   }
 ]

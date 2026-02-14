@@ -1,204 +1,98 @@
-{
-  "facts": [
-    {
-      "id": "homelab-001",
-      "fact": "I have GitLab access to gitlab.lab.nkontur.com with user 'moltbot'",
-      "category": "status",
-      "timestamp": "2026-01-30",
-      "source": "conversation",
-      "status": "active"
-    },
-    {
-      "id": "homelab-002",
-      "fact": "Homelab repo is at root/homelab (project ID: 4)",
-      "category": "status",
-      "timestamp": "2026-01-30",
-      "source": "conversation",
-      "status": "active"
-    },
-    {
-      "id": "homelab-003",
-      "fact": "GitLab token has both git push and API access (can create MRs)",
-      "category": "status",
-      "timestamp": "2026-01-30",
-      "source": "conversation",
-      "status": "active"
-    },
-    {
-      "id": "homelab-004",
-      "fact": "Push to repo triggers GitLab CI \u2192 Ansible deploys to router",
-      "category": "status",
-      "timestamp": "2026-01-30",
-      "source": "file",
-      "status": "active"
-    },
-    {
-      "id": "homelab-005",
-      "fact": "Created MR #2: CI dry-run validation for MRs (merged)",
-      "category": "milestone",
-      "timestamp": "2026-01-30",
-      "source": "conversation",
-      "status": "active"
-    },
-    {
-      "id": "homelab-006",
-      "fact": "Created MR #3: CI caching for faster builds",
-      "category": "milestone",
-      "timestamp": "2026-01-30",
-      "source": "conversation",
-      "status": "active"
-    },
-    {
-      "id": "homelab-007",
-      "fact": "Created MR #4: Moltbot healthcheck",
-      "category": "milestone",
-      "timestamp": "2026-01-30",
-      "source": "conversation",
-      "status": "active"
-    },
-    {
-      "id": "homelab-008",
-      "fact": "Created MR #5: Improved README documentation",
-      "category": "milestone",
-      "timestamp": "2026-01-30",
-      "source": "conversation",
-      "status": "active"
-    },
-    {
-      "id": "homelab-009",
-      "fact": "Router (router.lab.nkontur.com) IS the Docker host \u2014 everything runs on one machine. satellite-2 is a separate device.",
-      "category": "status",
-      "timestamp": "2026-02-11",
-      "source": "conversation",
-      "status": "active"
-    },
-    {
-      "id": "homelab-010",
-      "fact": "Homelab has 44 containers, 9 dependency edges, 3 clusters (IoT/Home, Observability, Security). Deepest chain: 3 levels.",
-      "category": "status",
-      "timestamp": "2026-02-11",
-      "source": "file",
-      "status": "active"
-    },
-    {
-      "id": "homelab-011",
-      "fact": "JIT service listens on port 8080 from moltbot container. Auth header: X-JIT-API-Key with key from Vault at agents/jit-api-key.",
-      "category": "status",
-      "timestamp": "2026-02-11",
-      "source": "conversation",
-      "status": "active"
-    },
-    {
-      "id": "homelab-012",
-      "fact": "SSH certs from JIT have principal 'claude', only works on hosts with Vault CA trusted.",
-      "category": "status",
-      "timestamp": "2026-02-11",
-      "source": "conversation",
-      "status": "active"
-    },
-    {
-      "id": "homelab-013",
-      "fact": "Vault runs at 10.3.32.6:8200. Uses auto-unseal. cap_drop ALL requires IPC_LOCK, CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID.",
-      "category": "status",
-      "timestamp": "2026-02-11",
-      "source": "conversation",
-      "status": "active"
-    },
-    {
-      "id": "homelab-014",
-      "fact": "Docker cap_drop persists until container recreation \u2014 reverting compose file doesn't restore capabilities on running containers.",
-      "category": "status",
-      "timestamp": "2026-02-11",
-      "source": "conversation",
-      "status": "active"
-    },
-    {
-      "id": "homelab-015",
-      "fact": "GitLab PAT has full api scope + cross-project access including project 8 (images). Critical security finding \u2014 should be replaced with scoped project token.",
-      "category": "status",
-      "timestamp": "2026-02-11",
-      "source": "file",
-      "status": "active"
-    },
-    {
-      "id": "homelab-016",
-      "fact": "Gmail migrating from app password to Google OAuth2. Two JIT resources: gmail-read (T2, gmail.readonly) and gmail-send (T2, gmail.send). MR !220.",
-      "category": "status",
-      "timestamp": "2026-02-11",
-      "source": "conversation",
-      "status": "active"
-    },
-    {
-      "id": "homelab-017",
-      "fact": "Loki accessible via https://loki.lab.nkontur.com (nginx proxy). MR !214 binds to localhost only \u2014 container-to-container still works via Docker network.",
-      "category": "status",
-      "timestamp": "2026-02-11",
-      "source": "conversation",
-      "status": "active"
-    },
-    {
-      "id": "homelab-018",
-      "fact": "Scrub-transcripts cron runs every 10min on host. Script at docker/moltbot/scripts/scrub-transcripts.sh. Had wrong volume mount (moltbot-gateway vs moltbot/data). Fixed in MR !224.",
-      "category": "status",
-      "timestamp": "2026-02-11",
-      "source": "file",
-      "status": "active"
-    },
-    {
-      "id": "homelab-019",
-      "fact": "Docker socket proxy uses TLS+mTLS. Runner connects via DOCKER_HOST=tcp://lab.nkontur.com:2376. DOCKER_BUILDKIT=0 required (BuildKit APIs not allowed by Tecnativa socket proxy).",
-      "category": "status",
-      "timestamp": "2026-02-12",
-      "source": "conversation",
-      "status": "active"
-    },
-    {
-      "id": "homelab-020",
-      "fact": "Consolidated from 2 gitlab-runners (main+images) to single runner on host network.",
-      "category": "milestone",
-      "timestamp": "2026-02-12",
-      "source": "conversation",
-      "status": "active"
-    },
-    {
-      "id": "homelab-021",
-      "fact": "Chromium browser sidecar operational. noVNC on port 6080, CDP on 9222, static IP 10.3.32.9. VNC password in Vault at homelab/data/docker/chromium-browser.",
-      "category": "status",
-      "timestamp": "2026-02-12",
-      "source": "conversation",
-      "status": "active"
-    },
-    {
-      "id": "homelab-022",
-      "fact": "Loki reachable directly at http://loki:3100 (internal Docker DNS). HTTPS via nginx has 301 redirect loop.",
-      "category": "status",
-      "timestamp": "2026-02-12",
-      "source": "conversation",
-      "status": "active"
-    },
-    {
-      "id": "homelab-023",
-      "fact": "CODEOWNERS gap: ansible/roles/configure-docker/ was unprotected. MR !252 adds /ansible/ @root wildcard.",
-      "category": "status",
-      "timestamp": "2026-02-12",
-      "source": "conversation",
-      "status": "active"
-    },
-    {
-      "id": "homelab-024",
-      "fact": "Gmail OAuth creds in Vault at homelab/data/docker/gmail (client_id, client_secret, refresh_token). Scope gmail.readonly. Workers can fetch verification codes autonomously.",
-      "category": "milestone",
-      "timestamp": "2026-02-12",
-      "source": "conversation",
-      "status": "active"
-    },
-    {
-      "id": "homelab-025",
-      "fact": "agent-browser CLI at /usr/local/bin/agent-browser \u2014 Playwright-based, connects to chromium container CDP. Commands: open, snapshot, fill, type, click, upload, eval.",
-      "category": "status",
-      "timestamp": "2026-02-12",
-      "source": "conversation",
-      "status": "active"
-    }
-  ]
-}
+[
+  {
+    "id": "infra-001",
+    "fact": "Docker socket proxy isolated from moltbot via MR !231 - removed from mgmt network",
+    "category": "milestone",
+    "timestamp": "2026-02-12",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "infra-002",
+    "fact": "Chromium browser sidecar deployed with Xvfb/noVNC/CDP for agent browser automation",
+    "category": "milestone",
+    "timestamp": "2026-02-12",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "infra-003",
+    "fact": "Docker socket proxy TLS + mTLS configured via lab_nginx (MR !236)",
+    "category": "milestone",
+    "timestamp": "2026-02-12",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "infra-004",
+    "fact": "Consolidated from 2 gitlab-runners to 1 on host network",
+    "category": "milestone",
+    "timestamp": "2026-02-12",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "infra-005",
+    "fact": "Loki accessible internally via http://loki:3100 - HTTPS broken (301 loop)",
+    "category": "status",
+    "timestamp": "2026-02-12",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "infra-006",
+    "fact": "Gmail OAuth2 configured for JIT dynamic backends - read (T1) and send (T2)",
+    "category": "milestone",
+    "timestamp": "2026-02-13",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "infra-007",
+    "fact": "JIT credential caching implemented in jit-lib.sh - 344ms to 70ms on cache hit",
+    "category": "milestone",
+    "timestamp": "2026-02-13",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "infra-008",
+    "fact": "CODEOWNERS gap found - ansible configure-docker not protected, fixed with /ansible/ @root wildcard (MR !252)",
+    "category": "milestone",
+    "timestamp": "2026-02-13",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "infra-009",
+    "fact": "OpenClaw updated from 2026.2.9 to 2026.2.12 - SSRF hardening, path traversal fixes",
+    "category": "milestone",
+    "timestamp": "2026-02-13",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "infra-010",
+    "fact": "Gitleaks-based transcript scrubber replaced bash sed approach (MR !258)",
+    "category": "milestone",
+    "timestamp": "2026-02-13",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "infra-011",
+    "fact": "Chromium browser pinned to static IP 10.3.32.9",
+    "category": "status",
+    "timestamp": "2026-02-13",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "infra-012",
+    "fact": "agent-browser CLI discovered at /usr/local/bin/agent-browser for Playwright-based automation",
+    "category": "milestone",
+    "timestamp": "2026-02-13",
+    "source": "conversation",
+    "status": "active"
+  }
+]
