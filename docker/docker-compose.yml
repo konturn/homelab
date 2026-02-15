@@ -376,7 +376,7 @@ services:
       retries: 3
       start_period: 60s
   nzbget:
-    image: linuxserver/nzbget:26.0.20260206@sha256:c96d3a5c7876d183b82ee164dd2f8a56d85ee533cd41113dfb9dca6408f191a8
+    image: linuxserver/nzbget:26.0.20260213@sha256:3709b8e5c5a6a23cfc25b9de0877be164156392708dc95250291e6d9e571a342
     container_name: nzbget
     security_opt:
       - no-new-privileges:true
@@ -450,7 +450,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.1103@sha256:5906ec80f00735b5ee8246ec21e98d424ac7a224331047ad50a19e4d583be7b0
+    image: linuxserver/jackett:0.24.1113@sha256:6e6ea6b276d70662635ef1ef0bf3ae28f127c25fe89301577ffa1a47baf900e4
     container_name: jackett
     security_opt:
       - no-new-privileges:true
