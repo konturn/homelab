@@ -80,6 +80,10 @@ These are the ones I keep re-learning. Full operational discipline rules are in 
 - **Git worktree for sub-agents** — never checkout branches in shared clone
 - **Sub-agents must verify pipeline green** before reporting done
 - **Shell scripts for mechanical work, LLM for judgment** — don't stream raw data into context
+- **cap_drop persists until container recreation** — reverting compose file doesn't restore caps, must `docker compose up -d <service>`
+- **Moltbot is Developer (level 30), NOT Maintainer** — can't self-merge CODEOWNERS-protected paths
+- **Docker cross-network communication** is the most common "it's not working" issue — check network topology first
+- **Sub-agent branch push ≠ MR created** — always verify sub-agent actually created the MR, not just pushed code
 
 ---
 
@@ -87,11 +91,17 @@ These are the ones I keep re-learning. Full operational discipline rules are in 
 
 Moved to `tools/services.md` for detailed patterns. Quick reference:
 
-**T1 (auto):** grafana, influxdb, plex, radarr, sonarr, ombi, nzbget, deluge, paperless, prowlarr, mqtt, gmail
-**T2 (approval):** homeassistant, tailscale, gitlab, ssh, vault, pihole, ipmi
+**T1 (auto):** grafana, influxdb, plex, radarr, sonarr, ombi, nzbget, deluge, paperless, prowlarr, mqtt, gmail-read
+**T2 (approval):** homeassistant, tailscale, gitlab, ssh, vault, pihole, ipmi, gmail-send
 
-**Helper lib:** `source tools/jit-lib.sh` → `jit_get`, `jit_service_key`, `jit_grafana_token`
+**Helper lib:** `source tools/jit-lib.sh` → `jit_get`, `jit_service_key`, `jit_grafana_token`, `jit_gmail_token`, `jit_gmail_send_token`
+
+**Key notes:**
+- `GITLAB_TOKEN` env var revoked — always use `jit_get gitlab` (T2)
+- Gmail resource names are `gmail-read` (T1) and `gmail-send` (T2), NOT `gmail`
+- Client-side caching in /tmp/jit-cache (344ms→70ms on hit)
+- Vault paths must start with `homelab/data/`
 
 ---
 
-*Last reviewed: 2026-02-11*
+*Last reviewed: 2026-02-15*

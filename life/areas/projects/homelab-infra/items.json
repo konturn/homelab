@@ -94,5 +94,37 @@
     "timestamp": "2026-02-13",
     "source": "conversation",
     "status": "active"
+  },
+  {
+    "id": "infra-013",
+    "fact": "GITLAB_TOKEN env var revoked - must use JIT T2 for GitLab access",
+    "category": "status",
+    "timestamp": "2026-02-14",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "infra-014",
+    "fact": "SSH key push to clawd-memory repo failing - key denied on GitLab",
+    "category": "status",
+    "timestamp": "2026-02-14",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "infra-015",
+    "fact": "check-updates.sh script corruption found (all / chars stripped in commit fe2e344) - fixed via MR !268",
+    "category": "milestone",
+    "timestamp": "2026-02-15",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "infra-016",
+    "fact": "Moltbot is Developer level 30 NOT Maintainer - confirmed via API, custom role with admin_terraform_state created",
+    "category": "status",
+    "timestamp": "2026-02-12",
+    "source": "conversation",
+    "status": "active"
   }
 ]
