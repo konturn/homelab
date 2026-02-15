@@ -1,7 +1,7 @@
 # JIT Approval Webhook Notifications — Design Document
 
 > **Status:** Draft  
-> **Author:** Prometheus (moltbot)  
+> **Author:** Prometheus (openclaw)  
 > **Date:** 2026-02-12  
 > **Depends on:** [JIT Access Design Doc](./jit-access-design.md)  
 > **Stakeholder:** Noah Kontur
@@ -203,7 +203,7 @@ An attacker would need ALL of: webhook token + network access + Ed25519 private 
   "reason": "Fix iptables rule for Tailscale DNS",
   "ttl_minutes": 15,
   "callback_session_key": "agent:main:subagent:59db4167-ec03-433b-9df4-a0c912be7292",
-  "callback_url": "http://moltbot:18789/hooks/agent"
+  "callback_url": "http://openclaw:18789/hooks/agent"
 }
 ```
 
@@ -263,7 +263,7 @@ An attacker would need ALL of: webhook token + network access + Ed25519 private 
 **Changes needed:**
 - Ensure `hooks.enabled: true` (may already be set)
 - Generate and store a dedicated webhook token in Vault
-- Confirm the OpenClaw gateway is listening on a port reachable from the JIT bot container (e.g., `moltbot:18789` on the internal Docker network)
+- Confirm the OpenClaw gateway is listening on a port reachable from the JIT bot container (e.g., `openclaw:18789` on the internal Docker network)
 
 **No custom mappings needed.** We use `/hooks/agent` directly.
 
@@ -509,7 +509,7 @@ This provides resilience during the transition period without the cost of aggres
 ### Full approval callback (as sent by JIT bot):
 
 ```bash
-curl -X POST http://moltbot:18789/hooks/agent \
+curl -X POST http://openclaw:18789/hooks/agent \
   -H 'Authorization: Bearer <webhook-token>' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -524,7 +524,7 @@ curl -X POST http://moltbot:18789/hooks/agent \
 ### Full denial callback:
 
 ```bash
-curl -X POST http://moltbot:18789/hooks/agent \
+curl -X POST http://openclaw:18789/hooks/agent \
   -H 'Authorization: Bearer <webhook-token>' \
   -H 'Content-Type: application/json' \
   -d '{

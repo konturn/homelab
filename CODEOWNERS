@@ -1,11 +1,11 @@
 # CODEOWNERS — Privilege escalation prevention
 # 
-# moltbot (Prometheus) has Maintainer access and can self-merge MRs.
+# openclaw (Prometheus) has Maintainer access and can self-merge MRs.
 # These rules require approval from @root for paths that could be
 # used to escalate privileges, bypass security controls, or break
 # remote access.
 #
-# Philosophy: moltbot can freely modify application configs, docs,
+# Philosophy: openclaw can freely modify application configs, docs,
 # and non-sensitive infrastructure. But anything that could grant
 # it more access, break network connectivity, or run arbitrary
 # code on hosts requires human approval.
@@ -39,8 +39,8 @@
 /docker/daemon.json                      @root
 
 # === MOLTBOT SELF-MODIFICATION ===
-# Prevent moltbot from expanding its own access
-/docker/moltbot/                         @root
+# Prevent openclaw from expanding its own access
+/docker/openclaw/                         @root
 
 # === VAULT & SECRETS ===
 # Could access or redirect secret storage
@@ -53,7 +53,7 @@
 /networking/ssl/                         @root
 
 # === THIS FILE ===
-# Prevent moltbot from removing its own restrictions
+# Prevent openclaw from removing its own restrictions
 /CODEOWNERS                              @root
 
 # === SAFE FOR SELF-MERGE (no CODEOWNERS rule needed) ===

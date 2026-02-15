@@ -1,7 +1,7 @@
 # JIT Privileged Access Management for Prometheus
 
 > **Status:** Design Document (Draft)  
-> **Author:** Prometheus (moltbot)  
+> **Author:** Prometheus (openclaw)  
 > **Date:** 2026-02-06  
 > **Stakeholder:** Noah Kontur  
 > **Target:** Homelab infrastructure at `*.lab.nkontur.com`
@@ -32,7 +32,7 @@
 ---
 ## 1. Executive Summary
 
-Prometheus (moltbot) currently operates with ~20 credentials injected as environment variables at container startup. As of MR !126, these are sourced from **HashiCorp Vault** during Ansible deployment (with CI env var fallback), but they are still **long-lived, broadly-scoped, and never expire at runtime**. The Vault migration centralized secret storage and rotation, but the agent still has all credentials available simultaneously from the moment its container starts. If the agent is compromised (via prompt injection, tool abuse, or container escape), every credential is immediately available to the attacker.
+Prometheus (openclaw) currently operates with ~20 credentials injected as environment variables at container startup. As of MR !126, these are sourced from **HashiCorp Vault** during Ansible deployment (with CI env var fallback), but they are still **long-lived, broadly-scoped, and never expire at runtime**. The Vault migration centralized secret storage and rotation, but the agent still has all credentials available simultaneously from the moment its container starts. If the agent is compromised (via prompt injection, tool abuse, or container escape), every credential is immediately available to the attacker.
 
 This document designs a **Just-In-Time (JIT) Privileged Access Management** system where:
 
@@ -65,7 +65,7 @@ As of MR !126, all secrets are managed in **HashiCorp Vault** and fetched during
 ```yaml
 # From docker-compose.yml (Jinja2 templated) — current state
 environment:
-  - GITLAB_TOKEN={{ vault_moltbot_gitlab_token | default(lookup('env', 'MOLTBOT_GITLAB_TOKEN')) }}
+  - GITLAB_TOKEN={{ vault_openclaw_gitlab_token | default(lookup('env', 'OPENCLAW_GITLAB_TOKEN')) }}
   - HASS_TOKEN={{ vault_hass_token | default(lookup('env', 'HASS_TOKEN')) }}
   - RADARR_API_KEY={{ vault_radarr_api_key | default(lookup('env', 'RADARR_API_KEY')) }}
   - SONARR_API_KEY={{ vault_sonarr_api_key | default(lookup('env', 'SONARR_API_KEY')) }}
@@ -75,7 +75,7 @@ environment:
   # ... 20+ more, all following vault_var | default(env_var) pattern
 ```
 
-**What Vault migration solved:** Secrets are centralized in Vault KV v2, fetched via JWT (CI) or AppRole (moltbot) auth during deploy. Rotation is centralized. Secrets aren't scattered across GitLab CI/CD variables as the sole source of truth.
+**What Vault migration solved:** Secrets are centralized in Vault KV v2, fetched via JWT (CI) or AppRole (openclaw) auth during deploy. Rotation is centralized. Secrets aren't scattered across GitLab CI/CD variables as the sole source of truth.
 
 **What Vault migration did NOT solve:** At runtime, the container still has every credential baked into its environment. The deploy-time Vault fetch is a storage/rotation improvement, not a runtime access control improvement. This is where JIT comes in.
 
@@ -107,7 +107,7 @@ Agent needs SSH to router → requests access → Noah taps "Approve" on Telegra
 ```
 ┌─────────────────┐     ┌──────────────────────┐     ┌─────────────┐
 │   Prometheus     │     │  jit-approval-svc    │     │   Vault     │
-│   (moltbot)      │     │  (separate container) │     │             │
+│   (openclaw)      │     │  (separate container) │     │             │
 │                  │     │                      │     │             │
 │ 1. POST request  │────▶│ 2. Validate request  │     │             │
 │    to approval   │     │ 3. Send Telegram msg │     │             │
@@ -210,7 +210,7 @@ GET /api/v1/health
 A second Telegram bot (e.g., @PrometheusApprovalBot) that:
 - Sends approval request messages to Noah's chat
 - Handles callback_query for approve/deny buttons
-- Is completely separate from the Prometheus/moltbot bot
+- Is completely separate from the Prometheus/openclaw bot
 - Only accepts callbacks from Noah's Telegram user ID (hardcoded allowlist)
 
 **Approval message format:**
@@ -561,7 +561,7 @@ step 3 of 5 in the audit checklist.
 | DNS/domain management | External-facing, long propagation |
 | Certificate management | Could break TLS for all services |
 
-**These credentials are never exposed to the agent at all.** They exist in Vault KV but are only fetched during pipeline execution by the `fetch-vault-secrets` Ansible role (MR !126). The agent's AppRole policy (`moltbot-ops`) does not grant access to these paths. Noah manages them directly.
+**These credentials are never exposed to the agent at all.** They exist in Vault KV but are only fetched during pipeline execution by the `fetch-vault-secrets` Ansible role (MR !126). The agent's AppRole policy (`openclaw-ops`) does not grant access to these paths. Noah manages them directly.
 
 ### Tier Decision Matrix
 
@@ -1007,7 +1007,7 @@ The definitive solution is to ensure credentials never enter the LLM context at 
 
 ```
 ┌─────────────────────┐     ┌──────────────────────┐
-│  Agent (moltbot)     │     │  JIT Sidecar         │
+│  Agent (openclaw)     │     │  JIT Sidecar         │
 │                      │     │  (separate container) │
 │  LLM decides WHAT:   │     │                      │
 │  "Check iptables on  │────▶│  Handles HOW:        │
@@ -1223,7 +1223,7 @@ This gives Noah peace of mind and creates a nice audit trail in Telegram itself.
 **Prerequisites (DONE):**
 - ✅ Vault deployed and running (`vault.lab.nkontur.com:8200`)
 - ✅ All ~47 secrets populated in Vault KV v2
-- ✅ AppRole auth configured for moltbot (`moltbot-ops` policy, read-only)
+- ✅ AppRole auth configured for openclaw (`openclaw-ops` policy, read-only)
 - ✅ JWT auth configured for CI runners (`vault-admin`, `vault-read` roles)
 - ✅ Ansible `fetch-vault-secrets` role deployed (MR !126)
 - ✅ Vault Terraform config-as-code (policies, auth, mounts)
@@ -1510,7 +1510,7 @@ promtail:
 
 #### 14.3.3 Agent JIT Audit Logs → Loki
 
-The agent (moltbot/OpenClaw container) already uses the Loki log driver. JIT-related actions should be logged to stdout as structured JSON with a `jit_` prefix on event names for easy filtering.
+The agent (openclaw/OpenClaw container) already uses the Loki log driver. JIT-related actions should be logged to stdout as structured JSON with a `jit_` prefix on event names for easy filtering.
 
 **Log format:**
 ```json
@@ -1526,7 +1526,7 @@ The agent (moltbot/OpenClaw container) already uses the Loki log driver. JIT-rel
 
 **LogQL for agent JIT activity:**
 ```logql
-{compose_service="moltbot-gateway"} | json | event=~"jit_.*"
+{compose_service="openclaw-gateway"} | json | event=~"jit_.*"
 ```
 
 #### 14.3.4 Cross-Component Correlation
@@ -1903,7 +1903,7 @@ vault read -field=public_key ssh-client-signer/config/ca > trusted-user-ca-keys.
 vault write ssh-client-signer/roles/prometheus-tier2 \
   key_type="ca" \
   allow_user_certificates=true \
-  allowed_users="prometheus,moltbot,node" \
+  allowed_users="prometheus,openclaw,node" \
   allowed_extensions="permit-pty" \
   default_extensions='{"permit-pty":""}' \
   ttl="15m" \
@@ -1931,7 +1931,7 @@ TrustedUserCAKeys /etc/ssh/trusted-user-ca-keys.pem
 For the router (critical infra), also add:
 
 ```
-# Only allow cert-based auth for moltbot user (no password, no plain keys)
+# Only allow cert-based auth for openclaw user (no password, no plain keys)
 Match User root
   AuthorizedKeysFile none
   TrustedUserCAKeys /etc/ssh/trusted-user-ca-keys.pem
@@ -2174,7 +2174,7 @@ EOF
 
 #### 5.5 Docker Socket Access
 
-The moltbot container does **not** currently have Docker socket access, and this should remain the case. Docker operations should go through the homelab repo's CI/CD pipeline (git push → Ansible deploy).
+The openclaw container does **not** currently have Docker socket access, and this should remain the case. Docker operations should go through the homelab repo's CI/CD pipeline (git push → Ansible deploy).
 
 If future use cases require container inspection (not management), a read-only Docker API proxy could be deployed:
 
@@ -2312,7 +2312,7 @@ step 3 of 5 in the audit checklist.
 | DNS/domain management | External-facing, long propagation |
 | Certificate management | Could break TLS for all services |
 
-**These credentials are never exposed to the agent at all.** They exist in Vault KV but are only fetched during pipeline execution by the `fetch-vault-secrets` Ansible role (MR !126). The agent's AppRole policy (`moltbot-ops`) does not grant access to these paths. Noah manages them directly.
+**These credentials are never exposed to the agent at all.** They exist in Vault KV but are only fetched during pipeline execution by the `fetch-vault-secrets` Ansible role (MR !126). The agent's AppRole policy (`openclaw-ops`) does not grant access to these paths. Noah manages them directly.
 
 #### Tier Decision Matrix
 
@@ -2576,12 +2576,12 @@ A Vault Agent running as a sidecar container could automatically:
 
 ```yaml
 # docker-compose addition (future)
-moltbot-vault-agent:
+openclaw-vault-agent:
   image: hashicorp/vault:1.21
   command: ["vault", "agent", "-config=/vault/agent/config.hcl"]
   volumes:
     - ./vault-agent-config.hcl:/vault/agent/config.hcl:ro
-    - shared-creds:/vault/creds  # Shared volume with moltbot-gateway
+    - shared-creds:/vault/creds  # Shared volume with openclaw-gateway
 ```
 
 **Recommendation for Phase 1:** Use Methods 1-3 (direct issuance). The agent calls Vault API directly. This is simplest and keeps the system understandable. Consider Method 4 only if credential management becomes unwieldy.
@@ -2930,7 +2930,7 @@ Request tier 3 access with reason "Emergency security patch required."
 **Prerequisites (DONE):**
 - ✅ Vault deployed and running (`vault.lab.nkontur.com:8200`)
 - ✅ All ~47 secrets populated in Vault KV v2
-- ✅ AppRole auth configured for moltbot (`moltbot-ops` policy, read-only)
+- ✅ AppRole auth configured for openclaw (`openclaw-ops` policy, read-only)
 - ✅ JWT auth configured for CI runners (`vault-admin`, `vault-read` roles)
 - ✅ Ansible `fetch-vault-secrets` role deployed (MR !126)
 - ✅ Vault Terraform config-as-code (policies, auth, mounts)
@@ -3312,7 +3312,7 @@ path "ssh-client-signer/config/ca" {
 Vault connection is already available via AppRole credentials (MR !126). The JIT changes are about *removing* runtime env vars, not adding Vault access:
 
 ```yaml
-# moltbot-gateway service — Phase C target state
+# openclaw-gateway service — Phase C target state
 environment:
   # Vault connection (already deployed via MR !126)
   - VAULT_ADDR=https://vault.lab.nkontur.com:8200

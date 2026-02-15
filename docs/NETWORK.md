@@ -205,7 +205,7 @@ Some containers need access to multiple networks:
                                      │ (homeassistant, plex, ombi)
 ┌────────────────────────────────────┴────────────────────────────────────┐
 │                           INTERNAL (VLAN 3)                              │
-│  gitlab ─── moltbot ─── radarr ─── sonarr ─── pihole ─── grafana        │
+│  gitlab ─── openclaw ─── radarr ─── sonarr ─── pihole ─── grafana        │
 │  deluge ─── influxdb ─── paperless ─── prowlarr ─── lab_nginx           │
 └────────────────────────────────────┬────────────────────────────────────┘
                                      │ (homeassistant)

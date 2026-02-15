@@ -16,7 +16,7 @@
 #
 #   BUILD (parallel, path-triggered)
 #   ┌──────────────┬──────────────┬──────────────┬──────────────────────┐
-#   moltbot:build  amcrest2mqtt:build  snapcast:build  snapclient:build  jit-approval-svc:build
+#   openclaw:build  amcrest2mqtt:build  snapcast:build  snapclient:build  jit-approval-svc:build
 #
 #   DEPLOY (main only, parallel)
 #   ┌──────────────────────────┬──────────────┬──────────────┬──────────────────────────┐
@@ -42,7 +42,7 @@ variables:
   ANSIBLE_PIPELINING: "True"
   PIP_CACHE_DIR: "/cache/pip"
   ANSIBLE_ROLES_PATH: "/cache/ansible-roles"
-  MOLTBOT_IMAGE_TAG: "latest"
+  OPENCLAW_IMAGE_TAG: "latest"
 
 # =============================================================================
 # Path-based change detection
@@ -255,12 +255,12 @@ jit-approval-svc:test:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   needs: []
 
-moltbot:build:
+openclaw:build:
   extends: .docker_build
   script:
-    - docker build -t $CI_REGISTRY_IMAGE/moltbot:latest -t $CI_REGISTRY_IMAGE/moltbot:$CI_COMMIT_SHORT_SHA docker/moltbot/
-    - docker push $CI_REGISTRY_IMAGE/moltbot:latest
-    - docker push $CI_REGISTRY_IMAGE/moltbot:$CI_COMMIT_SHORT_SHA
+    - docker build -t $CI_REGISTRY_IMAGE/openclaw:latest -t $CI_REGISTRY_IMAGE/openclaw:$CI_COMMIT_SHORT_SHA docker/moltbot/
+    - docker push $CI_REGISTRY_IMAGE/openclaw:latest
+    - docker push $CI_REGISTRY_IMAGE/openclaw:$CI_COMMIT_SHORT_SHA
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
@@ -561,13 +561,13 @@ vault:rotate-approles:
       FAILURES=0
 
       # -----------------------------------------------------------------
-      # 1. Rotate moltbot AppRole (stored in CI variable)
+      # 1. Rotate openclaw AppRole (stored in CI variable)
       # -----------------------------------------------------------------
-      if rotate_approle "moltbot"; then
-        echo "=== Updating moltbot CI variable ==="
+      if rotate_approle "openclaw"; then
+        echo "=== Updating openclaw CI variable ==="
         # Fetch GitLab token from Vault for CI variable update
         GL_TOKEN=""
-        GL_SECRET_RESP=$(vault_api GET "homelab/data/moltbot/tokens") || true
+        GL_SECRET_RESP=$(vault_api GET "homelab/data/openclaw/tokens") || true
         GL_TOKEN=$(echo "$GL_SECRET_RESP" | jq -r '.data.data.gitlab_token // empty' 2>/dev/null)
         if [ -n "$GL_TOKEN" ]; then
           echo "  GitLab token fetched from Vault"
@@ -645,7 +645,7 @@ vault:rotate-approles:
       echo "=== Rotation Summary ==="
       if [ "$FAILURES" -eq 0 ]; then
         echo "All AppRoles rotated successfully ✓"
-        echo "  - moltbot: next deploy picks up new secret_id from CI variable"
+        echo "  - openclaw: next deploy picks up new secret_id from CI variable"
         echo "  - jit-approval-svc: next deploy picks up new credentials from Vault KV"
       else
         echo "WARNING: ${FAILURES} rotation(s) failed — check logs above"

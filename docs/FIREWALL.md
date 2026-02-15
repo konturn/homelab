@@ -124,7 +124,7 @@ Lab services (not internet-exposed):
 | Paperless-ngx | `paperless-ngx` | Document management |
 | iperf3 | `iperf3` | Network testing |
 | Draw.io | `diagram` | Diagramming |
-| **Moltbot** | `moltbot-gateway` | AI assistant |
+| **OpenClaw** | `openclaw-gateway` | AI assistant |
 
 ### IoT Network (10.6.x.x)
 

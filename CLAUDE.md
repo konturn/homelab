@@ -31,8 +31,8 @@ docker_config:
 All third-party Docker images are pinned to SHA256 digests for reproducible deploys. Format: `image:tag@sha256:xxxx`.
 
 **Exceptions (NOT pinned):**
-- `gitlab-registry.lab.nkontur.com` images (snapcast, snapclient, amcrest2mqtt, moltbot) — built in CI, pinning would break deploys
-- Images using Jinja2 template variables (e.g., `{{ moltbot_image_tag }}`)
+- `gitlab-registry.lab.nkontur.com` images (snapcast, snapclient, amcrest2mqtt, openclaw) — built in CI, pinning would break deploys
+- Images using Jinja2 template variables (e.g., `{{ openclaw_image_tag }}`)
 
 **When adding a new service:**
 1. Find the amd64 digest: `docker manifest inspect <image> | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest'`

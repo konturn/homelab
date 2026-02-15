@@ -342,10 +342,10 @@
 
 - name: Set up transcript scrub cron job (every 10 minutes)
   ansible.builtin.cron:
-    name: "Scrub credentials from moltbot transcripts"
+    name: "Scrub credentials from openclaw transcripts"
     minute: "*/10"
     job: >-
-      /usr/local/bin/scrub-transcripts.sh {{ docker_persistent_data_path }}/moltbot/data/agents/main/sessions 2>&1 | logger -t scrub-transcripts
+      /usr/local/bin/scrub-transcripts.sh {{ docker_persistent_data_path }}/openclaw/data/agents/main/sessions 2>&1 | logger -t scrub-transcripts
 
 - name: Daily chromium-browser restart (clear tabs and free memory)
   ansible.builtin.cron:

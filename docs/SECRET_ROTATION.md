@@ -48,7 +48,7 @@ Secrets are managed through a **Vault-first** architecture with CI environment v
 | JWT (GitLab OIDC) | `vault-admin` | `vault-admin` | `vault:configure`, `vault:rotate-approle` (main only) |
 | JWT (GitLab OIDC) | `ci-deploy` | `ci-deploy` | `router:deploy`, `zwave:deploy`, `satellite-2:deploy`, `router:validate` (main/MR) |
 | JWT (GitLab OIDC) | `vault-read` | `vault-read` | `vault:validate` (MR only — terraform plan) |
-| AppRole | `moltbot` | `moltbot-ops` | Moltbot container (scoped read-only) |
+| AppRole | `openclaw` | `openclaw-ops` | OpenClaw container (scoped read-only) |
 | AppRole | `jit-approval-svc` | `jit-approval-svc` | JIT approval service (credential broker) |
 
 ### Vault Secret Layout
@@ -62,7 +62,7 @@ homelab/
 ├── email/           # Gmail, SMTP, DKIM
 ├── gitlab/          # Runner tokens
 ├── infrastructure/  # Aruba, IPMI, LUKS, OMAPI, Pi-hole, router, SNMP, Tailscale, VRRP
-├── moltbot/         # Gateway, GitLab, Telegram tokens
+├── openclaw/         # Gateway, GitLab, Telegram tokens
 ├── mqtt/            # Mosquitto credentials
 └── networking/      # Cloudflare, Mullvad, Namesilo, Wireguard
 ```
@@ -71,7 +71,7 @@ homelab/
 
 The `fetch-vault-secrets` role runs as the **first role** in every playbook. It:
 
-1. Authenticates to Vault via JWT (CI pipeline) or AppRole (moltbot)
+1. Authenticates to Vault via JWT (CI pipeline) or AppRole (openclaw)
 2. Reads all secret paths from `homelab/` KV v2 mount
 3. Sets each secret as an Ansible fact (e.g., `vault_pihole_password`)
 4. If Vault is unreachable, secrets remain unset and the `| default(lookup('env', ...))` fallback activates
@@ -106,7 +106,7 @@ To remove CI variable fallback (after Vault is proven stable):
 | `PIHOLE_PASSWORD` | `infrastructure/pihole` | `password` | Pi-hole |
 | `INFLUXDB_PASSWORD` | `docker/influxdb` | `password` | InfluxDB |
 | `INFLUXDB_ADMIN_TOKEN` | `docker/influxdb` | `admin_token` | InfluxDB, Grafana |
-| `INFLUXDB_TOKEN` | `docker/influxdb` | `token` | moltbot-gateway |
+| `INFLUXDB_TOKEN` | `docker/influxdb` | `token` | openclaw-gateway |
 | `INFLUXDB_TELEGRAF_TOKEN` | `docker/influxdb` | `telegraf_token` | Telegraf |
 | `GRAFANA_ADMIN_PASSWORD` | `docker/grafana` | `admin_password` | Grafana |
 | `GRAFANA_SMTP_PASSWORD` | `docker/grafana` | `smtp_password` | Grafana |
@@ -115,29 +115,29 @@ To remove CI variable fallback (after Vault is proven stable):
 | `DOORBELL_PASS` | `cameras/doorbell` | `password` | amcrest2mqtt |
 | `MQTT_PASS` | `mqtt/mosquitto` | `password` | amcrest2mqtt, ambientweather |
 | `AUDIOSERVE_SECRET` | `docker/audioserve` | `secret` | audioserve |
-| `OPENAI_API_KEY` | `api-keys/openai` | `api_key` | moltbot-gateway |
-| `ANTHROPIC_API_KEY` | `api-keys/anthropic` | `api_key` | moltbot (future) |
-| `BRAVE_API_KEY` | `api-keys/brave` | `api_key` | moltbot-gateway |
-| `ACLAWDEMY_API_KEY` | `api-keys/aclawdemy` | `api_key` | moltbot-gateway |
-| `MOLTBOT_GATEWAY_TOKEN` | `moltbot/tokens` | `gateway_token` | moltbot-gateway |
-| `MOLTBOT_TELEGRAM_TOKEN` | `moltbot/tokens` | `telegram_token` | moltbot-gateway |
-| `MOLTBOT_GITLAB_TOKEN` | `moltbot/tokens` | `gitlab_token` | moltbot-gateway |
-| `HASS_TOKEN` | `docker/homeassistant` | `token` | moltbot-gateway |
-| `PLEX_TOKEN` | `docker/plex` | `token` | moltbot-gateway |
-| `RADARR_API_KEY` | `docker/radarr` | `api_key` | moltbot-gateway |
-| `SONARR_API_KEY` | `docker/sonarr` | `api_key` | moltbot-gateway |
-| `PROWLARR_API_KEY` | `docker/prowlarr` | `api_key` | moltbot-gateway |
-| `OMBI_API_KEY` | `docker/ombi` | `api_key` | moltbot-gateway |
-| `NZBGET_USERNAME` | `docker/nzbget` | `username` | moltbot-gateway |
-| `NZBGET_PASSWORD` | `docker/nzbget` | `password` | moltbot-gateway |
-| `DELUGE_PASSWORD` | `docker/deluge` | `password` | moltbot-gateway |
-| `PAPERLESS_TOKEN` | `docker/paperless` | `token` | moltbot-gateway |
-| `TAILSCALE_API_TOKEN` | `infrastructure/tailscale` | `api_token` | moltbot-gateway |
+| `OPENAI_API_KEY` | `api-keys/openai` | `api_key` | openclaw-gateway |
+| `ANTHROPIC_API_KEY` | `api-keys/anthropic` | `api_key` | openclaw (future) |
+| `BRAVE_API_KEY` | `api-keys/brave` | `api_key` | openclaw-gateway |
+| `ACLAWDEMY_API_KEY` | `api-keys/aclawdemy` | `api_key` | openclaw-gateway |
+| `OPENCLAW_GATEWAY_TOKEN` | `openclaw/tokens` | `gateway_token` | openclaw-gateway |
+| `OPENCLAW_TELEGRAM_TOKEN` | `openclaw/tokens` | `telegram_token` | openclaw-gateway |
+| `OPENCLAW_GITLAB_TOKEN` | `openclaw/tokens` | `gitlab_token` | openclaw-gateway |
+| `HASS_TOKEN` | `docker/homeassistant` | `token` | openclaw-gateway |
+| `PLEX_TOKEN` | `docker/plex` | `token` | openclaw-gateway |
+| `RADARR_API_KEY` | `docker/radarr` | `api_key` | openclaw-gateway |
+| `SONARR_API_KEY` | `docker/sonarr` | `api_key` | openclaw-gateway |
+| `PROWLARR_API_KEY` | `docker/prowlarr` | `api_key` | openclaw-gateway |
+| `OMBI_API_KEY` | `docker/ombi` | `api_key` | openclaw-gateway |
+| `NZBGET_USERNAME` | `docker/nzbget` | `username` | openclaw-gateway |
+| `NZBGET_PASSWORD` | `docker/nzbget` | `password` | openclaw-gateway |
+| `DELUGE_PASSWORD` | `docker/deluge` | `password` | openclaw-gateway |
+| `PAPERLESS_TOKEN` | `docker/paperless` | `token` | openclaw-gateway |
+| `TAILSCALE_API_TOKEN` | `infrastructure/tailscale` | `api_token` | openclaw-gateway |
 | `TAILSCALE_AUTH_KEY` | `infrastructure/tailscale` | `auth_key` | configure-tailscale role |
-| `IPMI_USER` | `infrastructure/ipmi` | `user` | moltbot-gateway |
-| `IPMI_PASSWORD` | `infrastructure/ipmi` | `password` | moltbot-gateway |
-| `GMAIL_EMAIL` | `email/gmail` | `email` | moltbot-gateway |
-| `GMAIL_APP_PASSWORD` | `email/gmail` | `app_password` | moltbot-gateway |
+| `IPMI_USER` | `infrastructure/ipmi` | `user` | openclaw-gateway |
+| `IPMI_PASSWORD` | `infrastructure/ipmi` | `password` | openclaw-gateway |
+| `GMAIL_EMAIL` | `email/gmail` | `email` | openclaw-gateway |
+| `GMAIL_APP_PASSWORD` | `email/gmail` | `app_password` | openclaw-gateway |
 | `ROUTER_PRIVATE_KEY_BASE64` | `infrastructure/router` | `private_key_base64` | GitLab CI pipeline |
 | `SNMP_PASSWORD` | `infrastructure/snmp` | `password` | Telegraf |
 | `LUKS_PASSWORD_BASE64` | `infrastructure/luks` | `password_base64` | configure-base role |
@@ -145,7 +145,7 @@ To remove CI variable fallback (after Vault is proven stable):
 | `CLOUDFLARE_API_KEY` | `networking/cloudflare` | `api_key` | DDNS cron |
 | `CLOUDFLARE_ZONE_ID` | `networking/cloudflare` | `zone_id` | DDNS cron |
 | `NAMESILO_API_KEY` | `networking/namesilo` | `api_key` | SSL renewal cron |
-| `GRAFANA_TOKEN` | `docker/grafana` | `token` | moltbot-gateway |
+| `GRAFANA_TOKEN` | `docker/grafana` | `token` | openclaw-gateway |
 | `SPOTIFY_DC` | `infrastructure/spotify` | `sp_dc` | Home Assistant spotcast |
 | `SPOTIFY_KEY` | `infrastructure/spotify` | `sp_key` | Home Assistant spotcast |
 | `JIT_APPROLE_ROLE_ID` | `docker/jit-approval-svc` | `approle_role_id` | jit-approval-svc |
@@ -313,19 +313,19 @@ To remove CI variable fallback (after Vault is proven stable):
 
 ---
 
-### MOLTBOT_GATEWAY_TOKEN / MOLTBOT_TELEGRAM_TOKEN / MOLTBOT_GITLAB_TOKEN
+### OPENCLAW_GATEWAY_TOKEN / OPENCLAW_TELEGRAM_TOKEN / OPENCLAW_GITLAB_TOKEN
 
 **Description:** Tokens for Moltbot gateway API, Telegram Bot API, and GitLab access.
 
-**Vault path:** `homelab/moltbot/tokens`
+**Vault path:** `homelab/openclaw/tokens`
 
-**Note:** `MOLTBOT_GITLAB_TOKEN` is also used by the `vault:rotate-approle` CI job. That job now fetches it from Vault via JWT auth, falling back to the CI variable.
+**Note:** `OPENCLAW_GITLAB_TOKEN` is also used by the `vault:rotate-approle` CI job. That job now fetches it from Vault via JWT auth, falling back to the CI variable.
 
 **How to rotate:**
 1. Generate new token (varies by service)
-2. Update in Vault: `homelab/moltbot/tokens` → relevant field
+2. Update in Vault: `homelab/openclaw/tokens` → relevant field
 3. Update GitLab CI variable (fallback)
-4. Redeploy moltbot-gateway container
+4. Redeploy openclaw-gateway container
 
 **Complexity:** 🟢-🟡 Easy to Medium
 
@@ -377,7 +377,7 @@ Contains MQTT credentials. Update when rotating MQTT_PASS.
 
 | Frequency | Secrets |
 |-----------|---------|
-| **When Compromised** | OPENAI_API_KEY, MOLTBOT_GATEWAY_TOKEN, MOLTBOT_TELEGRAM_TOKEN, DOORBELL_PASS |
+| **When Compromised** | OPENAI_API_KEY, OPENCLAW_GATEWAY_TOKEN, OPENCLAW_TELEGRAM_TOKEN, DOORBELL_PASS |
 | **Monthly** | VAULT_APPROLE_SECRET_ID (via `vault:rotate-approle` CI job) |
 | **Annually** | All others |
 | **After Employee Offboarding** | All secrets they had access to |
@@ -426,10 +426,10 @@ It can also be triggered via pipeline schedule for automatic monthly rotation.
 
 The job:
 1. Authenticates to Vault via JWT (`vault-admin` role)
-2. Generates a new `secret_id` for the moltbot AppRole
+2. Generates a new `secret_id` for the openclaw AppRole
 3. Verifies the new credentials work (login test)
 4. Updates the `VAULT_APPROLE_SECRET_ID` CI variable
-5. Next moltbot deploy picks up the new secret automatically
+5. Next openclaw deploy picks up the new secret automatically
 
 **To trigger manually:**
 1. Go to CI/CD → Pipelines → Run pipeline (on main)
@@ -453,7 +453,7 @@ scoped policies (`jit-tier1-services`, `jit-tier2-infra`).
 - `jit-approval-svc` — service's own policy (token management + read brokered secrets)
 - Child tokens minted with tier-specific policies only
 
-**Rotation:** Same procedure as moltbot AppRole — generate new `secret_id`, update the
+**Rotation:** Same procedure as openclaw AppRole — generate new `secret_id`, update the
 service's environment, restart.
 
 ---
@@ -464,7 +464,7 @@ OpenClaw session transcripts (`.jsonl` files) may contain credentials that were 
 
 ### What it does
 
-1. **Credential redaction** — Scans all transcript files under `{{ docker_persistent_data_path }}/moltbot-gateway/agents/main/sessions/` and replaces known secret patterns with `[REDACTED]` in-place.
+1. **Credential redaction** — Scans all transcript files under `{{ docker_persistent_data_path }}/openclaw-gateway/agents/main/sessions/` and replaces known secret patterns with `[REDACTED]` in-place.
 2. **Archive purge** — Deletes archived sub-agent transcripts (`*.deleted.*` files) older than 7 days to reclaim disk space.
 
 ### Patterns redacted
@@ -488,7 +488,7 @@ OpenClaw session transcripts (`.jsonl` files) may contain credentials that were 
 ### Configuration
 
 - **Script:** `/usr/local/bin/scrub-transcripts.sh` (deployed by Ansible)
-- **Source:** `docker/moltbot/scripts/scrub-transcripts.sh` in this repo
+- **Source:** `docker/openclaw/scripts/scrub-transcripts.sh` in this repo
 - **Schedule:** Every 6 hours at :30 (cron)
 - **Logging:** Output goes to syslog via `logger -t scrub-transcripts`
 - **Ansible task:** In `configure-docker` role
@@ -496,7 +496,7 @@ OpenClaw session transcripts (`.jsonl` files) may contain credentials that were 
 ### Manual run
 
 ```bash
-/usr/local/bin/scrub-transcripts.sh /persistent_data/application/moltbot-gateway/agents/main/sessions/
+/usr/local/bin/scrub-transcripts.sh /persistent_data/application/openclaw-gateway/agents/main/sessions/
 ```
 
 ### Monitoring

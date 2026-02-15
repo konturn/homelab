@@ -1,7 +1,7 @@
 # =============================================================================
 # Fetch secrets from HashiCorp Vault
 # =============================================================================
-# Authenticates via JWT (CI pipeline) or AppRole (moltbot), then reads all
+# Authenticates via JWT (CI pipeline) or AppRole (openclaw), then reads all
 # secrets into Ansible variables. Falls back to CI environment variables if
 # Vault is unreachable — deploys must never break due to Vault downtime.
 #
