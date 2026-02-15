@@ -7,7 +7,7 @@
       "name": "weekly-knowledge-synthesis",
       "enabled": true,
       "createdAtMs": 1769807584370,
-      "updatedAtMs": 1770562921362,
+      "updatedAtMs": 1771167701685,
       "schedule": {
         "kind": "cron",
         "expr": "0 10 * * 0",
@@ -20,10 +20,11 @@
         "message": "Weekly Knowledge Graph Synthesis: Read HEARTBEAT.md and perform the Weekly Knowledge Graph Synthesis task. Rewrite entity summaries in /life/areas/ from atomic facts, mark contradicted facts as superseded, and update MEMORY.md."
       },
       "state": {
-        "nextRunAtMs": 1771167600000,
-        "lastRunAtMs": 1770562800009,
+        "nextRunAtMs": 1771772400000,
+        "lastRunAtMs": 1771167600015,
         "lastStatus": "ok",
-        "lastDurationMs": 121353
+        "lastDurationMs": 101670,
+        "consecutiveErrors": 0
       },
       "delivery": {
         "mode": "announce"
@@ -149,7 +150,7 @@
       "name": "main-pipeline-fix",
       "enabled": true,
       "createdAtMs": 1769927834157,
-      "updatedAtMs": 1771151406470,
+      "updatedAtMs": 1771194608266,
       "schedule": {
         "kind": "cron",
         "expr": "*/30 * * * *",
@@ -162,12 +163,12 @@
         "message": "Main Pipeline Monitor:\n\n1. Fetch latest main pipeline: GET /projects/4/pipelines?ref=main&per_page=1 (use $GITLAB_TOKEN as PRIVATE-TOKEN header)\n2. Read /home/node/.openclaw/workspace/memory/main-pipeline-state.json\n3. If pipeline status == 'success': update state file silently, reply HEARTBEAT_OK. Do NOT announce green pipelines.\n4. If pipeline status == 'failed' AND pipelineId != lastFixedPipelineId:\n   a. Check activeFix - if set and timestamp < 60 min ago, SKIP (already being fixed)\n   b. If activeFix is null or expired (>60 min):\n      - Set activeFix = {pipelineId, timestamp: Date.now(), sessionLabel}\n      - Write state file IMMEDIATELY before spawning\n      - Spawn sub-agent labeled 'gitlab.main.pipeline.<id>.fix' (see skills/gitlab-mr/SKILL.md)\n      - Sub-agent MUST: clear activeFix and set lastFixedPipelineId when done\n5. If pipeline status == 'success', clear activeFix if set\n\nState file: /home/node/.openclaw/workspace/memory/main-pipeline-state.json\nFormat: {\"lastCheckedPipelineId\": N, \"lastFixedPipelineId\": N, \"activeFix\": {pipelineId, timestamp, sessionLabel}}\n\nONLY announce if pipeline is FAILED. Silent on success."
       },
       "state": {
-        "nextRunAtMs": 1771153200000,
-        "lastRunAtMs": 1771151400014,
+        "nextRunAtMs": 1771196400000,
+        "lastRunAtMs": 1771194600020,
         "lastStatus": "ok",
-        "lastDurationMs": 6456,
+        "lastDurationMs": 8246,
         "consecutiveErrors": 0,
-        "runningAtMs": 1771153200012
+        "runningAtMs": 1771196400016
       },
       "delivery": {
         "mode": "announce"
@@ -329,7 +330,7 @@
       "name": "Morning Digest",
       "enabled": true,
       "createdAtMs": 1770347532113,
-      "updatedAtMs": 1771077664787,
+      "updatedAtMs": 1771164042337,
       "schedule": {
         "kind": "cron",
         "expr": "0 9 * * *",
@@ -342,10 +343,10 @@
         "message": "It's 9 AM. Compile and send the daily morning digest to Noah via Telegram. Include: 1) Red team findings from overnight (vulnerabilities discovered, severity ratings), 2) MRs created/updated/merged overnight, 3) GitLab issues opened/closed, 4) Moltbook posts if any, 5) Meditation summary if written, 6) Any other notable overnight work. Format it as one clean consolidated Telegram message. Check memory/YYYY-MM-DD.md for today and yesterday to compile. Send to Telegram chat 8531859108."
       },
       "state": {
-        "nextRunAtMs": 1771164000000,
-        "lastRunAtMs": 1771077646991,
+        "nextRunAtMs": 1771250400000,
+        "lastRunAtMs": 1771164007561,
         "lastStatus": "ok",
-        "lastDurationMs": 17796,
+        "lastDurationMs": 34776,
         "consecutiveErrors": 0
       },
       "delivery": {
@@ -360,7 +361,7 @@
       "name": "email-check",
       "enabled": true,
       "createdAtMs": 1770841906634,
-      "updatedAtMs": 1771106522483,
+      "updatedAtMs": 1771192826119,
       "schedule": {
         "kind": "cron",
         "expr": "0 9,13,17 * * *",
@@ -377,10 +378,10 @@
         "mode": "announce"
       },
       "state": {
-        "nextRunAtMs": 1771164000000,
-        "lastRunAtMs": 1771106512451,
+        "nextRunAtMs": 1771250400000,
+        "lastRunAtMs": 1771192809092,
         "lastStatus": "ok",
-        "lastDurationMs": 10032,
+        "lastDurationMs": 17027,
         "consecutiveErrors": 0
       }
     },
@@ -450,7 +451,7 @@
       "name": "fact-extraction",
       "enabled": true,
       "createdAtMs": 1770841907058,
-      "updatedAtMs": 1771127441405,
+      "updatedAtMs": 1771153224226,
       "schedule": {
         "kind": "cron",
         "expr": "0 6 * * *",
@@ -467,12 +468,11 @@
         "mode": "none"
       },
       "state": {
-        "nextRunAtMs": 1771153200000,
-        "lastRunAtMs": 1771066886797,
+        "nextRunAtMs": 1771239600000,
+        "lastRunAtMs": 1771153207882,
         "lastStatus": "ok",
-        "lastDurationMs": 82094,
-        "consecutiveErrors": 0,
-        "runningAtMs": 1771153200012
+        "lastDurationMs": 16344,
+        "consecutiveErrors": 0
       }
     },
     {
@@ -481,7 +481,7 @@
       "name": "cron-config-sync",
       "enabled": true,
       "createdAtMs": 1770841907179,
-      "updatedAtMs": 1771131621872,
+      "updatedAtMs": 1771175159705,
       "schedule": {
         "kind": "cron",
         "expr": "0 */6 * * *",
@@ -491,19 +491,19 @@
       "wakeMode": "now",
       "payload": {
         "kind": "agentTurn",
-        "message": "Cron config sync. Copy /home/node/.openclaw/cron/jobs.json to /home/node/.openclaw/workspace/config/cron-jobs.json. Then check if it changed: cd /home/node/.openclaw/workspace && git diff --quiet config/cron-jobs.json. If changed, commit and push via HTTPS (`git remote set-url origin \"https://moltbot:${GITLAB_TOKEN}@gitlab.lab.nkontur.com/moltbot/clawd-memory.git\"` then `git push`). If unchanged, reply HEARTBEAT_OK.",
-        "timeoutSeconds": 60
+        "message": "Cron config sync. Copy /home/node/.openclaw/cron/jobs.json to /home/node/.openclaw/workspace/config/cron-jobs.json. Then check if it changed: cd /home/node/.openclaw/workspace && git diff --quiet config/cron-jobs.json. If changed, commit and push. If unchanged, reply HEARTBEAT_OK.\n\nGit push: ALWAYS use HTTPS with $GITLAB_TOKEN. Never use SSH.\n```\ngit remote set-url origin \"https://moltbot:${GITLAB_TOKEN}@gitlab.lab.nkontur.com/moltbot/clawd-memory.git\"\ngit add config/cron-jobs.json && git commit -m 'chore: sync cron config' && git push origin master\n```",
+        "timeoutSeconds": 120
       },
       "delivery": {
         "mode": "none"
       },
       "state": {
-        "nextRunAtMs": 1771153200000,
-        "lastRunAtMs": 1771131609762,
-        "lastStatus": "ok",
-        "lastDurationMs": 12110,
-        "consecutiveErrors": 0,
-        "runningAtMs": 1771153200012
+        "nextRunAtMs": 1771196400000,
+        "lastRunAtMs": 1771174862897,
+        "lastStatus": "error",
+        "lastDurationMs": 60002,
+        "consecutiveErrors": 1,
+        "runningAtMs": 1771196400016
       }
     },
     {
