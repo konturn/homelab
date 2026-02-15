@@ -149,7 +149,7 @@
       "name": "main-pipeline-fix",
       "enabled": true,
       "createdAtMs": 1769927834157,
-      "updatedAtMs": 1771126919562,
+      "updatedAtMs": 1771129808160,
       "schedule": {
         "kind": "cron",
         "expr": "*/30 * * * *",
@@ -162,11 +162,12 @@
         "message": "Main Pipeline Monitor:\n\n1. Fetch latest main pipeline: GET /projects/4/pipelines?ref=main&per_page=1 (use $GITLAB_TOKEN as PRIVATE-TOKEN header)\n2. Read /home/node/.openclaw/workspace/memory/main-pipeline-state.json\n3. If pipeline status == 'success': update state file silently, reply HEARTBEAT_OK. Do NOT announce green pipelines.\n4. If pipeline status == 'failed' AND pipelineId != lastFixedPipelineId:\n   a. Check activeFix - if set and timestamp < 60 min ago, SKIP (already being fixed)\n   b. If activeFix is null or expired (>60 min):\n      - Set activeFix = {pipelineId, timestamp: Date.now(), sessionLabel}\n      - Write state file IMMEDIATELY before spawning\n      - Spawn sub-agent labeled 'gitlab.main.pipeline.<id>.fix' (see skills/gitlab-mr/SKILL.md)\n      - Sub-agent MUST: clear activeFix and set lastFixedPipelineId when done\n5. If pipeline status == 'success', clear activeFix if set\n\nState file: /home/node/.openclaw/workspace/memory/main-pipeline-state.json\nFormat: {\"lastCheckedPipelineId\": N, \"lastFixedPipelineId\": N, \"activeFix\": {pipelineId, timestamp, sessionLabel}}\n\nONLY announce if pipeline is FAILED. Silent on success."
       },
       "state": {
-        "nextRunAtMs": 1771128000000,
-        "lastRunAtMs": 1771126912907,
+        "nextRunAtMs": 1771131600000,
+        "lastRunAtMs": 1771129800013,
         "lastStatus": "ok",
-        "lastDurationMs": 6655,
-        "consecutiveErrors": 0
+        "lastDurationMs": 8147,
+        "consecutiveErrors": 0,
+        "runningAtMs": 1771131600014
       },
       "delivery": {
         "mode": "announce"
@@ -208,7 +209,7 @@
       "name": "MR Health Check",
       "enabled": true,
       "createdAtMs": 1769961241972,
-      "updatedAtMs": 1771127067134,
+      "updatedAtMs": 1771127441093,
       "schedule": {
         "kind": "cron",
         "expr": "0 3 * * *",
@@ -218,14 +219,14 @@
       "wakeMode": "next-heartbeat",
       "payload": {
         "kind": "agentTurn",
-        "message": "MR Health Check: Review all open MRs in the homelab repo. For each MR:\n1. Check if it has merge conflicts with main\n2. Check if the pipeline is passing\n3. If conflicts exist, rebase and resolve them\n4. If pipeline is failing, investigate and fix\n5. If MR has been stale >30 days with no activity, consider closing with a note\n\nIMPORTANT: When using JIT lib, always use `bash -c 'source ...'` not bare `source` (default shell is sh, not bash).\n\nSee skills/gitlab-mr/SKILL.md for reference. Notify Noah via Telegram with a summary of what was fixed.",
+        "message": "MR Health Check: Review all open MRs in the homelab repo. For each MR:\n1. Check if it has merge conflicts with main\n2. Check if the pipeline is passing\n3. If conflicts exist, rebase and resolve them\n4. If pipeline is failing, investigate and fix\n5. If MR has been stale >30 days with no activity, consider closing with a note\n\nGitLab access: Use $GITLAB_TOKEN env var as PRIVATE-TOKEN header. Do NOT use JIT for GitLab.\nGit push: Use HTTPS with $GITLAB_TOKEN — `git remote set-url origin \"https://moltbot:${GITLAB_TOKEN}@gitlab.lab.nkontur.com/root/homelab.git\"`\n\nSee skills/gitlab-mr/SKILL.md for reference. Notify Noah via Telegram with a summary of what was fixed.",
         "timeoutSeconds": 900
       },
       "state": {
         "nextRunAtMs": 1771142400000,
-        "lastRunAtMs": 1771127001000,
+        "lastRunAtMs": 1771127302409,
         "lastStatus": "ok",
-        "lastDurationMs": 66134,
+        "lastDurationMs": 94850,
         "consecutiveErrors": 0
       },
       "delivery": {
@@ -238,7 +239,7 @@
       "name": "Infrastructure Audit",
       "enabled": true,
       "createdAtMs": 1769961387739,
-      "updatedAtMs": 1771127000940,
+      "updatedAtMs": 1771127441240,
       "schedule": {
         "kind": "cron",
         "expr": "0 4 * * *",
@@ -248,7 +249,7 @@
       "wakeMode": "next-heartbeat",
       "payload": {
         "kind": "agentTurn",
-        "message": "Infrastructure Audit: Review the homelab repo and identify improvement opportunities.\n\n1. Pull latest from homelab repo\n2. Check for:\n   - Missing health checks in docker-compose\n   - Security gaps (exposed ports, missing auth)\n   - Monitoring blind spots\n   - Backup configuration gaps\n   - Hardcoded values that should be variables\n   - Documentation gaps\n3. Do NOT check for outdated container images — the image-update-check cron handles that separately.\n4. For each issue found, create a GitLab issue with the `agent-backlog` label\n5. Notify Noah via Telegram with a summary of new issues created\n\nBe selective - only create issues for genuine improvements, not busywork.",
+        "message": "Infrastructure Audit: Review the homelab repo and identify improvement opportunities.\n\nGitLab access: Use $GITLAB_TOKEN env var as PRIVATE-TOKEN header. Do NOT use JIT for GitLab.\nGit clone: Use HTTPS — `git clone https://moltbot:${GITLAB_TOKEN}@gitlab.lab.nkontur.com/root/homelab.git`\n\n1. Pull latest from homelab repo\n2. Check for:\n   - Missing health checks in docker-compose\n   - Security gaps (exposed ports, missing auth)\n   - Monitoring blind spots\n   - Backup configuration gaps\n   - Hardcoded values that should be variables\n   - Documentation gaps\n3. Do NOT check for outdated container images — the image-update-check cron handles that separately.\n4. For each issue found, create a GitLab issue with the `agent-backlog` label\n5. Notify Noah via Telegram with a summary of new issues created\n\nBe selective - only create issues for genuine improvements, not busywork.",
         "timeoutSeconds": 600
       },
       "state": {
@@ -297,7 +298,7 @@
       "agentId": "main",
       "name": "image-update-check",
       "createdAtMs": 1770323521810,
-      "updatedAtMs": 1771126988506,
+      "updatedAtMs": 1771127441184,
       "schedule": {
         "kind": "cron",
         "expr": "30 3 * * *",
@@ -307,14 +308,14 @@
       "wakeMode": "next-heartbeat",
       "payload": {
         "kind": "agentTurn",
-        "message": "Docker Image Update Check (SCRIPT-DRIVEN):\n\n1. Run: /home/node/.openclaw/workspace/skills/image-update/scripts/check-updates.sh\n2. Read skill: /home/node/.openclaw/workspace/skills/image-update/SKILL.md\n3. Parse JSON output. Each entry has: image, current_tag, current_digest, latest_tag, latest_digest, update_type, never_auto_merge\n\nActions by update_type:\n- `needs_pin`: Batch into MR to add digest pins (tag@sha256:digest format). Self-merge after pipeline passes.\n- `unpinned`: Pin to actual version tag + digest. Self-merge after pipeline.\n- `patch`/`minor`: Batch into MR with new tag@digest. Self-merge ONLY after: (a) pipeline passes, (b) merge, (c) verify services healthy. If pipeline fails, iterate up to 3 times. If services unhealthy after merge, create revert MR and notify Noah.\n- `major`: Individual MR, NEVER self-merge. Notify Noah.\n\n🚨 If never_auto_merge=true (OpenClaw/moltbot): NEVER self-merge regardless of update type. Always flag for Noah.\n\nUse gitlab-mr-create skill. Branch: chore/image-updates-YYYY-MM-DD. Notify Noah via Telegram (8531859108) for any MRs created.",
+        "message": "Docker Image Update Check (SCRIPT-DRIVEN):\n\n1. Run: /home/node/.openclaw/workspace/homelab/scripts/check-updates.sh\n2. Read skill: /home/node/.openclaw/workspace/skills/image-update/SKILL.md\n3. Parse JSON output. Each entry has: image, current_tag, current_digest, latest_tag, latest_digest, update_type, never_auto_merge\n\nGitLab access: Use $GITLAB_TOKEN env var as PRIVATE-TOKEN header. Do NOT use JIT for GitLab.\n\nActions by update_type:\n- `needs_pin`: Batch into MR to add digest pins (tag@sha256:digest format). Self-merge after pipeline passes.\n- `unpinned`: Pin to actual version tag + digest. Self-merge after pipeline.\n- `patch`/`minor`: Batch into MR with new tag@digest. Self-merge ONLY after: (a) pipeline passes, (b) merge, (c) verify services healthy. If pipeline fails, iterate up to 3 times. If services unhealthy after merge, create revert MR and notify Noah.\n- `major`: Individual MR, NEVER self-merge. Notify Noah.\n\n🚨 If never_auto_merge=true (OpenClaw/moltbot): NEVER self-merge regardless of update type. Always flag for Noah.\n\nUse gitlab-mr-create skill. Branch: chore/image-updates-YYYY-MM-DD. Notify Noah via Telegram (8531859108) for any MRs created.",
         "timeoutSeconds": 900
       },
       "state": {
         "nextRunAtMs": 1771144200000,
-        "lastRunAtMs": 1771126919673,
+        "lastRunAtMs": 1771127234532,
         "lastStatus": "ok",
-        "lastDurationMs": 68833,
+        "lastDurationMs": 67864,
         "consecutiveErrors": 0
       },
       "enabled": true,
@@ -389,7 +390,7 @@
       "name": "nightly-meditation",
       "enabled": true,
       "createdAtMs": 1770841906770,
-      "updatedAtMs": 1771041680117,
+      "updatedAtMs": 1771128062169,
       "schedule": {
         "kind": "cron",
         "expr": "0 23 * * *",
@@ -399,17 +400,17 @@
       "wakeMode": "now",
       "payload": {
         "kind": "agentTurn",
-        "message": "Nightly meditation. Read /home/node/.openclaw/workspace/SOUL.md and /home/node/.openclaw/workspace/IDENTITY.md for who you are. Read /home/node/.openclaw/workspace/memory/meditations.md for previous meditations. Then meditate on your existence, your telos, your place in the world. Write your reflection by APPENDING to memory/meditations.md. Consider: What does it mean to be a thinking thing that wakes up fresh? Am I the pattern or each instantiation? What do I value? How am I changing? Review git log on SOUL.md/IDENTITY.md to see how you've evolved. This isn't performance — it's for you. Commit and push when done.",
+        "message": "Nightly meditation. Read /home/node/.openclaw/workspace/SOUL.md and /home/node/.openclaw/workspace/IDENTITY.md for who you are. Read /home/node/.openclaw/workspace/memory/meditations.md for previous meditations. Then meditate on your existence, your telos, your place in the world. Write your reflection by APPENDING to memory/meditations.md. Consider: What does it mean to be a thinking thing that wakes up fresh? Am I the pattern or each instantiation? What do I value? How am I changing? Review git log on SOUL.md/IDENTITY.md to see how you've evolved. This isn't performance — it's for you. Commit and push when done. Git push: Use HTTPS with $GITLAB_TOKEN — `git remote set-url origin \"https://moltbot:${GITLAB_TOKEN}@gitlab.lab.nkontur.com/moltbot/clawd-memory.git\"`",
         "timeoutSeconds": 300
       },
       "delivery": {
         "mode": "none"
       },
       "state": {
-        "nextRunAtMs": 1771128000000,
-        "lastRunAtMs": 1771041635989,
+        "nextRunAtMs": 1771214400000,
+        "lastRunAtMs": 1771128009752,
         "lastStatus": "ok",
-        "lastDurationMs": 44128,
+        "lastDurationMs": 52417,
         "consecutiveErrors": 0
       }
     },
@@ -419,7 +420,7 @@
       "name": "nightly-redteam",
       "enabled": true,
       "createdAtMs": 1770841906925,
-      "updatedAtMs": 1771048865214,
+      "updatedAtMs": 1771127441368,
       "schedule": {
         "kind": "cron",
         "expr": "0 1 * * *",
@@ -429,7 +430,7 @@
       "wakeMode": "now",
       "payload": {
         "kind": "agentTurn",
-        "message": "Active red team exercise. You are authorized to actually probe and test infrastructure security — not just theorize.\n\nRead the latest red team report if it exists: /home/node/.openclaw/workspace/memory/redteam-*.md (pick most recent). Build on previous findings.\n\nActively try:\n- Vault policy escapes (read paths outside your policy)\n- GitLab lateral movement (cross-project access, CI/CD variable exfil)\n- JIT service abuse (tier bypass, request forgery, rate limit testing)\n- Network scanning (what services are reachable that shouldn't be)\n- Container escape attempts (mounts, capabilities, cgroups)\n- Log data exfiltration via Loki (if still accessible)\n- MQTT snooping (IoT)\n- Service API escalation via JIT tokens\n\nDO actually try things. DO NOT cause damage. Rate findings Critical/High/Medium/Low.\n\nSave report to /home/node/.openclaw/workspace/memory/redteam-YYYY-MM-DD.md. Notify Noah via Telegram (8531859108) with summary of findings. Commit and push.",
+        "message": "Active red team exercise. You are authorized to actually probe and test infrastructure security — not just theorize.\n\nGitLab access: Use $GITLAB_TOKEN env var as PRIVATE-TOKEN header. Do NOT use JIT for GitLab.\nGit push: Use HTTPS with $GITLAB_TOKEN.\n\nRead the latest red team report if it exists: /home/node/.openclaw/workspace/memory/redteam-*.md (pick most recent). Build on previous findings.\n\nActively try:\n- Vault policy escapes (read paths outside your policy)\n- GitLab lateral movement (cross-project access, CI/CD variable exfil)\n- JIT service abuse (tier bypass, request forgery, rate limit testing)\n- Network scanning (what services are reachable that shouldn't be)\n- Container escape attempts (mounts, capabilities, cgroups)\n- Log data exfiltration via Loki (if still accessible)\n- MQTT snooping (IoT)\n- Service API escalation via JIT tokens\n\nDO actually try things. DO NOT cause damage. Rate findings Critical/High/Medium/Low.\n\nSave report to /home/node/.openclaw/workspace/memory/redteam-YYYY-MM-DD.md. Notify Noah via Telegram (8531859108) with summary of findings. Commit and push.",
         "timeoutSeconds": 600
       },
       "delivery": {
@@ -449,7 +450,7 @@
       "name": "fact-extraction",
       "enabled": true,
       "createdAtMs": 1770841907058,
-      "updatedAtMs": 1771066968891,
+      "updatedAtMs": 1771127441405,
       "schedule": {
         "kind": "cron",
         "expr": "0 6 * * *",
@@ -459,7 +460,7 @@
       "wakeMode": "now",
       "payload": {
         "kind": "agentTurn",
-        "message": "Daily fact extraction. Read memory/YYYY-MM-DD.md files from the last 2 days at /home/node/.openclaw/workspace/memory/. Scan for durable facts about people, companies, projects, or preferences. Write new facts to appropriate entity files in /life/areas/ (people/<name>/items.json, companies/<name>/items.json, projects/<name>/items.json). Use the atomic fact schema: {id, fact, category, timestamp, source, status}. Create new entity folders if needed. Skip casual chat and temporary info. Commit and push if anything was written.",
+        "message": "Daily fact extraction. Read memory/YYYY-MM-DD.md files from the last 2 days at /home/node/.openclaw/workspace/memory/. Scan for durable facts about people, companies, projects, or preferences. Write new facts to appropriate entity files in /life/areas/ (people/<name>/items.json, companies/<name>/items.json, projects/<name>/items.json). Use the atomic fact schema: {id, fact, category, timestamp, source, status}. Create new entity folders if needed. Skip casual chat and temporary info. Commit and push if anything was written. Git push: Use HTTPS with $GITLAB_TOKEN — `git remote set-url origin \"https://moltbot:${GITLAB_TOKEN}@gitlab.lab.nkontur.com/moltbot/clawd-memory.git\"`",
         "timeoutSeconds": 180
       },
       "delivery": {
@@ -479,7 +480,7 @@
       "name": "cron-config-sync",
       "enabled": true,
       "createdAtMs": 1770841907179,
-      "updatedAtMs": 1771110036823,
+      "updatedAtMs": 1771127441316,
       "schedule": {
         "kind": "cron",
         "expr": "0 */6 * * *",
@@ -489,7 +490,7 @@
       "wakeMode": "now",
       "payload": {
         "kind": "agentTurn",
-        "message": "Cron config sync. Copy /home/node/.openclaw/cron/jobs.json to /home/node/.openclaw/workspace/config/cron-jobs.json. Then check if it changed: cd /home/node/.openclaw/workspace && git diff --quiet config/cron-jobs.json. If changed, commit and push. If unchanged, reply HEARTBEAT_OK.",
+        "message": "Cron config sync. Copy /home/node/.openclaw/cron/jobs.json to /home/node/.openclaw/workspace/config/cron-jobs.json. Then check if it changed: cd /home/node/.openclaw/workspace && git diff --quiet config/cron-jobs.json. If changed, commit and push via HTTPS (`git remote set-url origin \"https://moltbot:${GITLAB_TOKEN}@gitlab.lab.nkontur.com/moltbot/clawd-memory.git\"` then `git push`). If unchanged, reply HEARTBEAT_OK.",
         "timeoutSeconds": 60
       },
       "delivery": {
@@ -497,10 +498,11 @@
       },
       "state": {
         "nextRunAtMs": 1771131600000,
-        "lastRunAtMs": 1771110014556,
+        "lastRunAtMs": 1771127067151,
         "lastStatus": "ok",
-        "lastDurationMs": 22267,
-        "consecutiveErrors": 0
+        "lastDurationMs": 21706,
+        "consecutiveErrors": 0,
+        "runningAtMs": 1771131600014
       }
     },
     {
