@@ -97,7 +97,7 @@ Moved to `tools/services.md` for detailed patterns. Quick reference:
 **Helper lib:** `source tools/jit-lib.sh` → `jit_get`, `jit_service_key`, `jit_grafana_token`, `jit_gmail_token`, `jit_gmail_send_token`
 
 **Key notes:**
-- `GITLAB_TOKEN` env var revoked — always use `jit_get gitlab` (T2)
+- `GITLAB_TOKEN` env var is ACTIVE (re-issued Feb 14) — use it directly, do NOT use JIT for GitLab
 - Gmail resource names are `gmail-read` (T1) and `gmail-send` (T2), NOT `gmail`
 - Client-side caching in /tmp/jit-cache (344ms→70ms on hit)
 - Vault paths must start with `homelab/data/`
