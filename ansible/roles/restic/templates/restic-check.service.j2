@@ -10,16 +10,6 @@ User={{ restic_user }}
 
 CPUQuota={{ 25 * ansible_processor_vcpus }}%
 
-{% if restic_ssh_enabled %}
-Environment="RESTIC_REPOSITORY=sftp:{{ restic_ssh_host }}:{{ restic_repository_name }}"
-{% else %}
-Environment="RESTIC_REPOSITORY={{ restic_repository }}"
-{% endif -%}
-Environment="RESTIC_PASSWORD={{ restic_password | trim }}"
-
-{% if restic_aws_access_key_id is defined and restic_aws_secret_access_key is defined %}
-Environment="AWS_ACCESS_KEY_ID={{ restic_aws_access_key_id | trim }}"
-Environment="AWS_SECRET_ACCESS_KEY={{ restic_aws_secret_access_key | trim }}"
-{% endif %}
+EnvironmentFile=/root/.restic_env
 
 ExecStart={{ restic_path }} check --read-data-subset={{ restic_check_read_data_subset }}
