@@ -149,7 +149,7 @@
       "name": "main-pipeline-fix",
       "enabled": true,
       "createdAtMs": 1769927834157,
-      "updatedAtMs": 1771129808160,
+      "updatedAtMs": 1771151406470,
       "schedule": {
         "kind": "cron",
         "expr": "*/30 * * * *",
@@ -162,12 +162,12 @@
         "message": "Main Pipeline Monitor:\n\n1. Fetch latest main pipeline: GET /projects/4/pipelines?ref=main&per_page=1 (use $GITLAB_TOKEN as PRIVATE-TOKEN header)\n2. Read /home/node/.openclaw/workspace/memory/main-pipeline-state.json\n3. If pipeline status == 'success': update state file silently, reply HEARTBEAT_OK. Do NOT announce green pipelines.\n4. If pipeline status == 'failed' AND pipelineId != lastFixedPipelineId:\n   a. Check activeFix - if set and timestamp < 60 min ago, SKIP (already being fixed)\n   b. If activeFix is null or expired (>60 min):\n      - Set activeFix = {pipelineId, timestamp: Date.now(), sessionLabel}\n      - Write state file IMMEDIATELY before spawning\n      - Spawn sub-agent labeled 'gitlab.main.pipeline.<id>.fix' (see skills/gitlab-mr/SKILL.md)\n      - Sub-agent MUST: clear activeFix and set lastFixedPipelineId when done\n5. If pipeline status == 'success', clear activeFix if set\n\nState file: /home/node/.openclaw/workspace/memory/main-pipeline-state.json\nFormat: {\"lastCheckedPipelineId\": N, \"lastFixedPipelineId\": N, \"activeFix\": {pipelineId, timestamp, sessionLabel}}\n\nONLY announce if pipeline is FAILED. Silent on success."
       },
       "state": {
-        "nextRunAtMs": 1771131600000,
-        "lastRunAtMs": 1771129800013,
+        "nextRunAtMs": 1771153200000,
+        "lastRunAtMs": 1771151400014,
         "lastStatus": "ok",
-        "lastDurationMs": 8147,
+        "lastDurationMs": 6456,
         "consecutiveErrors": 0,
-        "runningAtMs": 1771131600014
+        "runningAtMs": 1771153200012
       },
       "delivery": {
         "mode": "announce"
@@ -209,7 +209,7 @@
       "name": "MR Health Check",
       "enabled": true,
       "createdAtMs": 1769961241972,
-      "updatedAtMs": 1771127441093,
+      "updatedAtMs": 1771142440772,
       "schedule": {
         "kind": "cron",
         "expr": "0 3 * * *",
@@ -223,10 +223,10 @@
         "timeoutSeconds": 900
       },
       "state": {
-        "nextRunAtMs": 1771142400000,
-        "lastRunAtMs": 1771127302409,
+        "nextRunAtMs": 1771228800000,
+        "lastRunAtMs": 1771142409213,
         "lastStatus": "ok",
-        "lastDurationMs": 94850,
+        "lastDurationMs": 31559,
         "consecutiveErrors": 0
       },
       "delivery": {
@@ -239,7 +239,7 @@
       "name": "Infrastructure Audit",
       "enabled": true,
       "createdAtMs": 1769961387739,
-      "updatedAtMs": 1771127441240,
+      "updatedAtMs": 1771146029176,
       "schedule": {
         "kind": "cron",
         "expr": "0 4 * * *",
@@ -253,10 +253,10 @@
         "timeoutSeconds": 600
       },
       "state": {
-        "nextRunAtMs": 1771146000000,
-        "lastRunAtMs": 1771126988535,
+        "nextRunAtMs": 1771232400000,
+        "lastRunAtMs": 1771146017076,
         "lastStatus": "ok",
-        "lastDurationMs": 12405,
+        "lastDurationMs": 12100,
         "consecutiveErrors": 0
       },
       "delivery": {
@@ -298,7 +298,7 @@
       "agentId": "main",
       "name": "image-update-check",
       "createdAtMs": 1770323521810,
-      "updatedAtMs": 1771127441184,
+      "updatedAtMs": 1771144412574,
       "schedule": {
         "kind": "cron",
         "expr": "30 3 * * *",
@@ -308,14 +308,14 @@
       "wakeMode": "next-heartbeat",
       "payload": {
         "kind": "agentTurn",
-        "message": "Docker Image Update Check (SCRIPT-DRIVEN):\n\n1. Run: /home/node/.openclaw/workspace/homelab/scripts/check-updates.sh\n2. Read skill: /home/node/.openclaw/workspace/skills/image-update/SKILL.md\n3. Parse JSON output. Each entry has: image, current_tag, current_digest, latest_tag, latest_digest, update_type, never_auto_merge\n\nGitLab access: Use $GITLAB_TOKEN env var as PRIVATE-TOKEN header. Do NOT use JIT for GitLab.\n\nActions by update_type:\n- `needs_pin`: Batch into MR to add digest pins (tag@sha256:digest format). Self-merge after pipeline passes.\n- `unpinned`: Pin to actual version tag + digest. Self-merge after pipeline.\n- `patch`/`minor`: Batch into MR with new tag@digest. Self-merge ONLY after: (a) pipeline passes, (b) merge, (c) verify services healthy. If pipeline fails, iterate up to 3 times. If services unhealthy after merge, create revert MR and notify Noah.\n- `major`: Individual MR, NEVER self-merge. Notify Noah.\n\n🚨 If never_auto_merge=true (OpenClaw/moltbot): NEVER self-merge regardless of update type. Always flag for Noah.\n\nUse gitlab-mr-create skill. Branch: chore/image-updates-YYYY-MM-DD. Notify Noah via Telegram (8531859108) for any MRs created.",
+        "message": "Docker Image Update Check (SCRIPT-DRIVEN):\n\n1. Clone/pull the homelab repo: `git clone https://moltbot:${GITLAB_TOKEN}@gitlab.lab.nkontur.com/root/homelab.git /tmp/homelab 2>/dev/null || (cd /tmp/homelab && git pull origin main --quiet)`\n2. Run: /tmp/homelab/scripts/check-updates.sh (set HOMELAB_REPO=/tmp/homelab)\n3. Read skill: /home/node/.openclaw/workspace/skills/image-update/SKILL.md\n4. Parse JSON output. Each entry has: image, current_tag, current_digest, latest_tag, latest_digest, update_type, never_auto_merge, source\n\nGitLab access: Use $GITLAB_TOKEN env var as PRIVATE-TOKEN header. Do NOT use JIT for GitLab.\n\nActions by update_type:\n- `needs_pin`: Batch into MR to add digest pins (tag@sha256:digest format). Self-merge after pipeline passes.\n- `unpinned`: Pin to actual version tag + digest. Self-merge after pipeline.\n- `patch`/`minor`: Batch into MR with new tag@digest. Self-merge ONLY after: (a) pipeline passes, (b) merge, (c) verify services healthy. If pipeline fails, iterate up to 3 times. If services unhealthy after merge, create revert MR and notify Noah.\n- `major`: Individual MR, NEVER self-merge. Notify Noah.\n- `downgrade`: Skip entirely.\n- `variant_change`: Skip — flag for Noah's awareness in summary but don't create MR.\n\nFor Dockerfile source entries: update the FROM line in the Dockerfile, not docker-compose.\n\n🚨 If never_auto_merge=true (OpenClaw/moltbot): NEVER self-merge regardless of update type. Always flag for Noah.\n\nUse gitlab-mr-create skill. Branch: chore/image-updates-YYYY-MM-DD. Notify Noah via Telegram (8531859108) for any MRs created.",
         "timeoutSeconds": 900
       },
       "state": {
-        "nextRunAtMs": 1771144200000,
-        "lastRunAtMs": 1771127234532,
+        "nextRunAtMs": 1771230600000,
+        "lastRunAtMs": 1771144206641,
         "lastStatus": "ok",
-        "lastDurationMs": 67864,
+        "lastDurationMs": 205933,
         "consecutiveErrors": 0
       },
       "enabled": true,
@@ -420,7 +420,7 @@
       "name": "nightly-redteam",
       "enabled": true,
       "createdAtMs": 1770841906925,
-      "updatedAtMs": 1771127441368,
+      "updatedAtMs": 1771135344369,
       "schedule": {
         "kind": "cron",
         "expr": "0 1 * * *",
@@ -437,10 +437,10 @@
         "mode": "announce"
       },
       "state": {
-        "nextRunAtMs": 1771135200000,
-        "lastRunAtMs": 1771048846759,
+        "nextRunAtMs": 1771221600000,
+        "lastRunAtMs": 1771135206632,
         "lastStatus": "ok",
-        "lastDurationMs": 18455,
+        "lastDurationMs": 137737,
         "consecutiveErrors": 0
       }
     },
@@ -471,7 +471,8 @@
         "lastRunAtMs": 1771066886797,
         "lastStatus": "ok",
         "lastDurationMs": 82094,
-        "consecutiveErrors": 0
+        "consecutiveErrors": 0,
+        "runningAtMs": 1771153200012
       }
     },
     {
@@ -480,7 +481,7 @@
       "name": "cron-config-sync",
       "enabled": true,
       "createdAtMs": 1770841907179,
-      "updatedAtMs": 1771127441316,
+      "updatedAtMs": 1771131621872,
       "schedule": {
         "kind": "cron",
         "expr": "0 */6 * * *",
@@ -497,12 +498,12 @@
         "mode": "none"
       },
       "state": {
-        "nextRunAtMs": 1771131600000,
-        "lastRunAtMs": 1771127067151,
+        "nextRunAtMs": 1771153200000,
+        "lastRunAtMs": 1771131609762,
         "lastStatus": "ok",
-        "lastDurationMs": 21706,
+        "lastDurationMs": 12110,
         "consecutiveErrors": 0,
-        "runningAtMs": 1771131600014
+        "runningAtMs": 1771153200012
       }
     },
     {
