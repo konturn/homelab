@@ -1,0 +1,42 @@
+---
+# Deploy Docker Compose files and start containers
+# This role is a reusable extraction from configure-homelab-services,
+# allowing Pi hosts (zwave, satellite) to deploy compose files without
+# the router-specific nginx/pihole/gitleaks tasks.
+
+- name: Create ansible state directory for compose files
+  ansible.builtin.file:
+    path: "{{ docker_compose_dest_path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  when: docker_compose_dest_path != ""
+
+- name: Template out compose file to ansible state directory on host
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/' + item }}"
+    dest: "{{ docker_compose_dest_path + '/' + item }}"
+    owner: root
+    group: root
+    mode: '0700'
+  no_log: true
+  loop: "{{ docker_compose_file_names }}"
+  when: docker_compose_dest_path != ""
+
+- name: Create and start Docker services
+  community.docker.docker_compose_v2:
+    project_name: "{{ docker_compose_project_name | default('docker') }}"
+    project_src: "{{ docker_compose_dest_path }}/"
+    files: "{{ docker_compose_file_names }}"
+    state: present
+  when: not ansible_check_mode and docker_compose_dest_path != ""
+
+- name: Force recreate containers after daemon config change
+  community.docker.docker_compose_v2:
+    project_name: "{{ docker_compose_project_name | default('docker') }}"
+    project_src: "{{ docker_compose_dest_path }}/"
+    files: "{{ docker_compose_file_names }}"
+    state: present
+    recreate: always
+  when: docker_conf is defined and docker_conf.changed and not ansible_check_mode and docker_compose_dest_path != ""

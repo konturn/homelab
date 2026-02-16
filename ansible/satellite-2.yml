@@ -10,4 +10,5 @@
         claude_user_principal: claude-satellite
     - configure-scanner
     - configure-docker
+    - deploy-compose
   become: yes
