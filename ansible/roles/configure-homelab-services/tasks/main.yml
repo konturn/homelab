@@ -79,6 +79,27 @@
   check_mode: no
   loop: "{{ nginx_config | default([]) }}"
 
+### Generate Loki htpasswd file for push authentication
+# Promtail and Docker logging driver authenticate to Loki via nginx reverse proxy
+- name: Generate Loki htpasswd file
+  ansible.builtin.shell: |
+    printf '%s:%s\n' '{{ vault_loki_push_username | default("promtail") }}' \
+      "$(openssl passwd -apr1 '{{ vault_loki_push_password | default(lookup("env", "LOKI_PUSH_PASSWORD")) }}')"
+  register: loki_htpasswd_content
+  delegate_to: localhost
+  check_mode: no
+  changed_when: false
+  no_log: true
+
+- name: Write Loki htpasswd file
+  ansible.builtin.copy:
+    content: "{{ loki_htpasswd_content.stdout }}"
+    dest: "{{ docker_persistent_data_path }}/lab_nginx/conf/loki.htpasswd"
+    owner: root
+    group: root
+    mode: '0640'
+  no_log: true
+
 - name: initialize nginx conf file dicts
   set_fact: 
     docker_config_nginx: []
