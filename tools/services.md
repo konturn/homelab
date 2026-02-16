@@ -118,33 +118,33 @@ ssh -o StrictHostKeyChecking=no -i /tmp/jit-ssh-key claude@10.4.0.1
 
 ## Loki (Log Queries)
 
-**Direct internal access (preferred — no auth needed, no JIT):**
-Moltbot is on the same Docker network as Loki. Use internal DNS:
+**Access via reverse proxy (no auth needed for reads):**
+Loki is on an isolated network, accessed through `loki.lab.nkontur.com`:
 ```bash
 # Query logs by container name
 START=$(($(date +%s) - 3600))000000000
 END=$(date +%s)000000000
-curl -s -G "http://loki:3100/loki/api/v1/query_range" \
+curl -sk -G "https://loki.lab.nkontur.com/loki/api/v1/query_range" \
   --data-urlencode 'query={container_name="CONTAINER_NAME"}' \
   --data-urlencode "limit=50" \
   --data-urlencode "start=$START" \
   --data-urlencode "end=$END" | jq -r '.data.result[].values[][1]'
 
 # Filter with pattern
-curl -s -G "http://loki:3100/loki/api/v1/query_range" \
+curl -sk -G "https://loki.lab.nkontur.com/loki/api/v1/query_range" \
   --data-urlencode 'query={container_name="CONTAINER_NAME"} |~ "error|ERROR"' \
   --data-urlencode "limit=50" \
   --data-urlencode "start=$START" \
   --data-urlencode "end=$END" | jq -r '.data.result[].values[][1]'
 
 # Check readiness
-curl -s "http://loki:3100/ready"
+curl -sk "https://loki.lab.nkontur.com/ready"
 
 # List all label values (find container names)
-curl -s "http://loki:3100/loki/api/v1/label/container_name/values" | jq -r '.data[]'
+curl -sk "https://loki.lab.nkontur.com/loki/api/v1/label/container_name/values" | jq -r '.data[]'
 ```
 
-**⚠️ DO NOT use `https://loki.lab.nkontur.com`** — nginx has a 301 redirect loop bug. Always use `http://loki:3100` directly.
+**⚠️ Writes require authentication** — The `/loki/api/v1/push` endpoint requires basic auth (promtail credentials). Read endpoints are open.
 
 **Via Grafana (alternative, needs JIT):**
 ```bash
