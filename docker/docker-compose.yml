@@ -91,7 +91,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    image: tecnativa/docker-socket-proxy:0.3@sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476
+    image: tecnativa/docker-socket-proxy:0.3.0@sha256:9e4b9e7517a6b660f2cc903a19b257b1852d5b3344794e3ea334ff00ae677ac2
     restart: unless-stopped
     networks:
       proxy-internal:
@@ -133,7 +133,7 @@ services:
       - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
     ports:
       - "32400/tcp"
-    image: plexinc/pms-docker:1.43.0.10467-2b1ba6e69@sha256:d38767ec3b948e860bcf1abfe16512bd638e6ac01230f5b65b64e2ef09052267
+    image: plexinc/pms-docker:1.43.0.10492-121068a07@sha256:1131c4cd21fa22f8196f749f1dbb69af306776c3c83c7f5b061e51dc49bcff7f
     networks:
       - external
       - internal
@@ -411,7 +411,7 @@ services:
       retries: 3
       start_period: 30s
   radarr:
-    image: linuxserver/radarr:6.0.4@sha256:ba2693dd704b84eb0b404d40b3902bd3e62a1768dc5ee0d89b1f1d7cd51a66eb
+    image: linuxserver/radarr:6.0.4.10291-ls292@sha256:f08dda38e7d12e5a722d9a5cb6e54acaf63c8598fefeefec88effe0c0d0038dd
     container_name: radarr
     security_opt:
       - no-new-privileges:true
@@ -450,7 +450,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.1113@sha256:6e6ea6b276d70662635ef1ef0bf3ae28f127c25fe89301577ffa1a47baf900e4
+    image: linuxserver/jackett:0.24.1124@sha256:574cd22a6ca580ed40a8d07dea37f1f30167de5d819a2f887b27a721859a1b83
     container_name: jackett
     security_opt:
       - no-new-privileges:true
@@ -483,7 +483,7 @@ services:
       retries: 3
       start_period: 30s
   sonarr:
-    image: linuxserver/sonarr:4.0.16@sha256:6f73bbba33391a338e20d836a60c86beaf2a865a89b706b339fc8cb0b8ce1559
+    image: linuxserver/sonarr:4.0.16.2944-ls303@sha256:37be832b78548e3f55f69c45b50e3b14d18df1b6def2a4994258217e67efb1a1
     container_name: sonarr
     security_opt:
       - no-new-privileges:true
@@ -642,7 +642,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    image: grafana/loki:3.6@sha256:847c287ada0e12603910589f42038c5cdaaad04e248bd1dc6c6e0920a235f427
+    image: grafana/loki:3.6.5@sha256:847c287ada0e12603910589f42038c5cdaaad04e248bd1dc6c6e0920a235f427
     networks:
       internal:
         ipv4_address: {{ loki_ip }}
@@ -664,7 +664,7 @@ services:
     healthcheck:
       disable: true
   promtail:
-    image: grafana/promtail:3.6@sha256:6140a3158fddd7ef2276908bd321ad5265ee6ad2abd9fb3c937394827df3ea4d
+    image: grafana/promtail:3.6.5@sha256:6140a3158fddd7ef2276908bd321ad5265ee6ad2abd9fb3c937394827df3ea4d
     container_name: promtail
     security_opt:
       - no-new-privileges:true
@@ -716,7 +716,7 @@ services:
       - "443:80"
     networks:
       - internal
-    image: 'gitlab/gitlab-ee:18.6.6-ee.0@sha256:13d051c50d219b842485dd513dabc8c22d5f707bc44119433bec182e911ff243'
+    image: 'gitlab/gitlab-ee:18.8.4-ee.0@sha256:d8c9bb7291fd6aaf64824a603855727b7864bd3f44223d409ccefd9ed0ee6b6c'
     restart: unless-stopped
     ulimits:
       nofile:
@@ -747,7 +747,7 @@ services:
   # Initial setup uses file storage; will be configured for GitLab JWT auth in future MR
   vault:
     container_name: vault
-    image: hashicorp/vault:1.21@sha256:a54f6229f8416dd5514020ecd06f514664c0cb21776b6686a3d26af21a79b1b1
+    image: hashicorp/vault:1.21.3@sha256:5f244d447c6f90107149c9565da5ffedf847cec673ba0062a82fc3dd83c89e65
     restart: unless-stopped
     networks:
       internal:
@@ -1009,7 +1009,7 @@ services:
     devices: 
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_ETDRb11A920-if00-port0:/dev/ttyUSB0"
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0:/dev/ttyUSB1"
-    image: "homeassistant/home-assistant:2026.2@sha256:17441c45ba14560b4ef727ee06aac4d605cf0dc0625fc4f2e043cb2551d72749"
+    image: "homeassistant/home-assistant:2026.2.2@sha256:3e2dff545c46e91f4ab2b21597016011d76d0de58bc8eaf51d75e841f337bf88"
     deploy:
       resources:
         limits:
@@ -1406,7 +1406,7 @@ services:
     cap_drop:
       - ALL
     restart: unless-stopped
-    image: koenkk/zigbee2mqtt:2@sha256:89cf02f379aa743a68494388e3a26fba7b8c9101f8b452038cc07aeff3fc983c
+    image: koenkk/zigbee2mqtt:2.8.0@sha256:89cf02f379aa743a68494388e3a26fba7b8c9101f8b452038cc07aeff3fc983c
     depends_on:
       mosquitto:
         condition: service_healthy
