@@ -18,7 +18,7 @@ scrape_configs:
       labels:
         job: systemd-journal
         host: router
-      path: /run/log/journal
+      # path auto-detected: checks /var/log/journal then /run/log/journal
     relabel_configs:
       - source_labels: ['__journal__systemd_unit']
         target_label: 'unit'
