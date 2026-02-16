@@ -1,7 +1,7 @@
 services:
   zwavejs2mqtt:
     container_name: zwavejs2mqtt
-    image: zwavejs/zwave-js-ui:11.10.1@sha256:a51e0f652f24252886905d17881acf40c51d0e3f5fc7555b756f29f646cd5087
+    image: zwavejs/zwave-js-ui:11.10.1@sha256:50984aa5b5195bc0b365b023d27ce2e8bad9a39c8f1da0094414f049abce4550
     restart: always
     tty: true
     stop_signal: SIGINT

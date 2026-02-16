@@ -2,7 +2,7 @@ networks:
   zwave:
 services:
   nginx: 
-    image: nginx:latest@sha256:514a9c2814250e61396ef4d6125ece1a8fbb3b0964a2ab441e9f7acf0b66b8b5
+    image: nginx:latest@sha256:3040aee8d792887190feb77276924597cf8a50cb9304723816a5e68047d49b3a
     container_name: nginx
     security_opt:
       - no-new-privileges:true
@@ -34,7 +34,7 @@ services:
       retries: 3
       start_period: 30s
   room-assistant:
-    image: mkerix/room-assistant:latest@sha256:e09275d619025fa7905e60a432ecb4cb3f1fad46c20bd033734808d565dfc78a
+    image: mkerix/room-assistant:latest@sha256:603b78ccaddebc50e4092e1573a8861cfbd6e7ed6c2707e38cf27a54399bce5a
     container_name: room-assistant
     security_opt:
       - no-new-privileges:true
