@@ -11,5 +11,6 @@
   - configure-zwave
   - configure-snapclient
   - configure-docker
+  - deploy-compose
   become: yes
 

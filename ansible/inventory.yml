@@ -185,7 +185,7 @@ all:
       vars:
         docker_compose_file_names: 
           - "docker-compose-satellite.yml"
-        docker_compose_dest_path: ""
+        docker_compose_dest_path: "/root/ansible_state"
         docker_compose_project_name: "satellite"
         docker_compose_version: '3.7'
         is_satellite: true
