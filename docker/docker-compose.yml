@@ -673,7 +673,6 @@ services:
     restart: unless-stopped
     volumes:
       - /var/log:/var/log:ro
-      - /run/log/journal:/run/log/journal:ro
       - /etc/machine-id:/etc/machine-id:ro
       - {{ docker_persistent_data_path }}/promtail:/tmp/positions
       - {{ docker_persistent_data_path }}/promtail/config.yml:/etc/promtail/config.yml:ro
