@@ -97,7 +97,7 @@
     dest: "{{ docker_persistent_data_path }}/lab_nginx/conf/loki.htpasswd"
     owner: root
     group: root
-    mode: '0644'
+    mode: '0640'
   no_log: true
 
 - name: initialize nginx conf file dicts
