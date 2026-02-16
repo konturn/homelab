@@ -17,13 +17,42 @@ if [ ! -f "$STATE_FILE" ]; then
 fi
 
 # Extract image references from docker-compose (Jinja2 template — grep for image:)
-extract_images() {
+# Output: image_ref|source
+extract_compose_images() {
   grep -E '^\s+image:' "$COMPOSE_FILE" \
     | sed 's/.*image:\s*//' \
     | sed 's/["'"'"']//g' \
     | sed 's/\s*#.*//' \
     | grep -v '{{' \
-    | sort -u
+    | sort -u \
+    | while IFS= read -r img; do
+        echo "${img}|compose:docker/docker-compose.yml"
+      done
+}
+
+# Extract FROM image references from Dockerfiles under docker/
+# Output: image_ref|source
+extract_dockerfile_images() {
+  local docker_dir="$REPO_DIR/docker"
+  find "$docker_dir" -name 'Dockerfile*' -type f 2>/dev/null | while IFS= read -r df; do
+    local rel_path="${df#$REPO_DIR/}"
+    grep -E '^FROM\s+' "$df" 2>/dev/null \
+      | sed 's/^FROM\s\+//' \
+      | sed 's/\s\+AS\s\+.*//i' \
+      | sed 's/\s*#.*//' \
+      | sed 's/\s*$//' \
+      | grep -v '^\$' \
+      | grep -v '^scratch$' \
+      | while IFS= read -r img; do
+          echo "${img}|Dockerfile:${rel_path}"
+        done
+  done | sort -u
+}
+
+# Combined: all image references with source
+extract_all_images() {
+  extract_compose_images
+  extract_dockerfile_images
 }
 
 ##############################################################################
@@ -327,8 +356,11 @@ suppressed=$(jq -r '(.suppressedImages // [])[]' "$STATE_FILE" 2>/dev/null)
 never_auto_merge=$(jq -r '(.neverAutoMerge // [])[]' "$STATE_FILE" 2>/dev/null)
 updates="[]"
 
-while IFS= read -r image_ref; do
+while IFS='|' read -r image_ref source; do
   (
+    # Default source if not provided (backward compat)
+    source="${source:-compose:docker/docker-compose.yml}"
+
     # Strip existing digest if present
     image_no_digest="${image_ref%%@*}"
 
@@ -360,6 +392,10 @@ while IFS= read -r image_ref; do
     if echo "$never_auto_merge" | grep -qF "$(basename "$image")"; then
       no_auto_merge="true"
     fi
+    # Always mark moltbot Dockerfile images as never_auto_merge
+    if [[ "$source" == Dockerfile:docker/moltbot/* ]]; then
+      no_auto_merge="true"
+    fi
 
     # Parse registry info
     parse_image_ref "$image" "$current_tag"
@@ -373,7 +409,7 @@ while IFS= read -r image_ref; do
       latest_digest=$(get_digest "$IMG_REGISTRY" "$IMG_REPO" "latest")
       actual_tag=$(get_latest_tag "")
 
-      echo "{\"image\": \"$image\", \"current_tag\": \"latest\", \"current_digest\": \"${current_digest}\", \"latest_tag\": \"${actual_tag:-latest}\", \"latest_digest\": \"${latest_digest}\", \"update_type\": \"unpinned\", \"never_auto_merge\": $([ "$no_auto_merge" = "true" ] && echo true || echo false)}"
+      echo "{\"image\": \"$image\", \"current_tag\": \"latest\", \"current_digest\": \"${current_digest}\", \"latest_tag\": \"${actual_tag:-latest}\", \"latest_digest\": \"${latest_digest}\", \"update_type\": \"unpinned\", \"source\": \"$source\", \"never_auto_merge\": $([ "$no_auto_merge" = "true" ] && echo true || echo false)}"
       exit 0
     fi
 
@@ -385,7 +421,7 @@ while IFS= read -r image_ref; do
       if [ -z "$current_digest" ]; then
         pin_digest=$(get_digest "$IMG_REGISTRY" "$IMG_REPO" "$current_tag")
         if [ -n "$pin_digest" ]; then
-          echo "{\"image\": \"$image\", \"current_tag\": \"$current_tag\", \"current_digest\": \"\", \"latest_tag\": \"$current_tag\", \"latest_digest\": \"$pin_digest\", \"update_type\": \"needs_pin\", \"never_auto_merge\": $([ "$no_auto_merge" = "true" ] && echo true || echo false)}"
+          echo "{\"image\": \"$image\", \"current_tag\": \"$current_tag\", \"current_digest\": \"\", \"latest_tag\": \"$current_tag\", \"latest_digest\": \"$pin_digest\", \"update_type\": \"needs_pin\", \"source\": \"$source\", \"never_auto_merge\": $([ "$no_auto_merge" = "true" ] && echo true || echo false)}"
         fi
       fi
       exit 0
@@ -396,7 +432,7 @@ while IFS= read -r image_ref; do
       if [ -z "$current_digest" ]; then
         pin_digest=$(get_digest "$IMG_REGISTRY" "$IMG_REPO" "$current_tag")
         if [ -n "$pin_digest" ]; then
-          echo "{\"image\": \"$image\", \"current_tag\": \"$current_tag\", \"current_digest\": \"\", \"latest_tag\": \"$current_tag\", \"latest_digest\": \"$pin_digest\", \"update_type\": \"needs_pin\", \"never_auto_merge\": $([ "$no_auto_merge" = "true" ] && echo true || echo false)}"
+          echo "{\"image\": \"$image\", \"current_tag\": \"$current_tag\", \"current_digest\": \"\", \"latest_tag\": \"$current_tag\", \"latest_digest\": \"$pin_digest\", \"update_type\": \"needs_pin\", \"source\": \"$source\", \"never_auto_merge\": $([ "$no_auto_merge" = "true" ] && echo true || echo false)}"
         fi
       fi
       exit 0
@@ -405,9 +441,9 @@ while IFS= read -r image_ref; do
     update_type=$(classify_update "$current_tag" "$latest_tag")
     latest_digest=$(get_digest "$IMG_REGISTRY" "$IMG_REPO" "$latest_tag")
 
-    echo "{\"image\": \"$image\", \"current_tag\": \"$current_tag\", \"current_digest\": \"${current_digest}\", \"latest_tag\": \"$latest_tag\", \"latest_digest\": \"${latest_digest}\", \"update_type\": \"$update_type\", \"never_auto_merge\": $([ "$no_auto_merge" = "true" ] && echo true || echo false)}"
+    echo "{\"image\": \"$image\", \"current_tag\": \"$current_tag\", \"current_digest\": \"${current_digest}\", \"latest_tag\": \"$latest_tag\", \"latest_digest\": \"${latest_digest}\", \"update_type\": \"$update_type\", \"source\": \"$source\", \"never_auto_merge\": $([ "$no_auto_merge" = "true" ] && echo true || echo false)}"
   ) || ((ERRORS++))
-done <<< "$(extract_images)" | jq -s '.' > /tmp/check-updates-result.json
+done <<< "$(extract_all_images)" | jq -s '.' > /tmp/check-updates-result.json
 
 # Update state
 jq --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '.lastCheck = $ts' "$STATE_FILE" > "${STATE_FILE}.tmp" \
