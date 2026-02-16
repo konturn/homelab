@@ -11,6 +11,13 @@ STATE_FILE="${STATE_FILE:-/home/node/.openclaw/workspace/memory/image-update-sta
 CURL_TIMEOUT=15
 ERRORS=0
 
+# Images to permanently skip update checks for (with reason).
+# These are distinct from suppressedImages in the state file, which is for
+# temporary/user-driven suppression.
+SKIP_IMAGES=(
+  "grafana/promtail"  # 3.6.0+ Docker images don't include systemd journal support (grafana/loki#19911)
+)
+
 # Initialize state file if missing
 if [ ! -f "$STATE_FILE" ]; then
   echo '{"lastCheck":null,"lastMR":null,"suppressedImages":[],"neverAutoMerge":["moltbot-gateway","moltbot"]}' > "$STATE_FILE"
@@ -382,7 +389,14 @@ while IFS='|' read -r image_ref source; do
       current_digest="${image_ref#*@}"
     fi
 
-    # Skip suppressed images
+    # Skip permanently excluded images (hardcoded in SKIP_IMAGES)
+    for skip in "${SKIP_IMAGES[@]}"; do
+      if [ "$image" = "$skip" ]; then
+        exit 0
+      fi
+    done
+
+    # Skip suppressed images (from state file)
     if echo "$suppressed" | grep -qF "$image"; then
       exit 0
     fi

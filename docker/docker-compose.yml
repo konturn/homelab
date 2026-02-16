@@ -664,7 +664,7 @@ services:
     healthcheck:
       disable: true
   promtail:
-    image: grafana/promtail:3.6.5@sha256:6140a3158fddd7ef2276908bd321ad5265ee6ad2abd9fb3c937394827df3ea4d
+    image: grafana/promtail:3.5.8@sha256:2a7c5469d687377de5cb7c8356cf96090c0069814d90ef35f9874db445999609
     container_name: promtail
     security_opt:
       - no-new-privileges:true
