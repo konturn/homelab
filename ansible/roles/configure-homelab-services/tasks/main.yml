@@ -139,7 +139,7 @@
     dest: "{{ item.dest }}"
     owner: "{{ item.owner | default('root') }}"
     group: "{{ item.owner | default('root') }}"
-    mode: "{{ item.mode | default('0644') }}"
+    mode: "{{ item.mode | default('0640') }}"
   register: docker_config_copy
   loop: "{{ docker_config + (docker_config_nginx | default([])) }}"
 
