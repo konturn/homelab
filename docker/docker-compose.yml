@@ -81,6 +81,9 @@ networks:
   proxy-internal:
     driver: bridge
     internal: true
+  loki-internal:
+    driver: bridge
+    internal: true
 services:
   # Docker socket proxy - filtered access for CI builds
   # Only allows build/image operations, blocks exec/start/stop
@@ -284,6 +287,7 @@ services:
       internal:
         ipv4_address: {{ lab_nginx_ip }}
       proxy-internal:
+      loki-internal:
     restart: unless-stopped
     depends_on:
       docker-socket-proxy:
@@ -644,8 +648,7 @@ services:
       - ALL
     image: grafana/loki:3.6.5@sha256:847c287ada0e12603910589f42038c5cdaaad04e248bd1dc6c6e0920a235f427
     networks:
-      internal:
-        ipv4_address: {{ loki_ip }}
+      - loki-internal
     restart: unless-stopped
     deploy:
       resources:
@@ -838,12 +841,14 @@ services:
     logging:
       driver: loki
       options:
-        loki-url: "http://{{ loki_ip }}:3100/loki/api/v1/push"
-        labels: "service=jit-approval-svc"
+        loki-url: "https://loki.lab.nkontur.com/loki/api/v1/push"
+        loki-tls-insecure-skip-verify: "true"
+        loki-external-labels: "service=jit-approval-svc"
         loki-retries: "5"
         loki-batch-size: "400"
         max-buffer-size: "4m"
         mode: "non-blocking"
+        loki-basic-auth: "{{ vault_loki_push_username | default('promtail') }}:{{ vault_loki_push_password | default(lookup('env', 'LOKI_PUSH_PASSWORD')) }}"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
       interval: 30s

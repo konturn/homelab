@@ -4,6 +4,8 @@ datasources:
   - name: Loki
     type: loki
     access: proxy
-    url: http://loki:3100
+    url: https://loki.lab.nkontur.com
     isDefault: false
     editable: true
+    jsonData:
+      tlsSkipVerify: true
