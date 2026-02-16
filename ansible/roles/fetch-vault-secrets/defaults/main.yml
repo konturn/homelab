@@ -168,3 +168,9 @@ vault_secret_paths:
   - path: "docker/chromium-browser"
     fields:
       vault_chromium_vnc_password: "vnc_password"
+
+  # Loki push authentication (promtail -> loki via reverse proxy)
+  - path: "loki/push-auth"
+    fields:
+      vault_loki_push_username: "username"
+      vault_loki_push_password: "password"
