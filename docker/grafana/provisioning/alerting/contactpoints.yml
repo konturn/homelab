@@ -25,4 +25,4 @@ contactPoints:
             {{ end }}
             
             Time: {{ .CommonAnnotations.startsAt }}
-        disableResolveMessage: false{% endraw %}
+        disableResolveMessage: false
