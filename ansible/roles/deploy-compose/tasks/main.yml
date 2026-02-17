@@ -48,6 +48,7 @@
     project_src: "{{ docker_compose_dest_path }}/"
     files: "{{ docker_compose_file_names }}"
     state: present
+    remove_orphans: true
   when: not ansible_check_mode and docker_compose_dest_path != ""
 
 - name: Force recreate containers after daemon config change
@@ -57,4 +58,5 @@
     files: "{{ docker_compose_file_names }}"
     state: present
     recreate: always
+    remove_orphans: true
   when: docker_conf is defined and docker_conf.changed and not ansible_check_mode and docker_compose_dest_path != ""
