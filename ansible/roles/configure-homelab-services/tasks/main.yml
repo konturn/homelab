@@ -132,6 +132,21 @@
     recursive: yes
   when: "'external' in (nginx_config | default([]) | map(attribute='network') | list)"
 
+- name: Check if config destinations are directories (cleanup stale state)
+  ansible.builtin.stat:
+    path: "{{ item.dest }}"
+  loop: "{{ docker_config + (docker_config_nginx | default([])) }}"
+  register: _config_dest_check
+
+- name: Remove config dest that is a directory instead of a file
+  ansible.builtin.file:
+    path: "{{ item.stat.path }}"
+    state: absent
+  loop: "{{ _config_dest_check.results | default([]) }}"
+  when: item.stat is defined and item.stat.exists and item.stat.isdir
+  loop_control:
+    label: "{{ item.stat.path | default('skip') }}"
+
 - name: Copy docker configuration files
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/{{ item.src }}"
