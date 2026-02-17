@@ -13,6 +13,24 @@
     mode: '0700'
   when: docker_compose_dest_path != ""
 
+- name: Create config file directories
+  ansible.builtin.file:
+    path: "{{ item.dest | dirname }}"
+    state: directory
+  loop: "{{ docker_config | default([]) }}"
+  when: docker_config is defined and docker_config | length > 0
+
+- name: Template config files
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.group | default('root') }}"
+    mode: "{{ item.mode | default('0640') }}"
+  no_log: true
+  loop: "{{ docker_config | default([]) }}"
+  when: docker_config is defined and docker_config | length > 0
+
 - name: Template out compose file to ansible state directory on host
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/' + item }}"

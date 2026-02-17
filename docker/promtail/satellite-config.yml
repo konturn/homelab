@@ -1,0 +1,29 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions/positions.yaml
+
+clients:
+  - url: https://loki.lab.nkontur.com/loki/api/v1/push
+    basic_auth:
+      username: {{ vault_loki_push_username }}
+      password: {{ vault_loki_push_password }}
+
+scrape_configs:
+  # Systemd journal - scrapes all host logs directly from journal
+  - job_name: journal
+    journal:
+      json: false
+      max_age: 48h
+      labels:
+        job: systemd-journal
+        host: {{ inventory_hostname | regex_replace('\.lab\.nkontur\.com$', '') }}
+    relabel_configs:
+      - source_labels: ['__journal__systemd_unit']
+        target_label: 'unit'
+      - source_labels: ['__journal_syslog_identifier']
+        target_label: 'syslog_identifier'
+      - source_labels: ['__journal_priority_keyword']
+        target_label: 'level'

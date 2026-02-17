@@ -189,19 +189,27 @@ all:
       vars:
         docker_compose_file_names: 
           - "docker-compose-satellite.yml"
+          - "docker-compose-observability.yml"
         docker_compose_dest_path: "/root/ansible_state"
         docker_compose_project_name: "satellite"
         docker_compose_version: '3.7'
         is_satellite: true
         use_onboard_audio: true
+        docker_config:
+          - src: "docker/promtail/satellite-config.yml"
+            dest: "/root/ansible_state/promtail-config.yml"
+            name: "promtail"
+          - src: "docker/telegraf/satellite-telegraf.conf"
+            dest: "/root/ansible_state/telegraf.conf"
+            name: "telegraf"
       hosts:
         zwave.lab.nkontur.com:
           gitlab_registry_login: false
           location: "Movie Room"
-          docker_config: []
           docker_compose_file_names: 
             - "docker-compose-zwave.yml"
             - "docker-compose-satellite.yml"
+            - "docker-compose-observability.yml"
           docker_compose_project_name: "zwave"
           nginx_config:
             - dest: "/root/nginx"
@@ -213,7 +221,6 @@ all:
               name: "movie"
         satellite-2.lab.nkontur.com:
           gitlab_registry_login: false
-          docker_config: []
           nginx_config:
             - dest: "/root/nginx"
               network: "zwave"
@@ -222,4 +229,5 @@ all:
           docker_compose_file_names: 
             - "docker-compose-zigbee.yml"
             - "docker-compose-satellite.yml"
+            - "docker-compose-observability.yml"
 
