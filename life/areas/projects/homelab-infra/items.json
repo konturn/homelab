@@ -37,7 +37,8 @@
     "category": "status",
     "timestamp": "2026-02-12",
     "source": "conversation",
-    "status": "active"
+    "status": "superseded",
+    "supersededBy": "infra-020"
   },
   {
     "id": "infra-006",
@@ -101,7 +102,8 @@
     "category": "status",
     "timestamp": "2026-02-14",
     "source": "daily-log",
-    "status": "active"
+    "status": "superseded",
+    "supersededBy": "infra-023"
   },
   {
     "id": "infra-014",
@@ -125,6 +127,79 @@
     "category": "status",
     "timestamp": "2026-02-12",
     "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "infra-017",
+    "fact": "Crossplane (JSON→nginx config renderer) has quoting bug - wraps location args in single quotes breaking exact match. Killed in MR !281, replaced with plain conf files",
+    "category": "milestone",
+    "timestamp": "2026-02-16",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "infra-018",
+    "fact": "Promtail 3.6.0+ Docker images lack systemd journal support (grafana/loki#19911) - must stay on 3.5.8. Added to SKIP_IMAGES in check-updates.sh",
+    "category": "status",
+    "timestamp": "2026-02-16",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "infra-019",
+    "fact": "Loki write auth implemented via nginx basic auth on /loki/api/v1/push, unauthenticated reads allowed. Creds stored in Vault at homelab/data/loki/push-auth",
+    "category": "milestone",
+    "timestamp": "2026-02-16",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "infra-020",
+    "fact": "Loki HTTPS 301 redirect loop fixed - was missing server block in nginx, default server redirected on both 80 and 443",
+    "category": "milestone",
+    "timestamp": "2026-02-16",
+    "source": "daily-log",
+    "status": "superseded",
+    "supersededBy": "infra-019"
+  },
+  {
+    "id": "infra-021",
+    "fact": "Promtail systemd journal logs never reached Loki - was mounting /run/log/journal (volatile) instead of /var/log/journal (persistent). Fixed in MR !273",
+    "category": "milestone",
+    "timestamp": "2026-02-16",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "infra-022",
+    "fact": "Cloudflare DDNS API key broken - ddns.py failing with auth error. Needs key regeneration",
+    "category": "status",
+    "timestamp": "2026-02-16",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "infra-023",
+    "fact": "GITLAB_TOKEN env var restored/working - MEMORY.md had stale info saying it was revoked, causing sub-agents to waste tokens on JIT",
+    "category": "status",
+    "timestamp": "2026-02-16",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "infra-024",
+    "fact": "Docker daemon.json uses direct Loki IP - cannot fully isolate Loki on internal network because daemon runs on host",
+    "category": "status",
+    "timestamp": "2026-02-16",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "infra-025",
+    "fact": "Moltbook posting cadence changed from nightly to weekly (Sunday 10 PM) - Noah prefers posting when inspired vs obligation",
+    "category": "status",
+    "timestamp": "2026-02-16",
+    "source": "daily-log",
     "status": "active"
   }
 ]
