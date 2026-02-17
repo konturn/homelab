@@ -42,9 +42,16 @@
     group: root
     mode: '0744'
 
+- name: Get dpkg architecture
+  ansible.builtin.command: dpkg --print-architecture
+  register: _dpkg_arch
+  changed_when: false
+
 - name: Install shell2http
+  vars:
+    _shell2http_arch: "{{ 'arm64' if _dpkg_arch.stdout == 'arm64' else 'armv6' }}"
   ansible.builtin.apt:
-    deb: https://github.com/msoap/shell2http/releases/download/v1.14.2/shell2http_1.14.2_linux_arm64.deb
+    deb: "https://github.com/msoap/shell2http/releases/download/v1.14.2/shell2http_1.14.2_linux_{{ _shell2http_arch }}.deb"
 
 - name: shell2http systemd service
   ansible.builtin.copy:
