@@ -682,6 +682,8 @@ services:
       - {{ docker_persistent_data_path }}/promtail:/tmp/positions
       - {{ docker_persistent_data_path }}/promtail/config.yml:/etc/promtail/config.yml:ro
       - {{ docker_persistent_data_path }}/vault/logs:/vault/logs:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - {{ docker_persistent_data_path }}/docker/containers:/var/lib/docker/containers:ro
     command: -config.file=/etc/promtail/config.yml
     networks:
       internal:
@@ -840,14 +842,10 @@ services:
       vault:
         condition: service_healthy
     logging:
-      driver: loki
+      driver: json-file
       options:
-        loki-url: "http://{{ loki_ip }}:3100/loki/api/v1/push"
-        labels: "service=jit-approval-svc"
-        loki-retries: "5"
-        loki-batch-size: "400"
-        max-buffer-size: "4m"
-        mode: "non-blocking"
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
       interval: 30s

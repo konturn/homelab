@@ -30,6 +30,30 @@ scrape_configs:
       - source_labels: ['__journal_priority_keyword']
         target_label: 'level'
 
+  # Docker container logs (json-file driver)
+  # Discovers containers via Docker socket, reads JSON log files
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 30s
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: 'container'
+      - source_labels: ['__meta_docker_container_id']
+        target_label: 'container_id'
+      - action: replace
+        target_label: 'source'
+        replacement: 'docker'
+      - action: replace
+        target_label: 'host'
+        replacement: 'router'
+      - action: replace
+        target_label: 'job'
+        replacement: 'docker'
+    pipeline_stages:
+      - docker: {}
+
   # Credential scrubber audit log
   - job_name: scrub-transcripts
     static_configs:
