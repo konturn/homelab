@@ -554,7 +554,7 @@ services:
       - /mpool/audioserve/data:/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -1100,7 +1100,7 @@ services:
       - "--hostID"
       - "office"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep snapclient || exit 1"]
+      test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -1133,7 +1133,7 @@ services:
       - "--hostID"
       - "global"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep snapclient || exit 1"]
+      test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -1167,7 +1167,7 @@ services:
       - "--hostID"
       - "kitchen"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep snapclient || exit 1"]
+      test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -1201,7 +1201,7 @@ services:
       - "--hostID"
       - "main_bedroom"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep snapclient || exit 1"]
+      test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -1235,7 +1235,7 @@ services:
       - "--hostID"
       - "main_bathroom"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep snapclient || exit 1"]
+      test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -1269,7 +1269,7 @@ services:
       - "--hostID"
       - "guest_bathroom"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep snapclient || exit 1"]
+      test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -1303,7 +1303,7 @@ services:
       - "--hostID"
       - "guest_bedroom"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep snapclient || exit 1"]
+      test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -1402,7 +1402,7 @@ services:
       MQTT_PASSWORD: {{ vault_mqtt_pass | default(lookup('env', 'MQTT_PASS')) | trim }}
       MQTT_REJECT_UNAUTHORIZED: "false"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080 || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/data/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -1545,6 +1545,12 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
     networks:
       - external
       - nextcloud_internal
