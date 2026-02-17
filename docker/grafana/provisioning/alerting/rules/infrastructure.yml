@@ -1,8 +1,11 @@
 apiVersion: 1
 
 groups:
+  # =========================================================================
+  # Container Alerts
+  # =========================================================================
   - orgId: 1
-    name: infrastructure
+    name: container-alerts
     folder: Infrastructure Alerts
     interval: 1m
     rules:
@@ -11,562 +14,569 @@ groups:
         condition: B
         data:
           - refId: A
-            queryType: ""
-            relativeTimeRange:
-              from: 300
-              to: 0
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
             model:
-              datasource:
-                type: influxdb
-                uid: influxdb
               query: |
                 from(bucket: "metrics")
                   |> range(start: -5m)
-                  |> filter(fn: (r) => r["_measurement"] == "docker_container_health")
-                  |> filter(fn: (r) => r["_field"] == "health_status")
-                  |> filter(fn: (r) => r["_value"] != "healthy")
+                  |> filter(fn: (r) => r._measurement == "docker_container_health")
+                  |> filter(fn: (r) => r._field == "health_status")
+                  |> filter(fn: (r) => r._value != "healthy")
                   |> group(columns: ["container_name"])
                   |> last()
               refId: A
           - refId: B
-            queryType: ""
-            relativeTimeRange:
-              from: 0
-              to: 0
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
             model:
-              conditions:
-                - evaluator:
-                    params: [0]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    params: []
-                    type: last
-                  type: query
-              datasource:
-                type: __expr__
-                uid: __expr__
+              type: reduce
               expression: A
-              intervalMs: 1000
-              maxDataPoints: 43200
               reducer: last
               refId: B
-              type: reduce
-        noDataState: NoData
+              settings: {mode: dropNN}
+        noDataState: OK
         execErrState: Alerting
         for: 2m
         annotations:
           summary: "Container {{ $labels.container_name }} health check failed"
-          description: "Container {{ $labels.container_name }} has been reporting unhealthy status for more than 2 minutes. This indicates the container service may be down or malfunctioning."
         labels:
           severity: critical
-          team: infrastructure
-          alertname: ContainerHealthFailure
 
-      - uid: high-disk-usage-warning
-        title: Disk Space Warning (80%+)
-        condition: B
+      - uid: container-restart-loop
+        title: Container Restart Loop
+        condition: C
         data:
           - refId: A
-            queryType: ""
-            relativeTimeRange:
-              from: 300
-              to: 0
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: influxdb
             model:
-              datasource:
-                type: influxdb
-                uid: influxdb
               query: |
                 from(bucket: "metrics")
-                  |> range(start: -5m)
-                  |> filter(fn: (r) => r["_measurement"] == "disk")
-                  |> filter(fn: (r) => r["_field"] == "used_percent")
-                  |> filter(fn: (r) => r["_value"] >= 80.0)
-                  |> group(columns: ["device", "path"])
-                  |> mean()
+                  |> range(start: -15m)
+                  |> filter(fn: (r) => r._measurement == "docker_container_status")
+                  |> filter(fn: (r) => r._field == "restart_count")
+                  |> difference(nonNegative: true)
+                  |> group(columns: ["container_name"])
+                  |> sum()
               refId: A
           - refId: B
-            queryType: ""
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              conditions:
-                - evaluator:
-                    params: [80]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    params: []
-                    type: last
-                  type: query
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: A
-              intervalMs: 1000
-              maxDataPoints: 43200
-              reducer: last
-              refId: B
-              type: reduce
-        noDataState: NoData
-        execErrState: NoData
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [3]}}]}
+        noDataState: OK
+        execErrState: Alerting
         for: 5m
         annotations:
-          summary: "Disk space warning on {{ $labels.device }} ({{ $labels.path }})"
-          description: "Disk usage on {{ $labels.device }} mounted at {{ $labels.path }} is {{ $value }}%, which exceeds the 80% warning threshold. Consider freeing up space or extending storage."
+          summary: "Container restarting repeatedly (>3 restarts in 15min)"
         labels:
-          severity: warning
-          team: infrastructure
-          alertname: DiskSpaceWarning
+          severity: critical
 
-      - uid: high-disk-usage-critical
-        title: Disk Space Critical (90%+)
-        condition: B
+      - uid: container-oom-kill
+        title: Container OOM Kill
+        condition: C
         data:
           - refId: A
-            queryType: ""
-            relativeTimeRange:
-              from: 300
-              to: 0
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
             model:
-              datasource:
-                type: influxdb
-                uid: influxdb
               query: |
                 from(bucket: "metrics")
                   |> range(start: -5m)
-                  |> filter(fn: (r) => r["_measurement"] == "disk")
-                  |> filter(fn: (r) => r["_field"] == "used_percent")
-                  |> filter(fn: (r) => r["_value"] >= 90.0)
-                  |> group(columns: ["device", "path"])
-                  |> mean()
+                  |> filter(fn: (r) => r._measurement == "docker_container_status")
+                  |> filter(fn: (r) => r._field == "oomkilled")
+                  |> last()
+                  |> filter(fn: (r) => r._value == true)
               refId: A
           - refId: B
-            queryType: ""
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              conditions:
-                - evaluator:
-                    params: [90]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    params: []
-                    type: last
-                  type: query
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: A
-              intervalMs: 1000
-              maxDataPoints: 43200
-              reducer: last
-              refId: B
-              type: reduce
-        noDataState: NoData
-        execErrState: NoData
-        for: 2m
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Alerting
+        for: 0s
         annotations:
-          summary: "CRITICAL: Disk space on {{ $labels.device }} ({{ $labels.path }}) at {{ $value }}%"
-          description: "Disk usage on {{ $labels.device }} mounted at {{ $labels.path }} is {{ $value }}%, which exceeds the 90% critical threshold. Immediate action required to prevent system issues."
+          summary: "Container killed by OOM"
         labels:
           severity: critical
-          team: infrastructure
-          alertname: DiskSpaceCritical
 
-      - uid: high-memory-usage
-        title: High Memory Usage (85%+)
-        condition: B
-        data:
-          - refId: A
-            queryType: ""
-            relativeTimeRange:
-              from: 600
-              to: 0
-            model:
-              datasource:
-                type: influxdb
-                uid: influxdb
-              query: |
-                from(bucket: "metrics")
-                  |> range(start: -10m)
-                  |> filter(fn: (r) => r["_measurement"] == "mem")
-                  |> filter(fn: (r) => r["_field"] == "used_percent")
-                  |> filter(fn: (r) => r["_value"] >= 85.0)
-                  |> mean()
-              refId: A
-          - refId: B
-            queryType: ""
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              conditions:
-                - evaluator:
-                    params: [85]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    params: []
-                    type: last
-                  type: query
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: A
-              intervalMs: 1000
-              maxDataPoints: 43200
-              reducer: last
-              refId: B
-              type: reduce
-        noDataState: NoData
-        execErrState: NoData
-        for: 10m
-        annotations:
-          summary: "High memory usage detected: {{ $value }}%"
-          description: "System memory usage has been at {{ $value }}% for more than 10 minutes, which exceeds the 85% threshold. This may impact system performance and stability."
-        labels:
-          severity: warning
-          team: infrastructure
-          alertname: HighMemoryUsage
-
-      - uid: service-downtime-critical
+      - uid: critical-service-down
         title: Critical Service Down
         condition: B
         data:
           - refId: A
-            queryType: ""
-            relativeTimeRange:
-              from: 300
-              to: 0
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
             model:
-              datasource:
-                type: influxdb
-                uid: influxdb
               query: |
                 from(bucket: "metrics")
                   |> range(start: -5m)
-                  |> filter(fn: (r) => r["_measurement"] == "docker_container_status")
-                  |> filter(fn: (r) => r["_field"] == "oom_killed" or r["_field"] == "status")
-                  |> filter(fn: (r) => r["container_name"] =~ /grafana|homeassistant|nginx|gitlab|influxdb|plex|bitwarden|vault|loki/)
-                  |> filter(fn: (r) => r["_value"] != "running" or r["oom_killed"] == 1)
-                  |> group(columns: ["container_name"])
+                  |> filter(fn: (r) => r._measurement == "docker_container_status")
+                  |> filter(fn: (r) => r._field == "exitcode")
+                  |> filter(fn: (r) => r.container_name =~ /grafana|homeassistant|nginx|gitlab|influxdb|plex|bitwarden|vault|loki|promtail/)
                   |> last()
+                  |> filter(fn: (r) => r._value != 0)
               refId: A
           - refId: B
-            queryType: ""
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              conditions:
-                - evaluator:
-                    params: [0]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    params: []
-                    type: last
-                  type: query
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: A
-              intervalMs: 1000
-              maxDataPoints: 43200
-              reducer: last
-              refId: B
-              type: reduce
-        noDataState: NoData
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B, settings: {mode: dropNN}}
+        noDataState: OK
         execErrState: Alerting
-        for: 1m
+        for: 2m
         annotations:
-          summary: "Critical service {{ $labels.container_name }} is down"
-          description: "Critical homelab service {{ $labels.container_name }} has stopped running or was OOM killed. This service is essential for homelab operations and requires immediate attention."
+          summary: "Critical service {{ $labels.container_name }} has non-zero exit code"
         labels:
           severity: critical
-          team: infrastructure
-          alertname: ServiceDowntime
 
-      - uid: restic-backup-stale
-        title: Restic Backup Stale (36h+)
-        condition: B
+  # =========================================================================
+  # System Alerts
+  # =========================================================================
+  - orgId: 1
+    name: system-alerts
+    folder: Infrastructure Alerts
+    interval: 1m
+    rules:
+      - uid: high-memory-usage
+        title: High Memory Usage (90%+)
+        condition: C
         data:
           - refId: A
-            queryType: ""
-            relativeTimeRange:
-              from: 129600
-              to: 0
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
             model:
-              datasource:
-                type: loki
-                uid: loki
-              expr: 'count_over_time({job="systemd-journal", unit="restic-backup.service"} |= "backup" |= "processed" [36h])'
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "mem")
+                  |> filter(fn: (r) => r._field == "used_percent")
+                  |> mean()
               refId: A
           - refId: B
-            queryType: ""
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              conditions:
-                - evaluator:
-                    params: [1]
-                    type: lt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    params: []
-                    type: last
-                  type: query
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: A
-              intervalMs: 1000
-              maxDataPoints: 43200
-              reducer: last
-              refId: B
-              type: reduce
-        noDataState: Alerting
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [90]}}]}
+        noDataState: NoData
         execErrState: Alerting
         for: 5m
         annotations:
-          summary: "No successful restic backup in the last 36 hours"
-          description: "The restic-backup.service has not completed a successful backup in over 36 hours. This may indicate a backup failure, repository connectivity issue, or timer malfunction. Check with: journalctl -u restic-backup.service --since '36 hours ago'"
+          summary: "System memory usage above 90%"
         labels:
-          severity: critical
-          team: infrastructure
-          alertname: ResticBackupStale
+          severity: warning
 
-      - uid: restic-check-failure
-        title: Restic Repository Check Failed
-        condition: B
+      - uid: high-cpu-temps
+        title: CPU Temperature High (80°C+)
+        condition: C
         data:
           - refId: A
-            queryType: ""
-            relativeTimeRange:
-              from: 604800
-              to: 0
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
             model:
-              datasource:
-                type: loki
-                uid: loki
-              expr: 'count_over_time({job="systemd-journal", unit="restic-check.service"} |= "Fatal" [7d])'
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "ipmi_sensor")
+                  |> filter(fn: (r) => r._field == "value")
+                  |> filter(fn: (r) => r.name == "cpu1_temp" or r.name == "cpu2_temp")
+                  |> mean()
               refId: A
           - refId: B
-            queryType: ""
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              conditions:
-                - evaluator:
-                    params: [0]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    params: []
-                    type: last
-                  type: query
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: A
-              intervalMs: 1000
-              maxDataPoints: 43200
-              reducer: last
-              refId: B
-              type: reduce
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [80]}}]}
         noDataState: NoData
         execErrState: Alerting
-        for: 0s
+        for: 5m
         annotations:
-          summary: "Restic repository integrity check failed"
-          description: "The weekly restic-check.service reported fatal errors, indicating possible repository corruption. Immediate investigation required. Check with: journalctl -u restic-check.service --since '7 days ago'"
+          summary: "CPU temperature above 80°C"
         labels:
-          severity: critical
-          team: infrastructure
-          alertname: ResticCheckFailure
+          severity: warning
 
-      - uid: loki-log-errors
-        title: High Error Rate in Logs
-        condition: B
+      - uid: disk-space-warning
+        title: Disk Space Warning (80%+)
+        condition: C
         data:
           - refId: A
-            queryType: ""
-            relativeTimeRange:
-              from: 300
-              to: 0
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
             model:
-              datasource:
-                type: loki
-                uid: loki
-              expr: 'rate({job=~".+"} |~ "(?i)(error|fatal|exception|panic)" [5m])'
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "disk")
+                  |> filter(fn: (r) => r._field == "used_percent")
+                  |> group(columns: ["device", "path", "host"])
+                  |> mean()
               refId: A
           - refId: B
-            queryType: ""
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              conditions:
-                - evaluator:
-                    params: [0.1]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    params: []
-                    type: last
-                  type: query
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: A
-              intervalMs: 1000
-              maxDataPoints: 43200
-              reducer: last
-              refId: B
-              type: reduce
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [80]}}]}
         noDataState: NoData
         execErrState: NoData
         for: 5m
         annotations:
-          summary: "High error rate detected in logs"
-          description: "Error rate in application logs has exceeded 0.1 errors per second over the last 5 minutes. This may indicate service issues requiring investigation."
+          summary: "Disk usage above 80% on {{ $labels.device }} ({{ $labels.path }})"
         labels:
           severity: warning
-          team: infrastructure
-          alertname: LogErrorRate
 
-      - uid: restic-backup-failure
-        title: Restic Backup Failed (Error in Logs)
-        condition: B
+      - uid: disk-space-critical
+        title: Disk Space Critical (90%+)
+        condition: C
         data:
           - refId: A
-            queryType: ""
-            relativeTimeRange:
-              from: 3600
-              to: 0
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
             model:
-              datasource:
-                type: loki
-                uid: loki
-              expr: 'count_over_time({job="systemd-journal", unit="restic-backup.service"} |~ "(?i)(fatal|error|failed)" [1h])'
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "disk")
+                  |> filter(fn: (r) => r._field == "used_percent")
+                  |> group(columns: ["device", "path", "host"])
+                  |> mean()
               refId: A
           - refId: B
-            queryType: ""
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              conditions:
-                - evaluator:
-                    params: [0]
-                    type: gt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    params: []
-                    type: last
-                  type: query
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: A
-              intervalMs: 1000
-              maxDataPoints: 43200
-              reducer: last
-              refId: B
-              type: reduce
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [90]}}]}
         noDataState: NoData
+        execErrState: NoData
+        for: 2m
+        annotations:
+          summary: "CRITICAL: Disk usage above 90% on {{ $labels.device }} ({{ $labels.path }})"
+        labels:
+          severity: critical
+
+      - uid: smart-disk-error
+        title: SMART Disk Error
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 3600, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -1h)
+                  |> filter(fn: (r) => r._measurement == "smart_device")
+                  |> filter(fn: (r) => r._field == "health_ok")
+                  |> last()
+                  |> filter(fn: (r) => r._value == false)
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [-1]}}]}
+        noDataState: OK
         execErrState: Alerting
         for: 0s
         annotations:
-          summary: "Restic backup failed with errors"
-          description: "The restic-backup.service logged error/fatal messages in the last hour, indicating a backup run failed. Check with: journalctl -u restic-backup.service --since '1 hour ago'"
+          summary: "SMART reports disk health issue"
         labels:
           severity: critical
-          team: infrastructure
-          alertname: ResticBackupFailure
 
-      - uid: restic-backup-no-recent-success
-        title: Restic No Successful Snapshot (24h)
-        condition: B
+  # =========================================================================
+  # Network Alerts
+  # =========================================================================
+  - orgId: 1
+    name: network-alerts
+    folder: Infrastructure Alerts
+    interval: 1m
+    rules:
+      - uid: internet-connectivity-loss
+        title: Internet Connectivity Loss
+        condition: C
         data:
           - refId: A
-            queryType: ""
-            relativeTimeRange:
-              from: 86400
-              to: 0
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
             model:
-              datasource:
-                type: loki
-                uid: loki
-              expr: 'count_over_time({job="systemd-journal", unit="restic-backup.service"} |= "snapshot" |= "saved" [24h])'
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "ping")
+                  |> filter(fn: (r) => r._field == "percent_packet_loss")
+                  |> mean()
               refId: A
           - refId: B
-            queryType: ""
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              conditions:
-                - evaluator:
-                    params: [1]
-                    type: lt
-                  operator:
-                    type: and
-                  query:
-                    params: [A]
-                  reducer:
-                    params: []
-                    type: last
-                  type: query
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: A
-              intervalMs: 1000
-              maxDataPoints: 43200
-              reducer: last
-              refId: B
-              type: reduce
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: mean, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [50]}}]}
         noDataState: Alerting
         execErrState: Alerting
         for: 5m
         annotations:
-          summary: "No successful restic snapshot in 24 hours"
-          description: "No 'snapshot saved' message found in restic-backup.service logs in the last 24 hours. The 36h stale alert is a safety net — this earlier warning gives time to investigate before data loss risk increases."
+          summary: "Internet connectivity loss — >50% packet loss"
+        labels:
+          severity: critical
+
+      - uid: dns-resolution-failure
+        title: DNS Resolution Failure
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "dns_query")
+                  |> filter(fn: (r) => r._field == "result_code")
+                  |> filter(fn: (r) => r._value != 0)
+                  |> count()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [2]}}]}
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          summary: "DNS resolution failing"
+        labels:
+          severity: critical
+
+  # =========================================================================
+  # Certificate Alerts
+  # =========================================================================
+  - orgId: 1
+    name: certificate-alerts
+    folder: Infrastructure Alerts
+    interval: 6h
+    rules:
+      - uid: ssl-cert-expiry
+        title: SSL Certificate Expiry (<14 days)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 21600, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -6h)
+                  |> filter(fn: (r) => r._measurement == "x509_cert")
+                  |> filter(fn: (r) => r._field == "expiry")
+                  |> last()
+                  |> map(fn: (r) => ({r with _value: r._value / 3600.0}))
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: min, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [336]}}]}
+        noDataState: NoData
+        execErrState: Alerting
+        for: 10m
+        annotations:
+          summary: "SSL certificate expiring within 14 days"
         labels:
           severity: warning
-          team: infrastructure
-          alertname: ResticNoRecentSuccess
+
+  # =========================================================================
+  # UPS / Hardware Alerts
+  # =========================================================================
+  - orgId: 1
+    name: hardware-alerts
+    folder: Infrastructure Alerts
+    interval: 1m
+    rules:
+      - uid: ups-battery-low
+        title: UPS Battery Low
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "snmp")
+                  |> filter(fn: (r) => r._field == "percent_charge")
+                  |> last()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: min, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [50]}}]}
+        noDataState: NoData
+        execErrState: Alerting
+        for: 2m
+        annotations:
+          summary: "UPS battery charge below 50%"
+        labels:
+          severity: critical
+
+      - uid: ups-high-load
+        title: UPS High Load
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "snmp")
+                  |> filter(fn: (r) => r._field == "load")
+                  |> last()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [80]}}]}
+        noDataState: NoData
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          summary: "UPS load above 80%"
+        labels:
+          severity: warning
+
+  # =========================================================================
+  # Backup Alerts
+  # =========================================================================
+  - orgId: 1
+    name: backup-alerts
+    folder: Infrastructure Alerts
+    interval: 30m
+    rules:
+      - uid: restic-backup-stale
+        title: Restic Backup Stale (48h)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 172800, to: 0}
+            datasourceUid: loki
+            model:
+              expr: 'count_over_time({unit="restic-backup.service"} |= "backup finished" [48h])'
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: replaceNN, replaceWithValue: 0}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [1]}}]}
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          summary: "No successful restic backup in 48 hours"
+          description: "Check: journalctl -u restic-backup.service --since '48 hours ago'"
+        labels:
+          severity: critical
+
+      - uid: restic-backup-error
+        title: Restic Backup Error
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 3600, to: 0}
+            datasourceUid: loki
+            model:
+              expr: 'count_over_time({unit="restic-backup.service"} |~ "(?i)(fatal|unable to create lock)" [1h])'
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: replaceNN, replaceWithValue: 0}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Alerting
+        for: 0s
+        annotations:
+          summary: "Restic backup failed with errors"
+          description: "Check: journalctl -u restic-backup.service --since '1 hour ago'"
+        labels:
+          severity: critical
+
+  # =========================================================================
+  # Security Alerts
+  # =========================================================================
+  - orgId: 1
+    name: security-alerts
+    folder: Infrastructure Alerts
+    interval: 5m
+    rules:
+      - uid: failed-ssh-logins
+        title: Failed SSH Logins
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: loki
+            model:
+              expr: 'count_over_time({unit="ssh.service"} |= "Failed password" [15m])'
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: replaceNN, replaceWithValue: 0}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [5]}}]}
+        noDataState: OK
+        execErrState: Alerting
+        for: 0s
+        annotations:
+          summary: "Multiple failed SSH login attempts (>5 in 15min)"
+        labels:
+          severity: warning
