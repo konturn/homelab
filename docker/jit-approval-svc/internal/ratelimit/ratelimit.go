@@ -2,6 +2,8 @@ package ratelimit
 
 import (
 	"fmt"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -12,6 +14,25 @@ type Limiter struct {
 	window   time.Duration
 	maxReqs  int
 	requests map[string][]time.Time
+}
+
+// NewFromEnv creates a Limiter from environment variables:
+//   - JIT_RATE_LIMIT_MAX (default 50)
+//   - JIT_RATE_LIMIT_WINDOW_MIN (default 15)
+func NewFromEnv() *Limiter {
+	maxReqs := 50
+	windowMin := 15
+	if v := os.Getenv("JIT_RATE_LIMIT_MAX"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxReqs = n
+		}
+	}
+	if v := os.Getenv("JIT_RATE_LIMIT_WINDOW_MIN"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			windowMin = n
+		}
+	}
+	return New(maxReqs, time.Duration(windowMin)*time.Minute)
 }
 
 // New creates a Limiter that allows maxReqs requests per window per key.
