@@ -68,9 +68,15 @@
     content: "{{ loki_htpasswd_content.stdout }}"
     dest: "{{ docker_persistent_data_path }}/lab_nginx/conf/loki.htpasswd"
     owner: root
-    group: root
+    group: systemd-journal
     mode: '0640'
   no_log: true
+
+- name: Ensure nginx conf directory is traversable by workers
+  ansible.builtin.file:
+    path: "{{ docker_persistent_data_path }}/lab_nginx/conf"
+    state: directory
+    mode: '0711'
 
 - name: initialize nginx conf file dicts
   set_fact: 
