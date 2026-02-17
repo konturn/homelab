@@ -77,7 +77,12 @@ variables:
         - ansible/inventory.yml
         - ansible/roles/configure-zwave/**/*
         - ansible/roles/configure-snapclient/**/*
+        - ansible/roles/deploy-compose/**/*
         - docker/docker-compose-zwave.yml
+        - docker/docker-compose-observability.yml
+        - docker/docker-compose-satellite.yml
+        - docker/promtail/satellite-config.yml
+        - docker/telegraf/satellite-telegraf.conf
         - requirements.txt
         - ansible/requirements.yml
         - .gitlab-ci.yml
@@ -89,6 +94,11 @@ variables:
         - ansible/satellite-2.yml
         - ansible/inventory.yml
         - ansible/roles/configure-satellite/**/*
+        - ansible/roles/deploy-compose/**/*
+        - docker/docker-compose-observability.yml
+        - docker/docker-compose-satellite.yml
+        - docker/promtail/satellite-config.yml
+        - docker/telegraf/satellite-telegraf.conf
         - requirements.txt
         - ansible/requirements.yml
         - .gitlab-ci.yml

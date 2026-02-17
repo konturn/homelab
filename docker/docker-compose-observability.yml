@@ -1,0 +1,57 @@
+services:
+  promtail:
+    image: grafana/promtail:3.5.8@sha256:2a7c5469d687377de5cb7c8356cf96090c0069814d90ef35f9874db445999609
+    container_name: promtail
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - DAC_READ_SEARCH
+    volumes:
+      - /var/log:/var/log:ro
+      - /etc/machine-id:/etc/machine-id:ro
+      - promtail-positions:/tmp/positions
+      - /root/ansible_state/promtail-config.yml:/etc/promtail/config.yml:ro
+    command: -config.file=/etc/promtail/config.yml
+    network_mode: host
+    mem_limit: 64m
+    cpus: 0.15
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    healthcheck:
+      disable: true
+
+  telegraf:
+    image: telegraf:1.33-alpine@sha256:3ea0664bed1cacec5e6b463882dc43da9b33c9742d436ace35f157843aca9e40
+    container_name: telegraf
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /root/ansible_state/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    network_mode: host
+    mem_limit: 64m
+    cpus: 0.15
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep telegraf > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  promtail-positions:
+    name: promtail-positions
