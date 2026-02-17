@@ -236,22 +236,28 @@ func TestHandleRequest_AutoApprove_MintFailure(t *testing.T) {
 
 	h.HandleRequest(w, req)
 
-	// Request still created (201) but stays pending since mint failed
-	if w.Code != http.StatusCreated {
-		t.Errorf("expected 201, got %d: %s", w.Code, w.Body.String())
+	// T1 mint failure returns 502 with error status
+	if w.Code != http.StatusBadGateway {
+		t.Errorf("expected 502, got %d: %s", w.Code, w.Body.String())
 	}
 
 	var resp CreateRequestResponse
 	json.Unmarshal(w.Body.Bytes(), &resp)
 
-	// Check the store status - should still be pending since mint failed
+	if resp.Status != "error" {
+		t.Errorf("expected error status, got %s", resp.Status)
+	}
+	if resp.Error != "upstream_unreachable" {
+		t.Errorf("expected upstream_unreachable error, got %s", resp.Error)
+	}
+
+	// Check the store status - should be error
 	storeReq := h.store.Get(resp.RequestID)
 	if storeReq == nil {
 		t.Fatal("request should exist in store")
 	}
-	// The request was created as pending, mint failed so it stays pending
-	if storeReq.Status != store.StatusPending {
-		t.Errorf("expected pending (mint failed), got %s", storeReq.Status)
+	if storeReq.Status != store.StatusError {
+		t.Errorf("expected error (mint failed), got %s", storeReq.Status)
 	}
 }
 
