@@ -150,7 +150,7 @@
       "name": "main-pipeline-fix",
       "enabled": true,
       "createdAtMs": 1769927834157,
-      "updatedAtMs": 1771346041643,
+      "updatedAtMs": 1771367488912,
       "schedule": {
         "kind": "cron",
         "expr": "*/30 * * * *",
@@ -163,12 +163,12 @@
         "message": "Main Pipeline Monitor:\n\n1. Fetch latest main pipeline: GET /projects/4/pipelines?ref=main&per_page=1 (use $GITLAB_TOKEN as PRIVATE-TOKEN header)\n2. Read /home/node/.openclaw/workspace/memory/main-pipeline-state.json\n3. If pipeline status == 'success': update state file silently, reply HEARTBEAT_OK. Do NOT announce green pipelines.\n4. If pipeline status == 'failed' AND pipelineId != lastFixedPipelineId:\n   a. Check activeFix - if set and timestamp < 60 min ago, SKIP (already being fixed)\n   b. If activeFix is null or expired (>60 min):\n      - Set activeFix = {pipelineId, timestamp: Date.now(), sessionLabel}\n      - Write state file IMMEDIATELY before spawning\n      - Spawn sub-agent labeled 'gitlab.main.pipeline.<id>.fix' (see skills/gitlab-mr/SKILL.md)\n      - Sub-agent MUST: clear activeFix and set lastFixedPipelineId when done\n5. If pipeline status == 'success', clear activeFix if set\n\nState file: /home/node/.openclaw/workspace/memory/main-pipeline-state.json\nFormat: {\"lastCheckedPipelineId\": N, \"lastFixedPipelineId\": N, \"activeFix\": {pipelineId, timestamp, sessionLabel}}\n\nONLY announce if pipeline is FAILED. Silent on success."
       },
       "state": {
-        "nextRunAtMs": 1771347600000,
-        "lastRunAtMs": 1771345800018,
-        "lastStatus": "error",
-        "lastDurationMs": 241625,
-        "consecutiveErrors": 1,
-        "runningAtMs": 1771347600012
+        "nextRunAtMs": 1771369200000,
+        "lastRunAtMs": 1771367400014,
+        "lastStatus": "ok",
+        "lastDurationMs": 88898,
+        "consecutiveErrors": 0,
+        "runningAtMs": 1771369200011
       },
       "delivery": {
         "mode": "announce"
@@ -361,7 +361,7 @@
       "name": "email-check",
       "enabled": true,
       "createdAtMs": 1770841906634,
-      "updatedAtMs": 1771336845657,
+      "updatedAtMs": 1771365644015,
       "schedule": {
         "kind": "cron",
         "expr": "0 9,13,17 * * *",
@@ -378,10 +378,10 @@
         "mode": "announce"
       },
       "state": {
-        "nextRunAtMs": 1771351200000,
-        "lastRunAtMs": 1771336832854,
+        "nextRunAtMs": 1771423200000,
+        "lastRunAtMs": 1771365614233,
         "lastStatus": "ok",
-        "lastDurationMs": 12803,
+        "lastDurationMs": 29782,
         "consecutiveErrors": 0
       }
     },
@@ -481,7 +481,7 @@
       "name": "cron-config-sync",
       "enabled": true,
       "createdAtMs": 1770841907179,
-      "updatedAtMs": 1771326103104,
+      "updatedAtMs": 1771347722844,
       "schedule": {
         "kind": "cron",
         "expr": "0 */6 * * *",
@@ -498,12 +498,12 @@
         "mode": "none"
       },
       "state": {
-        "nextRunAtMs": 1771347600000,
-        "lastRunAtMs": 1771326088267,
+        "nextRunAtMs": 1771369200000,
+        "lastRunAtMs": 1771347712276,
         "lastStatus": "ok",
-        "lastDurationMs": 14837,
+        "lastDurationMs": 10568,
         "consecutiveErrors": 0,
-        "runningAtMs": 1771347600012
+        "runningAtMs": 1771369200011
       }
     },
     {
