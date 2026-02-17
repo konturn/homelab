@@ -13,8 +13,4 @@
     state: link
     force: yes
 
-- name: Set MAILTO for borgmatic cron
-  cronvar:
-    name: MAILTO
-    value: konoahko@gmail.com
-    cron_file: borgmatic
+# borgmatic cron removed — backups use restic now
