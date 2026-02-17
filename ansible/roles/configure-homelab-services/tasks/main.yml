@@ -188,6 +188,8 @@
     project_src: "{{ docker_compose_dest_path }}/"
     files: "{{ docker_compose_file_names }}"
     state: present
+    remove_orphans: true
+  timeout: 300
   when: not ansible_check_mode
 
 - name: Force recreate containers after daemon config change
@@ -197,6 +199,8 @@
     files: "{{ docker_compose_file_names }}"
     state: present
     recreate: always
+    remove_orphans: true
+  timeout: 300
   when: docker_conf.changed and not ansible_check_mode
 
 - name: Enable dnsmasq.d config loading for Pi-hole
@@ -219,19 +223,24 @@
 
 - name: Restart containers if config change
   ansible.builtin.command:
-    cmd: "docker restart {{ item.item.name }}"
+    cmd: "docker restart -t 30 {{ item.item.name }}"
+  timeout: 60
   when: item.changed and not ansible_check_mode
   loop: "{{ docker_config_copy.results }}"
+  loop_control:
+    label: "{{ item.item.name | default('unknown') }} ({{ item.item.src | default('?') }})"
   ignore_errors: yes
 
 - name: Restart Grafana if alerting config changed
   ansible.builtin.command:
-    cmd: "docker restart grafana"
+    cmd: "docker restart -t 30 grafana"
+  timeout: 60
   when: grafana_alerting_copy is defined and grafana_alerting_copy.changed and not ansible_check_mode
 
 - name: Restart pihole if pihole.toml was modified
   ansible.builtin.command:
-    cmd: "docker restart pihole"
+    cmd: "docker restart -t 30 pihole"
+  timeout: 60
   when: (pihole_dnsmasq_d is changed or pihole_listening_mode is changed) and not ansible_check_mode
 
 - name: Configure Pi-hole local DNS records via pihole-FTL
