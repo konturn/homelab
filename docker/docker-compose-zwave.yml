@@ -2,13 +2,14 @@ services:
   zwavejs2mqtt:
     container_name: zwavejs2mqtt
     image: zwavejs/zwave-js-ui:11.10.1@sha256:50984aa5b5195bc0b365b023d27ce2e8bad9a39c8f1da0094414f049abce4550
-    restart: always
+    restart: unless-stopped
     tty: true
     stop_signal: SIGINT
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    mem_limit: 256m
     environment:
       - HTTPS=false
       - ZWAVEJS_EXTERNAL_CONFIG=/usr/src/app/store/.config-db

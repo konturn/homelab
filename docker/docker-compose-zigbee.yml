@@ -4,12 +4,13 @@ services:
     restart: unless-stopped
     image: koenkk/zigbee2mqtt:latest@sha256:835f532d0c2a480a58c407ae8e661735fe5be5580b43919239ba522c6a6a0f50
     volumes:
-      - /root/zigbee2mqtt:/app/data
+      - {{ docker_persistent_data_path }}/zigbee2mqtt:/app/data
       - /run/udev:/run/udev:ro
     ports:
       - 8081:8080
     networks:
       - zwave
+    mem_limit: 256m
     environment:
       - TZ=America/New_York
     healthcheck:

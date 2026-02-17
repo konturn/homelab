@@ -15,6 +15,7 @@ services:
       - ALL
     cap_add:
       - NET_BIND_SERVICE
+    mem_limit: 256m
     networks:
       - zwave
     ports:
@@ -22,11 +23,11 @@ services:
       - '443:443'
     restart: unless-stopped
     volumes:
-      - /root/nginx/conf/conf.d:/etc/nginx/conf.d
-      - /root/nginx/conf/nginx.conf:/etc/nginx/nginx.conf
-      - /root/nginx/conf/ssl_config:/etc/nginx/ssl_config
-      - /root/nginx/log:/data/log
-      - /certs:/data/certs/nkontur.com/certificates
+      - {{ docker_persistent_data_path }}/nginx/conf/conf.d:/etc/nginx/conf.d
+      - {{ docker_persistent_data_path }}/nginx/conf/nginx.conf:/etc/nginx/nginx.conf
+      - {{ docker_persistent_data_path }}/nginx/conf/ssl_config:/etc/nginx/ssl_config
+      - {{ docker_persistent_data_path }}/nginx/log:/data/log
+      - {{ docker_persistent_data_path }}/certs:/data/certs/nkontur.com/certificates
     healthcheck:
       test: ["CMD-SHELL", "pgrep nginx > /dev/null || exit 1"]
       interval: 30s
@@ -43,11 +44,12 @@ services:
     cap_add:
       - NET_RAW
       - NET_ADMIN
+    mem_limit: 256m
     restart: unless-stopped
     network_mode: host
     volumes:
       - /var/run/dbus:/var/run/dbus
-      - /root/room-assistant/config:/room-assistant/config
+      - {{ docker_persistent_data_path }}/room-assistant/config:/room-assistant/config
       - /etc/localtime:/etc/localtime:ro
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f room-assistant || exit 1"]
