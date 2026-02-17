@@ -6,10 +6,12 @@ positions:
   filename: /tmp/positions/positions.yaml
 
 clients:
-  - url: http://lab_nginx/loki/api/v1/push
+  - url: https://loki.lab.nkontur.com/loki/api/v1/push
     basic_auth:
       username: promtail
       password: "{{ vault_loki_push_password }}"
+    tls_config:
+      insecure_skip_verify: true
 
 scrape_configs:
   # Systemd journal - scrapes all host logs directly from journal

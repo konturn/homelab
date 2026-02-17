@@ -685,6 +685,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - {{ docker_persistent_data_path }}/docker/containers:/var/lib/docker/containers:ro
     command: -config.file=/etc/promtail/config.yml
+    extra_hosts:
+      - "loki.lab.nkontur.com:{{ lab_nginx_ip }}"
     networks:
       internal:
         ipv4_address: {{ promtail_ip }}
