@@ -193,7 +193,7 @@ services:
           memory: 512M
     environment:
       TZ: America/New_York
-      WEBPASSWORD: {{ vault_pihole_password | default(lookup('env', 'PIHOLE_PASSWORD')) | trim }}
+      WEBPASSWORD: {{ vault_pihole_password | default(lookup('env', 'PIHOLE_PASSWORD')) | trim | replace("$", "$$") }}
       DNSMASQ_USER: root
     volumes:
       - {{ docker_persistent_data_path }}/pihole/conf:/etc/pihole
@@ -548,7 +548,7 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=America/New_York
-      - AUDIOSERVE_SHARED_SECRET={{ vault_audioserve_secret | default(lookup('env', 'AUDIOSERVE_SECRET')) | trim }}
+      - AUDIOSERVE_SHARED_SECRET={{ vault_audioserve_secret | default(lookup('env', 'AUDIOSERVE_SECRET')) | trim | replace("$", "$$") }}
       - VIRTUAL_HOST=audioserve.nkontur.com
       - LETSENCRYPT_HOST=audioserve.nkontur.com
     command: /audiobooks
@@ -593,10 +593,10 @@ services:
     environment:
       - DOCKER_INFLUXDB_INIT_MODE=setup
       - DOCKER_INFLUXDB_INIT_USERNAME=admin
-      - DOCKER_INFLUXDB_INIT_PASSWORD={{ vault_influxdb_password | default(lookup('env', 'INFLUXDB_PASSWORD')) | trim }}
+      - DOCKER_INFLUXDB_INIT_PASSWORD={{ vault_influxdb_password | default(lookup('env', 'INFLUXDB_PASSWORD')) | trim | replace("$", "$$") }}
       - DOCKER_INFLUXDB_INIT_ORG=homelab
       - DOCKER_INFLUXDB_INIT_BUCKET=metrics
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN={{ vault_influxdb_admin_token | default(lookup('env', 'INFLUXDB_ADMIN_TOKEN')) | trim }}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN={{ vault_influxdb_admin_token | default(lookup('env', 'INFLUXDB_ADMIN_TOKEN')) | trim | replace("$", "$$") }}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
       interval: 30s
@@ -626,15 +626,15 @@ services:
       - {{ docker_persistent_data_path }}/grafana/provisioning:/etc/grafana/provisioning
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD={{ vault_grafana_admin_password | default(lookup('env', 'GRAFANA_ADMIN_PASSWORD')) | trim }}
+      - GF_SECURITY_ADMIN_PASSWORD={{ vault_grafana_admin_password | default(lookup('env', 'GRAFANA_ADMIN_PASSWORD')) | trim | replace("$", "$$") }}
       - GF_SERVER_ROOT_URL=https://grafana.lab.nkontur.com
       - GF_USERS_ALLOW_SIGN_UP=false
-      - INFLUXDB_TOKEN={{ vault_influxdb_admin_token | default(lookup('env', 'INFLUXDB_ADMIN_TOKEN')) | trim }}
+      - INFLUXDB_TOKEN={{ vault_influxdb_admin_token | default(lookup('env', 'INFLUXDB_ADMIN_TOKEN')) | trim | replace("$", "$$") }}
       # SMTP for email alerts
       - GF_SMTP_ENABLED=true
       - GF_SMTP_HOST=smtp.gmail.com:587
       - GF_SMTP_USER=konoahko@gmail.com
-      - GF_SMTP_PASSWORD={{ vault_grafana_smtp_password | default(lookup('env', 'GRAFANA_SMTP_PASSWORD')) | trim }}
+      - GF_SMTP_PASSWORD={{ vault_grafana_smtp_password | default(lookup('env', 'GRAFANA_SMTP_PASSWORD')) | trim | replace("$", "$$") }}
       - GF_SMTP_FROM_ADDRESS=konoahko@gmail.com
       - GF_SMTP_FROM_NAME=Grafana Homelab
       - GF_SMTP_STARTTLS_POLICY=MandatoryStartTLS
@@ -807,7 +807,7 @@ services:
     entrypoint: /bin/sh
     command: ["/vault/scripts/auto-unseal.sh"]
     healthcheck:
-      test: ["CMD", "sh", "-c", "vault status -address=https://127.0.0.1:8200; [ $? -le 2 ]"]
+      test: ["CMD", "sh", "-c", "vault status -address=https://127.0.0.1:8200; [ $$? -le 2 ]"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -837,17 +837,17 @@ services:
           memory: 128M
     environment:
       - VAULT_ADDR=https://vault.lab.nkontur.com:8200
-      - VAULT_ROLE_ID={{ vault_jit_approle_role_id }}
-      - VAULT_SECRET_ID={{ vault_jit_approle_secret_id }}
-      - TELEGRAM_BOT_TOKEN={{ vault_jit_telegram_bot_token }}
+      - VAULT_ROLE_ID={{ vault_jit_approle_role_id | replace("$", "$$") }}
+      - VAULT_SECRET_ID={{ vault_jit_approle_secret_id | replace("$", "$$") }}
+      - TELEGRAM_BOT_TOKEN={{ vault_jit_telegram_bot_token | replace("$", "$$") }}
       - TELEGRAM_CHAT_ID=8531859108
-      - TELEGRAM_WEBHOOK_SECRET={{ vault_jit_telegram_webhook_secret }}
+      - TELEGRAM_WEBHOOK_SECRET={{ vault_jit_telegram_webhook_secret | replace("$", "$$") }}
       - LISTEN_ADDR=:8080
       - REQUEST_TIMEOUT=300
       - ALLOWED_REQUESTERS=prometheus
-      - JIT_API_KEY={{ vault_jit_api_key }}
+      - JIT_API_KEY={{ vault_jit_api_key | replace("$", "$$") }}
       - GITLAB_URL=https://gitlab.lab.nkontur.com
-      - GITLAB_ADMIN_TOKEN={{ vault_jit_gitlab_admin_token }}
+      - GITLAB_ADMIN_TOKEN={{ vault_jit_gitlab_admin_token | replace("$", "$$") }}
       - SSH_VAULT_PATH=ssh-client-signer
       - TAILSCALE_API_URL=https://api.tailscale.com
       - TELEGRAM_WEBHOOK_URL=https://jit-webhook.nkontur.com/telegram/webhook
@@ -941,7 +941,7 @@ services:
     environment:
       WORDPRESS_DB_HOST: wordpress_db
       WORDPRESS_DB_USER: wordpress
-      WORDPRESS_DB_PASSWORD: {{ vault_wordpress_db_password | default(lookup('env', 'WORDPRESS_DB_PASSWORD')) | trim }}
+      WORDPRESS_DB_PASSWORD: {{ vault_wordpress_db_password | default(lookup('env', 'WORDPRESS_DB_PASSWORD')) | trim | replace("$", "$$") }}
       WORDPRESS_DB_NAME: wordpress
     volumes:
       - {{ docker_persistent_data_path }}/wordpress/html:/var/www/html
@@ -977,8 +977,8 @@ services:
     environment:
       MYSQL_DATABASE: wordpress
       MYSQL_USER: wordpress
-      MYSQL_PASSWORD: {{ vault_wordpress_db_password | default(lookup('env', 'WORDPRESS_DB_PASSWORD')) | trim }}
-      MYSQL_ROOT_PASSWORD: {{ vault_wordpress_db_password | default(lookup('env', 'WORDPRESS_DB_PASSWORD')) | trim }}
+      MYSQL_PASSWORD: {{ vault_wordpress_db_password | default(lookup('env', 'WORDPRESS_DB_PASSWORD')) | trim | replace("$", "$$") }}
+      MYSQL_ROOT_PASSWORD: {{ vault_wordpress_db_password | default(lookup('env', 'WORDPRESS_DB_PASSWORD')) | trim | replace("$", "$$") }}
     volumes:
       - wordpress_db:/var/lib/mysql
     healthcheck:
@@ -1368,10 +1368,10 @@ services:
           memory: 256M
     environment:
       AMCREST_HOST: 10.6.128.9
-      AMCREST_PASSWORD: {{ vault_doorbell_pass | default(lookup('env', 'DOORBELL_PASS')) | trim }}
+      AMCREST_PASSWORD: {{ vault_doorbell_pass | default(lookup('env', 'DOORBELL_PASS')) | trim | replace("$", "$$") }}
       MQTT_HOST: "mqtt.lab.nkontur.com"
       MQTT_USERNAME: mosquitto
-      MQTT_PASSWORD: {{ vault_mqtt_pass | default(lookup('env', 'MQTT_PASS')) | trim }}
+      MQTT_PASSWORD: {{ vault_mqtt_pass | default(lookup('env', 'MQTT_PASS')) | trim | replace("$", "$$") }}
       HOME_ASSISTANT: "true"
       MQTT_TLS_ENABLED: "true"
       MQTT_TLS_CA_CERT: "/etc/ssl/certs/ca-certificates.crt"
@@ -1404,7 +1404,7 @@ services:
       TZ: America/New_York
       PORT: 8080
       MQTT_USERNAME: mosquitto
-      MQTT_PASSWORD: {{ vault_mqtt_pass | default(lookup('env', 'MQTT_PASS')) | trim }}
+      MQTT_PASSWORD: {{ vault_mqtt_pass | default(lookup('env', 'MQTT_PASS')) | trim | replace("$", "$$") }}
       MQTT_REJECT_UNAUTHORIZED: "false"
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/data/ || exit 1"]
@@ -1533,8 +1533,8 @@ services:
     volumes:
       - nextcloud_db:/var/lib/mysql
     environment:
-      - MYSQL_ROOT_PASSWORD={{ vault_nextcloud_db_password | default(lookup('env', 'NEXTCLOUD_DB_PASSWORD')) | trim }}
-      - MYSQL_PASSWORD={{ vault_nextcloud_db_password | default(lookup('env', 'NEXTCLOUD_DB_PASSWORD')) | trim }}
+      - MYSQL_ROOT_PASSWORD={{ vault_nextcloud_db_password | default(lookup('env', 'NEXTCLOUD_DB_PASSWORD')) | trim | replace("$", "$$") }}
+      - MYSQL_PASSWORD={{ vault_nextcloud_db_password | default(lookup('env', 'NEXTCLOUD_DB_PASSWORD')) | trim | replace("$", "$$") }}
       - MYSQL_DATABASE=nextcloud
       - MYSQL_USER=nextcloud
     healthcheck:
@@ -1650,7 +1650,7 @@ services:
       start_period: 30s
     environment:
       - TZ=America/New_York
-      - VNC_PASSWORD={{ vault_chromium_vnc_password | default('changeme') }}
+      - VNC_PASSWORD={{ vault_chromium_vnc_password | default('changeme') | replace("$", "$$") }}
   moltbot-gateway:
     image: gitlab-registry.lab.nkontur.com:443/root/homelab/moltbot:{{ moltbot_image_tag | default('latest') }}
     container_name: moltbot-gateway
@@ -1685,15 +1685,15 @@ services:
     environment:
       - TZ=America/New_York
       # Core moltbot configuration
-      - OPENAI_API_KEY={{ vault_openai_api_key | default(lookup('env', 'OPENAI_API_KEY')) | trim }}
-      - CLAWDBOT_GATEWAY_TOKEN={{ vault_moltbot_gateway_token | default(lookup('env', 'MOLTBOT_GATEWAY_TOKEN')) | trim }}
-      - TELEGRAM_BOT_TOKEN={{ vault_moltbot_telegram_token | default(lookup('env', 'MOLTBOT_TELEGRAM_TOKEN')) | trim }}
-      - GITLAB_TOKEN={{ vault_moltbot_gitlab_token | default(lookup('env', 'MOLTBOT_GITLAB_TOKEN')) | trim }}
+      - OPENAI_API_KEY={{ vault_openai_api_key | default(lookup('env', 'OPENAI_API_KEY')) | trim | replace("$", "$$") }}
+      - CLAWDBOT_GATEWAY_TOKEN={{ vault_moltbot_gateway_token | default(lookup('env', 'MOLTBOT_GATEWAY_TOKEN')) | trim | replace("$", "$$") }}
+      - TELEGRAM_BOT_TOKEN={{ vault_moltbot_telegram_token | default(lookup('env', 'MOLTBOT_TELEGRAM_TOKEN')) | trim | replace("$", "$$") }}
+      - GITLAB_TOKEN={{ vault_moltbot_gitlab_token | default(lookup('env', 'MOLTBOT_GITLAB_TOKEN')) | trim | replace("$", "$$") }}
       # IPMI credentials removed — use JIT T2 (ipmi resource) instead
       # Web search
       - BRAVE_API_KEY={{ brave_api_key }}
       # Agent platforms
-      - ACLAWDEMY_API_KEY={{ vault_aclawdemy_api_key | default(lookup('env', 'ACLAWDEMY_API_KEY')) | trim }}
+      - ACLAWDEMY_API_KEY={{ vault_aclawdemy_api_key | default(lookup('env', 'ACLAWDEMY_API_KEY')) | trim | replace("$", "$$") }}
       # Vault AppRole credentials (for moltbot runtime Vault access & JIT)
       - VAULT_ADDR=https://vault.lab.nkontur.com:8200
       - VAULT_APPROLE_ROLE_ID={{ lookup('env', 'VAULT_APPROLE_ROLE_ID') }}
