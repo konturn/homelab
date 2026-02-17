@@ -20,7 +20,7 @@
 #
 #   DEPLOY (main only, parallel)
 #   ┌──────────────────────────┬──────────────┬──────────────┬──────────────────────────┐
-#   router:deploy [id_tokens]  zwave:deploy  sat-2:deploy  vault:configure  vault:rotate [manual]
+#   router:deploy [id_tokens]  zwave:deploy [id_tokens]  sat-2:deploy [id_tokens]  vault:configure  vault:rotate [manual]
 #   (router:deploy needs vault:configure)
 #
 #   BOOTSTRAP (main only, manual)
@@ -399,6 +399,9 @@ zwave:deploy:
   extends: .ansible
   stage: deploy
   resource_group: deploy-zwave
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: https://vault.lab.nkontur.com:8200
   needs:
     - job: zwave:validate
       optional: true
@@ -411,6 +414,9 @@ satellite-2:deploy:
   extends: .ansible
   stage: deploy
   resource_group: deploy-satellite-2
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: https://vault.lab.nkontur.com:8200
   needs:
     - job: satellite-2:validate
       optional: true
