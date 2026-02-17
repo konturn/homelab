@@ -13,7 +13,7 @@ services:
       - /var/log:/var/log:ro
       - /etc/machine-id:/etc/machine-id:ro
       - promtail-positions:/tmp/positions
-      - /root/ansible_state/promtail-config.yml:/etc/promtail/config.yml:ro
+      - {{ docker_persistent_data_path }}/promtail/config.yml:/etc/promtail/config.yml:ro
     command: -config.file=/etc/promtail/config.yml
     network_mode: host
     mem_limit: 64m
@@ -24,7 +24,10 @@ services:
         max-size: "5m"
         max-file: "2"
     healthcheck:
-      disable: true
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9080/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   telegraf:
     image: telegraf:1.33-alpine@sha256:3ea0664bed1cacec5e6b463882dc43da9b33c9742d436ace35f157843aca9e40
@@ -36,7 +39,7 @@ services:
       - ALL
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /root/ansible_state/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+      - {{ docker_persistent_data_path }}/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
     network_mode: host
     mem_limit: 64m
     cpus: 0.15
