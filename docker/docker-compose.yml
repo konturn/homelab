@@ -554,7 +554,7 @@ services:
       - /mpool/audioserve/data:/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -1415,8 +1415,6 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    cap_add:
-      - NET_RAW
     restart: unless-stopped
     image: koenkk/zigbee2mqtt:2.8.0@sha256:89cf02f379aa743a68494388e3a26fba7b8c9101f8b452038cc07aeff3fc983c
     depends_on:
@@ -1575,7 +1573,7 @@ services:
       - /etc/localtime:/etc/localtime:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/status.php"]
+      test: ["CMD-SHELL", "php -r '$s=@fsockopen(\"localhost\",9000);if(!$s)exit(1);fclose($s);'"]
       interval: 30s
       timeout: 10s
       retries: 3
