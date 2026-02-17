@@ -450,7 +450,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.1124@sha256:574cd22a6ca580ed40a8d07dea37f1f30167de5d819a2f887b27a721859a1b83
+    image: linuxserver/jackett:0.24.1140@sha256:4303cc54f2543afdbca9e8a1ef7ffa84c3bcbb1e5d08c35f42a3b6c8e8a628c8
     container_name: jackett
     security_opt:
       - no-new-privileges:true
@@ -865,7 +865,7 @@ services:
       - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
     ports:
       - "443:8112"
-    image: 'lscr.io/linuxserver/deluge:latest@sha256:2392a75ce975de1b50c03344b05a858c5da36c1c41ba1f61a5fe6198ea88ef18'
+    image: 'lscr.io/linuxserver/deluge:latest@sha256:4ddb60af86c6c17013a0ab143af9a1dcd2fcd517129a94d0b71e581bbe4f7937'
     restart: unless-stopped
     networks:
       internal:
@@ -1430,7 +1430,7 @@ services:
       retries: 3
       start_period: 60s
   paperless-ngx:
-    image: lscr.io/linuxserver/paperless-ngx:latest@sha256:94ebc3ba985e9548a8a74ebff1d5d51011e78d41ded5fbffee13dceea5b27401
+    image: lscr.io/linuxserver/paperless-ngx:latest@sha256:4016f13609923d1ef926c3d3532cf77f3650dc0b886258947cdf311c5ddc9829
     container_name: paperless-ngx
     security_opt:
       - no-new-privileges:true
@@ -1565,7 +1565,7 @@ services:
       start_period: 120s
 
   prowlarr:
-    image: lscr.io/linuxserver/prowlarr:latest@sha256:b1372ea2bb237e6531412c9cc0436ff31d688be6af4f24aa56269c2d7b0fdc89
+    image: lscr.io/linuxserver/prowlarr:latest@sha256:e74a1e093dcc223d671d4b7061e2b4946f1989a4d3059654ff4e623b731c9134
     container_name: prowlarr
     security_opt:
       - no-new-privileges:true
