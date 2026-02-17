@@ -223,7 +223,7 @@ all:
             - "docker-compose-observability.yml"
           docker_compose_project_name: "zwave"
           nginx_config:
-            - dest: "/root/nginx"
+            - dest: "{{ docker_persistent_data_path }}/nginx"
               network: "zwave"
               name: "nginx"
               extra_args: "--domain-name zwave.lab.nkontur.com"
@@ -233,7 +233,7 @@ all:
         satellite-2.lab.nkontur.com:
           gitlab_registry_login: false
           nginx_config:
-            - dest: "/root/nginx"
+            - dest: "{{ docker_persistent_data_path }}/nginx"
               network: "zwave"
               name: "nginx"
               extra_args: "--domain-name satellite-2.lab.nkontur.com"
