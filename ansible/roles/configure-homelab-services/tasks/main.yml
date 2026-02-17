@@ -49,7 +49,7 @@
   loop: "{{ docker_compose_file_names }}"
 
 # nginx configs are now plain conf files committed to the repo in docker/nginx/{hostname}/
-# No dynamic generation required - crossplane has been removed
+# nginx configs are plain conf files committed to the repo
 
 ### Generate Loki htpasswd file for push authentication
 # Promtail and Docker logging driver authenticate to Loki via nginx reverse proxy
