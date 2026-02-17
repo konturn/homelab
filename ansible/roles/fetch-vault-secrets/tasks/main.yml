@@ -109,10 +109,18 @@
 
     - name: Warn about missing Vault paths
       ansible.builtin.debug:
-        msg: "Vault path '{{ item.item.path }}' not found (404) — variables will be undefined"
+        msg: "Vault path '{{ item.item.path }}' not found (404) — variables will default to empty strings"
       loop: "{{ _vault_raw_responses.results | selectattr('status', 'equalto', 404) | list }}"
       loop_control:
         label: "{{ item.item.path }}"
+
+    - name: Set empty defaults for missing Vault paths
+      ansible.builtin.include_tasks: default_missing_secret.yml
+      loop: "{{ _vault_raw_responses.results | selectattr('status', 'equalto', 404) | list }}"
+      loop_control:
+        loop_var: _vault_missing
+        label: "{{ _vault_missing.item.path }}"
+      no_log: true
 
     - name: Map Vault responses to Ansible variable names
       ansible.builtin.include_tasks: extract_secret.yml
