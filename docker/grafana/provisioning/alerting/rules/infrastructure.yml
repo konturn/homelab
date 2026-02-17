@@ -1,4 +1,3 @@
-{% raw %}
 apiVersion: 1
 
 groups:
@@ -581,4 +580,3 @@ groups:
           summary: "Multiple failed SSH login attempts (>5 in 15min)"
         labels:
           severity: warning
-{% endraw %}
