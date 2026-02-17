@@ -34,26 +34,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-  room-assistant:
-    image: mkerix/room-assistant:latest@sha256:603b78ccaddebc50e4092e1573a8861cfbd6e7ed6c2707e38cf27a54399bce5a
-    container_name: room-assistant
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    cap_add:
-      - NET_RAW
-      - NET_ADMIN
-    mem_limit: 256m
-    restart: unless-stopped
-    network_mode: host
-    volumes:
-      - /var/run/dbus:/var/run/dbus
-      - {{ docker_persistent_data_path }}/room-assistant/config:/room-assistant/config
-      - /etc/localtime:/etc/localtime:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pgrep -f room-assistant || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
