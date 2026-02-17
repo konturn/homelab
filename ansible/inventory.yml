@@ -6,7 +6,6 @@ all:
     lab_nginx_ip: 10.3.32.1
     pihole_ip: 10.3.32.2
     deluge_ip: 10.3.32.3
-    loki_ip: 10.3.32.4
     influxdb_ip: 10.3.32.5
     vault_ip: 10.3.32.6
     promtail_ip: 10.3.32.7
