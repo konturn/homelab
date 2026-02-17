@@ -35,7 +35,7 @@ func New(cfg *config.Config, s *store.Store, v *vault.Client, tg *telegram.Clien
 		vault:    v,
 		telegram: tg,
 		backends: backends,
-		limiter:  ratelimit.New(5, 15*time.Minute),
+		limiter:  ratelimit.NewFromEnv(),
 	}
 }
 
