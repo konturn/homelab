@@ -28,3 +28,45 @@ useDefault = true
   description = "UUID after secret/password keywords"
   regex = '''(?i)(secret_id|secret|password)[\s'"`:=]+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'''
   keywords = ["secret_id", "secret", "password"]
+
+[[rules]]
+  id = "curl-basic-auth"
+  description = "Credentials in curl -u user:password"
+  regex = '''-u\s+["']?[\w.-]+:([^\s"']{4,})'''
+  keywords = ["-u"]
+
+[[rules]]
+  id = "apr1-hash"
+  description = "Apache apr1 password hash"
+  regex = '''\$apr1\$[./A-Za-z0-9]+\$[./A-Za-z0-9]{22}'''
+  keywords = ["$apr1$"]
+
+[[rules]]
+  id = "basic-auth-header"
+  description = "Base64 Basic auth in Authorization header"
+  regex = '''(?i)Authorization:\s*Basic\s+([A-Za-z0-9+/=]{8,})'''
+  keywords = ["basic"]
+
+[[rules]]
+  id = "htpasswd-entry"
+  description = "htpasswd file entry with password hash"
+  regex = '''[\w.-]+:\$apr1\$[./A-Za-z0-9]+\$[./A-Za-z0-9]{22}'''
+  keywords = ["$apr1$"]
+
+[[rules]]
+  id = "password-value-quoted"
+  description = "Password/secret value in quotes after keyword"
+  regex = '''(?i)(password|passwd|secret|token|api_key|apikey)["'\s:=]+["']([^"']{8,})["']'''
+  keywords = ["password", "passwd", "secret", "token", "api_key", "apikey"]
+
+[[rules]]
+  id = "vault-approle-secret"
+  description = "Vault AppRole secret ID"
+  regex = '''(?i)VAULT_APPROLE_SECRET_ID[\s'"`:=]+([0-9a-f-]{36})'''
+  keywords = ["VAULT_APPROLE_SECRET_ID"]
+
+[[rules]]
+  id = "openssl-rand-output"
+  description = "openssl rand base64 output (high-entropy string after command)"
+  regex = '''openssl rand[^|]+\|\s*(?:tr|head|cut)[^\n]*\n([A-Za-z0-9]{20,})'''
+  keywords = ["openssl rand"]
