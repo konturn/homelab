@@ -391,6 +391,7 @@ services:
       - SETGID         # s6-overlay drops to PGID/configured group
       - CHOWN          # s6-overlay chowns data directories at startup
       - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
+      - FOWNER         # s6-overlay chmods config files owned by PUID
     ports:
       - "6789:6789"
     networks:
