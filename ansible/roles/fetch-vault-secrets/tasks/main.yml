@@ -100,16 +100,23 @@
           X-Vault-Token: "{{ _vault_token }}"
         validate_certs: "{{ not vault_skip_verify }}"
         timeout: "{{ vault_timeout }}"
-        status_code: [200]
+        status_code: [200, 404]
       register: _vault_raw_responses
       loop: "{{ vault_secret_paths }}"
       loop_control:
         label: "{{ item.path }}"
       no_log: true
 
+    - name: Warn about missing Vault paths
+      ansible.builtin.debug:
+        msg: "Vault path '{{ item.item.path }}' not found (404) — variables will be undefined"
+      loop: "{{ _vault_raw_responses.results | selectattr('status', 'equalto', 404) | list }}"
+      loop_control:
+        label: "{{ item.item.path }}"
+
     - name: Map Vault responses to Ansible variable names
       ansible.builtin.include_tasks: extract_secret.yml
-      loop: "{{ _vault_raw_responses.results }}"
+      loop: "{{ _vault_raw_responses.results | selectattr('status', 'equalto', 200) | list }}"
       loop_control:
         loop_var: _vault_response
         label: "{{ _vault_response.item.path }}"
