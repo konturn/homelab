@@ -142,6 +142,22 @@
   register: docker_config_copy
   loop: "{{ docker_config + (docker_config_nginx | default([])) }}"
 
+- name: Copy Grafana alerting provisioning files (no Jinja2 templating)
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: grafana_alerting_copy
+  loop:
+    - src: "docker/grafana/provisioning/alerting/contactpoints.yml"
+      dest: "{{ docker_persistent_data_path }}/grafana/provisioning/alerting/contactpoints.yml"
+    - src: "docker/grafana/provisioning/alerting/policies.yml"
+      dest: "{{ docker_persistent_data_path }}/grafana/provisioning/alerting/policies.yml"
+    - src: "docker/grafana/provisioning/alerting/rules/infrastructure.yml"
+      dest: "{{ docker_persistent_data_path }}/grafana/provisioning/alerting/rules/infrastructure.yml"
+
 - name: Rebuild Docker images for changed Dockerfiles
   ansible.builtin.command:
     cmd: "docker compose -f {{ docker_compose_dest_path }}/docker-compose.yml build --no-cache {{ item.item.name }}"
@@ -191,6 +207,11 @@
   when: item.changed and not ansible_check_mode
   loop: "{{ docker_config_copy.results }}"
   ignore_errors: yes
+
+- name: Restart Grafana if alerting config changed
+  ansible.builtin.command:
+    cmd: "docker restart grafana"
+  when: grafana_alerting_copy.changed and not ansible_check_mode
 
 - name: Restart pihole if pihole.toml was modified
   ansible.builtin.command:
