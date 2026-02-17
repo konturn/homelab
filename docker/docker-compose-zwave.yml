@@ -33,6 +33,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+networks:
+  zwave:
 volumes:
   zwave-config:
     name: zwave-config
