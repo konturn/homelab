@@ -48,36 +48,8 @@
   no_log: true
   loop: "{{ docker_compose_file_names }}"
 
-# The following three tasks generate nginx configs dynamically on the CI runner.
-# They must run even in check mode so validation can properly test config copying.
-- name: Create nginx config output subdir if it does not exist
-  ansible.builtin.file:
-    path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/nginx/' + inventory_hostname}}"
-    state: directory
-    mode: '0755'
-  delegate_to: localhost
-  check_mode: no
-
-- name: Template out compose file to ansible state directory within container
-  ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/' + item }}"
-    dest: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/nginx/' + inventory_hostname }}"
-    owner: root
-    group: root
-    mode: '0755'
-  changed_when: false
-  no_log: true
-  loop: "{{ docker_compose_file_names }}"
-  delegate_to: localhost
-  check_mode: no
-
-- name: Execute Python script to generate nginx custom config files
-  shell:
-    cmd: "/usr/bin/python3 {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/generate-configs.py --workspace-path {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx --network {{ item.network }} --output-prefix {{ item.network }}_ --output-subdir {{ inventory_hostname }} {{ item.extra_args | default('') }}"
-  delegate_to: localhost
-  changed_when: false
-  check_mode: no
-  loop: "{{ nginx_config | default([]) }}"
+# nginx configs are now plain conf files committed to the repo in docker/nginx/{hostname}/
+# No dynamic generation required - crossplane has been removed
 
 ### Generate Loki htpasswd file for push authentication
 # Promtail and Docker logging driver authenticate to Loki via nginx reverse proxy
