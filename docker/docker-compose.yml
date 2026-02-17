@@ -81,6 +81,9 @@ networks:
   proxy-internal:
     driver: bridge
     internal: true
+  loki-backend:
+    driver: bridge
+    internal: true
 services:
   # Docker socket proxy - filtered access for CI builds
   # Only allows build/image operations, blocks exec/start/stop
@@ -284,6 +287,7 @@ services:
       internal:
         ipv4_address: {{ lab_nginx_ip }}
       proxy-internal:
+      loki-backend:
     restart: unless-stopped
     depends_on:
       docker-socket-proxy:
@@ -644,8 +648,7 @@ services:
       - ALL
     image: grafana/loki:3.6.5@sha256:847c287ada0e12603910589f42038c5cdaaad04e248bd1dc6c6e0920a235f427
     networks:
-      internal:
-        ipv4_address: {{ loki_ip }}
+      loki-backend:
     restart: unless-stopped
     deploy:
       resources:
