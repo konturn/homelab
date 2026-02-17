@@ -99,7 +99,7 @@
   ansible.builtin.cron:
     name: "Update wan ipset"
     minute: "*/5"
-    job: "{{ '/bin/bash /root/cron/ip_update.sh 2>&1 | tee -a /root/cron/logs/ip_update.log | logger -t ip-update-cron' }}"
+    job: "{{ \"bash -c 'set -o pipefail; /bin/bash /root/cron/ip_update.sh 2>&1 | logger -t ip-update-cron'\" }}"
 
 - name: Template out cron script for DDNS
   ansible.builtin.template:
@@ -126,9 +126,9 @@
     name: "Update public DNS records"
     minute: "*/5"
     job: >-
-      {{ ("bash -c 'set -a; source /root/cron/.ddns.env; set +a;"
+      {{ ("bash -c 'set -o pipefail; set -a; source /root/cron/.ddns.env; set +a;"
       + " /usr/bin/python3 /root/cron/ddns.py -d nkontur.com"
-      + " -r \"\" \"*\" 2>&1 | tee -a /root/cron/logs/ddns.log | logger -t ddns-cron'")
+      + " -r \"\" \"*\" 2>&1 | logger -t ddns-cron'")
       | regex_replace('[\r\n]', '') }}
 
 - name: Template out cron script for SSL renewal
@@ -146,9 +146,9 @@
     hour: "4"
     weekday: "1"
     job: >-
-      {{ ('/bin/bash /root/cron/renew.sh '
+      {{ ("bash -c 'set -o pipefail; /bin/bash /root/cron/renew.sh "
       + ((vault_namesilo_api_key | default(lookup('env', 'NAMESILO_API_KEY'))) | trim)
-      + ' 2>&1 | tee -a /root/cron/logs/ssl.log | logger -t ssl-renew-cron')
+      + " 2>&1 | logger -t ssl-renew-cron'")
       | regex_replace('[\r\n]', '') }}
   no_log: true
 
@@ -165,7 +165,7 @@
     name: "Convert ISO files to MKV"
     minute: "0"
     hour: "2"
-    job: "{{ '/bin/bash /root/cron/convert_isos.sh 2>&1 | tee -a /root/cron/logs/iso_convert.log | logger -t iso-convert-cron' }}"
+    job: "{{ \"bash -c 'set -o pipefail; /bin/bash /root/cron/convert_isos.sh 2>&1 | logger -t iso-convert-cron'\" }}"
 
 
 - name: Sync systemd-networkd drop-in files
