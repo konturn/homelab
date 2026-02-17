@@ -78,6 +78,9 @@ networks:
   moltbot-nginx-bridge:
     driver: bridge
     internal: true
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
   proxy-internal:
     driver: bridge
     internal: true
