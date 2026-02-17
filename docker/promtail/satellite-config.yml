@@ -7,9 +7,11 @@ positions:
 
 clients:
   - url: https://loki.lab.nkontur.com/loki/api/v1/push
+{% if vault_loki_push_username is defined and vault_loki_push_password is defined %}
     basic_auth:
       username: {{ vault_loki_push_username }}
       password: {{ vault_loki_push_password }}
+{% endif %}
 
 scrape_configs:
   # Systemd journal - scrapes all host logs directly from journal
