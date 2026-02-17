@@ -24,6 +24,7 @@ const (
 	StatusDenied   Status = "denied"
 	StatusTimeout  Status = "timeout"
 	StatusClaimed  Status = "claimed"
+	StatusError    Status = "error"
 )
 
 // VaultPathRequest represents a requested Vault path with capabilities.
@@ -45,6 +46,9 @@ type Request struct {
 
 	// Dynamic Vault backend: requested paths and capabilities
 	VaultPaths []VaultPathRequest `json:"vault_paths,omitempty"`
+
+	// Error detail (set when status is "error")
+	ErrorMessage string `json:"error_message,omitempty"`
 
 	// Set on approval
 	ApprovedAt *time.Time `json:"approved_at,omitempty"`
@@ -195,6 +199,21 @@ func (s *Store) Timeout(id string) error {
 	}
 
 	req.Status = StatusTimeout
+	return nil
+}
+
+// MarkError transitions a request to error status with a message.
+func (s *Store) MarkError(id string, errMsg string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	req, ok := s.requests[id]
+	if !ok {
+		return fmt.Errorf("request not found: %s", id)
+	}
+
+	req.Status = StatusError
+	req.ErrorMessage = errMsg
 	return nil
 }
 
