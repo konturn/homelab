@@ -64,6 +64,9 @@ type CreateRequestResponse struct {
 	RequestID  string              `json:"request_id"`
 	Status     string              `json:"status"`
 	Credential *CredentialResponse `json:"credential,omitempty"`
+	Error      string              `json:"error,omitempty"`
+	Message    string              `json:"message,omitempty"`
+	Backend    string              `json:"backend,omitempty"`
 }
 
 // StatusResponse is the JSON response for GET /status/:id.
@@ -229,8 +232,17 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Auto-approve for tier 1
 	var credResp *CredentialResponse
+	var respErr, respMsg, respBackend string
 	if tierCfg.AutoApprove {
-		if cred := h.autoApprove(req, tierCfg); cred != nil {
+		cred, mintErr := h.autoApprove(req, tierCfg)
+		if mintErr != nil {
+			// T1 auto-approve failed due to upstream error — fail fast
+			_ = h.store.SetError(req.ID)
+			req.Status = store.StatusError
+			respErr = "upstream_unreachable"
+			respMsg = fmt.Sprintf("Failed to mint token: %s", mintErr.Error())
+			respBackend = body.Resource
+		} else if cred != nil {
 			credResp = &CredentialResponse{
 				Token:    cred.Token,
 				LeaseTTL: cred.LeaseTTL.String(),
@@ -247,6 +259,9 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		RequestID:  req.ID,
 		Status:     string(req.Status),
 		Credential: credResp,
+		Error:      respErr,
+		Message:    respMsg,
+		Backend:    respBackend,
 	})
 }
 
@@ -456,8 +471,8 @@ func (h *Handler) mintCredential(req *store.Request, tierCfg config.TierConfig) 
 }
 
 // autoApprove immediately approves a tier 1 request by minting a credential.
-// Returns the minted credential on success so the caller can include it in the HTTP response.
-func (h *Handler) autoApprove(req *store.Request, tierCfg config.TierConfig) *store.Credential {
+// Returns the minted credential on success, or an error if minting failed.
+func (h *Handler) autoApprove(req *store.Request, tierCfg config.TierConfig) (*store.Credential, error) {
 	logger.Info("auto_approve", logger.Fields{
 		"request_id": req.ID,
 		"tier":       req.Tier,
@@ -470,7 +485,7 @@ func (h *Handler) autoApprove(req *store.Request, tierCfg config.TierConfig) *st
 			"request_id": req.ID,
 			"error":      err.Error(),
 		})
-		return nil
+		return nil, err
 	}
 
 	if err := h.store.Approve(req.ID, cred, tierCfg.TTL); err != nil {
@@ -478,7 +493,7 @@ func (h *Handler) autoApprove(req *store.Request, tierCfg config.TierConfig) *st
 			"request_id": req.ID,
 			"error":      err.Error(),
 		})
-		return nil
+		return nil, err
 	}
 
 	logger.Info("approved", logger.Fields{
@@ -488,7 +503,7 @@ func (h *Handler) autoApprove(req *store.Request, tierCfg config.TierConfig) *st
 		"backend":     cred.Metadata["backend"],
 	})
 
-	return cred
+	return cred, nil
 }
 
 // sendApprovalMessage sends a Telegram message with approve/deny buttons.

@@ -236,7 +236,7 @@ func TestHandleRequest_AutoApprove_MintFailure(t *testing.T) {
 
 	h.HandleRequest(w, req)
 
-	// Request still created (201) but stays pending since mint failed
+	// Request still created (201) but now returns error status instead of pending
 	if w.Code != http.StatusCreated {
 		t.Errorf("expected 201, got %d: %s", w.Code, w.Body.String())
 	}
@@ -244,14 +244,56 @@ func TestHandleRequest_AutoApprove_MintFailure(t *testing.T) {
 	var resp CreateRequestResponse
 	json.Unmarshal(w.Body.Bytes(), &resp)
 
-	// Check the store status - should still be pending since mint failed
+	// T1 auto-approve failure should return error status (fail fast)
+	if resp.Status != "error" {
+		t.Errorf("expected status error for failed T1 mint, got %s", resp.Status)
+	}
+	if resp.Error != "upstream_unreachable" {
+		t.Errorf("expected error upstream_unreachable, got %s", resp.Error)
+	}
+	if resp.Message == "" {
+		t.Error("expected non-empty error message")
+	}
+	if resp.Backend != "radarr" {
+		t.Errorf("expected backend radarr, got %s", resp.Backend)
+	}
+
+	// Check the store status - should be error
 	storeReq := h.store.Get(resp.RequestID)
 	if storeReq == nil {
 		t.Fatal("request should exist in store")
 	}
-	// The request was created as pending, mint failed so it stays pending
-	if storeReq.Status != store.StatusPending {
-		t.Errorf("expected pending (mint failed), got %s", storeReq.Status)
+	if storeReq.Status != store.StatusError {
+		t.Errorf("expected error in store, got %s", storeReq.Status)
+	}
+}
+
+func TestHandleRequest_Tier2_StaysPendingOnMintFailure(t *testing.T) {
+	// T2 requests should NOT be affected - they go to pending for human approval
+	h := mockHandler()
+
+	body, _ := json.Marshal(CreateRequestBody{
+		Requester: "prometheus",
+		Resource:  "gitlab",
+		Tier:      2,
+		Reason:    "MR review",
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-JIT-API-Key", "test-api-key")
+	w := httptest.NewRecorder()
+
+	h.HandleRequest(w, req)
+
+	var resp CreateRequestResponse
+	json.Unmarshal(w.Body.Bytes(), &resp)
+
+	if resp.Status != "pending" {
+		t.Errorf("expected T2 status pending, got %s", resp.Status)
+	}
+	if resp.Error != "" {
+		t.Errorf("expected no error for T2 request, got %s", resp.Error)
 	}
 }
 

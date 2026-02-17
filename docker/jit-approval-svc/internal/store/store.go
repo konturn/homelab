@@ -24,6 +24,7 @@ const (
 	StatusDenied   Status = "denied"
 	StatusTimeout  Status = "timeout"
 	StatusClaimed  Status = "claimed"
+	StatusError    Status = "error"
 )
 
 // VaultPathRequest represents a requested Vault path with capabilities.
@@ -195,6 +196,20 @@ func (s *Store) Timeout(id string) error {
 	}
 
 	req.Status = StatusTimeout
+	return nil
+}
+
+// SetError transitions a request to error status.
+func (s *Store) SetError(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	req, ok := s.requests[id]
+	if !ok {
+		return fmt.Errorf("request not found: %s", id)
+	}
+
+	req.Status = StatusError
 	return nil
 }
 
