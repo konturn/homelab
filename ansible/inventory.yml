@@ -196,10 +196,10 @@ all:
         use_onboard_audio: true
         docker_config:
           - src: "docker/promtail/satellite-config.yml"
-            dest: "/root/ansible_state/promtail-config.yml"
+            dest: "{{ docker_persistent_data_path }}/promtail/config.yml"
             name: "promtail"
           - src: "docker/telegraf/satellite-telegraf.conf"
-            dest: "/root/ansible_state/telegraf.conf"
+            dest: "{{ docker_persistent_data_path }}/telegraf/telegraf.conf"
             name: "telegraf"
       hosts:
         zwave.lab.nkontur.com:
