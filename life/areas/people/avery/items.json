@@ -17,7 +17,7 @@
   },
   {
     "id": "avery-003",
-    "fact": "Noah knew her from high school (Northfield, OH area) \u2014 they reconnected when she was in town over Christmas 2025",
+    "fact": "Noah knew her from high school (Northfield, OH area) — they reconnected when she was in town over Christmas 2025",
     "category": "relationship",
     "timestamp": "2026-02-04",
     "source": "conversation",
@@ -33,7 +33,7 @@
   },
   {
     "id": "avery-005",
-    "fact": "PhD student at Arizona State University \u2014 Ira A. Fulton School of Engineering",
+    "fact": "PhD student at Arizona State University — Ira A. Fulton School of Engineering",
     "category": "education",
     "timestamp": "2026-02-04",
     "source": "web-research",
@@ -49,7 +49,7 @@
   },
   {
     "id": "avery-007",
-    "fact": "Long-distance relationship (Ohio \u2194 Arizona)",
+    "fact": "Long-distance relationship (Ohio ↔ Arizona)",
     "category": "status",
     "timestamp": "2026-02-04",
     "source": "conversation",
@@ -105,7 +105,7 @@
   },
   {
     "id": "avery-014",
-    "fact": "Undergrad at Ohio State University (OSU) \u2014 involved in iGEM synthetic biology competition, tried starting mycology club",
+    "fact": "Undergrad at Ohio State University (OSU) — involved in iGEM synthetic biology competition, tried starting mycology club",
     "category": "education",
     "timestamp": "2026-02-10",
     "source": "web-research",
@@ -113,7 +113,7 @@
   },
   {
     "id": "avery-015",
-    "fact": "Passionate mushroom forager (boletes, wood ears) \u2014 NE Ohio roots, deeply knowledgeable",
+    "fact": "Passionate mushroom forager (boletes, wood ears) — NE Ohio roots, deeply knowledgeable",
     "category": "preference",
     "timestamp": "2026-02-10",
     "source": "web-research",
@@ -121,7 +121,7 @@
   },
   {
     "id": "avery-016",
-    "fact": "Film photography enthusiast \u2014 Ektar H35N, Lomochrome purple film, interested in darkroom work",
+    "fact": "Film photography enthusiast — Ektar H35N, Lomochrome purple film, interested in darkroom work",
     "category": "preference",
     "timestamp": "2026-02-10",
     "source": "web-research",
@@ -180,6 +180,14 @@
     "fact": "Noah bought red/orange roses for Avery for Valentines Day 2026 (cat-safe)",
     "category": "milestone",
     "timestamp": "2026-02-13",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "avery-024",
+    "fact": "Calls Prometheus (Noah's AI assistant) \"my little guy\"",
+    "category": "preference",
+    "timestamp": "2026-02-17",
     "source": "conversation",
     "status": "active"
   }

@@ -35,7 +35,7 @@ Full JIT credential management system built and operational:
 
 ## Infrastructure
 - Chromium browser sidecar deployed (Xvfb/noVNC/CDP) for agent browser automation
-- Loki accessible internally via http://loki:3100
+- Loki isolated on loki-backend network, accessed only via https://loki.lab.nkontur.com (through nginx reverse proxy). Writes require basic auth.
 - Main branch protection enabled — no direct pushes, MRs only
 - Gmail OAuth2: read (T1) and send (T2) via JIT
 

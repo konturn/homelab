@@ -105,3 +105,9 @@ Moved to `tools/services.md` for detailed patterns. Quick reference:
 ---
 
 *Last reviewed: 2026-02-15*
+
+## HARD RULE: Check MR state before modifying (2026-02-17)
+ALWAYS check MR state via API before force-pushing or amending. Noah merges fast. If it's already merged, create a NEW MR. Never force-push to a merged branch.
+```
+curl -s -H "PRIVATE-TOKEN: $GITLAB_TOKEN" ".../merge_requests/NNN" | jq '.state'
+```
