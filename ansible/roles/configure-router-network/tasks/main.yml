@@ -126,10 +126,7 @@
     name: "Update public DNS records"
     minute: "*/5"
     job: >-
-      {{ ("bash -c 'set -o pipefail; set -a; source /root/cron/.ddns.env; set +a;"
-      + " /usr/bin/python3 /root/cron/ddns.py -d nkontur.com"
-      + " -r \"\" \"*\" 2>&1 | logger -t ddns-cron'")
-      | regex_replace('[\r\n]', '') }}
+      bash -c 'set -o pipefail; set -a; source /root/cron/.ddns.env; set +a; /usr/bin/python3 /root/cron/ddns.py -d nkontur.com -r @ \* 2>&1 | logger -t ddns-cron'
 
 - name: Template out cron script for SSL renewal
   ansible.builtin.template:
