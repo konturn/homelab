@@ -79,7 +79,8 @@ errors = 0
 
 for host in rrhost:
     # Build the FQDN we're looking for
-    if host == '':
+    # "@" is an alias for the bare domain (avoids shell quoting issues with "")
+    if host == '' or host == '@':
         target_fqdn = domain
     else:
         target_fqdn = f"{host}.{domain}"
