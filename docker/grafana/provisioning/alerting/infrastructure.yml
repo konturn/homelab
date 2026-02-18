@@ -233,7 +233,7 @@ groups:
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [80]}}]}
         noDataState: NoData
-        execErrState: NoData
+        execErrState: Alerting
         for: 5m
         annotations:
           summary: "Disk usage above 80% on {{ $labels.device }} ({{ $labels.path }})"
@@ -265,7 +265,7 @@ groups:
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [90]}}]}
         noDataState: NoData
-        execErrState: NoData
+        execErrState: Alerting
         for: 2m
         annotations:
           summary: "CRITICAL: Disk usage above 90% on {{ $labels.device }} ({{ $labels.path }})"
