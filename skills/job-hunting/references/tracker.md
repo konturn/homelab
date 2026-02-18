@@ -47,3 +47,4 @@
 | Calix | Staff Cloud Security Engineer | 2026-02-18 | Applied | Workday ATS. All screening questions answered No (5+ yrs cloud security, GCP, security tools, GCP certs). Remote US. |
 | Virta Health | Senior Cloud Infrastructure Engineer | 2026-02-18 | Applied | Ashby ATS. Remote US. Applied successfully. |
 | HackerOne | Infrastructure Engineer IV | 2026-02-18 | Applied | Ashby ATS. Remote US. No open-ended questions. |
+| Medallion | Senior Software Engineer, Infrastructure | 2026-02-18 | Applied | Greenhouse form. Healthcare credentialing platform. |
