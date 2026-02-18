@@ -175,6 +175,9 @@ all:
         - src: "docker/docker-socket-proxy-tls/docker-proxy-tls.stream.conf"
           dest: "{{ docker_persistent_data_path }}/lab_nginx/conf/stream.d/docker-proxy-tls.conf"
           name: "lab_nginx"
+        - src: "docker/bitwarden/global.override.env"
+          dest: "{{ docker_persistent_data_path }}/bitwarden/global.override.env"
+          name: "bitwarden"
       docker_data_dirs:
         - path: "{{ docker_persistent_data_path }}/loki/data"
           owner: "10001"
