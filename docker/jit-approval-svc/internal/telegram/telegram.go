@@ -271,18 +271,6 @@ func (c *Client) SetWebhook(url, secret string) error {
 		"allowed_updates": []string{"callback_query"},
 	}
 
-	// Resolve and pin our public IP so Telegram doesn't use a stale cached address
-	if ip, err := getPublicIP(); err != nil {
-		logger.Warn("webhook_ip_resolve_failed", logger.Fields{
-			"error": err.Error(),
-		})
-	} else {
-		payload["ip_address"] = ip
-		logger.Info("webhook_ip_resolved", logger.Fields{
-			"ip": ip,
-		})
-	}
-
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal webhook payload: %w", err)
