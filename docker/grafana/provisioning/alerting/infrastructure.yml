@@ -407,6 +407,7 @@ groups:
                   |> filter(fn: (r) => r.type == "leaf")
                   |> group(columns: ["source"])
                   |> last()
+                  |> keep(columns: ["_time", "_value", "source"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
