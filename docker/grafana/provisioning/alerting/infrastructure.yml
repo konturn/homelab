@@ -37,7 +37,7 @@ groups:
               settings: {mode: dropNN}
         noDataState: OK
         execErrState: Alerting
-        for: 2m
+        for: 10m
         annotations:
           summary: "Container {{ $labels.container_name }} health check failed"
         labels:
@@ -102,7 +102,7 @@ groups:
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
         noDataState: OK
         execErrState: Alerting
-        for: 0s
+        for: 5m
         annotations:
           summary: "Container killed by OOM"
         labels:
@@ -131,7 +131,7 @@ groups:
             model: {type: reduce, expression: A, reducer: last, refId: B, settings: {mode: dropNN}}
         noDataState: OK
         execErrState: Alerting
-        for: 2m
+        for: 10m
         annotations:
           summary: "Critical service {{ $labels.container_name }} has non-zero exit code"
         labels:
@@ -236,7 +236,7 @@ groups:
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [80]}}]}
         noDataState: NoData
         execErrState: Alerting
-        for: 5m
+        for: 10m
         annotations:
           summary: "Disk usage above 80% on {{ $labels.device }} ({{ $labels.path }})"
         labels:
@@ -270,7 +270,7 @@ groups:
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [90]}}]}
         noDataState: NoData
         execErrState: Alerting
-        for: 2m
+        for: 5m
         annotations:
           summary: "CRITICAL: Disk usage above 90% on {{ $labels.device }} ({{ $labels.path }})"
         labels:
@@ -344,7 +344,7 @@ groups:
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
         noDataState: OK
         execErrState: Alerting
-        for: 5m
+        for: 10m
         annotations:
           summary: "Internet connectivity loss — ping failures detected"
         labels:
@@ -376,7 +376,7 @@ groups:
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [2]}}]}
         noDataState: OK
         execErrState: Alerting
-        for: 5m
+        for: 10m
         annotations:
           summary: "DNS resolution failing"
         labels:
