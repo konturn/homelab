@@ -71,6 +71,10 @@ source /home/node/clawd/skills/gitlab/lib.sh  # Always source first
 
 3. **409 Conflict errors** — `gitlab_api_call` handles retry automatically.
 
+4. **Pipeline timeout:** `wait_for_pipeline` has a ~5 min stuck threshold, but some pipelines (especially deploy-heavy) take 6+ minutes. If pipeline is still progressing (jobs running, not hung), don't treat as stuck. Check job status before escalating.
+
+5. **`check_mode` + `get_url`:** Ansible `check_mode` can't validate destination directories that don't exist yet. For idempotent tasks like `get_url`, use `check_mode: no` to avoid false failures in CI.
+
 4. **Pipeline green is NOT enough.** After pipeline passes, ALWAYS check for merge conflicts before reporting done:
    ```bash
    # Check via API
@@ -79,13 +83,13 @@ source /home/node/clawd/skills/gitlab/lib.sh  # Always source first
    ```
    If `has_conflicts: true`, rebase onto main and resolve before reporting success. A green pipeline with merge conflicts is NOT done.
 
-5. **Pipeline stages:** validate → build → deploy → configure → bootstrap (deploy+ main only)
+8. **Pipeline stages:** validate → build → deploy → configure → bootstrap (deploy+ main only)
 
-5. **Every MR must update relevant docs.** Changed pipeline structure → update ASCII diagram in `.gitlab-ci.yml` header. New secrets/auth → update `docs/SECRET_ROTATION.md`. Network rules → update `docs/FIREWALL.md`. New services → update `docs/DISASTER_RECOVERY.md`. Code without doc updates will be sent back.
+9. **Every MR must update relevant docs.** Changed pipeline structure → update ASCII diagram in `.gitlab-ci.yml` header. New secrets/auth → update `docs/SECRET_ROTATION.md`. Network rules → update `docs/FIREWALL.md`. New services → update `docs/DISASTER_RECOVERY.md`. Code without doc updates will be sent back.
 
-6. **No runner tags** — jobs use default runner, don't specify tags.
+10. **No runner tags** — jobs use default runner, don't specify tags.
 
-7. **Git identity:**
+11. **Git identity:**
    ```bash
    git config user.email "moltbot@nkontur.com"
    git config user.name "Moltbot"
