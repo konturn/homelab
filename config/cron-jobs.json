@@ -150,7 +150,7 @@
       "name": "main-pipeline-fix",
       "enabled": true,
       "createdAtMs": 1769927834157,
-      "updatedAtMs": 1771389007557,
+      "updatedAtMs": 1771410608307,
       "schedule": {
         "kind": "cron",
         "expr": "*/30 * * * *",
@@ -163,12 +163,12 @@
         "message": "Main Pipeline Monitor:\n\n1. Fetch latest main pipeline: GET /projects/4/pipelines?ref=main&per_page=1 (use $GITLAB_TOKEN as PRIVATE-TOKEN header)\n2. Read /home/node/.openclaw/workspace/memory/main-pipeline-state.json\n3. If pipeline status == 'success': update state file silently, reply HEARTBEAT_OK. Do NOT announce green pipelines.\n4. If pipeline status == 'failed' AND pipelineId != lastFixedPipelineId:\n   a. Check activeFix - if set and timestamp < 60 min ago, SKIP (already being fixed)\n   b. If activeFix is null or expired (>60 min):\n      - Set activeFix = {pipelineId, timestamp: Date.now(), sessionLabel}\n      - Write state file IMMEDIATELY before spawning\n      - Spawn sub-agent labeled 'gitlab.main.pipeline.<id>.fix' (see skills/gitlab-mr/SKILL.md)\n      - Sub-agent MUST: clear activeFix and set lastFixedPipelineId when done\n5. If pipeline status == 'success', clear activeFix if set\n\nState file: /home/node/.openclaw/workspace/memory/main-pipeline-state.json\nFormat: {\"lastCheckedPipelineId\": N, \"lastFixedPipelineId\": N, \"activeFix\": {pipelineId, timestamp, sessionLabel}}\n\nONLY announce if pipeline is FAILED. Silent on success."
       },
       "state": {
-        "nextRunAtMs": 1771390800000,
-        "lastRunAtMs": 1771389000010,
+        "nextRunAtMs": 1771412400000,
+        "lastRunAtMs": 1771410600014,
         "lastStatus": "ok",
-        "lastDurationMs": 7547,
+        "lastDurationMs": 8293,
         "consecutiveErrors": 0,
-        "runningAtMs": 1771390800026
+        "runningAtMs": 1771412400011
       },
       "delivery": {
         "mode": "announce"
@@ -210,7 +210,7 @@
       "name": "MR Health Check",
       "enabled": true,
       "createdAtMs": 1769961241972,
-      "updatedAtMs": 1771315239956,
+      "updatedAtMs": 1771401718213,
       "schedule": {
         "kind": "cron",
         "expr": "0 3 * * *",
@@ -224,10 +224,10 @@
         "timeoutSeconds": 900
       },
       "state": {
-        "nextRunAtMs": 1771401600000,
-        "lastRunAtMs": 1771315208232,
+        "nextRunAtMs": 1771488000000,
+        "lastRunAtMs": 1771401610201,
         "lastStatus": "ok",
-        "lastDurationMs": 31724,
+        "lastDurationMs": 108012,
         "consecutiveErrors": 0
       },
       "delivery": {
@@ -240,7 +240,7 @@
       "name": "Infrastructure Audit",
       "enabled": true,
       "createdAtMs": 1769961387739,
-      "updatedAtMs": 1771318915920,
+      "updatedAtMs": 1771405334979,
       "schedule": {
         "kind": "cron",
         "expr": "0 4 * * *",
@@ -254,10 +254,10 @@
         "timeoutSeconds": 600
       },
       "state": {
-        "nextRunAtMs": 1771405200000,
-        "lastRunAtMs": 1771318816222,
+        "nextRunAtMs": 1771491600000,
+        "lastRunAtMs": 1771405214533,
         "lastStatus": "ok",
-        "lastDurationMs": 99698,
+        "lastDurationMs": 120446,
         "consecutiveErrors": 0
       },
       "delivery": {
@@ -299,7 +299,7 @@
       "agentId": "main",
       "name": "image-update-check",
       "createdAtMs": 1770323521810,
-      "updatedAtMs": 1771317189338,
+      "updatedAtMs": 1771403569662,
       "schedule": {
         "kind": "cron",
         "expr": "30 3 * * *",
@@ -313,10 +313,10 @@
         "timeoutSeconds": 900
       },
       "state": {
-        "nextRunAtMs": 1771403400000,
-        "lastRunAtMs": 1771317009557,
+        "nextRunAtMs": 1771489800000,
+        "lastRunAtMs": 1771403407798,
         "lastStatus": "ok",
-        "lastDurationMs": 179781,
+        "lastDurationMs": 161864,
         "consecutiveErrors": 0
       },
       "enabled": true,
@@ -421,7 +421,7 @@
       "name": "nightly-redteam",
       "enabled": true,
       "createdAtMs": 1770841906925,
-      "updatedAtMs": 1771308293232,
+      "updatedAtMs": 1771394643782,
       "schedule": {
         "kind": "cron",
         "expr": "0 1 * * *",
@@ -438,10 +438,10 @@
         "mode": "announce"
       },
       "state": {
-        "nextRunAtMs": 1771394400000,
-        "lastRunAtMs": 1771308007993,
+        "nextRunAtMs": 1771480800000,
+        "lastRunAtMs": 1771394412688,
         "lastStatus": "ok",
-        "lastDurationMs": 285239,
+        "lastDurationMs": 231094,
         "consecutiveErrors": 0
       }
     },
@@ -472,7 +472,8 @@
         "lastRunAtMs": 1771326007255,
         "lastStatus": "ok",
         "lastDurationMs": 81012,
-        "consecutiveErrors": 0
+        "consecutiveErrors": 0,
+        "runningAtMs": 1771412400011
       }
     },
     {
@@ -481,7 +482,7 @@
       "name": "cron-config-sync",
       "enabled": true,
       "createdAtMs": 1770841907179,
-      "updatedAtMs": 1771369216878,
+      "updatedAtMs": 1771391213543,
       "schedule": {
         "kind": "cron",
         "expr": "0 */6 * * *",
@@ -498,12 +499,12 @@
         "mode": "none"
       },
       "state": {
-        "nextRunAtMs": 1771390800000,
-        "lastRunAtMs": 1771369206808,
+        "nextRunAtMs": 1771412400000,
+        "lastRunAtMs": 1771391200361,
         "lastStatus": "ok",
-        "lastDurationMs": 10070,
+        "lastDurationMs": 13182,
         "consecutiveErrors": 0,
-        "runningAtMs": 1771390800026
+        "runningAtMs": 1771412400011
       }
     },
     {
@@ -512,7 +513,7 @@
       "name": "skill-review",
       "enabled": true,
       "createdAtMs": 1770841907314,
-      "updatedAtMs": 1770841907314,
+      "updatedAtMs": 1771398064549,
       "schedule": {
         "kind": "cron",
         "expr": "0 2 * * 3",
@@ -529,7 +530,11 @@
         "mode": "none"
       },
       "state": {
-        "nextRunAtMs": 1771398000000
+        "nextRunAtMs": 1772002800000,
+        "lastRunAtMs": 1771398008114,
+        "lastStatus": "ok",
+        "lastDurationMs": 56435,
+        "consecutiveErrors": 0
       }
     }
   ]
