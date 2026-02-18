@@ -22,6 +22,7 @@ groups:
                   |> range(start: -5m)
                   |> filter(fn: (r) => r._measurement == "docker_container_health")
                   |> filter(fn: (r) => r._field == "failing_streak")
+                  |> filter(fn: (r) => r.container_name != "audioserve" and r.container_name != "nextcloud")
                   |> filter(fn: (r) => r._value > 0)
                   |> group(columns: ["container_name"])
                   |> last()
@@ -168,7 +169,7 @@ groups:
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [90]}}]}
-        noDataState: NoData
+        noDataState: OK
         execErrState: Alerting
         for: 5m
         annotations:
@@ -200,7 +201,7 @@ groups:
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [80]}}]}
-        noDataState: NoData
+        noDataState: OK
         execErrState: Alerting
         for: 5m
         annotations:
@@ -234,7 +235,7 @@ groups:
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [80]}}]}
-        noDataState: NoData
+        noDataState: OK
         execErrState: Alerting
         for: 10m
         annotations:
@@ -268,7 +269,7 @@ groups:
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [90]}}]}
-        noDataState: NoData
+        noDataState: OK
         execErrState: Alerting
         for: 5m
         annotations:
@@ -414,7 +415,7 @@ groups:
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [336]}}]}
-        noDataState: NoData
+        noDataState: OK
         execErrState: Alerting
         for: 10m
         annotations:
@@ -454,7 +455,7 @@ groups:
       #       relativeTimeRange: {from: 0, to: 0}
       #       datasourceUid: __expr__
       #       model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [50]}}]}
-      #   noDataState: NoData
+      #   noDataState: OK
       #   execErrState: Alerting
       #   for: 2m
       #   annotations:
@@ -486,7 +487,7 @@ groups:
       #       relativeTimeRange: {from: 0, to: 0}
       #       datasourceUid: __expr__
       #       model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [80]}}]}
-      #   noDataState: NoData
+      #   noDataState: OK
       #   execErrState: Alerting
       #   for: 5m
       #   annotations:
