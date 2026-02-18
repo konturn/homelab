@@ -404,8 +404,9 @@ groups:
                   |> range(start: -6h)
                   |> filter(fn: (r) => r._measurement == "x509_cert")
                   |> filter(fn: (r) => r._field == "expiry")
+                  |> filter(fn: (r) => r.type == "leaf")
+                  |> group(columns: ["source"])
                   |> last()
-                  |> map(fn: (r) => ({r with _value: r._value / 3600.0}))
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -414,7 +415,8 @@ groups:
           - refId: C
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__
-            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [336]}}]}
+            # 14 days = 1209600 seconds (comparing raw seconds instead of hours)
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [1209600]}}]}
         noDataState: OK
         execErrState: Alerting
         for: 10m
