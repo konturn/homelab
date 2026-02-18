@@ -111,3 +111,12 @@ ALWAYS check MR state via API before force-pushing or amending. Noah merges fast
 ```
 curl -s -H "PRIVATE-TOKEN: $GITLAB_TOKEN" ".../merge_requests/NNN" | jq '.state'
 ```
+
+## Service Access — ALWAYS CHECK services.md FIRST (2026-02-17)
+
+When connecting to ANY service, the FIRST action is: `Read tools/services.md`. It has the complete JIT resource table with tiers, backends, and usage examples. Do NOT guess Vault paths, try env vars, or use browser login. The answer is always JIT.
+
+Key services and their tiers:
+- **T1 (auto):** grafana, influxdb, plex, radarr, sonarr, ombi, nzbget, deluge, paperless, prowlarr, mqtt, gmail
+- **T2 (approval):** homeassistant, tailscale, gitlab, ssh, vault, pihole, ipmi
+- **Router IP:** 10.4.0.1 (NOT 10.4.32.2, that's the Docker host)

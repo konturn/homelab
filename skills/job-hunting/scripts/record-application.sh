@@ -2,8 +2,10 @@
 # Record a successful job application
 # Usage: ./record-application.sh --id <id> --company <company> --role <role> --url <url> --app-url <app-url> --salary <salary>
 
-APPLIED_FILE="/home/node/clawd/skills/job-hunting/references/applied.json"
-TRACKER_FILE="/home/node/clawd/skills/job-hunting/references/tracker.md"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SKILL_DIR="$(dirname "$SCRIPT_DIR")"
+APPLIED_FILE="$SKILL_DIR/references/applied.json"
+TRACKER_FILE="$SKILL_DIR/references/tracker.md"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -29,7 +31,7 @@ DATE=$(TZ=America/New_York date +%Y-%m-%d)
 
 # Update applied.json
 if [ ! -f "$APPLIED_FILE" ]; then
-    echo "[]" > "$APPLIED_FILE"
+    echo '{"jobs": []}' > "$APPLIED_FILE"
 fi
 
 # Create new entry
@@ -44,8 +46,8 @@ NEW_ENTRY=$(jq -n \
     --arg notes "${NOTES:-}" \
     '{id: $id, company: $company, role: $role, url: $url, applicationUrl: $appUrl, salary: $salary, applied: $applied, notes: $notes}')
 
-# Append to array
-jq ". += [$NEW_ENTRY]" "$APPLIED_FILE" > "$APPLIED_FILE.tmp" && mv "$APPLIED_FILE.tmp" "$APPLIED_FILE"
+# Append to jobs array
+jq ".jobs += [$NEW_ENTRY]" "$APPLIED_FILE" > "$APPLIED_FILE.tmp" && mv "$APPLIED_FILE.tmp" "$APPLIED_FILE"
 
 # Update tracker.md (append to Active Applications table)
 if [ -f "$TRACKER_FILE" ]; then
