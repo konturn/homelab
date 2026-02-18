@@ -157,6 +157,12 @@
   register: docker_config_copy
   loop: "{{ docker_config + (docker_config_nginx | default([])) }}"
 
+- name: Remove old Grafana alerting rules subdirectory
+  ansible.builtin.file:
+    path: "{{ docker_persistent_data_path }}/grafana/provisioning/alerting/rules"
+    state: absent
+  when: "'router' in inventory_hostname"
+
 - name: Copy Grafana alerting provisioning files (no Jinja2 templating)
   ansible.builtin.copy:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/{{ item.src }}"
@@ -170,8 +176,8 @@
       dest: "{{ docker_persistent_data_path }}/grafana/provisioning/alerting/contactpoints.yml"
     - src: "docker/grafana/provisioning/alerting/policies.yml"
       dest: "{{ docker_persistent_data_path }}/grafana/provisioning/alerting/policies.yml"
-    - src: "docker/grafana/provisioning/alerting/rules/infrastructure.yml"
-      dest: "{{ docker_persistent_data_path }}/grafana/provisioning/alerting/rules/infrastructure.yml"
+    - src: "docker/grafana/provisioning/alerting/infrastructure.yml"
+      dest: "{{ docker_persistent_data_path }}/grafana/provisioning/alerting/infrastructure.yml"
   when: "'router' in inventory_hostname"
 
 - name: Rebuild Docker images for changed Dockerfiles
