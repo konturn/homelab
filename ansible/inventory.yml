@@ -169,9 +169,8 @@ all:
         - src: "docker/gitlab/gitlab.rb"
           dest: "{{ docker_persistent_data_path }}/gitlab/config/gitlab.rb"
           name: "gitlab"
-        - src: "docker/gitlab/license_encryption_key.pub"
-          dest: "{{ docker_persistent_data_path }}/gitlab/license_encryption_key.pub"
-          name: "gitlab"
+        # license_encryption_key.pub is managed on-host, not from repo
+        # (pipeline deploys would overwrite the key and invalidate the license)
         - src: "docker/docker-socket-proxy-tls/docker-proxy-tls.stream.conf"
           dest: "{{ docker_persistent_data_path }}/lab_nginx/conf/stream.d/docker-proxy-tls.conf"
           name: "lab_nginx"
