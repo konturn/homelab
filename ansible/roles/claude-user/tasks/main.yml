@@ -69,6 +69,7 @@
     - { src: /usr/bin/dig, name: dig }
     - { src: /usr/bin/ping, name: ping }
     - { src: /usr/bin/traceroute, name: traceroute }
+    - { src: /usr/bin/docker, name: docker }
   ignore_errors: yes  # Some binaries may not exist on all hosts
 
 - name: Configure restricted .bashrc
@@ -84,7 +85,7 @@
       export HISTSIZE=1000
       readonly PATH
       # No cd allowed in rbash by default
-      echo "Restricted shell - read-only access. Commands: cat ls head tail grep find df du ps journalctl systemctl ip ss dig"
+      echo "Restricted shell. Commands: cat ls head tail grep find df du ps journalctl systemctl ip ss dig docker"
 
 - name: Create .profile
   copy:
@@ -109,11 +110,19 @@
     line: "{{ claude_user_name }}"
     create: yes
 
+- name: Add claude user to docker group
+  user:
+    name: "{{ claude_user_name }}"
+    groups: docker
+    append: yes
+  when: claude_docker_access | default(false)
+
 - name: Ensure claude user is NOT in docker group
   user:
     name: "{{ claude_user_name }}"
     groups: []
     append: no
+  when: not (claude_docker_access | default(false))
 
 - name: Ensure sensitive directories are not world-readable
   file:

@@ -6,3 +6,6 @@ vault_ssh_ca_public_key: ""
 claude_user_name: "claude"
 claude_user_group: "claude"
 claude_user_principal: "claude"
+
+# Grant docker socket access (adds user to docker group)
+claude_docker_access: false
