@@ -3,7 +3,7 @@ permit_join: true
 frontend: true
 mqtt:
   base_topic: zigbee2mqtt
-  server: mqtts://mqtt.lab.nkontur.com:1883
+  server: mqtts://mqtt.lab.nkontur.com:8883
   user: mosquitto
   password: {{ vault_mqtt_pass | default(lookup('env', 'MQTT_PASS')) | trim }}
   keepalive: 60

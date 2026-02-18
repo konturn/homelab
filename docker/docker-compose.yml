@@ -1344,7 +1344,7 @@ services:
       - mosquitto:/mosquitto/data
       - "{{ docker_persistent_data_path }}/certs:/mosquitto/certs"
     healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 1883 || exit 1"]
+      test: ["CMD-SHELL", "nc -z localhost 1883 || nc -z localhost 8883 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -1370,6 +1370,7 @@ services:
       AMCREST_HOST: 10.6.128.9
       AMCREST_PASSWORD: {{ vault_doorbell_pass | default(lookup('env', 'DOORBELL_PASS')) | trim | replace("$", "$$") }}
       MQTT_HOST: "mqtt.lab.nkontur.com"
+      MQTT_PORT: "8883"
       MQTT_USERNAME: mosquitto
       MQTT_PASSWORD: {{ vault_mqtt_pass | default(lookup('env', 'MQTT_PASS')) | trim | replace("$", "$$") }}
       HOME_ASSISTANT: "true"
@@ -1400,7 +1401,7 @@ services:
           memory: 256M
     environment:
       STATION_MAC_ADDRESS: {{ weather_station_mac }}
-      MQTT_SERVER: "mqtts://mqtt.lab.nkontur.com:1883"
+      MQTT_SERVER: "mqtts://mqtt.lab.nkontur.com:8883"
       TZ: America/New_York
       PORT: 8080
       MQTT_USERNAME: mosquitto
