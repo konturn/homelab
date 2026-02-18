@@ -67,7 +67,8 @@
       "schedule": {
         "kind": "cron",
         "expr": "0 * * * *",
-        "tz": "America/New_York"
+        "tz": "America/New_York",
+        "staggerMs": 300000
       },
       "sessionTarget": "isolated",
       "wakeMode": "next-heartbeat",
@@ -150,7 +151,7 @@
       "name": "main-pipeline-fix",
       "enabled": true,
       "createdAtMs": 1769927834157,
-      "updatedAtMs": 1771410608307,
+      "updatedAtMs": 1771432207388,
       "schedule": {
         "kind": "cron",
         "expr": "*/30 * * * *",
@@ -163,12 +164,12 @@
         "message": "Main Pipeline Monitor:\n\n1. Fetch latest main pipeline: GET /projects/4/pipelines?ref=main&per_page=1 (use $GITLAB_TOKEN as PRIVATE-TOKEN header)\n2. Read /home/node/.openclaw/workspace/memory/main-pipeline-state.json\n3. If pipeline status == 'success': update state file silently, reply HEARTBEAT_OK. Do NOT announce green pipelines.\n4. If pipeline status == 'failed' AND pipelineId != lastFixedPipelineId:\n   a. Check activeFix - if set and timestamp < 60 min ago, SKIP (already being fixed)\n   b. If activeFix is null or expired (>60 min):\n      - Set activeFix = {pipelineId, timestamp: Date.now(), sessionLabel}\n      - Write state file IMMEDIATELY before spawning\n      - Spawn sub-agent labeled 'gitlab.main.pipeline.<id>.fix' (see skills/gitlab-mr/SKILL.md)\n      - Sub-agent MUST: clear activeFix and set lastFixedPipelineId when done\n5. If pipeline status == 'success', clear activeFix if set\n\nState file: /home/node/.openclaw/workspace/memory/main-pipeline-state.json\nFormat: {\"lastCheckedPipelineId\": N, \"lastFixedPipelineId\": N, \"activeFix\": {pipelineId, timestamp, sessionLabel}}\n\nONLY announce if pipeline is FAILED. Silent on success."
       },
       "state": {
-        "nextRunAtMs": 1771412400000,
-        "lastRunAtMs": 1771410600014,
+        "nextRunAtMs": 1771434000000,
+        "lastRunAtMs": 1771432200021,
         "lastStatus": "ok",
-        "lastDurationMs": 8293,
+        "lastDurationMs": 7367,
         "consecutiveErrors": 0,
-        "runningAtMs": 1771412400011
+        "runningAtMs": 1771434000015
       },
       "delivery": {
         "mode": "announce"
@@ -330,7 +331,7 @@
       "name": "Morning Digest",
       "enabled": true,
       "createdAtMs": 1770347532113,
-      "updatedAtMs": 1771371659275,
+      "updatedAtMs": 1771423251656,
       "schedule": {
         "kind": "cron",
         "expr": "0 9 * * *",
@@ -343,10 +344,10 @@
         "message": "It's 9 AM. Compile and send the daily morning digest to Noah via Telegram. Include:\n\n1) **Restic backup status** — Check Loki for recent restic logs. Use JIT grafana token to query: `{syslog_identifier=\"restic\"}` from last 24h. Report: last run time, success/failure, snapshot size, duration, any errors. If no logs found in 24h, flag as STALE.\n2) Red team findings from overnight (vulnerabilities discovered, severity ratings)\n3) MRs created/updated/merged overnight\n4) GitLab issues opened/closed\n5) Moltbook posts if any\n6) Meditation summary if written\n7) Any other notable overnight work\n\nFor Loki queries via Grafana API:\n```\nbash -c 'source /home/node/.openclaw/workspace/tools/jit-lib.sh && GRAFANA_TOKEN=$(jit_get grafana 1 \"morning digest\") && curl -s -H \"Authorization: Bearer $GRAFANA_TOKEN\" \"https://grafana.lab.nkontur.com/api/ds/query\" -H \"Content-Type: application/json\" -d \"{\\\"queries\\\":[{\\\"refId\\\":\\\"A\\\",\\\"datasource\\\":{\\\"uid\\\":\\\"loki\\\"},\\\"expr\\\":\\\"{syslog_identifier=\\\\\\\"restic\\\\\\\"}\\\",\\\"queryType\\\":\\\"range\\\",\\\"intervalMs\\\":60000,\\\"maxDataPoints\\\":100}],\\\"from\\\":\\\"now-24h\\\",\\\"to\\\":\\\"now\\\"}\"'\n```\n\nInfluxDB bucket name is `metrics` (not telegraf).\n\nFormat as one clean consolidated Telegram message. Check memory/YYYY-MM-DD.md for today and yesterday to compile. Send to Telegram chat 8531859108."
       },
       "state": {
-        "nextRunAtMs": 1771423200000,
-        "lastRunAtMs": 1771336812042,
+        "nextRunAtMs": 1771509600000,
+        "lastRunAtMs": 1771423207500,
         "lastStatus": "ok",
-        "lastDurationMs": 20812,
+        "lastDurationMs": 44156,
         "consecutiveErrors": 0
       },
       "delivery": {
@@ -361,7 +362,7 @@
       "name": "email-check",
       "enabled": true,
       "createdAtMs": 1770841906634,
-      "updatedAtMs": 1771365644015,
+      "updatedAtMs": 1771423274456,
       "schedule": {
         "kind": "cron",
         "expr": "0 9,13,17 * * *",
@@ -378,10 +379,10 @@
         "mode": "announce"
       },
       "state": {
-        "nextRunAtMs": 1771423200000,
-        "lastRunAtMs": 1771365614233,
+        "nextRunAtMs": 1771437600000,
+        "lastRunAtMs": 1771423251656,
         "lastStatus": "ok",
-        "lastDurationMs": 29782,
+        "lastDurationMs": 22800,
         "consecutiveErrors": 0
       }
     },
@@ -451,7 +452,7 @@
       "name": "fact-extraction",
       "enabled": true,
       "createdAtMs": 1770841907058,
-      "updatedAtMs": 1771326088267,
+      "updatedAtMs": 1771412473639,
       "schedule": {
         "kind": "cron",
         "expr": "0 6 * * *",
@@ -468,12 +469,11 @@
         "mode": "none"
       },
       "state": {
-        "nextRunAtMs": 1771412400000,
-        "lastRunAtMs": 1771326007255,
+        "nextRunAtMs": 1771498800000,
+        "lastRunAtMs": 1771412407785,
         "lastStatus": "ok",
-        "lastDurationMs": 81012,
-        "consecutiveErrors": 0,
-        "runningAtMs": 1771412400011
+        "lastDurationMs": 65854,
+        "consecutiveErrors": 0
       }
     },
     {
@@ -482,11 +482,12 @@
       "name": "cron-config-sync",
       "enabled": true,
       "createdAtMs": 1770841907179,
-      "updatedAtMs": 1771391213543,
+      "updatedAtMs": 1771412486234,
       "schedule": {
         "kind": "cron",
         "expr": "0 */6 * * *",
-        "tz": "America/New_York"
+        "tz": "America/New_York",
+        "staggerMs": 300000
       },
       "sessionTarget": "isolated",
       "wakeMode": "now",
@@ -499,12 +500,12 @@
         "mode": "none"
       },
       "state": {
-        "nextRunAtMs": 1771412400000,
-        "lastRunAtMs": 1771391200361,
+        "nextRunAtMs": 1771434000000,
+        "lastRunAtMs": 1771412473639,
         "lastStatus": "ok",
-        "lastDurationMs": 13182,
+        "lastDurationMs": 12595,
         "consecutiveErrors": 0,
-        "runningAtMs": 1771412400011
+        "runningAtMs": 1771434000015
       }
     },
     {
