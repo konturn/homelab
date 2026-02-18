@@ -44,3 +44,6 @@
 | Docker | Principal Software Engineer, AI Cloud | 2026-02-02 | Applied | Remote US. Resume uploaded via xdotool fallback. |
 | Veeam Software | Senior Staff Platform Engineer | 2026-02-02 | Applied | Remote US. Resume uploaded successfully. |
 | Luma AI | Software Engineer - Reliability | 2026-02-17 | Applied | Applied manually - hCaptcha blocked automation. Gem ATS. Remote US. |
+| Calix | Staff Cloud Security Engineer | 2026-02-18 | Applied | Workday ATS. All screening questions answered No (5+ yrs cloud security, GCP, security tools, GCP certs). Remote US. |
+| Virta Health | Senior Cloud Infrastructure Engineer | 2026-02-18 | Applied | Ashby ATS. Remote US. Applied successfully. |
+| HackerOne | Infrastructure Engineer IV | 2026-02-18 | Applied | Ashby ATS. Remote US. No open-ended questions. |

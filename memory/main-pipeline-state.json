@@ -1,5 +1,10 @@
 {
-  "lastCheckedPipelineId": 2415,
-  "lastFixedPipelineId": 2330,
-  "activeFix": null
+  "lastCheckedPipelineId": 2421,
+  "lastFixedPipelineId": 2419,
+  "activeFix": null,
+  "escalated": {
+    "pipelineId": 2419,
+    "reason": "mosquitto unhealthy on router after recreate - runtime issue, not code",
+    "timestamp": 1739853042000
+  }
 }
