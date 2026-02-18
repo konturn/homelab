@@ -116,5 +116,28 @@ for host in rrhost:
 
 log.info("Done: %d updated, %d skipped (already current), %d errors", updated, skipped, errors)
 
+# If any records were updated (IP changed), refresh the JIT webhook
+if updated > 0:
+    jit_api_key = os.environ.get('JIT_API_KEY', '')
+    jit_url = os.environ.get('JIT_URL', 'https://jit.lab.nkontur.com')
+    if jit_api_key:
+        log.info("IP changed — refreshing JIT Telegram webhook...")
+        try:
+            resp = requests.post(
+                f"{jit_url}/webhook/refresh",
+                headers={"X-JIT-API-Key": jit_api_key},
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                log.info("Webhook refresh OK")
+            elif resp.status_code == 429:
+                log.warning("Webhook refresh rate limited (already refreshed recently)")
+            else:
+                log.error("Webhook refresh failed (HTTP %d): %s", resp.status_code, resp.text)
+        except requests.RequestException as e:
+            log.error("Webhook refresh request failed: %s", e)
+    else:
+        log.debug("JIT_API_KEY not set, skipping webhook refresh")
+
 if errors:
     sys.exit(1)

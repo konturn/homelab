@@ -115,6 +115,8 @@
       CLOUDFLARE_API_KEY={{ (vault_cloudflare_api_key | default(lookup('env', 'CLOUDFLARE_API_KEY'))) | trim }}
       CLOUDFLARE_ZONE_ID={{ (vault_cloudflare_zone_id | default(lookup('env', 'CLOUDFLARE_ZONE_ID'))) | trim }}
       CLOUDFLARE_EMAIL=konoahko@gmail.com
+      JIT_API_KEY={{ (vault_jit_api_key | default('')) | trim }}
+      JIT_URL=https://jit.lab.nkontur.com
     dest: /root/cron/.ddns.env
     owner: root
     group: root

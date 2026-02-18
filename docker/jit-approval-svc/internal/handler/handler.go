@@ -19,12 +19,13 @@ import (
 
 // Handler holds all dependencies for HTTP request handling.
 type Handler struct {
-	cfg      *config.Config
-	store    *store.Store
-	vault    *vault.Client
-	telegram *telegram.Client
-	backends *backend.Registry
-	limiter  *ratelimit.Limiter
+	cfg               *config.Config
+	store             *store.Store
+	vault             *vault.Client
+	telegram          *telegram.Client
+	backends          *backend.Registry
+	limiter           *ratelimit.Limiter
+	lastWebhookRefresh time.Time
 }
 
 // New creates a new Handler.
@@ -356,6 +357,62 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		Status:   status,
 		Vault:    vaultStatus,
 		Requests: h.store.Count(),
+	})
+}
+
+// HandleWebhookRefresh handles POST /webhook/refresh.
+// Called by DDNS or other scripts after a public IP change to re-register
+// the Telegram webhook with the new IP address.
+// Rate limited to once per 5 minutes. Requires API key auth.
+func (h *Handler) HandleWebhookRefresh(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	// Require API key (same as /request)
+	apiKey := r.Header.Get("X-JIT-API-Key")
+	if subtle.ConstantTimeCompare([]byte(apiKey), []byte(h.cfg.JITAPIKey)) != 1 {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	// Rate limit: once per 5 minutes
+	const cooldown = 5 * time.Minute
+	now := time.Now()
+	if !h.lastWebhookRefresh.IsZero() && now.Sub(h.lastWebhookRefresh) < cooldown {
+		retryAfter := h.lastWebhookRefresh.Add(cooldown).Sub(now)
+		logger.Warn("webhook_refresh_rate_limited", logger.Fields{
+			"retry_after_s": int(retryAfter.Seconds()),
+		})
+		writeJSON(w, http.StatusTooManyRequests, map[string]interface{}{
+			"error":        "rate limited",
+			"retry_after_s": int(retryAfter.Seconds()) + 1,
+		})
+		return
+	}
+
+	if h.cfg.TelegramWebhookURL == "" {
+		writeError(w, http.StatusBadRequest, "no webhook URL configured")
+		return
+	}
+
+	if err := h.telegram.SetWebhook(h.cfg.TelegramWebhookURL, h.cfg.TelegramWebhookSecret); err != nil {
+		logger.Error("webhook_refresh_failed", logger.Fields{
+			"error": err.Error(),
+		})
+		writeError(w, http.StatusInternalServerError, "webhook refresh failed: "+err.Error())
+		return
+	}
+
+	h.lastWebhookRefresh = now
+	logger.Info("webhook_refreshed", logger.Fields{
+		"url": h.cfg.TelegramWebhookURL,
+	})
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status": "ok",
+		"message": "webhook re-registered with current IP",
 	})
 }
 
