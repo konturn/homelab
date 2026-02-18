@@ -1508,7 +1508,7 @@ services:
       retries: 3
       start_period: 30s
   nextcloud_db:
-    image: mariadb:12.2.2-ubi10@sha256:8dc38e142d058f1ee2faf0fdb9ccd324da79c2f06e2a3300e9b80a123d843214
+    image: mariadb:12.2.2
     container_name: nextcloud_database
     security_opt:
       - no-new-privileges:true

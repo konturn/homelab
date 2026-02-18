@@ -21,8 +21,8 @@ groups:
                 from(bucket: "metrics")
                   |> range(start: -5m)
                   |> filter(fn: (r) => r._measurement == "docker_container_health")
-                  |> filter(fn: (r) => r._field == "health_status")
-                  |> filter(fn: (r) => r._value != "healthy")
+                  |> filter(fn: (r) => r._field == "failing_streak")
+                  |> filter(fn: (r) => r._value > 0)
                   |> group(columns: ["container_name"])
                   |> last()
               refId: A

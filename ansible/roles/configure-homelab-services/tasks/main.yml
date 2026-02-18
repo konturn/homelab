@@ -38,6 +38,16 @@
         docker_proxy_tls_certs.results | selectattr('stat.isdir', 'defined') | selectattr('stat.isdir', 'equalto', true) | list | length > 0
   register: docker_proxy_tls_generated
 
+- name: Deploy telegraf sudoers for SMART monitoring
+  ansible.builtin.copy:
+    content: "telegraf ALL=(root) NOPASSWD: /usr/sbin/smartctl\n"
+    dest: /etc/sudoers.d/telegraf
+    owner: root
+    group: root
+    mode: "0440"
+    validate: 'visudo -cf %s'
+  when: "'router' in inventory_hostname"
+
 - name: Template out compose file to ansible state directory on host
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/' + item }}"
