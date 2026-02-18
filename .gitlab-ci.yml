@@ -432,7 +432,6 @@ satellite-2:deploy:
 vault:configure:
   stage: deploy
   image: alpine:3.19
-  environment: admin
   needs: []
   variables:
     TF_VERSION: "1.7.5"
