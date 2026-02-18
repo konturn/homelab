@@ -389,7 +389,7 @@ groups:
   - orgId: 1
     name: certificate-alerts
     folder: General Alerting
-    interval: 6h
+    interval: 10m
     rules:
       - uid: ssl-cert-expiry
         title: SSL Certificate Expiry (<14 days)
@@ -407,6 +407,7 @@ groups:
                   |> filter(fn: (r) => r.type == "leaf")
                   |> group(columns: ["source"])
                   |> last()
+                  |> keep(columns: ["_time", "_value", "source"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
