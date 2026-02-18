@@ -90,6 +90,7 @@ agent-browser screenshot [path]
 | `check-applied.sh` | `./scripts/check-applied.sh <job-id>` | Exit 0 if not applied, exit 1 if already applied |
 | `check-blocklist.sh` | `./scripts/check-blocklist.sh <company>` | Exit 0 if not blocked, exit 1 if blocked |
 | `record-application.sh` | `./scripts/record-application.sh --id <id> --company <company> --role <role> [--url <url>] [--app-url <app-url>] [--salary <salary>] [--notes <notes>]` | Updates applied.json and tracker.md |
+| `solve-captcha.sh` | `./scripts/solve-captcha.sh <hcaptcha\|recaptcha> <sitekey> <page_url>` | Solves CAPTCHA via 2captcha API (~10-30s) |
 
 ---
 
@@ -451,13 +452,48 @@ Include any issues encountered and suggestions for the skill.
 
 ## CAPTCHA Handling
 
-1. **Try vision approach:** Screenshot → analyze with `image` tool → click identified tiles
-2. **If fails:** Add to `references/manual-queue.json` and notify Noah:
-```
-message action=send channel=telegram target=8531859108 message="🔐 CAPTCHA detected for <Company>. Form ready at <URL>."
+**Use 2captcha service to solve automatically.** API key stored in Vault at `homelab/data/agents/2captcha`.
+
+### Automated Solving Flow
+
+```bash
+# 1. Detect the captcha type and sitekey from the page
+SITEKEY=$(agent-browser eval "document.querySelector('[data-sitekey]')?.dataset?.sitekey || document.querySelector('iframe[src*=\"hcaptcha\"]')?.src?.match(/sitekey=([^&]+)/)?.[1] || document.querySelector('iframe[src*=\"recaptcha\"]')?.src?.match(/k=([^&]+)/)?.[1] || ''")
+
+# 2. Determine type
+# hCaptcha: iframe src contains "hcaptcha.com"
+# reCAPTCHA: iframe src contains "recaptcha" or "google.com/recaptcha"
+CAPTCHA_TYPE="hcaptcha"  # or "recaptcha"
+
+# 3. Get the current page URL
+PAGE_URL=$(agent-browser eval "window.location.href")
+
+# 4. Solve it
+TOKEN=$(./scripts/solve-captcha.sh "$CAPTCHA_TYPE" "$SITEKEY" "$PAGE_URL")
+
+# 5. Inject the solution token
+# For hCaptcha:
+agent-browser eval "document.querySelector('[name=\"h-captcha-response\"]').value = '$TOKEN'; document.querySelector('[name=\"g-recaptcha-response\"]').value = '$TOKEN';"
+
+# For reCAPTCHA:
+agent-browser eval "document.querySelector('[name=\"g-recaptcha-response\"]').value = '$TOKEN';"
+
+# 6. Some forms need a callback triggered
+agent-browser eval "typeof hcaptcha !== 'undefined' && hcaptcha.getRespKey && document.querySelector('[data-callback]')?.dataset?.callback && window[document.querySelector('[data-callback]').dataset.callback]('$TOKEN');"
 ```
 
-Don't spend more than 60 seconds on CAPTCHA attempts.
+### Script Reference
+
+| Script | Usage | Purpose |
+|--------|-------|---------|
+| `solve-captcha.sh` | `./scripts/solve-captcha.sh <hcaptcha\|recaptcha> <sitekey> <page_url>` | Returns solution token. ~10-30s. Costs ~$0.003/solve. |
+
+### If 2captcha Fails
+
+Add to `references/manual-queue.json` and notify Noah:
+```
+message action=send channel=telegram target=8531859108 message="🔐 CAPTCHA solving failed for <Company>. Form ready at <URL>."
+```
 
 ---
 
