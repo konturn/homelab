@@ -389,7 +389,7 @@ groups:
   - orgId: 1
     name: certificate-alerts
     folder: General Alerting
-    interval: 6h
+    interval: 10m
     rules:
       - uid: ssl-cert-expiry
         title: SSL Certificate Expiry (<14 days)
