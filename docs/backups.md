@@ -200,10 +200,6 @@ The homelab runs containerized services with data stored on ZFS (mpool) with aut
 - Config: `/persistent_data/application/grafana/`
 - Contains dashboards, datasources, users
 
-**Registry (Docker):**
-- Data: `registry` Docker volume
-- Auth: `/persistent_data/application/registry/auth/`
-
 **Nginx (all instances):**
 - Configs: `/persistent_data/application/{nginx,lab_nginx,iot_nginx}/conf/`
 - Logs: `/var/log/{nginx,lab_nginx,iot_nginx}/`
@@ -409,9 +405,13 @@ docker exec homeassistant python -m homeassistant --script check_config
 
 ### Backup Success Monitoring
 
-- **Restic logs** in `/var/log/restic.log`
-- **Grafana dashboard** showing backup status
-- **Email alerts** on backup failures (via postfix)
+- **Restic logs** via systemd journal (`syslog_identifier=restic`), visible in Loki
+- **Grafana provisioned alerts** for stale backups and restic errors
+- **Email alerts** on backup failures (via Grafana contact points)
+- **Morning digest** includes restic backup status summary
+
+> **Note:** Backup credentials are managed via Vault (`homelab/data/restic`).
+> JIT T2 approval is required for credential access.
 
 ### Storage Monitoring
 
@@ -487,6 +487,6 @@ docker exec homeassistant python -m homeassistant --script check_config
 
 ---
 
-**Last updated:** 2024-02-04  
+**Last updated:** 2026-02-17  
 **Review schedule:** Quarterly  
 **Owner:** Infrastructure Team

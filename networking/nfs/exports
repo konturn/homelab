@@ -1,1 +1,1 @@
-/mpool/nextcloud/paperless/consume {{ satellite_2_address }}(rw,sync,no_subtree_check,no_root_squash)
+/mpool/nextcloud/paperless/consume {{ satellite_2_address }}(rw,sync,no_subtree_check,root_squash)
