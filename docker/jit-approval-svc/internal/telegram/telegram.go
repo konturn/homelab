@@ -235,7 +235,15 @@ func (c *Client) editMessage(messageID int, text string) error {
 // getPublicIP returns the current public IP address.
 func getPublicIP() (string, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get("https://ifconfig.me")
+
+	// Use the /ip endpoint and set a curl-like User-Agent to ensure plain text response
+	req, err := http.NewRequest("GET", "https://ifconfig.me/ip", nil)
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("User-Agent", "curl/8.0")
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("get public IP: %w", err)
 	}
