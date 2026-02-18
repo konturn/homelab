@@ -121,6 +121,7 @@ stages:
 router:bootstrap:
   extends: .ansible
   stage: bootstrap
+  environment: admin
   when: manual
   allow_failure: true
   script:
@@ -431,6 +432,7 @@ satellite-2:deploy:
 vault:configure:
   stage: deploy
   image: alpine:3.19
+  environment: admin
   needs: []
   variables:
     TF_VERSION: "1.7.5"
@@ -463,6 +465,7 @@ vault:configure:
 vault:rotate-approles:
   stage: deploy
   image: alpine:3.19
+  environment: admin
   needs:
     - job: router:deploy
       optional: true
