@@ -4,7 +4,9 @@
     vars:
       fetch_ssh_ca_key: true
   - configure-base
-  - claude-user
+  - role: claude-user
+    vars:
+      claude_docker_access: true
   - configure-router-network
   - role: configure-tailscale
     vars:
