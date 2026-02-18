@@ -370,12 +370,9 @@ func (h *Handler) HandleWebhookRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Require API key (same as /request)
-	apiKey := r.Header.Get("X-JIT-API-Key")
-	if subtle.ConstantTimeCompare([]byte(apiKey), []byte(h.cfg.JITAPIKey)) != 1 {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
+	// No auth required — benign operation (re-registers webhook with current IP).
+	// Only reachable on internal network via jit.lab.nkontur.com.
+	// Rate limited to prevent abuse.
 
 	// Rate limit: once per 5 minutes
 	const cooldown = 5 * time.Minute
