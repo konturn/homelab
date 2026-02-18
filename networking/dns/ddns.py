@@ -119,7 +119,7 @@ log.info("Done: %d updated, %d skipped (already current), %d errors", updated, s
 # If any records were updated (IP changed), refresh the JIT webhook
 if updated > 0:
     jit_api_key = os.environ.get('JIT_API_KEY', '')
-    jit_url = os.environ.get('JIT_URL', 'http://jit-approval-svc:8080')
+    jit_url = os.environ.get('JIT_URL', 'https://jit.lab.nkontur.com')
     if jit_api_key:
         log.info("IP changed — refreshing JIT Telegram webhook...")
         try:
