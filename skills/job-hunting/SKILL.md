@@ -572,6 +572,7 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 - Account credentials: `konoahko@gmail.com` / `jobApplications123@`
 - **Never use Google OAuth** — always email/password
 - For unresponsive buttons: hover-then-click
+- **"How Did You Hear About Us?" multiselect** is a custom widget that's hard to interact with via refs. Clear the search field first, then select "Other" — it's the most reliably clickable option. If the dropdown won't cooperate, use `agent-browser eval` with `document.getElementById` to click sub-options directly.
 
 ### Workable (apply.workable.com)
 - Uses Cloudflare Turnstile CAPTCHA heavily
