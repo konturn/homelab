@@ -232,11 +232,47 @@ func (c *Client) editMessage(messageID int, text string) error {
 	return nil
 }
 
+// getPublicIP returns the current public IP address.
+func getPublicIP() (string, error) {
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get("https://ifconfig.me")
+	if err != nil {
+		return "", fmt.Errorf("get public IP: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read public IP response: %w", err)
+	}
+
+	ip := strings.TrimSpace(string(body))
+	if ip == "" {
+		return "", fmt.Errorf("empty public IP response")
+	}
+	return ip, nil
+}
+
 // SetWebhook configures the Telegram webhook URL.
+// It resolves the current public IP and passes it to Telegram via ip_address
+// to ensure callbacks are delivered to the correct address even after IP changes.
 func (c *Client) SetWebhook(url, secret string) error {
 	payload := map[string]interface{}{
-		"url":          url,
-		"secret_token": secret,
+		"url":             url,
+		"secret_token":    secret,
+		"allowed_updates": []string{"callback_query"},
+	}
+
+	// Resolve and pin our public IP so Telegram doesn't use a stale cached address
+	if ip, err := getPublicIP(); err != nil {
+		logger.Warn("webhook_ip_resolve_failed", logger.Fields{
+			"error": err.Error(),
+		})
+	} else {
+		payload["ip_address"] = ip
+		logger.Info("webhook_ip_resolved", logger.Fields{
+			"ip": ip,
+		})
 	}
 
 	body, err := json.Marshal(payload)
