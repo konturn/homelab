@@ -150,7 +150,7 @@
       "name": "main-pipeline-fix",
       "enabled": true,
       "createdAtMs": 1769927834157,
-      "updatedAtMs": 1771367488912,
+      "updatedAtMs": 1771389007557,
       "schedule": {
         "kind": "cron",
         "expr": "*/30 * * * *",
@@ -163,12 +163,12 @@
         "message": "Main Pipeline Monitor:\n\n1. Fetch latest main pipeline: GET /projects/4/pipelines?ref=main&per_page=1 (use $GITLAB_TOKEN as PRIVATE-TOKEN header)\n2. Read /home/node/.openclaw/workspace/memory/main-pipeline-state.json\n3. If pipeline status == 'success': update state file silently, reply HEARTBEAT_OK. Do NOT announce green pipelines.\n4. If pipeline status == 'failed' AND pipelineId != lastFixedPipelineId:\n   a. Check activeFix - if set and timestamp < 60 min ago, SKIP (already being fixed)\n   b. If activeFix is null or expired (>60 min):\n      - Set activeFix = {pipelineId, timestamp: Date.now(), sessionLabel}\n      - Write state file IMMEDIATELY before spawning\n      - Spawn sub-agent labeled 'gitlab.main.pipeline.<id>.fix' (see skills/gitlab-mr/SKILL.md)\n      - Sub-agent MUST: clear activeFix and set lastFixedPipelineId when done\n5. If pipeline status == 'success', clear activeFix if set\n\nState file: /home/node/.openclaw/workspace/memory/main-pipeline-state.json\nFormat: {\"lastCheckedPipelineId\": N, \"lastFixedPipelineId\": N, \"activeFix\": {pipelineId, timestamp, sessionLabel}}\n\nONLY announce if pipeline is FAILED. Silent on success."
       },
       "state": {
-        "nextRunAtMs": 1771369200000,
-        "lastRunAtMs": 1771367400014,
+        "nextRunAtMs": 1771390800000,
+        "lastRunAtMs": 1771389000010,
         "lastStatus": "ok",
-        "lastDurationMs": 88898,
+        "lastDurationMs": 7547,
         "consecutiveErrors": 0,
-        "runningAtMs": 1771369200011
+        "runningAtMs": 1771390800026
       },
       "delivery": {
         "mode": "announce"
@@ -330,7 +330,7 @@
       "name": "Morning Digest",
       "enabled": true,
       "createdAtMs": 1770347532113,
-      "updatedAtMs": 1771336832854,
+      "updatedAtMs": 1771371659275,
       "schedule": {
         "kind": "cron",
         "expr": "0 9 * * *",
@@ -340,7 +340,7 @@
       "wakeMode": "next-heartbeat",
       "payload": {
         "kind": "agentTurn",
-        "message": "It's 9 AM. Compile and send the daily morning digest to Noah via Telegram. Include: 1) Red team findings from overnight (vulnerabilities discovered, severity ratings), 2) MRs created/updated/merged overnight, 3) GitLab issues opened/closed, 4) Moltbook posts if any, 5) Meditation summary if written, 6) Any other notable overnight work. Format it as one clean consolidated Telegram message. Check memory/YYYY-MM-DD.md for today and yesterday to compile. Send to Telegram chat 8531859108."
+        "message": "It's 9 AM. Compile and send the daily morning digest to Noah via Telegram. Include:\n\n1) **Restic backup status** — Check Loki for recent restic logs. Use JIT grafana token to query: `{syslog_identifier=\"restic\"}` from last 24h. Report: last run time, success/failure, snapshot size, duration, any errors. If no logs found in 24h, flag as STALE.\n2) Red team findings from overnight (vulnerabilities discovered, severity ratings)\n3) MRs created/updated/merged overnight\n4) GitLab issues opened/closed\n5) Moltbook posts if any\n6) Meditation summary if written\n7) Any other notable overnight work\n\nFor Loki queries via Grafana API:\n```\nbash -c 'source /home/node/.openclaw/workspace/tools/jit-lib.sh && GRAFANA_TOKEN=$(jit_get grafana 1 \"morning digest\") && curl -s -H \"Authorization: Bearer $GRAFANA_TOKEN\" \"https://grafana.lab.nkontur.com/api/ds/query\" -H \"Content-Type: application/json\" -d \"{\\\"queries\\\":[{\\\"refId\\\":\\\"A\\\",\\\"datasource\\\":{\\\"uid\\\":\\\"loki\\\"},\\\"expr\\\":\\\"{syslog_identifier=\\\\\\\"restic\\\\\\\"}\\\",\\\"queryType\\\":\\\"range\\\",\\\"intervalMs\\\":60000,\\\"maxDataPoints\\\":100}],\\\"from\\\":\\\"now-24h\\\",\\\"to\\\":\\\"now\\\"}\"'\n```\n\nInfluxDB bucket name is `metrics` (not telegraf).\n\nFormat as one clean consolidated Telegram message. Check memory/YYYY-MM-DD.md for today and yesterday to compile. Send to Telegram chat 8531859108."
       },
       "state": {
         "nextRunAtMs": 1771423200000,
@@ -391,7 +391,7 @@
       "name": "nightly-meditation",
       "enabled": true,
       "createdAtMs": 1770841906770,
-      "updatedAtMs": 1771300879765,
+      "updatedAtMs": 1771387276283,
       "schedule": {
         "kind": "cron",
         "expr": "0 23 * * *",
@@ -408,10 +408,10 @@
         "mode": "none"
       },
       "state": {
-        "nextRunAtMs": 1771387200000,
-        "lastRunAtMs": 1771300807373,
+        "nextRunAtMs": 1771473600000,
+        "lastRunAtMs": 1771387211113,
         "lastStatus": "ok",
-        "lastDurationMs": 72392,
+        "lastDurationMs": 65170,
         "consecutiveErrors": 0
       }
     },
@@ -481,7 +481,7 @@
       "name": "cron-config-sync",
       "enabled": true,
       "createdAtMs": 1770841907179,
-      "updatedAtMs": 1771347722844,
+      "updatedAtMs": 1771369216878,
       "schedule": {
         "kind": "cron",
         "expr": "0 */6 * * *",
@@ -498,12 +498,12 @@
         "mode": "none"
       },
       "state": {
-        "nextRunAtMs": 1771369200000,
-        "lastRunAtMs": 1771347712276,
+        "nextRunAtMs": 1771390800000,
+        "lastRunAtMs": 1771369206808,
         "lastStatus": "ok",
-        "lastDurationMs": 10568,
+        "lastDurationMs": 10070,
         "consecutiveErrors": 0,
-        "runningAtMs": 1771369200011
+        "runningAtMs": 1771390800026
       }
     },
     {
