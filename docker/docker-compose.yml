@@ -396,7 +396,7 @@ services:
       - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
       - FOWNER         # s6-overlay chmods config files owned by PUID
     ports:
-      - "6789:6789"
+      - "127.0.0.1:6789:6789"
     networks:
       - internal
     deploy:
