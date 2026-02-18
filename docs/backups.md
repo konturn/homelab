@@ -200,10 +200,6 @@ The homelab runs containerized services with data stored on ZFS (mpool) with aut
 - Config: `/persistent_data/application/grafana/`
 - Contains dashboards, datasources, users
 
-**Registry (Docker):**
-- Data: `registry` Docker volume
-- Auth: `/persistent_data/application/registry/auth/`
-
 **Nginx (all instances):**
 - Configs: `/persistent_data/application/{nginx,lab_nginx,iot_nginx}/conf/`
 - Logs: `/var/log/{nginx,lab_nginx,iot_nginx}/`
@@ -440,7 +436,7 @@ docker exec homeassistant python -m homeassistant --script check_config
 
 ### Access Control
 
-- **Backup credentials** stored in Ansible vault
+- **Backup credentials** available via JIT (just-in-time) access where possible
 - **Separate service account** for backup operations only
 - **Minimal permissions** for backup destination access
 
@@ -487,6 +483,6 @@ docker exec homeassistant python -m homeassistant --script check_config
 
 ---
 
-**Last updated:** 2024-02-04  
+**Last updated:** 2026-02-17  
 **Review schedule:** Quarterly  
 **Owner:** Infrastructure Team

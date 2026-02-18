@@ -13,7 +13,7 @@ docker run --rm \
   --dns-cloudflare-propagation-seconds 60 \
   --email konoahko@gmail.com \
   --agree-tos --no-eff-email \
-  --force-renewal \
+  --keep-until-expiring \
   -d *.iot.lab.nkontur.com \
   -d *.lab.nkontur.com \
   -d nkontur.com \
