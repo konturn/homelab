@@ -6,7 +6,7 @@ groups:
   # =========================================================================
   - orgId: 1
     name: container-alerts
-    folder: Infrastructure Alerts
+    folder: General Alerting
     interval: 1m
     rules:
       - uid: container-health-failure
@@ -142,7 +142,7 @@ groups:
   # =========================================================================
   - orgId: 1
     name: system-alerts
-    folder: Infrastructure Alerts
+    folder: General Alerting
     interval: 1m
     rules:
       - uid: high-memory-usage
@@ -309,7 +309,7 @@ groups:
   # =========================================================================
   - orgId: 1
     name: network-alerts
-    folder: Infrastructure Alerts
+    folder: General Alerting
     interval: 1m
     rules:
       - uid: internet-connectivity-loss
@@ -380,7 +380,7 @@ groups:
   # =========================================================================
   - orgId: 1
     name: certificate-alerts
-    folder: Infrastructure Alerts
+    folder: General Alerting
     interval: 6h
     rules:
       - uid: ssl-cert-expiry
@@ -420,7 +420,7 @@ groups:
   # =========================================================================
   - orgId: 1
     name: hardware-alerts
-    folder: Infrastructure Alerts
+    folder: General Alerting
     interval: 1m
     rules:
       - uid: ups-battery-low
@@ -490,7 +490,7 @@ groups:
   # =========================================================================
   - orgId: 1
     name: backup-alerts
-    folder: Infrastructure Alerts
+    folder: General Alerting
     interval: 30m
     rules:
       - uid: restic-backup-stale
@@ -552,7 +552,7 @@ groups:
   # =========================================================================
   - orgId: 1
     name: security-alerts
-    folder: Infrastructure Alerts
+    folder: General Alerting
     interval: 5m
     rules:
       - uid: failed-ssh-logins
