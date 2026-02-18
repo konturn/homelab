@@ -1,50 +1,41 @@
-# Prometheus Workspace - Git Ignore
-# Only track markdown files for memory/identity/skills
 
-# Ignore everything by default
-*
-
-# But allow descending into directories
-!*/
-
-# Track markdown files
-!.gitignore
 !*.md
-
-# Track scripts in skills and tools
-!skills/**/lib.sh
-!skills/**/scripts/*.sh
-!skills/**/scripts/*.py
-!skills/**/scripts/*.js
-!tools/*.sh
-!tools/*.md
-
-# JIT Approval Service (full Go project)
+!*/
+!.gitignore
+!config/cron-jobs.json
 !jit-approval-svc/**
 !jit-approval-svc/**/*
-
-# Face recognition skill specifics
-!skills/face-recognition/models/**
-!skills/face-recognition/package.json
-
-# Ignore homelab entirely (separate repo)
-homelab/
-
-# Ignore runtime/session data even if .md
-*.jsonl
-*.json
-*.log
-
-# But track knowledge graph and state JSON
 !life/**/items.json
 !memory/heartbeat-state.json
 !memory/main-pipeline-state.json
 !memory/open-mrs.json
-!config/cron-jobs.json
-
-# Ignore temp and canvas directories
-tmp/
-canvas/
-
+!skills/**/lib.sh
+!skills/**/scripts/*.js
+!skills/**/scripts/*.py
+!skills/**/scripts/*.sh
+!skills/face-recognition/models/**
+!skills/face-recognition/package.json
+!tools/*.md
+!tools/*.sh
+# But allow descending into directories
+# But track knowledge graph and state JSON
+# Face recognition skill specifics
+# Ignore everything by default
+# Ignore homelab entirely (separate repo)
 # Ignore node_modules everywhere
+# Ignore runtime/session data even if .md
+# Ignore temp and canvas directories
+# JIT Approval Service (full Go project)
+# Only track markdown files for memory/identity/skills
+# Prometheus Workspace - Git Ignore
+# Track markdown files
+# Track scripts in skills and tools
+*
+*.json
+*.jsonl
+*.log
+.keys/
+canvas/
+homelab/
 node_modules/
+tmp/

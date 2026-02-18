@@ -454,41 +454,47 @@ Include any issues encountered and suggestions for the skill.
 
 **Use 2captcha service to solve automatically.** API key stored in Vault at `homelab/data/agents/2captcha`.
 
-### Automated Solving Flow
+### Supported CAPTCHA Types
+
+| Type | Status | Notes |
+|------|--------|-------|
+| reCAPTCHA v2/v3 | ✅ Solved automatically | Via Capsolver (primary) or 2captcha (fallback) |
+| Cloudflare Turnstile | ✅ Solved automatically | Via Capsolver (primary) or 2captcha (fallback) |
+| **hCaptcha** | ❌ **SKIP APPLICATION** | All major solving services dropped hCaptcha support (2025). Do not attempt. |
+
+**If you hit hCaptcha → report SKIPPED immediately.** Don't waste time trying to solve it.
+
+### Automated Solving Flow (reCAPTCHA / Turnstile only)
 
 ```bash
 # 1. Detect the captcha type and sitekey from the page
-SITEKEY=$(agent-browser eval "document.querySelector('[data-sitekey]')?.dataset?.sitekey || document.querySelector('iframe[src*=\"hcaptcha\"]')?.src?.match(/sitekey=([^&]+)/)?.[1] || document.querySelector('iframe[src*=\"recaptcha\"]')?.src?.match(/k=([^&]+)/)?.[1] || ''")
+SITEKEY=$(agent-browser eval "document.querySelector('[data-sitekey]')?.dataset?.sitekey || document.querySelector('iframe[src*=\"recaptcha\"]')?.src?.match(/k=([^&]+)/)?.[1] || ''")
 
-# 2. Determine type
-# hCaptcha: iframe src contains "hcaptcha.com"
+# 2. Determine type (recaptcha or turnstile)
 # reCAPTCHA: iframe src contains "recaptcha" or "google.com/recaptcha"
-CAPTCHA_TYPE="hcaptcha"  # or "recaptcha"
+# Turnstile: iframe src contains "challenges.cloudflare.com"
+CAPTCHA_TYPE="recaptcha"  # or "turnstile"
 
 # 3. Get the current page URL
 PAGE_URL=$(agent-browser eval "window.location.href")
 
-# 4. Solve it
+# 4. Solve it (uses Capsolver primary, 2captcha fallback)
 TOKEN=$(./scripts/solve-captcha.sh "$CAPTCHA_TYPE" "$SITEKEY" "$PAGE_URL")
 
 # 5. Inject the solution token
-# For hCaptcha:
-agent-browser eval "document.querySelector('[name=\"h-captcha-response\"]').value = '$TOKEN'; document.querySelector('[name=\"g-recaptcha-response\"]').value = '$TOKEN';"
-
-# For reCAPTCHA:
 agent-browser eval "document.querySelector('[name=\"g-recaptcha-response\"]').value = '$TOKEN';"
 
 # 6. Some forms need a callback triggered
-agent-browser eval "typeof hcaptcha !== 'undefined' && hcaptcha.getRespKey && document.querySelector('[data-callback]')?.dataset?.callback && window[document.querySelector('[data-callback]').dataset.callback]('$TOKEN');"
+agent-browser eval "document.querySelector('[data-callback]')?.dataset?.callback && window[document.querySelector('[data-callback]').dataset.callback]('$TOKEN');"
 ```
 
 ### Script Reference
 
 | Script | Usage | Purpose |
 |--------|-------|---------|
-| `solve-captcha.sh` | `./scripts/solve-captcha.sh <hcaptcha\|recaptcha> <sitekey> <page_url>` | Returns solution token. ~10-30s. Costs ~$0.003/solve. |
+| `solve-captcha.sh` | `./scripts/solve-captcha.sh <recaptcha\|turnstile> <sitekey> <page_url>` | Returns solution token via Capsolver/2captcha. ~10-30s. |
 
-### If 2captcha Fails
+### If Solving Fails
 
 Add to `references/manual-queue.json` and notify Noah:
 ```

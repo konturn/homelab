@@ -43,3 +43,4 @@
 - **Low** — Backup option
 | Docker | Principal Software Engineer, AI Cloud | 2026-02-02 | Applied | Remote US. Resume uploaded via xdotool fallback. |
 | Veeam Software | Senior Staff Platform Engineer | 2026-02-02 | Applied | Remote US. Resume uploaded successfully. |
+| Luma AI | Software Engineer - Reliability | 2026-02-17 | Applied | Applied manually - hCaptcha blocked automation. Gem ATS. Remote US. |
