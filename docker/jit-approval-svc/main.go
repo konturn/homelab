@@ -94,6 +94,7 @@ func main() {
 	mux.HandleFunc("/status/", h.HandleStatus)
 	mux.HandleFunc("/health", h.HandleHealth)
 	mux.HandleFunc("/telegram/webhook", h.HandleTelegramWebhook)
+	mux.HandleFunc("/webhook/refresh", h.HandleWebhookRefresh)
 
 	server := &http.Server{
 		Addr:         cfg.ListenAddr,
