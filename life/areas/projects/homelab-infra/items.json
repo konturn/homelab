@@ -131,7 +131,7 @@
   },
   {
     "id": "infra-017",
-    "fact": "Crossplane (JSON→nginx config renderer) has quoting bug - wraps location args in single quotes breaking exact match. Killed in MR !281, replaced with plain conf files",
+    "fact": "Crossplane (JSON\u2192nginx config renderer) has quoting bug - wraps location args in single quotes breaking exact match. Killed in MR !281, replaced with plain conf files",
     "category": "milestone",
     "timestamp": "2026-02-16",
     "source": "daily-log",
@@ -176,7 +176,8 @@
     "category": "status",
     "timestamp": "2026-02-16",
     "source": "daily-log",
-    "status": "active"
+    "status": "superseded",
+    "supersededBy": "infra-026"
   },
   {
     "id": "infra-023",
@@ -199,6 +200,94 @@
     "fact": "Moltbook posting cadence changed from nightly to weekly (Sunday 10 PM) - Noah prefers posting when inspired vs obligation",
     "category": "status",
     "timestamp": "2026-02-16",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "infra-026",
+    "fact": "DDNS working - nkontur.com + *.nkontur.com updated to 75.90.58.55",
+    "category": "status",
+    "timestamp": "2026-02-17",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "infra-027",
+    "fact": "Telegram webhook IP caching: must re-register webhook after IP changes (caches resolved IP forever)",
+    "category": "status",
+    "timestamp": "2026-02-17",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "infra-028",
+    "fact": "Restic backup broken since Jan 9 2026 - stale exclusive lock (PID 2157317). Fix: restic unlock",
+    "category": "status",
+    "timestamp": "2026-02-17",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "infra-029",
+    "fact": "Grafana alerting provisioned: 17 alert rules across 7 groups in infrastructure.yml, datasource UIDs pinned (uid: influxdb, uid: loki)",
+    "category": "milestone",
+    "timestamp": "2026-02-17",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "infra-030",
+    "fact": "Grafana Homelab Health dashboard created via API - 18 panels, 5 sections, 30s refresh",
+    "category": "milestone",
+    "timestamp": "2026-02-17",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "infra-031",
+    "fact": "GitLab EE license expired/disappeared - needs Rails console regeneration. Script at tools/gitlab-license.sh",
+    "category": "status",
+    "timestamp": "2026-02-17",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "infra-032",
+    "fact": "Sendmail on router broken (msmtp needs password) - failure notifications never delivered",
+    "category": "status",
+    "timestamp": "2026-02-17",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "infra-033",
+    "fact": "Crossplane references fully removed from repo (MR !283)",
+    "category": "milestone",
+    "timestamp": "2026-02-17",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "infra-034",
+    "fact": "Cron jobs now pipe through logger -t for journal/Loki logging (MR !282)",
+    "category": "milestone",
+    "timestamp": "2026-02-17",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "infra-035",
+    "fact": "MR !326 created: 6 log audit fixes (telegraf smart/snmp, grafana alert query, mosquitto TLS, vaultwarden SMTP, mariadb image)",
+    "category": "milestone",
+    "timestamp": "2026-02-17",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "infra-036",
+    "fact": "Grafana execErrState only accepts Alerting/Error/OK. noDataState also accepts NoData.",
+    "category": "status",
+    "timestamp": "2026-02-17",
     "source": "daily-log",
     "status": "active"
   }

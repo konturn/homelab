@@ -117,7 +117,8 @@
     "category": "status",
     "timestamp": "2026-02-12",
     "source": "conversation",
-    "status": "active"
+    "status": "superseded",
+    "supersededBy": "jh-006"
   },
   {
     "id": "jh-001",
@@ -149,7 +150,8 @@
     "category": "status",
     "timestamp": "2026-02-13",
     "source": "conversation",
-    "status": "active"
+    "status": "superseded",
+    "supersededBy": "jh-006"
   },
   {
     "id": "jh-005",
@@ -157,6 +159,38 @@
     "category": "milestone",
     "timestamp": "2026-02-13",
     "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "jh-006",
+    "fact": "Total applications: 55 as of Feb 18, 2026",
+    "category": "milestone",
+    "timestamp": "2026-02-18",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "jh-007",
+    "fact": "2captcha + Capsolver CAPTCHA solving integration built (solve-captcha.sh). Capsolver is primary solver.",
+    "category": "milestone",
+    "timestamp": "2026-02-18",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "jh-008",
+    "fact": "Feb 18 batch: CrowdStrike, GM, Calix, Rad AI, Virta Health, HackerOne, Medallion submitted. Luma AI blocked by hCaptcha.",
+    "category": "milestone",
+    "timestamp": "2026-02-18",
+    "source": "daily-log",
+    "status": "active"
+  },
+  {
+    "id": "jh-009",
+    "fact": "13 jobs remaining in queue: Camunda, Kalepa, Temporal, Oscar Health, Reddit, Gauntlet, Veeam, Abnormal Security, Docker, Coinbase, Wizard World, Cisco, Airbnb",
+    "category": "status",
+    "timestamp": "2026-02-18",
+    "source": "daily-log",
     "status": "active"
   }
 ]
