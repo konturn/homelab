@@ -221,6 +221,8 @@ groups:
                   |> range(start: -5m)
                   |> filter(fn: (r) => r._measurement == "disk")
                   |> filter(fn: (r) => r._field == "used_percent")
+                  |> filter(fn: (r) => r.device !~ /^loop/)
+                  |> filter(fn: (r) => r.path !~ /^\/snap/)
                   |> group(columns: ["device", "path", "host"])
                   |> mean()
               refId: A
@@ -253,6 +255,8 @@ groups:
                   |> range(start: -5m)
                   |> filter(fn: (r) => r._measurement == "disk")
                   |> filter(fn: (r) => r._field == "used_percent")
+                  |> filter(fn: (r) => r.device !~ /^loop/)
+                  |> filter(fn: (r) => r.path !~ /^\/snap/)
                   |> group(columns: ["device", "path", "host"])
                   |> mean()
               refId: A
@@ -272,37 +276,38 @@ groups:
         labels:
           severity: critical
 
-      - uid: smart-disk-error
-        title: SMART Disk Error
-        condition: C
-        data:
-          - refId: A
-            relativeTimeRange: {from: 3600, to: 0}
-            datasourceUid: influxdb
-            model:
-              query: |
-                from(bucket: "metrics")
-                  |> range(start: -1h)
-                  |> filter(fn: (r) => r._measurement == "smart_device")
-                  |> filter(fn: (r) => r._field == "health_ok")
-                  |> last()
-                  |> filter(fn: (r) => r._value == false)
-              refId: A
-          - refId: B
-            relativeTimeRange: {from: 0, to: 0}
-            datasourceUid: __expr__
-            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
-          - refId: C
-            relativeTimeRange: {from: 0, to: 0}
-            datasourceUid: __expr__
-            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [-1]}}]}
-        noDataState: OK
-        execErrState: Alerting
-        for: 0s
-        annotations:
-          summary: "SMART reports disk health issue"
-        labels:
-          severity: critical
+      # DISABLED: smart_device measurement not available - enable when smartmontools Telegraf plugin is configured
+      # - uid: smart-disk-error
+      #   title: SMART Disk Error
+      #   condition: C
+      #   data:
+      #     - refId: A
+      #       relativeTimeRange: {from: 3600, to: 0}
+      #       datasourceUid: influxdb
+      #       model:
+      #         query: |
+      #           from(bucket: "metrics")
+      #             |> range(start: -1h)
+      #             |> filter(fn: (r) => r._measurement == "smart_device")
+      #             |> filter(fn: (r) => r._field == "health_ok")
+      #             |> last()
+      #             |> filter(fn: (r) => r._value == false)
+      #         refId: A
+      #     - refId: B
+      #       relativeTimeRange: {from: 0, to: 0}
+      #       datasourceUid: __expr__
+      #       model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+      #     - refId: C
+      #       relativeTimeRange: {from: 0, to: 0}
+      #       datasourceUid: __expr__
+      #       model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [-1]}}]}
+      #   noDataState: OK
+      #   execErrState: Alerting
+      #   for: 0s
+      #   annotations:
+      #     summary: "SMART reports disk health issue"
+      #   labels:
+      #     severity: critical
 
   # =========================================================================
   # Network Alerts
@@ -324,22 +329,24 @@ groups:
                 from(bucket: "metrics")
                   |> range(start: -5m)
                   |> filter(fn: (r) => r._measurement == "ping")
-                  |> filter(fn: (r) => r._field == "percent_packet_loss")
-                  |> mean()
+                  |> filter(fn: (r) => r._field == "result_code")
+                  |> filter(fn: (r) => r._value != 0)
+                  |> group(columns: ["url"])
+                  |> count()
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__
-            model: {type: reduce, expression: A, reducer: mean, refId: B, settings: {mode: dropNN}}
+            model: {type: reduce, expression: A, reducer: sum, refId: B, settings: {mode: dropNN}}
           - refId: C
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__
-            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [50]}}]}
-        noDataState: Alerting
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
         execErrState: Alerting
         for: 5m
         annotations:
-          summary: "Internet connectivity loss — >50% packet loss"
+          summary: "Internet connectivity loss — ping failures detected"
         labels:
           severity: critical
 
@@ -367,7 +374,7 @@ groups:
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [2]}}]}
-        noDataState: Alerting
+        noDataState: OK
         execErrState: Alerting
         for: 5m
         annotations:
@@ -422,68 +429,70 @@ groups:
     name: hardware-alerts
     folder: General Alerting
     interval: 1m
-    rules:
-      - uid: ups-battery-low
-        title: UPS Battery Low
-        condition: C
-        data:
-          - refId: A
-            relativeTimeRange: {from: 300, to: 0}
-            datasourceUid: influxdb
-            model:
-              query: |
-                from(bucket: "metrics")
-                  |> range(start: -5m)
-                  |> filter(fn: (r) => r._measurement == "snmp")
-                  |> filter(fn: (r) => r._field == "percent_charge")
-                  |> last()
-              refId: A
-          - refId: B
-            relativeTimeRange: {from: 0, to: 0}
-            datasourceUid: __expr__
-            model: {type: reduce, expression: A, reducer: min, refId: B, settings: {mode: dropNN}}
-          - refId: C
-            relativeTimeRange: {from: 0, to: 0}
-            datasourceUid: __expr__
-            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [50]}}]}
-        noDataState: NoData
-        execErrState: Alerting
-        for: 2m
-        annotations:
-          summary: "UPS battery charge below 50%"
-        labels:
-          severity: critical
+    rules: []
+      # DISABLED: snmp measurement not available - enable when UPS SNMP monitoring is configured
+      # - uid: ups-battery-low
+      #   title: UPS Battery Low
+      #   condition: C
+      #   data:
+      #     - refId: A
+      #       relativeTimeRange: {from: 300, to: 0}
+      #       datasourceUid: influxdb
+      #       model:
+      #         query: |
+      #           from(bucket: "metrics")
+      #             |> range(start: -5m)
+      #             |> filter(fn: (r) => r._measurement == "snmp")
+      #             |> filter(fn: (r) => r._field == "percent_charge")
+      #             |> last()
+      #         refId: A
+      #     - refId: B
+      #       relativeTimeRange: {from: 0, to: 0}
+      #       datasourceUid: __expr__
+      #       model: {type: reduce, expression: A, reducer: min, refId: B, settings: {mode: dropNN}}
+      #     - refId: C
+      #       relativeTimeRange: {from: 0, to: 0}
+      #       datasourceUid: __expr__
+      #       model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [50]}}]}
+      #   noDataState: NoData
+      #   execErrState: Alerting
+      #   for: 2m
+      #   annotations:
+      #     summary: "UPS battery charge below 50%"
+      #   labels:
+      #     severity: critical
 
-      - uid: ups-high-load
-        title: UPS High Load
-        condition: C
-        data:
-          - refId: A
-            relativeTimeRange: {from: 300, to: 0}
-            datasourceUid: influxdb
-            model:
-              query: |
-                from(bucket: "metrics")
-                  |> range(start: -5m)
-                  |> filter(fn: (r) => r._measurement == "snmp")
-                  |> filter(fn: (r) => r._field == "load")
-                  |> last()
-              refId: A
-          - refId: B
-            relativeTimeRange: {from: 0, to: 0}
-            datasourceUid: __expr__
-            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
-          - refId: C
-            relativeTimeRange: {from: 0, to: 0}
-            datasourceUid: __expr__
-            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [80]}}]}
-        noDataState: NoData
-        execErrState: Alerting
-        for: 5m
-        annotations:
-          summary: "UPS load above 80%"
-        labels:
-          severity: warning
+      # DISABLED: snmp measurement not available - enable when UPS SNMP monitoring is configured
+      # - uid: ups-high-load
+      #   title: UPS High Load
+      #   condition: C
+      #   data:
+      #     - refId: A
+      #       relativeTimeRange: {from: 300, to: 0}
+      #       datasourceUid: influxdb
+      #       model:
+      #         query: |
+      #           from(bucket: "metrics")
+      #             |> range(start: -5m)
+      #             |> filter(fn: (r) => r._measurement == "snmp")
+      #             |> filter(fn: (r) => r._field == "load")
+      #             |> last()
+      #         refId: A
+      #     - refId: B
+      #       relativeTimeRange: {from: 0, to: 0}
+      #       datasourceUid: __expr__
+      #       model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+      #     - refId: C
+      #       relativeTimeRange: {from: 0, to: 0}
+      #       datasourceUid: __expr__
+      #       model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [80]}}]}
+      #   noDataState: NoData
+      #   execErrState: Alerting
+      #   for: 5m
+      #   annotations:
+      #     summary: "UPS load above 80%"
+      #   labels:
+      #     severity: warning
 
   # =========================================================================
   # Backup Alerts
@@ -501,7 +510,7 @@ groups:
             relativeTimeRange: {from: 172800, to: 0}
             datasourceUid: loki
             model:
-              expr: 'count_over_time({unit="restic-backup.service"} |= "backup finished" [48h])'
+              expr: 'count_over_time({unit="restic-backup.service"} |= "snapshot" |= "saved" [48h])'
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
