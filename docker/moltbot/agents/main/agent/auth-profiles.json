@@ -5,6 +5,11 @@
       "type": "token",
       "provider": "anthropic",
       "token": "{{ lookup('env', 'CLAUDE_CODE_OAUTH_TOKEN') }}"
-    }
+    }{% if lookup('env', 'CLAUDE_CODE_OAUTH_TOKEN_FALLBACK') %},
+    "anthropic:fallback": {
+      "type": "token",
+      "provider": "anthropic",
+      "token": "{{ lookup('env', 'CLAUDE_CODE_OAUTH_TOKEN_FALLBACK') }}"
+    }{% endif %}
   }
 }
