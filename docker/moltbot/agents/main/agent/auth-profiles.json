@@ -4,12 +4,12 @@
     "anthropic:manual": {
       "type": "token",
       "provider": "anthropic",
-      "token": "{{ lookup('env', 'CLAUDE_CODE_OAUTH_TOKEN') }}"
+      "token": "{{ vault_anthropic_api_key }}"
     },
     "anthropic:fallback": {
       "type": "token",
       "provider": "anthropic",
-      "token": "{{ lookup('env', 'CLAUDE_CODE_OAUTH_TOKEN_FALLBACK') }}"
+      "token": "{{ vault_anthropic_api_key_fallback }}"
     }
   }
 }
