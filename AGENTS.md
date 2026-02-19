@@ -341,10 +341,14 @@ The workspace is tracked in git at `https://gitlab.lab.nkontur.com/moltbot/clawd
 **When you modify any `.md` file (memory, identity, skills, etc.), commit and push:**
 ```bash
 cd /home/node/clawd
-git add -A
+git add <specific files you changed>   # NEVER use git add -A (picks up unrelated dirty files)
 git commit -m "Descriptive message about what changed"
 git push origin master
 ```
+
+**⚠️ NEVER use `git add -A` or `git add .`** — this scoops up unrelated changes from other cron jobs
+and sub-agents, creating commits where the message doesn't match the actual changes. Always stage
+only the files you intentionally modified.
 
 This creates a history of how you evolve. Do this after significant updates to:
 - SOUL.md, IDENTITY.md (who you are)
