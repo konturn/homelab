@@ -1,0 +1,11 @@
+[Unit]
+Description=ZFS auto-snapshot ({{ item.frequency }}) for {{ zfs_snapshot_pool }}
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c '\
+  zfs snapshot -r {{ zfs_snapshot_pool }}@auto_{{ item.frequency }}_$(date +%%Y%%m%%d_%%H%%M%%S) && \
+  zfs list -t snapshot -o name -s creation -r {{ zfs_snapshot_pool }} | \
+    grep "@auto_{{ item.frequency }}_" | \
+    head -n -{{ item.keep }} | \
+    xargs -r -n1 zfs destroy -r'

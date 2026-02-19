@@ -1,0 +1,28 @@
+---
+- name: Install ZFS snapshot systemd service units
+  ansible.builtin.template:
+    src: zfs-snapshot@.service.j2
+    dest: "/etc/systemd/system/zfs-snapshot-{{ item.frequency }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ zfs_snapshot_schedules }}"
+  notify: Reload systemd
+
+- name: Install ZFS snapshot systemd timer units
+  ansible.builtin.template:
+    src: zfs-snapshot@.timer.j2
+    dest: "/etc/systemd/system/zfs-snapshot-{{ item.frequency }}.timer"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ zfs_snapshot_schedules }}"
+  notify: Reload systemd
+
+- name: Enable and start ZFS snapshot timers
+  ansible.builtin.systemd:
+    name: "zfs-snapshot-{{ item.frequency }}.timer"
+    enabled: true
+    state: started
+    daemon_reload: true
+  loop: "{{ zfs_snapshot_schedules }}"
