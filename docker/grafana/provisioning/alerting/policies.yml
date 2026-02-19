@@ -15,12 +15,6 @@ policies:
         group_interval: 2m
         repeat_interval: 2h
         continue: true
-      - receiver: openclaw-webhook
-        matchers:
-          - severity =~ "critical|warning"
-        group_wait: 10s
-        group_interval: 2m
-        repeat_interval: 2h
       - receiver: homelab-email-alerts
         matchers:
           - alertname =~ ".*HighMemory.*"
@@ -28,12 +22,6 @@ policies:
         group_interval: 5m
         repeat_interval: 1h
         continue: true
-      - receiver: openclaw-webhook
-        matchers:
-          - alertname =~ ".*HighMemory.*"
-        group_wait: 10s
-        group_interval: 5m
-        repeat_interval: 1h
       - receiver: homelab-email-alerts
         matchers:
           - alertname =~ ".*DiskSpace.*"
@@ -41,9 +29,3 @@ policies:
         group_interval: 10m
         repeat_interval: 6h
         continue: true
-      - receiver: openclaw-webhook
-        matchers:
-          - alertname =~ ".*DiskSpace.*"
-        group_wait: 30s
-        group_interval: 10m
-        repeat_interval: 6h

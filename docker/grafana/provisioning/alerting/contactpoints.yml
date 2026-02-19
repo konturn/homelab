@@ -32,6 +32,8 @@ contactPoints:
       - uid: openclaw-webhook
         type: webhook
         settings:
-          url: "http://moltbot-gateway:18791"
+          url: "http://moltbot-gateway:18789/hooks/grafana"
           httpMethod: POST
+          authorization_scheme: Bearer
+          authorization_credentials: $OPENCLAW_HOOKS_TOKEN
         disableResolveMessage: false
