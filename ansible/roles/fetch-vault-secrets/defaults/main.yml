@@ -140,6 +140,10 @@ vault_secret_paths:
       vault_moltbot_gitlab_token: "gitlab_token"
       vault_moltbot_telegram_token: "telegram_token"
 
+  - path: "moltbot/claude-fallback"
+    fields:
+      vault_claude_fallback_token: "token"
+
   # Backup secrets
   - path: "backup/backblaze"
     fields:
