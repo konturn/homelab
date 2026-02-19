@@ -290,5 +290,45 @@
     "timestamp": "2026-02-17",
     "source": "daily-log",
     "status": "active"
+  },
+  {
+    "id": "infra-037",
+    "fact": "Mac Mini discovered: hostname Noahs-Mac-mini, MAC 1c:f6:4c:56:b5:ba, static IP 10.4.128.24 (mgmt VLAN). Noah's MBP at 10.4.114.94 (DHCP).",
+    "category": "status",
+    "timestamp": "2026-02-18",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "infra-038",
+    "fact": "InfluxDB JIT T2 write access working (MR !347). HA\u2192InfluxDB integration configured with persistent write token in Vault (homelab/data/influxdb/ha-write). Grafana datasource influxdb-ha created.",
+    "category": "milestone",
+    "timestamp": "2026-02-18",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "infra-039",
+    "fact": "GitLab homelab repo default branch is 'main' not 'master'. Sub-agents must always specify target_branch: main in MR creation.",
+    "category": "status",
+    "timestamp": "2026-02-18",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "infra-040",
+    "fact": "Mosquitto healthcheck fix: BusyBox nc -z fails in read_only container with cap_drop ALL. Use 'echo | nc -w1 127.0.0.1 1883' instead (MR !329).",
+    "category": "status",
+    "timestamp": "2026-02-19",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "infra-041",
+    "fact": "~15 MRs pending Noah's merge as of Feb 18: !303, !305, !307, !311-!315, !325, !327, !328, !331, !332, !334, !348, !349",
+    "category": "status",
+    "timestamp": "2026-02-18",
+    "source": "conversation",
+    "status": "active"
   }
 ]
