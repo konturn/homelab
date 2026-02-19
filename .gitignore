@@ -1,41 +1,54 @@
+# Prometheus Workspace - Git Ignore
+# Order matters: gitignore uses last-match-wins
 
-!*.md
+# ── Ignore everything by default ──
+*
+
+# ── Allow descending into directories ──
 !*/
-!.gitignore
+
+# ── Track markdown files everywhere ──
+!*.md
+
+# ── Track specific config/state JSON ──
 !config/cron-jobs.json
-!jit-approval-svc/**
-!jit-approval-svc/**/*
+!memory/*.json
 !life/**/items.json
-!memory/heartbeat-state.json
-!memory/main-pipeline-state.json
-!memory/open-mrs.json
-!skills/**/lib.sh
-!skills/**/scripts/*.js
-!skills/**/scripts/*.py
+
+# ── Track job hunting data ──
+!skills/job-hunting/hardened.json
+!skills/job-hunting/references/*.json
+!skills/job-hunting/references/**/*.json
+
+# ── Track scripts in skills and tools ──
 !skills/**/scripts/*.sh
+!skills/**/scripts/*.py
+!skills/**/scripts/*.js
+!skills/**/lib.sh
+!tools/*.sh
+!tools/*.md
+
+# ── Track specific skill configs ──
 !skills/face-recognition/models/**
 !skills/face-recognition/package.json
-!tools/*.md
-!tools/*.sh
-# But allow descending into directories
-# But track knowledge graph and state JSON
-# Face recognition skill specifics
-# Ignore everything by default
-# Ignore homelab entirely (separate repo)
-# Ignore node_modules everywhere
-# Ignore runtime/session data even if .md
-# Ignore temp and canvas directories
-# JIT Approval Service (full Go project)
-# Only track markdown files for memory/identity/skills
-# Prometheus Workspace - Git Ignore
-# Track markdown files
-# Track scripts in skills and tools
-*
-*.json
-*.jsonl
-*.log
-.keys/
-canvas/
-homelab/
+!skills/moltbook/package.json
+!skills/imap-email/package.json
+!skills/imap-email/.clawhub/origin.json
+
+# ── Track other essentials ──
+!.gitignore
+!avatars/*
+
+# ── Hard excludes (override everything above) ──
 node_modules/
+homelab/
+homelab-*/
+images-repo/
 tmp/
+canvas/
+.keys/
+*.log
+*.jsonl
+
+# ── Exclude credentials from git ──
+memory/moltbook-credentials.json

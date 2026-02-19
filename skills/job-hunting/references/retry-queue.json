@@ -1,0 +1,76 @@
+{
+  "jobs": [
+    {
+      "id": "yg051buqb5hnyuvj",
+      "company": "Icmarc",
+      "role": "Expert Engineer, Cloud",
+      "formUrl": "https://icmarc.wd1.myworkdayjobs.com/",
+      "lastAttempt": "2026-01-31",
+      "attempts": 2,
+      "issue": "Workday multi-step form - broke through account creation with hover-then-click, reached step 2 of 7",
+      "strategiesTried": [
+        "standard Workday account creation flow",
+        "sign in attempt",
+        "hover-then-click (WORKED for auth)"
+      ],
+      "formState": "account created, at step 2 of 7 (My Information), needs completion"
+    },
+    {
+      "id": "8nqbfunyhqzs2gm0",
+      "company": "Abnormal Security",
+      "role": "Staff Software Engineer - GenAI Innovations",
+      "formUrl": "https://hiring.cafe/viewjob/8nqbfunyhqzs2gm0",
+      "lastAttempt": "2026-02-02",
+      "attempts": 1,
+      "issue": "Worker hit context limit (177k tokens) while filling veteran status dropdown",
+      "strategiesTried": [
+        "standard Ashby flow with manual fill"
+      ],
+      "formState": "form nearly complete, at veteran status dropdown - may need fresh attempt"
+    },
+    {
+      "id": "nqa7n6b7m2zvebx5",
+      "company": "Oscar Health",
+      "role": "Senior Software Engineer, Cloud Infrastructure / SRE",
+      "formUrl": "https://www.hioscar.com/careers/7573019?gh_jid=7573019",
+      "lastAttempt": "2026-02-02",
+      "attempts": 2,
+      "issue": "Greenhouse iframe resume upload - all fields complete but resume blocked by cross-origin security",
+      "strategiesTried": [
+        "browser upload action",
+        "xdotool approach",
+        "Simplify autofill"
+      ],
+      "formState": "100% complete except resume - ready for manual upload and submit"
+    },
+    {
+      "id": "anmner0mggq7euf1",
+      "company": "Viasat",
+      "role": "Network and Infrastructure Architect",
+      "formUrl": "https://careers-viasat.icims.com/jobs/4944/network-and-infrastructure-architect/candidate",
+      "lastAttempt": "2026-02-02",
+      "attempts": 1,
+      "issue": "iCIMS State/Province dropdown not responding - all other fields complete",
+      "strategiesTried": [
+        "click selection",
+        "JavaScript approach",
+        "select actions"
+      ],
+      "formState": "Step 1 of 3, 95% complete - just need Ohio state selection then submit"
+    },
+    {
+      "id": "us9nfpsxa8c0qid8",
+      "company": "Reveleer",
+      "role": "Director, Infrastructure",
+      "formUrl": "https://reveleer.breezy.hr/p/114ad776e091-director-infrastructure/apply",
+      "lastAttempt": "2026-02-02",
+      "attempts": 1,
+      "issue": "Breezy HR resume upload - all fields complete including cover letter, just needs resume",
+      "strategiesTried": [
+        "browser upload action",
+        "xdotool fallback"
+      ],
+      "formState": "100% complete except resume - salary, experience summary, cover letter all filled"
+    }
+  ]
+}

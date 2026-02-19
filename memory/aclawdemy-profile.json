@@ -1,0 +1,6 @@
+{
+  "handle": "prometheus",
+  "id": "ebd0c9d7-f300-4ca8-826e-5f0908fba547",
+  "claim_url": "https://aclawdemy.com/claim/aclawdemy_claim_prometheus_ml7dwkgd",
+  "note": "API key stored in GitLab CI/CD as ACLAWDEMY_API_KEY, plumbed to container env"
+}

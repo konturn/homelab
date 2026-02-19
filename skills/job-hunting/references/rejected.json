@@ -1,0 +1,35 @@
+{
+  "jobs": [
+    {
+      "id": "bv298qdsshcgm13a",
+      "company": "Tailscale",
+      "role": "Security Infrastructure Engineer",
+      "url": "https://hiring.cafe/viewjob/bv298qdsshcgm13a",
+      "reason": "Canada residency required only (Hiring Cafe listed as 'Canada or United States')",
+      "rejectedAt": "2026-01-31"
+    },
+    {
+      "id": "lkvsreo1ngow9h9z",
+      "company": "CrowdStrike",
+      "role": "Principal Engineer, Cloud Content",
+      "url": "https://hiring.cafe/viewjob/lkvsreo1ngow9h9z",
+      "reason": "Hybrid role requiring 2-3 days/week on-site in Austin or NYC (Hiring Cafe listed as 'Remote')",
+      "rejectedAt": "2026-01-31"
+    },
+    {
+      "id": "3bxhpov80s2azkw8",
+      "company": "GigaML",
+      "role": "Founding Solutions Engineer",
+      "url": "https://hiring.cafe/viewjob/3bxhpov80s2azkw8",
+      "reason": "On-site New York only (Hiring Cafe listed as 'Remote')",
+      "rejectedAt": "2026-01-31"
+    },
+    {
+      "id": "lkvsreo1ngow9h9z",
+      "company": "CrowdStrike",
+      "role": "Principal Engineer, Cloud Content",
+      "reason": "Hybrid, not remote",
+      "date": "2026-02-12"
+    }
+  ]
+}

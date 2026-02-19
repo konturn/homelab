@@ -1,0 +1,44 @@
+{
+  "procedures": [
+    {
+      "name": "node-connectivity-check",
+      "hardenedAt": "2026-01-31",
+      "scriptPath": "scripts/check-node.sh",
+      "runs": 0,
+      "failures": 0,
+      "description": "Check if Noah's XPS node is connected before browser automation"
+    },
+    {
+      "name": "ats-detection",
+      "hardenedAt": "2026-01-31",
+      "scriptPath": "scripts/detect-ats.sh",
+      "runs": 0,
+      "failures": 0,
+      "description": "Detect ATS type from application URL pattern"
+    },
+    {
+      "name": "applied-check",
+      "hardenedAt": "2026-01-31",
+      "scriptPath": "scripts/check-applied.sh",
+      "runs": 0,
+      "failures": 0,
+      "description": "Check if job ID already exists in applied.json"
+    },
+    {
+      "name": "blocklist-check",
+      "hardenedAt": "2026-01-31",
+      "scriptPath": "scripts/check-blocklist.sh",
+      "runs": 0,
+      "failures": 0,
+      "description": "Check if company is on the blocklist"
+    },
+    {
+      "name": "record-application",
+      "hardenedAt": "2026-01-31",
+      "scriptPath": "scripts/record-application.sh",
+      "runs": 0,
+      "failures": 0,
+      "description": "Record application to applied.json and tracker.md"
+    }
+  ]
+}

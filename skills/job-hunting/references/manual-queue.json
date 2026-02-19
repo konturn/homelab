@@ -1,0 +1,59 @@
+{
+  "description": "Jobs that need manual human action (CAPTCHA, spam flags, manual upload). Separate from retry-queue which is for automation retries.",
+  "jobs": [
+    {
+      "id": "k514bor5bjxa6mtc",
+      "company": "MLabs",
+      "role": "Senior Infrastructure Engineer",
+      "formUrl": "https://hiring.cafe/viewjob/k514bor5bjxa6mtc",
+      "salary": "$180k-$300k",
+      "issue": "CAPTCHA blocked - form ready, needs manual submit",
+      "addedAt": "2026-02-03"
+    },
+    {
+      "id": "onzxvzkb23yxtpb7",
+      "company": "Outlive",
+      "role": "DevOps / Infrastructure Engineer (GCP)",
+      "formUrl": "https://job-boards.greenhouse.io/outlive/jobs/4109204009",
+      "salary": "$125k-$200k",
+      "issue": "Form complete, pending manual CAPTCHA solve",
+      "addedAt": "2026-02-03"
+    },
+    {
+      "id": "pjs6owz2pevqog2s",
+      "company": "Shorebird",
+      "role": "Cloud Engineer (Dart)",
+      "formUrl": "https://jobs.gem.com/shorebird-dev/am9icG9zdDr9nR5X2_r4dpKvOQ8MH_5R",
+      "salary": "$150k-$220k",
+      "issue": "hCaptcha puzzle needs manual solve",
+      "addedAt": "2026-02-03"
+    },
+    {
+      "id": "seyax9102p16bqve",
+      "company": "radai",
+      "role": "Staff Machine Learning Engineer - Infrastructure",
+      "formUrl": "https://jobs.ashbyhq.com/radai",
+      "salary": "$200k-$240k",
+      "issue": "Ashby spam detection flagged submission. Needs manual re-apply.",
+      "addedAt": "2026-02-03"
+    },
+    {
+      "id": "yd2pg0osp40j70qk",
+      "company": "Whatnot",
+      "role": "Feature Platform Engineer",
+      "formUrl": "https://jobs.ashbyhq.com/whatnot/4bfe4f67-d289-4dfc-9319-4eaca0f2c976/application",
+      "salary": "$225k-$320k",
+      "issue": "Ashby spam detection. All fields pre-filled, just needs manual submit.",
+      "addedAt": "2026-02-03"
+    },
+    {
+      "id": "3l26j6dyd4phjb0l",
+      "company": "Fanatics",
+      "role": "Staff Platform Engineer",
+      "formUrl": "https://fa-exki-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/26238/apply/section/1",
+      "salary": "$190k-$250k",
+      "issue": "One dropdown remaining: \"How did you hear about Fanatics?\" \u2014 select any option and submit. Everything else is filled.",
+      "addedAt": "2026-02-03"
+    }
+  ]
+}
