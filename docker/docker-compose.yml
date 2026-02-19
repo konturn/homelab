@@ -458,7 +458,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.1147@sha256:98505863ad77a8a7a887dfe3db7276b51a45d57d2fb6e8cdc6ee98f8c7cd7525
+    image: linuxserver/jackett:0.24.1157@sha256:18b2379be95a9caa708304974e70ff05a65059ee1231054bc186274c6fa49488
     container_name: jackett
     security_opt:
       - no-new-privileges:true
@@ -650,7 +650,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    image: grafana/loki:3.6.5@sha256:847c287ada0e12603910589f42038c5cdaaad04e248bd1dc6c6e0920a235f427
+    image: grafana/loki:3.6.6@sha256:434c7effbd66dbf69c2665fe4b2125549ecf7b45039ac28595d4034031cf47ce
     networks:
       loki-backend:
     restart: unless-stopped
