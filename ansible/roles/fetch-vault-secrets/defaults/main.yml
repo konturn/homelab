@@ -169,6 +169,11 @@ vault_secret_paths:
     fields:
       vault_chromium_vnc_password: "vnc_password"
 
+  # InfluxDB Home Assistant write token
+  - path: "influxdb/ha-write"
+    fields:
+      vault_influxdb_ha_token: "token"
+
   # Loki push authentication (promtail -> loki via reverse proxy)
   - path: "loki/push-auth"
     fields:
