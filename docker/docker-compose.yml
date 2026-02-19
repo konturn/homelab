@@ -1597,7 +1597,7 @@ services:
       - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
     restart: unless-stopped
     ports:
-      - "443:7878"
+      - "443:9696"
     networks:
       - internal
     deploy:
