@@ -1,10 +1,6 @@
 {
-  "lastCheckedPipelineId": 2455,
-  "lastFixedPipelineId": 2419,
+  "lastCheckedPipelineId": 2457,
+  "lastFixedPipelineId": 2455,
   "activeFix": null,
-  "escalated": {
-    "pipelineId": 2455,
-    "reason": "DNS resolution failure on router during Tailscale OAuth token task - runtime/infra issue, not code",
-    "timestamp": 1739919060000
-  }
+  "escalated": null
 }
