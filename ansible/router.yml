@@ -15,7 +15,6 @@
   - role: configure-docker
     vars:
       nvidia_container_runtime: true
-  - configure-zfs-snapshots
   - configure-homelab-services
   - configure-notifications
   - configure-mullvad-failover
