@@ -49,26 +49,46 @@ func (b *InfluxDBBackend) MintCredential(resource string, tier int, ttl time.Dur
 		return nil, fmt.Errorf("missing org_id in vault path %s", b.vaultPath)
 	}
 
-	// Create read-only authorization scoped to the org
-	payload := map[string]interface{}{
-		"orgID":       orgID,
-		"description": fmt.Sprintf("jit-%d", time.Now().Unix()),
-		"permissions": []map[string]interface{}{
-			{
-				"action": "read",
+	// Build permissions based on tier: T1 = read-only, T2+ = read+write
+	permissions := []map[string]interface{}{
+		{
+			"action": "read",
+			"resource": map[string]interface{}{
+				"type":  "buckets",
+				"orgID": orgID,
+			},
+		},
+		{
+			"action": "read",
+			"resource": map[string]interface{}{
+				"type":  "orgs",
+				"id":    orgID,
+			},
+		},
+	}
+
+	// T2+: add write permissions for bucket creation and data writes
+	if tier >= 2 {
+		permissions = append(permissions,
+			map[string]interface{}{
+				"action": "write",
 				"resource": map[string]interface{}{
 					"type":  "buckets",
 					"orgID": orgID,
 				},
 			},
-			{
-				"action": "read",
-				"resource": map[string]interface{}{
-					"type":  "orgs",
-					"id":    orgID,
-				},
-			},
-		},
+		)
+	}
+
+	accessLevel := "read-only"
+	if tier >= 2 {
+		accessLevel = "read-write"
+	}
+
+	payload := map[string]interface{}{
+		"orgID":       orgID,
+		"description": fmt.Sprintf("jit-%s-%d", accessLevel, time.Now().Unix()),
+		"permissions": permissions,
 	}
 
 	body, err := json.Marshal(payload)
@@ -110,6 +130,7 @@ func (b *InfluxDBBackend) MintCredential(resource string, tier int, ttl time.Dur
 		"backend":  "influxdb",
 		"resource": resource,
 		"tier":     tier,
+		"access":   accessLevel,
 		"ttl":      ttl.String(),
 	})
 
