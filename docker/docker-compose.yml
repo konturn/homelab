@@ -84,6 +84,8 @@ networks:
   proxy-internal:
     driver: bridge
     internal: true
+  clawshell:
+    driver: bridge
   loki-backend:
     driver: bridge
     internal: true
@@ -1652,6 +1654,31 @@ services:
     environment:
       - TZ=America/New_York
       - VNC_PASSWORD={{ vault_chromium_vnc_password | default('changeme') | replace("$", "$$") }}
+  clawshell:
+    container_name: clawshell
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    image: ghcr.io/clawshell/clawshell:0.1.1
+    restart: unless-stopped
+    networks:
+      - clawshell
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    volumes:
+      - "{{ docker_persistent_data_path }}/clawshell/clawshell.toml:/etc/clawshell/clawshell.toml:ro"
+    command: ["start", "--config", "/etc/clawshell/clawshell.toml", "--foreground"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:18790/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
   moltbot-gateway:
     image: gitlab-registry.lab.nkontur.com:443/root/homelab/moltbot:{{ moltbot_image_tag | default('latest') }}
     container_name: moltbot-gateway
@@ -1666,6 +1693,7 @@ services:
       mgmt:
         ipv4_address: {{ moltbot_gateway_ip }}
       moltbot-nginx-bridge:
+      clawshell:
     extra_hosts:
       - "nkontur.com:172.30.0.10"
       - "www.nkontur.com:172.30.0.10"

@@ -40,6 +40,11 @@ vault_secret_paths:
       vault_jit_api_key: "jit_api_key"
       vault_jit_gitlab_admin_token: "gitlab_admin_token"
 
+  # ClawShell DLP proxy
+  - path: "clawshell/anthropic"
+    fields:
+      vault_clawshell_anthropic_key: "api_key"
+
   # Docker service secrets
   - path: "docker/audioserve"
     fields:

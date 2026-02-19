@@ -179,6 +179,9 @@ all:
         - src: "docker/bitwarden/global.override.env"
           dest: "{{ docker_persistent_data_path }}/bitwarden/global.override.env"
           name: "bitwarden"
+        - src: "docker/clawshell/clawshell.toml"
+          dest: "{{ docker_persistent_data_path }}/clawshell/clawshell.toml"
+          name: "clawshell"
       docker_data_dirs:
         - path: "{{ docker_persistent_data_path }}/loki/data"
           owner: "10001"

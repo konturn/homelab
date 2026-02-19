@@ -1,0 +1,30 @@
+version = "0.1.1"
+log_level = "info"
+
+[server]
+host = "0.0.0.0"
+port = 18790
+
+[upstream]
+anthropic_base_url = "https://api.anthropic.com"
+
+[[keys]]
+virtual_key = "vk-anthropic-001"
+real_key = "{{ vault_clawshell_anthropic_key }}"
+provider = "anthropic"
+
+[dlp]
+scan_responses = false
+patterns = [
+    { name = "real_name", regex = '(?i)noah\s*(patrick\s*)?kontur', action = "redact" },
+    { name = "address_city", regex = '(?i)northfield[,\s]*ohio', action = "redact" },
+    { name = "employer_nvidia", regex = '(?i)nvidia\s*(dgx|cloud)?', action = "redact" },
+    { name = "employer_arize", regex = '(?i)\barize\b', action = "redact" },
+    { name = "employer_amperon", regex = '(?i)\bamperon\b', action = "redact" },
+    { name = "employer_octoai", regex = '(?i)\boctoai\b', action = "redact" },
+    { name = "ssn", regex = '\b\d{3}-\d{2}-\d{4}\b', action = "block" },
+    { name = "credit_card_visa", regex = '\b4[0-9]{12}(?:[0-9]{3})?\b', action = "block" },
+    { name = "credit_card_mc", regex = '\b5[1-5][0-9]{14}\b', action = "block" },
+    { name = "credit_card_amex", regex = '\b3[47][0-9]{13}\b', action = "block" },
+    { name = "email_personal", regex = '(?i)konoahko@gmail\.com', action = "redact" },
+]
