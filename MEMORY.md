@@ -106,6 +106,9 @@ Moved to `tools/services.md` for detailed patterns. Quick reference:
 
 *Last reviewed: 2026-02-15*
 
+## Sub-agent MR bug: target_branch must be "main" (2026-02-18)
+Sub-agents default to `master` when creating MRs via API. Homelab repo default branch is `main`. Always include `"target_branch": "main"` in sub-agent task prompts. This caused empty-diff MRs twice (!333, !346).
+
 ## HARD RULE: Check MR state before modifying (2026-02-17)
 ALWAYS check MR state via API before force-pushing or amending. Noah merges fast. If it's already merged, create a NEW MR. Never force-push to a merged branch.
 ```

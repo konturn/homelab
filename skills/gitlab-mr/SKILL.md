@@ -48,7 +48,9 @@ source /home/node/clawd/skills/gitlab/lib.sh  # Always source first
 
 ## Gotchas
 
-1. **Project ID is 4**, not 1. API calls to project 1 will fail silently or hit wrong project.
+1. **Default branch is `main`**, NOT `master`. When creating MRs via API, always use `"target_branch": "main"`. Sub-agents defaulting to `master` has caused empty-diff MRs repeatedly.
+
+2. **Project ID is 4**, not 1. API calls to project 1 will fail silently or hit wrong project.
 
 2. **⚠️ CRITICAL: Use `git worktree` for branch isolation.** Multiple sub-agents run concurrently on the same repo. If you checkout branches in the shared clone, dirty files from other agents WILL contaminate your branch. This has caused leaked diffs in MRs repeatedly.
    ```bash
