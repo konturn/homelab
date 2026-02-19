@@ -20,6 +20,10 @@
       "anthropic:manual": {
         "provider": "anthropic",
         "mode": "token"
+      },
+      "anthropic:fallback": {
+        "provider": "anthropic",
+        "mode": "token"
       }
     }
   }
