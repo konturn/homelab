@@ -27,6 +27,8 @@ all:
     privileged_access_point_2_address: 10.4.128.22
     privileged_access_point_3_mac: 80:a9:97:12:5b:30
     privileged_access_point_3_address: 10.4.128.23
+    mac_mini_mac: 1c:f6:4c:56:b5:ba
+    mac_mini_address: 10.4.128.24
     denon_mac: 00:06:78:84:0e:d8
     denon_address: 10.6.128.3
     pc_mac: a8:a1:59:24:84:d7
