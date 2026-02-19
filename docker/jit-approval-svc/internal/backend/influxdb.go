@@ -32,7 +32,8 @@ func NewInfluxDBBackend(baseURL string, vaultReader VaultSecretReader) *InfluxDB
 	}
 }
 
-// MintCredential creates a read-only InfluxDB authorization token scoped to the org.
+// MintCredential creates an InfluxDB authorization token scoped to the org.
+// T1 grants read-only access; T2+ adds write permissions for data writes and bucket creation.
 // It also schedules a goroutine to delete the token after TTL expiry.
 func (b *InfluxDBBackend) MintCredential(resource string, tier int, ttl time.Duration, opts MintOptions) (*Credential, error) {
 	secrets, err := b.vaultReader.ReadSecret(b.vaultPath)
@@ -49,26 +50,41 @@ func (b *InfluxDBBackend) MintCredential(resource string, tier int, ttl time.Dur
 		return nil, fmt.Errorf("missing org_id in vault path %s", b.vaultPath)
 	}
 
-	// Create read-only authorization scoped to the org
-	payload := map[string]interface{}{
-		"orgID":       orgID,
-		"description": fmt.Sprintf("jit-%d", time.Now().Unix()),
-		"permissions": []map[string]interface{}{
-			{
-				"action": "read",
+	// Build permissions: T1 = read-only, T2+ = read-write
+	permissions := []map[string]interface{}{
+		{
+			"action": "read",
+			"resource": map[string]interface{}{
+				"type":  "buckets",
+				"orgID": orgID,
+			},
+		},
+		{
+			"action": "read",
+			"resource": map[string]interface{}{
+				"type":  "orgs",
+				"id":    orgID,
+			},
+		},
+	}
+
+	// T2+: add write permissions for bucket creation and data writes
+	if tier >= 2 {
+		permissions = append(permissions,
+			map[string]interface{}{
+				"action": "write",
 				"resource": map[string]interface{}{
 					"type":  "buckets",
 					"orgID": orgID,
 				},
 			},
-			{
-				"action": "read",
-				"resource": map[string]interface{}{
-					"type":  "orgs",
-					"id":    orgID,
-				},
-			},
-		},
+		)
+	}
+
+	payload := map[string]interface{}{
+		"orgID":       orgID,
+		"description": fmt.Sprintf("jit-%d", time.Now().Unix()),
+		"permissions": permissions,
 	}
 
 	body, err := json.Marshal(payload)
@@ -106,10 +122,15 @@ func (b *InfluxDBBackend) MintCredential(resource string, tier int, ttl time.Dur
 		return nil, fmt.Errorf("influxdb returned empty token")
 	}
 
+	accessLevel := "read-only"
+	if tier >= 2 {
+		accessLevel = "read-write"
+	}
 	logger.Info("backend_credential_minted", logger.Fields{
 		"backend":  "influxdb",
 		"resource": resource,
 		"tier":     tier,
+		"access":   accessLevel,
 		"ttl":      ttl.String(),
 	})
 
