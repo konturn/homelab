@@ -8,5 +8,9 @@ datasources:
     url: https://loki.lab.nkontur.com
     isDefault: false
     editable: true
+    basicAuth: true
+    basicAuthUser: "{{ vault_loki_push_username }}"
+    secureJsonData:
+      basicAuthPassword: "{{ vault_loki_push_password }}"
     jsonData:
       tlsSkipVerify: true
