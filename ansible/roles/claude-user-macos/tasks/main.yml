@@ -2,8 +2,9 @@
 # Role: claude-user-macos
 # =============================================================================
 # Creates a restricted 'claude' user on macOS for AI agent SSH access
-# via Vault-signed certificates. Uses dscl for user management and restricts
-# the user to a curated set of commands via PATH restriction.
+# via Vault-signed certificates. Uses sysadminctl for proper user creation
+# (dscl creates incomplete records that crash sshd). Restricts the user to
+# a curated set of commands via PATH restriction.
 # =============================================================================
 
 - name: Check if claude user exists
@@ -12,41 +13,29 @@
   failed_when: false
   changed_when: false
 
-- name: Get next available UniqueID
-  shell: "dscl . -list /Users UniqueID | awk '{print $2}' | sort -n | tail -1 | awk '{print $1+1}'"
-  register: next_uid
+- name: Generate random password for claude user
+  set_fact:
+    claude_user_password: "{{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits,punctuation') }}"
   when: user_check.rc != 0
-  changed_when: false
 
-- name: Create claude user via dscl
-  block:
-    - name: Create user record
-      command: "dscl . -create /Users/{{ claude_user_name }}"
-
-    - name: Set shell
-      command: "dscl . -create /Users/{{ claude_user_name }} UserShell /bin/bash"
-
-    - name: Set real name
-      command: "dscl . -create /Users/{{ claude_user_name }} RealName 'Claude Mac Mini Agent'"
-
-    - name: Set UniqueID
-      command: "dscl . -create /Users/{{ claude_user_name }} UniqueID {{ next_uid.stdout }}"
-
-    - name: Set PrimaryGroupID (staff = 20)
-      command: "dscl . -create /Users/{{ claude_user_name }} PrimaryGroupID 20"
-
-    - name: Set home directory
-      command: "dscl . -create /Users/{{ claude_user_name }} NFSHomeDirectory /Users/{{ claude_user_name }}"
-
-    - name: Create home directory
-      file:
-        path: "/Users/{{ claude_user_name }}"
-        state: directory
-        owner: "{{ claude_user_name }}"
-        group: staff
-        mode: '0700'
+- name: Create claude user via sysadminctl
+  command: >
+    sysadminctl -addUser {{ claude_user_name }}
+    -fullName 'Claude Mac Mini Agent'
+    -shell /bin/bash
+    -home /Users/{{ claude_user_name }}
+    -password '{{ claude_user_password }}'
   become: yes
   when: user_check.rc != 0
+
+- name: Ensure home directory permissions
+  file:
+    path: "/Users/{{ claude_user_name }}"
+    state: directory
+    owner: "{{ claude_user_name }}"
+    group: staff
+    mode: '0700'
+  become: yes
 
 - name: Create restricted PATH bin directory
   file:
@@ -140,10 +129,14 @@
     dest: "/Users/{{ claude_user_name }}/bin/sudo"
     state: link
 
-- name: Configure sudoers for iMessage and Notes access
+- name: Configure sudoers for claude user
   copy:
     dest: /etc/sudoers.d/claude-imessage
     content: |
+      # Disable password authentication for claude (macOS requires valid password
+      # hash even for NOPASSWD rules unless authentication is explicitly disabled)
+      Defaults:{{ claude_user_name }} !authenticate
+
       # Allow claude to run osascript and sqlite3 as the primary macOS user
       # for iMessage (Messages.app) and Notes.app access
       {{ claude_user_name }} ALL=({{ macos_primary_user }}) NOPASSWD: /usr/bin/osascript, /usr/bin/sqlite3
