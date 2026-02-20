@@ -6,6 +6,32 @@
 # Used for iMessage and Notes app access via osascript/sqlite3.
 # =============================================================================
 
+# Phase 1: Bootstrap prerequisites (no fact gathering, uses raw module)
+- name: Bootstrap Mac Mini prerequisites
+  hosts: macmini
+  become: yes
+  gather_facts: false
+  tasks:
+    - name: Check if Xcode Command Line Tools are installed
+      raw: xcode-select -p
+      register: xcode_check
+      failed_when: false
+      changed_when: false
+
+    - name: Install Xcode Command Line Tools (headless)
+      raw: |
+        touch /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
+        softwareupdate -i "$(softwareupdate -l 2>&1 | grep -o 'Command Line Tools for Xcode.*' | head -1)" --verbose
+        rm -f /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
+      when: xcode_check.rc != 0
+
+    - name: Ensure Python 3 is available
+      raw: which python3
+      register: python_check
+      failed_when: false
+      changed_when: false
+
+# Phase 2: Configure with full Ansible (fact gathering works now)
 - name: Configure Mac Mini for JIT SSH access
   hosts: macmini
   become: yes
