@@ -66,8 +66,8 @@ resource "vault_ssh_secret_backend_role" "nkontur_ws" {
   name                    = "nkontur-ws"
   backend                 = vault_mount.ssh.path
   key_type                = "ca"
-  default_user            = "claude"
-  allowed_users           = "claude"
+  default_user            = "nkontur"
+  allowed_users           = "nkontur"
   ttl                     = "900"
   max_ttl                 = "1800"
   allow_user_certificates = true
@@ -81,8 +81,8 @@ resource "vault_ssh_secret_backend_role" "konoahko_ws" {
   name                    = "konoahko-ws"
   backend                 = vault_mount.ssh.path
   key_type                = "ca"
-  default_user            = "claude"
-  allowed_users           = "claude"
+  default_user            = "konoahko"
+  allowed_users           = "konoahko"
   ttl                     = "900"
   max_ttl                 = "1800"
   allow_user_certificates = true
@@ -96,8 +96,8 @@ resource "vault_ssh_secret_backend_role" "konturn_ws" {
   name                    = "konturn-ws"
   backend                 = vault_mount.ssh.path
   key_type                = "ca"
-  default_user            = "claude"
-  allowed_users           = "claude"
+  default_user            = "konturn"
+  allowed_users           = "konturn"
   ttl                     = "900"
   max_ttl                 = "1800"
   allow_user_certificates = true
