@@ -1,0 +1,27 @@
+#!/bin/bash
+# Advance the iMessage checkpoint to a given ROWID
+# Call this ONLY after successfully processing all messages up to this ROWID
+# Usage: advance-checkpoint.sh <max_rowid>
+
+set -euo pipefail
+
+CHECKPOINT_FILE="$HOME/.imessage-checkpoint"
+
+if [ $# -eq 0 ]; then
+  echo "Usage: $0 <max_rowid>" >&2
+  exit 1
+fi
+
+NEW_ROWID="$1"
+
+# Only advance forward, never backward
+if [ -f "$CHECKPOINT_FILE" ]; then
+  CURRENT=$(cat "$CHECKPOINT_FILE")
+  if [ "$NEW_ROWID" -le "$CURRENT" ] 2>/dev/null; then
+    echo "Checkpoint already at $CURRENT, not going backward to $NEW_ROWID" >&2
+    exit 0
+  fi
+fi
+
+echo "$NEW_ROWID" > "$CHECKPOINT_FILE"
+echo "Checkpoint advanced to ROWID $NEW_ROWID" >&2
