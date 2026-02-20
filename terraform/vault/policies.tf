@@ -295,13 +295,13 @@ resource "vault_policy" "jit_approval_svc" {
     path "ssh-client-signer/sign/zwave" {
       capabilities = ["create", "update"]
     }
-    path "ssh-client-signer/sign/nkontur-ws" {
+    path "ssh-client-signer/sign/ws1" {
       capabilities = ["create", "update"]
     }
-    path "ssh-client-signer/sign/konoahko-ws" {
+    path "ssh-client-signer/sign/ws2" {
       capabilities = ["create", "update"]
     }
-    path "ssh-client-signer/sign/konturn-ws" {
+    path "ssh-client-signer/sign/ws3" {
       capabilities = ["create", "update"]
     }
     path "ssh-client-signer/sign/macmini" {

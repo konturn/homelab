@@ -62,8 +62,8 @@ resource "vault_ssh_secret_backend_role" "zwave" {
   allowed_extensions = "permit-pty"
 }
 
-resource "vault_ssh_secret_backend_role" "nkontur_ws" {
-  name                    = "nkontur-ws"
+resource "vault_ssh_secret_backend_role" "ws1" {
+  name                    = "ws1"
   backend                 = vault_mount.ssh.path
   key_type                = "ca"
   default_user            = "nkontur"
@@ -77,8 +77,8 @@ resource "vault_ssh_secret_backend_role" "nkontur_ws" {
   allowed_extensions = "permit-pty"
 }
 
-resource "vault_ssh_secret_backend_role" "konoahko_ws" {
-  name                    = "konoahko-ws"
+resource "vault_ssh_secret_backend_role" "ws2" {
+  name                    = "ws2"
   backend                 = vault_mount.ssh.path
   key_type                = "ca"
   default_user            = "konoahko"
@@ -92,8 +92,8 @@ resource "vault_ssh_secret_backend_role" "konoahko_ws" {
   allowed_extensions = "permit-pty"
 }
 
-resource "vault_ssh_secret_backend_role" "konturn_ws" {
-  name                    = "konturn-ws"
+resource "vault_ssh_secret_backend_role" "ws3" {
+  name                    = "ws3"
   backend                 = vault_mount.ssh.path
   key_type                = "ca"
   default_user            = "konturn"

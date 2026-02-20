@@ -24,9 +24,9 @@ var sshResourceConfig = map[string]struct {
 	"ssh":           {role: "claude", principal: "claude"},
 	"ssh-satellite": {role: "satellite", principal: "claude"},
 	"ssh-zwave":     {role: "zwave", principal: "claude"},
-	"ssh-nkontur":        {role: "nkontur-ws", principal: "nkontur"},
-	"ssh-konoahko":        {role: "konoahko-ws", principal: "konoahko"},
-	"ssh-konturn":        {role: "konturn-ws", principal: "konturn"},
+	"ssh-ws1":        {role: "ws1", principal: "nkontur"},
+	"ssh-ws2":        {role: "ws2", principal: "konoahko"},
+	"ssh-ws3":        {role: "ws3", principal: "konturn"},
 	"ssh-macmini":        {role: "macmini", principal: "claude"},
 }
 
