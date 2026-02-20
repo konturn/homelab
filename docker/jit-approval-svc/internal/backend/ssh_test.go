@@ -55,11 +55,11 @@ func TestSSHBackend_MintCredential_PerHostRoles(t *testing.T) {
 		resource  string
 		principal string
 	}{
-		{"ssh-satellite", "claude-satellite"},
-		{"ssh-zwave", "claude-zwave"},
-		{"ssh-nkontur", "claude-nkontur"},
-		{"ssh-konoahko", "claude-konoahko"},
-		{"ssh-konturn", "claude-konturn"},
+		{"ssh-satellite", "claude"},
+		{"ssh-zwave", "claude"},
+		{"ssh-nkontur", "nkontur"},
+		{"ssh-konoahko", "konoahko"},
+		{"ssh-konturn", "konturn"},
 	}
 
 	for _, tt := range tests {
