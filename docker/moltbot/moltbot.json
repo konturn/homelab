@@ -5,7 +5,9 @@
       "mode": "token",
       "token": "{{ lookup('env', 'MOLTBOT_GATEWAY_TOKEN') }}"
     },
-    "trustedProxies": ["10.3.32.1"],
+    "trustedProxies": [
+      "10.3.32.1"
+    ],
     "controlUi": {
       "allowInsecureAuth": true
     }
@@ -24,6 +26,35 @@
       "anthropic:fallback": {
         "provider": "anthropic",
         "mode": "token"
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "memorySearch": {
+        "enabled": true,
+        "sources": [
+          "memory",
+          "sessions"
+        ],
+        "provider": "local",
+        "query": {
+          "hybrid": {
+            "enabled": true,
+            "temporalDecay": {
+              "enabled": true,
+              "halfLifeDays": 90
+            },
+            "mmr": {
+              "enabled": true,
+              "lambda": 0.7
+            }
+          }
+        },
+        "sync": {
+          "watch": true,
+          "onSessionStart": true
+        }
       }
     }
   }
