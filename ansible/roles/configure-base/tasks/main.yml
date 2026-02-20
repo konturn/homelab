@@ -1,3 +1,49 @@
+### OpenZFS PPA — upgrade beyond Ubuntu's bundled 2.2.2
+### Fixes LUKS2 4k-sector + ashift-12 write errors (openzfs/zfs#14533)
+- name: Create keyrings directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+  check_mode: no
+
+- name: Download OpenZFS PPA signing key
+  ansible.builtin.get_url:
+    url: "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x71D641738AA0BEA26DA949516BA7349C5FD45AE1&options=mr"
+    dest: /etc/apt/keyrings/openzfs-ppa.asc
+    mode: '0644'
+  check_mode: no
+
+- name: Add OpenZFS PPA repository
+  apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/openzfs-ppa.asc] https://ppa.launchpadcontent.net/arter97/zfs/ubuntu {{ ansible_distribution_release }} main"
+    state: present
+
+- name: Install/upgrade ZFS packages
+  apt:
+    name:
+      - zfsutils-linux
+      - zfs-dkms
+      - zfs-zed
+    state: latest
+    update_cache: yes
+  register: zfs_packages
+
+- name: Check if ZFS kernel module needs reload (reboot required)
+  ansible.builtin.shell: |
+    LOADED=$(cat /sys/module/zfs/version 2>/dev/null || echo "unknown")
+    INSTALLED=$(dpkg-query -W -f='${Version}' zfsutils-linux 2>/dev/null | sed 's/-.*//')
+    echo "loaded=${LOADED} installed=${INSTALLED}"
+    [ "$LOADED" = "$INSTALLED" ] && echo "match=yes" || echo "match=no"
+  register: zfs_version_check
+  changed_when: false
+  when: zfs_packages.changed
+
+- name: Warn if ZFS reboot is needed
+  ansible.builtin.debug:
+    msg: "ZFS REBOOT REQUIRED — {{ zfs_version_check.stdout_lines | default(['version check skipped']) }}"
+  when: zfs_packages.changed and zfs_version_check.stdout is defined and 'match=no' in zfs_version_check.stdout
+
 ### Configure mounts and cryptodisks
 - name: fstab
   ansible.builtin.copy:
