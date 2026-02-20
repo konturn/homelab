@@ -57,5 +57,19 @@
         }
       }
     }
+  },
+  "hooks": {
+    "enabled": true,
+    "path": "/hooks",
+    "transformsDir": "/home/node/.openclaw/hooks/transforms",
+    "mappings": [
+      {
+        "action": "wake",
+        "name": "grafana",
+        "transform": {
+          "module": "grafana.js"
+        }
+      }
+    ]
   }
 }
