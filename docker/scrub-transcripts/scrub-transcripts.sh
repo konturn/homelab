@@ -49,6 +49,11 @@ fi
 log_event "INFO" "scrub_started" "dir=${TRANSCRIPT_DIR}"
 
 # --- Run gitleaks scan ---
+# Skip the active (most recently modified) session file to avoid
+# redacting tokens mid-conversation — they get scrubbed once the
+# session rotates and is no longer the newest file.
+ACTIVE_SESSION=$(find "$TRANSCRIPT_DIR" -maxdepth 1 -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+
 GITLEAKS_ARGS=(dir "$TRANSCRIPT_DIR" --report-format json --report-path "$REPORT_FILE" --exit-code 1 --no-banner)
 
 if [[ -f "$GITLEAKS_CONFIG" ]]; then
@@ -75,8 +80,12 @@ TOTAL_REDACTED=0
 
 if [[ -f "$REPORT_FILE" ]] && [[ -s "$REPORT_FILE" ]]; then
   if command -v jq &>/dev/null; then
-    # Deduplicate by file+secret, then redact
-    jq -r '.[] | [.File, .Secret] | @tsv' "$REPORT_FILE" | sort -u | while IFS=$'\t' read -r filepath secret; do
+    # Deduplicate by file+secret, then redact (skip active session)
+    FILTER='.'
+    if [[ -n "${ACTIVE_SESSION:-}" ]]; then
+      FILTER="[.[] | select(.File != \"${ACTIVE_SESSION}\")]"
+    fi
+    jq -r "$FILTER | .[] | [.File, .Secret] | @tsv" "$REPORT_FILE" | sort -u | while IFS=$'\t' read -r filepath secret; do
       if [[ -z "$secret" ]] || [[ -z "$filepath" ]]; then
         continue
       fi
