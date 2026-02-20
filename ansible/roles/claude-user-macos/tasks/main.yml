@@ -119,6 +119,14 @@
     group: staff
     mode: '0755'
 
+- name: Deploy iMessage checkpoint script
+  template:
+    src: advance-checkpoint.sh.j2
+    dest: "/Users/{{ claude_user_name }}/bin/advance-checkpoint.sh"
+    owner: "{{ claude_user_name }}"
+    group: staff
+    mode: '0755'
+
 - name: Configure SSH to trust Vault CA
   copy:
     dest: /etc/ssh/trusted-user-ca-keys.pem
