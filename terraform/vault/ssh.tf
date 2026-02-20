@@ -36,8 +36,8 @@ resource "vault_ssh_secret_backend_role" "satellite" {
   name                    = "satellite"
   backend                 = vault_mount.ssh.path
   key_type                = "ca"
-  default_user            = "claude-satellite"
-  allowed_users           = "claude-satellite"
+  default_user            = "claude"
+  allowed_users           = "claude"
   ttl                     = "900"
   max_ttl                 = "1800"
   allow_user_certificates = true
@@ -51,8 +51,8 @@ resource "vault_ssh_secret_backend_role" "zwave" {
   name                    = "zwave"
   backend                 = vault_mount.ssh.path
   key_type                = "ca"
-  default_user            = "claude-zwave"
-  allowed_users           = "claude-zwave"
+  default_user            = "claude"
+  allowed_users           = "claude"
   ttl                     = "900"
   max_ttl                 = "1800"
   allow_user_certificates = true
@@ -66,8 +66,8 @@ resource "vault_ssh_secret_backend_role" "nkontur_ws" {
   name                    = "nkontur-ws"
   backend                 = vault_mount.ssh.path
   key_type                = "ca"
-  default_user            = "claude-nkontur"
-  allowed_users           = "claude-nkontur"
+  default_user            = "claude"
+  allowed_users           = "claude"
   ttl                     = "900"
   max_ttl                 = "1800"
   allow_user_certificates = true
@@ -81,8 +81,8 @@ resource "vault_ssh_secret_backend_role" "konoahko_ws" {
   name                    = "konoahko-ws"
   backend                 = vault_mount.ssh.path
   key_type                = "ca"
-  default_user            = "claude-konoahko"
-  allowed_users           = "claude-konoahko"
+  default_user            = "claude"
+  allowed_users           = "claude"
   ttl                     = "900"
   max_ttl                 = "1800"
   allow_user_certificates = true
@@ -96,8 +96,8 @@ resource "vault_ssh_secret_backend_role" "konturn_ws" {
   name                    = "konturn-ws"
   backend                 = vault_mount.ssh.path
   key_type                = "ca"
-  default_user            = "claude-konturn"
-  allowed_users           = "claude-konturn"
+  default_user            = "claude"
+  allowed_users           = "claude"
   ttl                     = "900"
   max_ttl                 = "1800"
   allow_user_certificates = true
