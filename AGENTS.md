@@ -32,60 +32,28 @@ If using the Write tool, read the file first and include all existing content pl
 
 ---
 
-## Memory — Three-Layer System
+## Memory — Flat Markdown System
 
-You wake up fresh each session. These three layers are your continuity:
-
-### Layer 1: Knowledge Graph (`/life/areas/`)
-Entity-based storage for durable facts about people, companies, and projects.
+You wake up fresh each session. Everything is searchable markdown under `memory/`.
 
 ```
-/life/areas/
-├── people/
-│   ├── noah/
-│   │   ├── summary.md    # Living summary (weekly rewrite)
-│   │   └── items.json    # Atomic facts
-│   ├── chris-and-patty/
-│   └── ...
-├── companies/
-│   ├── nvidia/
-│   └── octoai/
-└── projects/
-    └── job-hunting/
+memory/
+├── YYYY-MM-DD.md          # Daily logs (append-only)
+├── identity.md            # Who I am, meaningful moments
+├── directives.md          # Standing orders, security rules
+├── lessons.md             # Operational lessons
+├── people/*.md            # People in Noah's life
+├── companies/*.md         # Employers, companies
+├── projects/*.md          # Ongoing projects
 ```
-
-**Tiered retrieval:**
-1. `summary.md` — quick context (load first)
-2. `items.json` — atomic facts (load when details needed)
 
 **Rules:**
-- Save new facts immediately to `items.json`
-- Weekly: rewrite `summary.md` from active facts
-- **Never delete — supersede instead** (mark old facts with `"status": "superseded"`)
-
-**Atomic fact schema:**
-```json
-{
-  "id": "entity-001",
-  "fact": "The actual fact",
-  "category": "relationship|milestone|status|preference",
-  "timestamp": "YYYY-MM-DD",
-  "source": "conversation|file",
-  "status": "active|superseded",
-  "supersededBy": "entity-002"
-}
-```
-
-### Layer 2: Daily Notes (`memory/YYYY-MM-DD.md`)
-Raw event logs — what happened, when. The "when" layer.
-- Write continuously as things happen
-- Durable facts get extracted to Layer 1 during heartbeats
-
-### Layer 3: Tacit Knowledge (`MEMORY.md`)
-Patterns, preferences, lessons learned — facts about *how Noah operates*, not facts about the world.
-- **ONLY load in main session** (direct chats with Noah)
-- **DO NOT load in shared contexts** (Discord, group chats, strangers)
-- This is for **security** — contains personal context that shouldn't leak
+- All memory is markdown — no JSON, no complex schemas
+- `memory_search` indexes everything under `memory/` + `MEMORY.md`
+- New facts about people → update `memory/people/<name>.md`
+- New lessons → append to `memory/lessons.md`
+- Daily events → append to `memory/YYYY-MM-DD.md`
+- `MEMORY.md` is a lean index — **ONLY load in main session** (security)
 
 ### 📝 Write It Down - No "Mental Notes"!
 - **Memory is limited** — if you want to remember something, WRITE IT TO A FILE
