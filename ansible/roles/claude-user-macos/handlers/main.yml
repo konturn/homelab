@@ -1,0 +1,3 @@
+- name: restart sshd
+  command: launchctl kickstart -k system/com.openssh.sshd
+  become: yes

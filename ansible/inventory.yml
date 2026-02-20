@@ -199,6 +199,11 @@ all:
           group: "root"
           mode: "0700"
   children:
+    macmini:
+      hosts:
+        macmini.lab.nkontur.com:
+          ansible_host: 10.4.128.24
+          ansible_user: noah
     satellites:
       vars:
         docker_compose_file_names: 

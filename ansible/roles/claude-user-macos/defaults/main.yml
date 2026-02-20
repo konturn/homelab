@@ -1,0 +1,3 @@
+claude_user_name: claude-macmini
+claude_user_principal: claude-macmini
+vault_ssh_ca_public_key: ""  # Set by vault secret fetch

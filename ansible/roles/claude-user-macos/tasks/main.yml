@@ -1,0 +1,143 @@
+# =============================================================================
+# Role: claude-user-macos
+# =============================================================================
+# Creates a restricted 'claude-macmini' user on macOS for AI agent SSH access
+# via Vault-signed certificates. Uses dscl for user management and restricts
+# the user to a curated set of commands via PATH restriction.
+# =============================================================================
+
+- name: Check if claude user exists
+  command: "dscl . -read /Users/{{ claude_user_name }}"
+  register: user_check
+  failed_when: false
+  changed_when: false
+
+- name: Get next available UniqueID
+  shell: "dscl . -list /Users UniqueID | awk '{print $2}' | sort -n | tail -1 | awk '{print $1+1}'"
+  register: next_uid
+  when: user_check.rc != 0
+  changed_when: false
+
+- name: Create claude user via dscl
+  block:
+    - name: Create user record
+      command: "dscl . -create /Users/{{ claude_user_name }}"
+
+    - name: Set shell
+      command: "dscl . -create /Users/{{ claude_user_name }} UserShell /bin/bash"
+
+    - name: Set real name
+      command: "dscl . -create /Users/{{ claude_user_name }} RealName 'Claude Mac Mini Agent'"
+
+    - name: Set UniqueID
+      command: "dscl . -create /Users/{{ claude_user_name }} UniqueID {{ next_uid.stdout }}"
+
+    - name: Set PrimaryGroupID (staff = 20)
+      command: "dscl . -create /Users/{{ claude_user_name }} PrimaryGroupID 20"
+
+    - name: Set home directory
+      command: "dscl . -create /Users/{{ claude_user_name }} NFSHomeDirectory /Users/{{ claude_user_name }}"
+
+    - name: Create home directory
+      file:
+        path: "/Users/{{ claude_user_name }}"
+        state: directory
+        owner: "{{ claude_user_name }}"
+        group: staff
+        mode: '0700'
+  become: yes
+  when: user_check.rc != 0
+
+- name: Create restricted PATH bin directory
+  file:
+    path: "/Users/{{ claude_user_name }}/bin"
+    state: directory
+    mode: '0755'
+    owner: "{{ claude_user_name }}"
+    group: staff
+
+- name: Symlink allowed commands into restricted PATH
+  file:
+    src: "{{ item.src }}"
+    dest: "/Users/{{ claude_user_name }}/bin/{{ item.name }}"
+    state: link
+  loop:
+    - { src: /bin/cat, name: cat }
+    - { src: /bin/ls, name: ls }
+    - { src: /usr/bin/head, name: head }
+    - { src: /usr/bin/tail, name: tail }
+    - { src: /usr/bin/grep, name: grep }
+    - { src: /usr/bin/find, name: find }
+    - { src: /bin/df, name: df }
+    - { src: /usr/bin/du, name: du }
+    - { src: /bin/ps, name: ps }
+    - { src: /usr/bin/uptime, name: uptime }
+    - { src: /usr/bin/sw_vers, name: sw_vers }
+    - { src: /usr/bin/defaults, name: defaults }
+    - { src: /usr/bin/osascript, name: osascript }
+    - { src: /usr/bin/sqlite3, name: sqlite3 }
+    - { src: /usr/bin/open, name: open }
+    - { src: /usr/bin/id, name: id }
+    - { src: /usr/bin/whoami, name: whoami }
+    - { src: /bin/hostname, name: hostname }
+    - { src: /bin/date, name: date }
+    - { src: /usr/bin/wc, name: wc }
+    - { src: /usr/bin/sort, name: sort }
+    - { src: /usr/bin/uniq, name: uniq }
+    - { src: /usr/bin/less, name: less }
+    - { src: /usr/bin/stat, name: stat }
+    - { src: /usr/bin/file, name: file }
+  ignore_errors: yes
+
+- name: Configure restricted .bash_profile
+  copy:
+    dest: "/Users/{{ claude_user_name }}/.bash_profile"
+    owner: "{{ claude_user_name }}"
+    group: staff
+    mode: '0644'
+    content: |
+      # Restricted shell configuration for macOS
+      export PATH=/Users/{{ claude_user_name }}/bin
+      export HISTFILE=/Users/{{ claude_user_name }}/.bash_history
+      export HISTSIZE=1000
+      readonly PATH
+      echo "Restricted shell. Available: cat ls head tail grep find df du ps uptime sw_vers defaults osascript sqlite3 open"
+
+- name: Configure SSH to trust Vault CA
+  copy:
+    dest: /etc/ssh/trusted-user-ca-keys.pem
+    content: "{{ vault_ssh_ca_public_key }}"
+    mode: '0644'
+  become: yes
+  notify: restart sshd
+
+- name: Add TrustedUserCAKeys to sshd_config
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    line: "TrustedUserCAKeys /etc/ssh/trusted-user-ca-keys.pem"
+    regexp: "^TrustedUserCAKeys"
+  become: yes
+  notify: restart sshd
+
+- name: Create AuthorizedPrincipals directory
+  file:
+    path: /etc/ssh/auth_principals
+    state: directory
+    mode: '0755'
+  become: yes
+
+- name: Configure AuthorizedPrincipals for claude user
+  copy:
+    dest: "/etc/ssh/auth_principals/{{ claude_user_name }}"
+    content: "{{ claude_user_principal }}\n"
+    mode: '0644'
+  become: yes
+  notify: restart sshd
+
+- name: Add AuthorizedPrincipalsFile to sshd_config
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    line: "AuthorizedPrincipalsFile /etc/ssh/auth_principals/%u"
+    regexp: "^AuthorizedPrincipalsFile"
+  become: yes
+  notify: restart sshd
