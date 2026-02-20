@@ -269,7 +269,8 @@ var resourceTier = map[string]int{
 	"gmail-read": 1,
 	"gmail-send": 2,
 	"prowlarr":  1,
-	"mqtt":      1,
+	"mqtt":        1,
+	"ssh-macmini": 1,
 
 	// Tier 2: Infrastructure (requires approval, 30 min TTL)
 	"ssh":           2,
