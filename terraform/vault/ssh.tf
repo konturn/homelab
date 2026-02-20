@@ -111,8 +111,8 @@ resource "vault_ssh_secret_backend_role" "macmini" {
   name                    = "macmini"
   backend                 = vault_mount.ssh.path
   key_type                = "ca"
-  default_user            = "claude-macmini"
-  allowed_users           = "claude-macmini"
+  default_user            = "claude"
+  allowed_users           = "claude"
   ttl                     = "900"
   max_ttl                 = "1800"
   allow_user_certificates = true

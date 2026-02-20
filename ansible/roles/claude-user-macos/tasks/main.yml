@@ -1,7 +1,7 @@
 # =============================================================================
 # Role: claude-user-macos
 # =============================================================================
-# Creates a restricted 'claude-macmini' user on macOS for AI agent SSH access
+# Creates a restricted 'claude' user on macOS for AI agent SSH access
 # via Vault-signed certificates. Uses dscl for user management and restricts
 # the user to a curated set of commands via PATH restriction.
 # =============================================================================
@@ -133,6 +133,23 @@
     mode: '0644'
   become: yes
   notify: restart sshd
+
+- name: Add sudo symlink to restricted PATH
+  file:
+    src: /usr/bin/sudo
+    dest: "/Users/{{ claude_user_name }}/bin/sudo"
+    state: link
+
+- name: Configure sudoers for iMessage and Notes access
+  copy:
+    dest: /etc/sudoers.d/claude-imessage
+    content: |
+      # Allow claude to run osascript and sqlite3 as the primary macOS user
+      # for iMessage (Messages.app) and Notes.app access
+      {{ claude_user_name }} ALL=({{ macos_primary_user }}) NOPASSWD: /usr/bin/osascript, /usr/bin/sqlite3
+    mode: '0440'
+    validate: 'visudo -cf %s'
+  become: yes
 
 - name: Add AuthorizedPrincipalsFile to sshd_config
   lineinfile:
