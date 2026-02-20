@@ -37,7 +37,7 @@ groups:
               refId: B
               settings: {mode: dropNN}
         noDataState: OK
-        execErrState: Alerting
+        execErrState: OK
         for: 10m
         annotations:
           summary: "Container {{ $labels.container_name }} health check failed"
