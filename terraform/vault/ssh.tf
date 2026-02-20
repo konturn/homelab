@@ -37,7 +37,7 @@ resource "vault_ssh_secret_backend_role" "satellite" {
   backend                 = vault_mount.ssh.path
   key_type                = "ca"
   default_user            = "claude"
-  allowed_users           = "claude"
+  allowed_users           = "claude,claude-satellite"
   ttl                     = "900"
   max_ttl                 = "1800"
   allow_user_certificates = true
@@ -52,7 +52,7 @@ resource "vault_ssh_secret_backend_role" "zwave" {
   backend                 = vault_mount.ssh.path
   key_type                = "ca"
   default_user            = "claude"
-  allowed_users           = "claude"
+  allowed_users           = "claude,claude-zwave"
   ttl                     = "900"
   max_ttl                 = "1800"
   allow_user_certificates = true
@@ -67,7 +67,7 @@ resource "vault_ssh_secret_backend_role" "nkontur_ws" {
   backend                 = vault_mount.ssh.path
   key_type                = "ca"
   default_user            = "nkontur"
-  allowed_users           = "nkontur"
+  allowed_users           = "nkontur,claude-nkontur"
   ttl                     = "900"
   max_ttl                 = "1800"
   allow_user_certificates = true
@@ -82,7 +82,7 @@ resource "vault_ssh_secret_backend_role" "konoahko_ws" {
   backend                 = vault_mount.ssh.path
   key_type                = "ca"
   default_user            = "konoahko"
-  allowed_users           = "konoahko"
+  allowed_users           = "konoahko,claude-konoahko"
   ttl                     = "900"
   max_ttl                 = "1800"
   allow_user_certificates = true
@@ -97,7 +97,7 @@ resource "vault_ssh_secret_backend_role" "konturn_ws" {
   backend                 = vault_mount.ssh.path
   key_type                = "ca"
   default_user            = "konturn"
-  allowed_users           = "konturn"
+  allowed_users           = "konturn,claude-konturn"
   ttl                     = "900"
   max_ttl                 = "1800"
   allow_user_certificates = true
@@ -112,7 +112,7 @@ resource "vault_ssh_secret_backend_role" "macmini" {
   backend                 = vault_mount.ssh.path
   key_type                = "ca"
   default_user            = "claude"
-  allowed_users           = "claude"
+  allowed_users           = "claude,claude-macmini"
   ttl                     = "900"
   max_ttl                 = "1800"
   allow_user_certificates = true
