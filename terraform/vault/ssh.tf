@@ -106,3 +106,18 @@ resource "vault_ssh_secret_backend_role" "konturn_ws" {
   }
   allowed_extensions = "permit-pty"
 }
+
+resource "vault_ssh_secret_backend_role" "macmini" {
+  name                    = "macmini"
+  backend                 = vault_mount.ssh.path
+  key_type                = "ca"
+  default_user            = "claude"
+  allowed_users           = "claude"
+  ttl                     = "900"
+  max_ttl                 = "1800"
+  allow_user_certificates = true
+  default_extensions = {
+    "permit-pty" = ""
+  }
+  allowed_extensions = "permit-pty"
+}
