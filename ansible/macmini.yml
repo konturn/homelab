@@ -35,6 +35,8 @@
 - name: Configure Mac Mini for JIT SSH access
   hosts: macmini
   become: yes
+  vars:
+    fetch_ssh_ca_key: true
   roles:
     - fetch-vault-secrets
     - claude-user-macos
