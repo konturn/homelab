@@ -46,8 +46,17 @@ RUN curl -fsSL https://bun.sh/install | bash \
     && mv /root/.bun/bin/bun /usr/local/bin/ \
     && rm -rf /root/.bun
 
-# Install qmd (quick markdown search) globally
-RUN bun install -g https://github.com/tobi/qmd
+# Install qmd (quick markdown search) - clone, build, and install
+RUN cd /tmp \
+    && git clone --depth 1 https://github.com/tobi/qmd.git \
+    && cd qmd \
+    && bun install \
+    && bun run build \
+    && mkdir -p /usr/local/lib/qmd \
+    && cp -r dist /usr/local/lib/qmd/ \
+    && cp qmd /usr/local/lib/qmd/qmd.sh \
+    && ln -sf /usr/local/lib/qmd/qmd.sh /usr/local/bin/qmd \
+    && cd / && rm -rf /tmp/qmd
 
 # Install playwright globally first, then agent-browser
 # Uses system Chromium via PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
