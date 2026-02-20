@@ -458,7 +458,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.1157@sha256:18b2379be95a9caa708304974e70ff05a65059ee1231054bc186274c6fa49488
+    image: linuxserver/jackett:0.24.1167@sha256:eb526255fd4286dbc649ec2b41ea53ba38ce9af0694440eacea7b4a1aaeb9c15
     container_name: jackett
     security_opt:
       - no-new-privileges:true
@@ -738,7 +738,7 @@ services:
       - "443:80"
     networks:
       - internal
-    image: 'gitlab/gitlab-ee:18.8.4-ee.0@sha256:d8c9bb7291fd6aaf64824a603855727b7864bd3f44223d409ccefd9ed0ee6b6c'
+    image: 'gitlab/gitlab-ee:18.9.0-ee.0@sha256:280be239e059a6b841cdc31e40427ab393d5f23ec55ef36f58f26f30513fc8e0'
     restart: unless-stopped
     ulimits:
       nofile:
