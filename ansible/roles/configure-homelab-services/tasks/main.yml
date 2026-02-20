@@ -292,6 +292,30 @@
     cmd: "docker restart deluge"
   when: deluge_dir.stat.exists and deluge_config is changed and not ansible_check_mode
 
+### OpenClaw webhook hook transforms
+# Deploy hook transform scripts used by the OpenClaw gateway hooks system.
+# These parse incoming webhooks (e.g. Grafana alerts) into wake events.
+- name: Ensure OpenClaw hooks transforms directory exists
+  ansible.builtin.file:
+    path: "{{ docker_persistent_data_path }}/moltbot/data/hooks/transforms"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  when: "'router' in inventory_hostname"
+
+- name: Deploy OpenClaw hook transforms
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - src: "docker/moltbot/hooks/transforms/grafana.js"
+      dest: "{{ docker_persistent_data_path }}/moltbot/data/hooks/transforms/grafana.js"
+  when: "'router' in inventory_hostname"
+
 ### Transcript credential scrubbing cron
 # Uses gitleaks (~160 rules) to detect and redact secrets from OpenClaw
 # session transcripts. Also purges archived sub-agent transcripts older
