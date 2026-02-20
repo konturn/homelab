@@ -5,7 +5,7 @@
         fetch_ssh_ca_key: true
     - role: claude-user
       vars:
-        claude_user_principal: claude-satellite
+        claude_user_principal: claude
     - configure-scanner
     - configure-docker
     - deploy-compose

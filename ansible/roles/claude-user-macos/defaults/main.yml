@@ -1,4 +1,4 @@
 claude_user_name: claude
-claude_user_principal: claude-macmini
+claude_user_principal: claude
 vault_ssh_ca_public_key: ""  # Set by vault secret fetch
 macos_primary_user: noah  # The logged-in macOS user for sudo delegation
