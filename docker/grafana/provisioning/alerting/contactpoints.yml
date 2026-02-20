@@ -26,3 +26,14 @@ contactPoints:
             
             Time: {{ .CommonAnnotations.startsAt }}
         disableResolveMessage: false
+  - orgId: 1
+    name: openclaw-webhook
+    receivers:
+      - uid: openclaw-webhook
+        type: webhook
+        settings:
+          url: "http://moltbot-gateway:18789/hooks/grafana"
+          httpMethod: POST
+          authorization_scheme: Bearer
+          authorization_credentials: $OPENCLAW_HOOKS_TOKEN
+        disableResolveMessage: false

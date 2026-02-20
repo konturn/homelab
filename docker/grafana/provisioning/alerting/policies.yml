@@ -2,7 +2,7 @@ apiVersion: 1
 
 policies:
   - orgId: 1
-    receiver: homelab-email-alerts
+    receiver: openclaw-webhook
     group_by: ['alertname', 'severity']
     group_wait: 30s
     group_interval: 5m
@@ -14,15 +14,18 @@ policies:
         group_wait: 10s
         group_interval: 2m
         repeat_interval: 2h
+        continue: true
       - receiver: homelab-email-alerts
         matchers:
           - alertname =~ ".*HighMemory.*"
         group_wait: 10s
         group_interval: 5m
         repeat_interval: 1h
+        continue: true
       - receiver: homelab-email-alerts
         matchers:
           - alertname =~ ".*DiskSpace.*"
         group_wait: 30s
         group_interval: 10m
         repeat_interval: 6h
+        continue: true

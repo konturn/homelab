@@ -142,6 +142,7 @@ vault_secret_paths:
       vault_moltbot_gateway_token: "gateway_token"
       vault_moltbot_gitlab_token: "gitlab_token"
       vault_moltbot_telegram_token: "telegram_token"
+      vault_moltbot_hooks_token: "hooks_token"
 
   # Backup secrets
   - path: "backup/backblaze"
