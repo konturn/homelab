@@ -1,0 +1,22 @@
+#!/bin/bash
+# Send an iMessage reply via Mac Mini
+# Usage: send-reply.sh <recipient> <message>
+# recipient: phone number or email (e.g. +13307304088)
+# message: text to send
+# Runs via SSH as claude, uses sudo to osascript as konoahko
+
+set -euo pipefail
+
+RECIPIENT="$1"
+MESSAGE="$2"
+
+# Escape double quotes in message for AppleScript
+MESSAGE_ESCAPED=$(echo "$MESSAGE" | sed 's/"/\\"/g')
+
+sudo -n -u konoahko /usr/bin/osascript -e "
+tell application \"Messages\"
+  set targetService to 1st account whose service type = iMessage
+  set targetBuddy to participant \"$RECIPIENT\" of targetService
+  send \"$MESSAGE_ESCAPED\" to targetBuddy
+end tell
+" 2>&1

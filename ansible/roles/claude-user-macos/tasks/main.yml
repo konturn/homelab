@@ -103,6 +103,30 @@
       readonly PATH
       echo "Restricted shell. Available: cat ls head tail grep find df du ps uptime sw_vers defaults osascript sqlite3 open"
 
+- name: Deploy iMessage check script
+  template:
+    src: check-new.sh.j2
+    dest: "/Users/{{ claude_user_name }}/bin/check-new.sh"
+    owner: "{{ claude_user_name }}"
+    group: staff
+    mode: '0755'
+
+- name: Deploy iMessage reply script
+  template:
+    src: send-reply.sh.j2
+    dest: "/Users/{{ claude_user_name }}/bin/send-reply.sh"
+    owner: "{{ claude_user_name }}"
+    group: staff
+    mode: '0755'
+
+- name: Deploy iMessage checkpoint script
+  template:
+    src: advance-checkpoint.sh.j2
+    dest: "/Users/{{ claude_user_name }}/bin/advance-checkpoint.sh"
+    owner: "{{ claude_user_name }}"
+    group: staff
+    mode: '0755'
+
 - name: Configure SSH to trust Vault CA
   copy:
     dest: /etc/ssh/trusted-user-ca-keys.pem
@@ -146,7 +170,7 @@
     content: |
       # Allow claude to run osascript and sqlite3 as the primary macOS user
       # for iMessage (Messages.app) and Notes.app access
-      {{ claude_user_name }} ALL=({{ macos_primary_user }}) NOPASSWD: /usr/bin/osascript, /usr/bin/sqlite3
+      {{ claude_user_name }} ALL=({{ macos_primary_user }}) NOPASSWD: /usr/bin/osascript, /usr/bin/sqlite3, /bin/ls, /usr/bin/find
     mode: '0440'
     validate: 'visudo -cf %s'
   become: yes

@@ -1,0 +1,44 @@
+#!/bin/bash
+# Check for new iMessages on Mac Mini since last check
+# Outputs JSON array of new messages
+# 
+# IMPORTANT: This script does NOT advance the checkpoint.
+# Call advance-checkpoint.sh after successfully processing messages.
+# This ensures no messages are lost if the caller crashes mid-processing.
+
+set -euo pipefail
+
+CHECKPOINT_FILE="$HOME/.imessage-checkpoint"
+DB="/Users/konoahko/Library/Messages/chat.db"
+
+# Get last processed message ROWID (default: 0)
+if [ -f "$CHECKPOINT_FILE" ]; then
+  LAST_ROWID=$(cat "$CHECKPOINT_FILE")
+else
+  # First run: only process messages from now on (don't replay entire history)
+  LAST_ROWID=$(sudo -n -u konoahko /usr/bin/sqlite3 "$DB" "SELECT MAX(ROWID) FROM message;" 2>/dev/null || echo "0")
+  echo "$LAST_ROWID" > "$CHECKPOINT_FILE"
+fi
+
+# Query for new messages NOT from me, with ROWID > last checkpoint
+MESSAGES=$(sudo -n -u konoahko /usr/bin/sqlite3 -json "$DB" "
+SELECT
+  m.ROWID as id,
+  m.text as text,
+  m.date as date,
+  h.id as sender,
+  m.is_from_me as is_from_me,
+  c.chat_identifier as chat_id,
+  c.display_name as chat_name,
+  datetime(m.date/1000000000 + 978307200, 'unixepoch', 'localtime') as time_local
+FROM message m
+LEFT JOIN handle h ON m.handle_id = h.ROWID
+LEFT JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
+LEFT JOIN chat c ON cmj.chat_id = c.ROWID
+WHERE m.ROWID > $LAST_ROWID
+  AND m.is_from_me = 0
+  AND m.text IS NOT NULL
+ORDER BY m.ROWID ASC;
+" 2>/dev/null || echo "[]")
+
+echo "$MESSAGES"
