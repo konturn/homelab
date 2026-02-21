@@ -579,7 +579,7 @@ services:
     networks:
       internal:
         ipv4_address: {{ influxdb_ip }}
-    image: influxdb:2.8.0@sha256:8e911da5f7b482230e61fe4bad9af0697d97a75e087f19f5f0ddfee62c2bd686
+    image: influxdb:3.8.0-enterprise@sha256:a74ab969bfea78bdb9b74f25c0f165a7ea8bbcae34a960794e566ec96158df51
     restart: unless-stopped
     deploy:
       resources:
