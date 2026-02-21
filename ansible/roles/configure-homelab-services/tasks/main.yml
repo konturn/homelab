@@ -297,7 +297,7 @@
 # The template injects the gateway token from Vault.
 - name: Deploy OpenClaw config
   ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/moltbot/moltbot.json"
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/moltbot/moltbot.json.j2"
     dest: "{{ docker_persistent_data_path }}/moltbot/data/moltbot.json"
     owner: root
     group: root
