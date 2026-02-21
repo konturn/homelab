@@ -3,7 +3,7 @@
     "mode": "local",
     "auth": {
       "mode": "token",
-      "token": "{{ lookup('env', 'MOLTBOT_GATEWAY_TOKEN') }}"
+      "token": "{{ vault_moltbot_gateway_token }}"
     },
     "trustedProxies": [
       "10.3.32.1"

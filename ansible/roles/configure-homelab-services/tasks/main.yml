@@ -292,6 +292,24 @@
     cmd: "docker restart deluge"
   when: deluge_dir.stat.exists and deluge_config is changed and not ansible_check_mode
 
+### OpenClaw config
+# Deploy the main OpenClaw config (moltbot.json) from the repo template.
+# The template injects the gateway token from Vault.
+- name: Deploy OpenClaw config
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/moltbot/moltbot.json.j2"
+    dest: "{{ docker_persistent_data_path }}/moltbot/data/moltbot.json"
+    owner: root
+    group: root
+    mode: "0600"
+  register: openclaw_config
+  when: "'router' in inventory_hostname"
+
+- name: Restart OpenClaw gateway if config changed
+  ansible.builtin.command:
+    cmd: "docker exec moltbot openclaw gateway restart"
+  when: openclaw_config is changed and not ansible_check_mode
+
 ### OpenClaw webhook hook transforms
 # Deploy hook transform scripts used by the OpenClaw gateway hooks system.
 # These parse incoming webhooks (e.g. Grafana alerts) into wake events.
