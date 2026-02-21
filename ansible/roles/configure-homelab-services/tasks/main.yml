@@ -318,7 +318,7 @@
 
 - name: Restart OpenClaw gateway if config changed
   ansible.builtin.command:
-    cmd: "docker exec moltbot openclaw gateway restart"
+    cmd: "docker restart moltbot-gateway"
   when: openclaw_config is changed and not ansible_check_mode
 
 ### OpenClaw webhook hook transforms
