@@ -71,6 +71,9 @@
             "context1m": true
           }
         }
+      },
+      "compaction": {
+        "reserveTokensFloor": 4000
       }
     }
   },
