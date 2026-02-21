@@ -1,3 +1,4 @@
+{% raw %}
 apiVersion: 1
 
 contactPoints:
@@ -35,5 +36,6 @@ contactPoints:
           url: "http://moltbot-gateway:18789/hooks/grafana"
           httpMethod: POST
           authorization_scheme: Bearer
-          authorization_credentials: $OPENCLAW_HOOKS_TOKEN
+{% endraw %}
+          authorization_credentials: "{{ vault_moltbot_hooks_token }}"
         disableResolveMessage: false

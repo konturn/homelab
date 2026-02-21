@@ -638,8 +638,6 @@ services:
       - GF_SMTP_FROM_ADDRESS=konoahko@gmail.com
       - GF_SMTP_FROM_NAME=Grafana Homelab
       - GF_SMTP_STARTTLS_POLICY=MandatoryStartTLS
-      # OpenClaw webhook auth token for alert notifications
-      - OPENCLAW_HOOKS_TOKEN={{ vault_moltbot_hooks_token | default('') | trim | replace("$", "$$") }}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s

@@ -173,6 +173,16 @@
     state: absent
   when: "'router' in inventory_hostname"
 
+- name: Template Grafana alerting contact points (injects Vault secrets)
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/grafana/provisioning/alerting/contactpoints.yml.j2"
+    dest: "{{ docker_persistent_data_path }}/grafana/provisioning/alerting/contactpoints.yml"
+    owner: root
+    group: root
+    mode: "0600"
+  register: grafana_contactpoints
+  when: "'router' in inventory_hostname"
+
 - name: Copy Grafana alerting provisioning files (no Jinja2 templating)
   ansible.builtin.copy:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/{{ item.src }}"
@@ -182,8 +192,6 @@
     mode: "0644"
   register: grafana_alerting_copy
   loop:
-    - src: "docker/grafana/provisioning/alerting/contactpoints.yml"
-      dest: "{{ docker_persistent_data_path }}/grafana/provisioning/alerting/contactpoints.yml"
     - src: "docker/grafana/provisioning/alerting/policies.yml"
       dest: "{{ docker_persistent_data_path }}/grafana/provisioning/alerting/policies.yml"
     - src: "docker/grafana/provisioning/alerting/infrastructure.yml"
@@ -251,7 +259,10 @@
   ansible.builtin.command:
     cmd: "docker restart -t 30 grafana"
   timeout: 60
-  when: grafana_alerting_copy is defined and grafana_alerting_copy.changed and not ansible_check_mode
+  when: >-
+    ((grafana_alerting_copy is defined and grafana_alerting_copy.changed) or
+     (grafana_contactpoints is defined and grafana_contactpoints.changed))
+    and not ansible_check_mode
 
 - name: Restart pihole if pihole.toml was modified
   ansible.builtin.command:
