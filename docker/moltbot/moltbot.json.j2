@@ -1,62 +1,116 @@
 {
-  "gateway": {
-    "mode": "local",
-    "auth": {
-      "mode": "token",
-      "token": "{{ vault_moltbot_gateway_token }}"
-    },
-    "trustedProxies": [
-      "10.3.32.1"
-    ],
-    "controlUi": {
-      "allowInsecureAuth": true
-    }
+  "meta": {
+    "lastTouchedVersion": "2026.2.19",
+    "lastTouchedAt": "2026-02-20T20:28:12.814Z"
   },
-  "channels": {
-    "telegram": {
-      "enabled": true
+  "wizard": {
+    "lastRunAt": "2026-02-20T20:28:12.752Z",
+    "lastRunVersion": "2026.2.19",
+    "lastRunCommand": "onboard",
+    "lastRunMode": "local"
+  },
+  "browser": {
+    "enabled": true,
+    "headless": false,
+    "defaultProfile": "sandbox",
+    "profiles": {
+      "job-1": {
+        "cdpPort": 18801,
+        "driver": "clawd",
+        "color": "#4A90D9"
+      },
+      "job-2": {
+        "cdpPort": 18802,
+        "driver": "clawd",
+        "color": "#50C878"
+      },
+      "job-3": {
+        "cdpPort": 18803,
+        "driver": "clawd",
+        "color": "#FFD700"
+      },
+      "job-4": {
+        "cdpPort": 18804,
+        "driver": "clawd",
+        "color": "#FF6B6B"
+      },
+      "sandbox": {
+        "cdpUrl": "http://10.3.32.9:9222",
+        "color": "#9B59B6"
+      }
     }
   },
   "auth": {
     "profiles": {
+      "anthropic:fallback": {
+        "provider": "anthropic",
+        "mode": "token"
+      },
       "anthropic:manual": {
         "provider": "anthropic",
         "mode": "token"
       },
-      "anthropic:fallback": {
-        "provider": "anthropic",
-        "mode": "token"
+      "openai-codex:default": {
+        "provider": "openai-codex",
+        "mode": "oauth"
+      }
+    }
+  },
+  "models": {
+    "providers": {
+      "anthropic": {
+        "baseUrl": "https://api.anthropic.com",
+        "auth": "token",
+        "api": "anthropic-messages",
+        "models": [
+          {
+            "id": "claude-opus-4-6",
+            "name": "Claude Opus 4.6",
+            "api": "anthropic-messages",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": {
+              "input": 15,
+              "output": 75,
+              "cacheRead": 1.5,
+              "cacheWrite": 18.75
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 32000
+          }
+        ]
+      },
+      "openai-codex": {
+        "baseUrl": "https://api.openai.com/v1",
+        "auth": "oauth",
+        "api": "openai-responses",
+        "models": [
+          {
+            "id": "gpt-5",
+            "name": "GPT-5 (Codex OAuth)",
+            "api": "openai-responses",
+            "reasoning": true,
+            "input": ["text"],
+            "contextWindow": 200000,
+            "maxTokens": 32768
+          }
+        ]
       }
     }
   },
   "agents": {
     "defaults": {
-      "memorySearch": {
-        "enabled": true,
-        "sources": [
-          "memory",
-          "sessions"
-        ],
-        "provider": "local",
-        "query": {
-          "hybrid": {
-            "enabled": true,
-            "temporalDecay": {
-              "enabled": true,
-              "halfLifeDays": 90
-            },
-            "mmr": {
-              "enabled": true,
-              "lambda": 0.7
-            }
-          }
-        },
-        "sync": {
-          "watch": true,
-          "onSessionStart": true
-        }
+      "model": {
+        "primary": "anthropic/claude-opus-4-6",
+        "fallbacks": [
+          "anthropic/claude-opus-4-5"
+        ]
       },
       "models": {
+        "openai-codex/gpt-5": {
+          "alias": "codex",
+          "params": {}
+        },
         "anthropic/claude-opus-4-6": {
           "alias": "opus",
           "params": {
@@ -72,14 +126,66 @@
           }
         }
       },
+      "workspace": "/home/node/.openclaw/workspace",
+      "memorySearch": {
+        "enabled": true,
+        "sources": ["memory", "sessions"],
+        "provider": "openai",
+        "sync": {
+          "onSessionStart": true,
+          "watch": true
+        },
+        "query": {
+          "hybrid": {
+            "enabled": true,
+            "mmr": {
+              "enabled": true,
+              "lambda": 0.7
+            },
+            "temporalDecay": {
+              "enabled": true,
+              "halfLifeDays": 90
+            }
+          }
+        }
+      },
+      "maxConcurrent": 4,
+      "subagents": {
+        "maxConcurrent": 8,
+        "archiveAfterMinutes": 30
+      },
+      "sandbox": {
+        "browser": {
+          "enabled": true
+        }
+      },
+      "contextPruning": {
+        "mode": "cache-ttl",
+        "ttl": "5m",
+        "keepLastAssistants": 3,
+        "tools": {
+          "allow": ["exec", "Read", "process", "web_fetch", "web_search"],
+          "deny": ["image*"]
+        }
+      },
       "compaction": {
         "reserveTokensFloor": 4000
       }
     }
   },
+  "tools": {},
+  "messages": {
+    "ackReactionScope": "group-mentions"
+  },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto",
+    "restart": true
+  },
   "hooks": {
     "enabled": true,
     "path": "/hooks",
+    "token": "{{ vault_moltbot_hooks_token }}",
     "transformsDir": "/home/node/.openclaw/hooks/transforms",
     "mappings": [
       {
@@ -91,22 +197,41 @@
       }
     ]
   },
-  "agent": {
-    "contextPruning": {
-      "mode": "cache-ttl",
-      "ttl": "5m",
-      "keepLastAssistants": 3,
-      "tools": {
-        "allow": [
-          "exec",
-          "Read",
-          "process",
-          "web_fetch",
-          "web_search"
-        ],
-        "deny": [
-          "image*"
-        ]
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "dmPolicy": "pairing",
+      "groupPolicy": "allowlist",
+      "streamMode": "partial",
+      "heartbeat": {
+        "showOk": false,
+        "showAlerts": true
+      }
+    }
+  },
+  "gateway": {
+    "port": 18789,
+    "mode": "local",
+    "bind": "loopback",
+    "controlUi": {
+      "allowInsecureAuth": true
+    },
+    "auth": {
+      "mode": "token",
+      "token": "{{ vault_moltbot_gateway_token }}"
+    },
+    "trustedProxies": [
+      "10.3.32.1"
+    ],
+    "tailscale": {
+      "mode": "off",
+      "resetOnExit": false
+    }
+  },
+  "plugins": {
+    "entries": {
+      "telegram": {
+        "enabled": true
       }
     }
   }
