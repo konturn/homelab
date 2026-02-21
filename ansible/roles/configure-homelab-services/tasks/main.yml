@@ -179,7 +179,7 @@
     dest: "{{ docker_persistent_data_path }}/grafana/provisioning/alerting/contactpoints.yml"
     owner: root
     group: root
-    mode: "0600"
+    mode: "0640"
   register: grafana_contactpoints
   when: "'router' in inventory_hostname"
 
