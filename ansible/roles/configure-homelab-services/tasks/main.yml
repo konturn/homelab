@@ -48,6 +48,21 @@
     validate: 'visudo -cf %s'
   when: "'router' in inventory_hostname"
 
+### Fix systemd-networkd-wait-online boot timeout
+# Default waits for ALL interfaces, causing 2min+ timeout on boot.
+# Override to wait only for WAN interface (USB NIC with DHCP).
+- name: Override systemd-networkd-wait-online to wait for WAN interface only
+  ansible.builtin.copy:
+    content: |
+      [Service]
+      ExecStart=
+      ExecStart=/lib/systemd/systemd-networkd-wait-online --interface=enx6c1ff76b2ec9
+    dest: /etc/systemd/system/systemd-networkd-wait-online.service.d/override.conf
+    owner: root
+    group: root
+    mode: "0644"
+  when: "'router' in inventory_hostname"
+
 - name: Template out compose file to ansible state directory on host
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/' + item }}"
