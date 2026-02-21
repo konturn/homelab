@@ -51,6 +51,15 @@
 ### Fix systemd-networkd-wait-online boot timeout
 # Default waits for ALL interfaces, causing 2min+ timeout on boot.
 # Override to wait only for WAN interface (USB NIC with DHCP).
+- name: Create systemd-networkd-wait-online override directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/systemd-networkd-wait-online.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: "'router' in inventory_hostname"
+
 - name: Override systemd-networkd-wait-online to wait for WAN interface only
   ansible.builtin.copy:
     content: |

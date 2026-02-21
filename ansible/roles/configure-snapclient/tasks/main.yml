@@ -21,7 +21,11 @@
 
 - name: Install snapclient
   apt:
-    deb: https://github.com/badaix/snapcast/releases/download/v0.26.0/snapclient_0.26.0-1_armhf.deb 
+    deb: https://github.com/badaix/snapcast/releases/download/v0.26.0/snapclient_0.26.0-1_armhf.deb
+  retries: 3
+  delay: 5
+  register: snapclient_install
+  until: snapclient_install is success
 
 - name: Stop snapclient
   ansible.builtin.systemd:
