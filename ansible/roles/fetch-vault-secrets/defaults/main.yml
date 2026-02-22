@@ -68,9 +68,6 @@ vault_secret_paths:
     fields:
       vault_nextcloud_db_password: "db_password"
       vault_nextcloud_secret: "secret"
-  - path: "docker/nominatim"
-    fields:
-      vault_nominatim_password: "password"
   - path: "docker/nzbget"
     fields:
       vault_nzbget_password: "password"
