@@ -334,8 +334,8 @@
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/moltbot/moltbot.json.j2"
     dest: "{{ docker_persistent_data_path }}/moltbot/data/moltbot.json"
-    owner: root
-    group: root
+    owner: konoahko
+    group: konoahko
     mode: "0600"
   register: openclaw_config
   when: "'router' in inventory_hostname"

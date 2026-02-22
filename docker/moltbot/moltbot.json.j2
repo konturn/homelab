@@ -56,48 +56,6 @@
       }
     }
   },
-  "models": {
-    "providers": {
-      "anthropic": {
-        "baseUrl": "https://api.anthropic.com",
-        "auth": "token",
-        "api": "anthropic-messages",
-        "models": [
-          {
-            "id": "claude-opus-4-6",
-            "name": "Claude Opus 4.6",
-            "api": "anthropic-messages",
-            "reasoning": false,
-            "input": ["text"],
-            "cost": {
-              "input": 15,
-              "output": 75,
-              "cacheRead": 1.5,
-              "cacheWrite": 18.75
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 32000
-          }
-        ]
-      },
-      "openai-codex": {
-        "baseUrl": "https://api.openai.com/v1",
-        "auth": "oauth",
-        "api": "openai-responses",
-        "models": [
-          {
-            "id": "gpt-5",
-            "name": "GPT-5 (Codex OAuth)",
-            "api": "openai-responses",
-            "reasoning": true,
-            "input": ["text"],
-            "contextWindow": 200000,
-            "maxTokens": 32768
-          }
-        ]
-      }
-    }
-  },
   "agents": {
     "defaults": {
       "model": {
@@ -114,15 +72,13 @@
         "anthropic/claude-opus-4-6": {
           "alias": "opus",
           "params": {
-            "cacheRetention": "short",
-            "context1m": true
+            "cacheRetention": "long"
           }
         },
         "anthropic/claude-opus-4-5": {
           "alias": "opus",
           "params": {
-            "cacheRetention": "short",
-            "context1m": true
+            "cacheRetention": "long",
           }
         }
       },
