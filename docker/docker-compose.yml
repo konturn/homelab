@@ -1771,5 +1771,34 @@ services:
       retries: 3
       start_period: 30s
 
-  # Geocoding: use public Nominatim API (https://nominatim.openstreetmap.org)
-  # at ≤1 req/sec — self-hosted geocoding is too RAM-heavy for occasional use.
+  # Nominatim — geocoding / reverse-geocoding engine
+  # Uses US-Midwest regional extract to keep import fast and memory reasonable.
+  # First startup imports the PBF extract into PostgreSQL (can take 1-2 hours).
+  nominatim:
+    container_name: nominatim
+    image: mediagis/nominatim:4.5
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - internal
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
+    environment:
+      - PBF_URL=https://download.geofabrik.de/north-america/us-midwest-latest.osm.pbf
+      - REPLICATION_URL=https://download.geofabrik.de/north-america/us-midwest-updates/
+      - NOMINATIM_PASSWORD={{ vault_nominatim_password | default('nominatim') }}
+    volumes:
+      - {{ docker_persistent_data_path }}/nominatim/data:/var/lib/postgresql/14/main
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 600s
