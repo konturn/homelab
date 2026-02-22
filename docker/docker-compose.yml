@@ -1571,7 +1571,7 @@ services:
           memory: 2G
     volumes:
       - nextcloud:/data
-      - ./nextcloud/config.php:/var/www/html/config/config.php:ro
+      - {{ docker_persistent_data_path }}/nextcloud/config.php:/var/www/html/config/config.php:ro
       - /etc/localtime:/etc/localtime:ro
     restart: unless-stopped
     healthcheck:
