@@ -230,14 +230,6 @@
     enabled: yes
   when: avahi_conf.changed or avahi_services.changed or avahi_hosts.changed
 
-- name: Populate RNDC key file
-  ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/dhcp/rndc.key' }}"
-    dest: /etc/dhcp/rndc.key
-    owner: root
-    group: root
-    mode: '0640'
-
 - name: Populate DHCP conf file
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/dhcp/dhcpd.conf' }}"
