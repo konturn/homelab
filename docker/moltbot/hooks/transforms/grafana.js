@@ -1,4 +1,4 @@
-// Grafana webhook → OpenClaw wake event transform
+// Grafana webhook → OpenClaw agent event transform
 // Gateway wraps the HTTP body inside { payload, headers, url, path }
 module.exports = function transform(raw) {
   var payload = raw.payload || raw;
@@ -18,15 +18,15 @@ module.exports = function transform(raw) {
     return parts.join(': ');
   });
 
-  var text;
+  var alertText;
   if (lines.length > 0) {
-    text = '🚨 Grafana (' + status + '): ' + lines.join(' | ');
+    alertText = lines.join('\n');
   } else {
-    text = '🚨 Grafana (' + status + '): no alert details';
+    alertText = 'No alert details in payload';
   }
 
   return {
-    text: text,
+    message: '🚨 Grafana Alert (' + status + '):\n' + alertText + '\n\nRead ALERTS.md for response protocol. Investigate using Loki logs and Grafana dashboards. Fix if possible. Notify Noah via Telegram with what happened and what you did.',
     mode: 'now'
   };
 };
