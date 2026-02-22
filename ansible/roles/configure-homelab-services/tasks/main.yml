@@ -361,8 +361,8 @@
   ansible.builtin.copy:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/{{ item.src }}"
     dest: "{{ item.dest }}"
-    owner: root
-    group: root
+    owner: konoahko
+    group: konoahko
     mode: "0644"
   loop:
     - src: "docker/moltbot/hooks/transforms/grafana.js"
