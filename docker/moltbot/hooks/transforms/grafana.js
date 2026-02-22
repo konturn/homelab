@@ -1,13 +1,7 @@
 // Grafana webhook → OpenClaw wake event transform
-//
-// Receives Grafana's unified alerting webhook payload and converts it
-// to an OpenClaw wake event ({ text, mode }).
-//
-// Grafana sends: { receiver, status, alerts: [{ labels, annotations, status, ... }], ... }
-//
-// Deployed to: /home/node/.openclaw/hooks/transforms/grafana.js
-// Triggered via: POST /hooks/grafana on the gateway
-module.exports = function transform(payload) {
+// Gateway wraps the HTTP body inside { payload, headers, url, path }
+module.exports = function transform(raw) {
+  var payload = raw.payload || raw;
   var alerts = payload.alerts || [];
   var status = payload.status || 'unknown';
 
@@ -26,11 +20,9 @@ module.exports = function transform(payload) {
 
   var text;
   if (lines.length > 0) {
-    text = '🚨 Grafana Alert (' + status + '): ' + lines.join(' | ');
+    text = '🚨 Grafana (' + status + '): ' + lines.join(' | ');
   } else {
-    // No alerts array — dump top-level keys for debugging
-    text = '🚨 Grafana Alert: payload had no alerts array. Keys: ' +
-           Object.keys(payload || {}).join(', ');
+    text = '🚨 Grafana (' + status + '): no alert details';
   }
 
   return {
