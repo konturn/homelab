@@ -1727,7 +1727,7 @@ services:
         reservations:
           memory: 4G
     environment:
-      - tile_urls=https://download.geofabrik.de/north-america/north-america-latest.osm.pbf
+      - tile_urls=https://download.geofabrik.de/north-america/us-latest.osm.pbf
       - serve_tiles=True
       - build_elevation=True
       - build_admins=True
@@ -1776,7 +1776,7 @@ services:
   # First startup imports the PBF extract into PostgreSQL (can take 1-2 hours).
   nominatim:
     container_name: nominatim
-    image: mediagis/nominatim:4.5@sha256:f5717b87ab30f4d46cbe906ca02887d8882ff15ab2c2ad133e1892be12c8d4ba
+    image: mediagis/nominatim:4.5
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -1787,13 +1787,13 @@ services:
     deploy:
       resources:
         limits:
-          memory: 8G
+          memory: 4G
         reservations:
           memory: 1G
     environment:
-      - PBF_URL=https://download.geofabrik.de/north-america/north-america-latest.osm.pbf
-      - REPLICATION_URL=https://download.geofabrik.de/north-america/north-america-updates/
-      - NOMINATIM_PASSWORD={{ vault_nominatim_password | default('nominatim') }}
+      - PBF_URL=https://download.geofabrik.de/north-america/us-midwest-latest.osm.pbf
+      - REPLICATION_URL=https://download.geofabrik.de/north-america/us-midwest-updates/
+      - NOMINATIM_PASSWORD={{ vault_nominatim_password | default(lookup('env', 'NOMINATIM_PASSWORD')) | trim | replace("$", "$$") }}
     volumes:
       - {{ docker_persistent_data_path }}/nominatim/data:/var/lib/postgresql/14/main
     healthcheck:
