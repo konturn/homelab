@@ -9,7 +9,7 @@
 #    password-based client authentication.
 #
 # Upstream source: https://github.com/dchesterton/amcrest2mqtt
-FROM dchesterton/amcrest2mqtt:latest
+FROM dchesterton/amcrest2mqtt:1.0.16@sha256:5a503bcf7b39bd846ca60be1846ce8b73eae979fd074f2a31e14462f85447260
 
 COPY patch.py /tmp/patch.py
 RUN python3 /tmp/patch.py && rm /tmp/patch.py
