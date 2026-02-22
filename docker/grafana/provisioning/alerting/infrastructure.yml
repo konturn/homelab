@@ -171,7 +171,7 @@ groups:
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [90]}}]}
         noDataState: OK
         execErrState: Alerting
-        for: 5m
+        for: 10m
         annotations:
           summary: "System memory usage above 90%"
         labels:
