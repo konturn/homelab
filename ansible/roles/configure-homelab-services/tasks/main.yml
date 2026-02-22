@@ -363,7 +363,7 @@
     dest: "{{ item.dest }}"
     owner: konoahko
     group: konoahko
-    mode: "0644"
+    mode: "0600"
   loop:
     - src: "docker/moltbot/hooks/transforms/grafana.js"
       dest: "{{ docker_persistent_data_path }}/moltbot/data/hooks/transforms/grafana.js"
