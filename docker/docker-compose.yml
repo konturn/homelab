@@ -1702,3 +1702,105 @@ services:
       - {{ docker_persistent_data_path }}/moltbot/mcporter:/home/node/.mcporter
       - {{ docker_persistent_data_path }}/moltbot/workspace:/home/node/.openclaw/workspace
     command: ["node", "dist/index.js", "gateway", "--bind", "lan", "--port", "18789"]
+
+  # =============================================================================
+  # OpenStreetMap Stack — self-hosted mapping services
+  # =============================================================================
+
+  # Valhalla — routing engine (turn-by-turn directions, isochrones, matrix)
+  # First startup downloads ~1-2GB OSM extract and builds routing tiles (30-60 min).
+  # Subsequent starts are fast — tiles are cached in the data volume.
+  valhalla:
+    container_name: valhalla
+    image: ghcr.io/valhalla/valhalla:latest@sha256:6cbf7a8ffdd6ff8524dacc258e7fc8ed5de2e4cccc98694e0e17b01cf1374e28
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - internal
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 2G
+    environment:
+      - tile_urls=https://download.geofabrik.de/north-america/us-midwest-latest.osm.pbf
+      - serve_tiles=True
+      - build_elevation=True
+      - build_admins=True
+      - build_time_zones=True
+      - force_rebuild=False
+    volumes:
+      - {{ docker_persistent_data_path }}/valhalla/custom_files:/custom_files
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
+
+  # TileServer GL — vector/raster map tile server
+  # NOTE: You must download an .mbtiles file into the data volume before this works.
+  # Options: https://data.maptiler.com/downloads/planet/ or generate with openmaptiles.
+  # Place .mbtiles files in {{ docker_persistent_data_path }}/tileserver/
+  tileserver:
+    container_name: tileserver
+    image: maptiler/tileserver-gl:latest@sha256:0472aa881c9965bcd578cbaaeeaf5ab86d5d92e10c64c48c6856a6b1b7beb13f
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - internal
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+    volumes:
+      - {{ docker_persistent_data_path }}/tileserver:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Nominatim — geocoding (address search and reverse geocoding)
+  # First startup imports the PBF extract which takes 1-2 hours for US Midwest.
+  # The import is RAM-heavy; subsequent starts are fast.
+  nominatim:
+    container_name: nominatim
+    image: mediagis/nominatim:4.5@sha256:e25b434212b46fadb378fab8054fb3e96bdd69e8d174b0274e5f20e53f15e9f1
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - internal
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 2G
+    environment:
+      - PBF_URL=https://download.geofabrik.de/north-america/us-midwest-latest.osm.pbf
+      - REPLICATION_URL=https://download.geofabrik.de/north-america/us-midwest-updates/
+      - NOMINATIM_PASSWORD={{ vault_nominatim_password | default(lookup('env', 'NOMINATIM_PASSWORD')) | trim | replace("$", "$$") }}
+      - IMPORT_STYLE=full
+    volumes:
+      - {{ docker_persistent_data_path }}/nominatim/data:/var/lib/postgresql/14/main
+      - {{ docker_persistent_data_path }}/nominatim/flatnode:/nominatim/flatnode
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 600s
