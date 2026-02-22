@@ -875,7 +875,7 @@ services:
       - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
     ports:
       - "443:8112"
-    image: 'lscr.io/linuxserver/deluge:latest@sha256:4ddb60af86c6c17013a0ab143af9a1dcd2fcd517129a94d0b71e581bbe4f7937'
+    image: 'lscr.io/linuxserver/deluge:2.0.3-2201906121747ubuntu18.04.1-ls107@sha256:4ddb60af86c6c17013a0ab143af9a1dcd2fcd517129a94d0b71e581bbe4f7937'
     restart: unless-stopped
     networks:
       internal:
@@ -1443,7 +1443,7 @@ services:
       retries: 3
       start_period: 60s
   paperless-ngx:
-    image: lscr.io/linuxserver/paperless-ngx:latest@sha256:4016f13609923d1ef926c3d3532cf77f3650dc0b886258947cdf311c5ddc9829
+    image: lscr.io/linuxserver/paperless-ngx:1.7.1@sha256:4016f13609923d1ef926c3d3532cf77f3650dc0b886258947cdf311c5ddc9829
     container_name: paperless-ngx
     security_opt:
       - no-new-privileges:true
