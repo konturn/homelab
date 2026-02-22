@@ -1571,9 +1571,7 @@ services:
           memory: 2G
     volumes:
       - nextcloud:/data
-#      - {{ docker_persistent_data_path }}/nextcloud/config:/var/www/html/config
-#      - {{ docker_persistent_data_path }}/nextcloud/mpm_prefork.conf:/etc/apache2/mods-available/mpm_prefork.conf
-#      - {{ docker_persistent_data_path }}/nextcloud/config/php.ini:/usr/local/etc/php/php.ini
+      - ./nextcloud/config.php:/var/www/html/config/config.php:ro
       - /etc/localtime:/etc/localtime:ro
     restart: unless-stopped
     healthcheck:
