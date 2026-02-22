@@ -430,3 +430,31 @@
     minute: "0"
     hour: "4"
     job: "docker restart chromium-browser 2>&1 | logger -t chromium-restart"
+
+### Router boot optimization
+# Mask Hyper-V guest services that are unnecessary on bare metal (not a VM).
+# Saves ~30s boot time by eliminating timeout waits for missing vmbus.
+- name: Mask Hyper-V guest services (bare metal, not a VM)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: true
+  loop:
+    - hv-fcopy-daemon.service
+    - hv-kvp-daemon.service
+    - hv-vss-daemon.service
+  when: "'router' in inventory_hostname"
+
+# Disable GUI/desktop services not needed on a headless router.
+# Saves 5-10s boot time.
+- name: Disable unnecessary GUI services on router
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: false
+    state: stopped
+  loop:
+    - gdm3.service
+    - pulseaudio.service
+    - cups.service
+    - snapd.service
+  failed_when: false
+  when: "'router' in inventory_hostname"
