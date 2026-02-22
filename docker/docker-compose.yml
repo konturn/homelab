@@ -1771,36 +1771,6 @@ services:
       retries: 3
       start_period: 30s
 
-  # Nominatim — geocoding (address search and reverse geocoding)
-  # First startup imports the PBF extract which takes 1-2 hours for US Midwest.
-  # The import is RAM-heavy; subsequent starts are fast.
-  nominatim:
-    container_name: nominatim
-    image: mediagis/nominatim:4.5@sha256:e25b434212b46fadb378fab8054fb3e96bdd69e8d174b0274e5f20e53f15e9f1
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    networks:
-      - internal
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 8G
-        reservations:
-          memory: 2G
-    environment:
-      - PBF_URL=https://download.geofabrik.de/north-america/us-midwest-latest.osm.pbf
-      - REPLICATION_URL=https://download.geofabrik.de/north-america/us-midwest-updates/
-      - NOMINATIM_PASSWORD={{ vault_nominatim_password | default(lookup('env', 'NOMINATIM_PASSWORD')) | trim | replace("$", "$$") }}
-      - IMPORT_STYLE=full
-    volumes:
-      - {{ docker_persistent_data_path }}/nominatim/data:/var/lib/postgresql/14/main
-      - {{ docker_persistent_data_path }}/nominatim/flatnode:/nominatim/flatnode
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/status"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 600s
+  # Geocoding: using public Nominatim API (https://nominatim.openstreetmap.org)
+  # for address search. 1 req/sec rate limit, fine for personal use.
+  # Self-hosted Nominatim or Photon can be added later if needed.
