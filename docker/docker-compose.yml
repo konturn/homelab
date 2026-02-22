@@ -1545,7 +1545,7 @@ services:
       retries: 3
       start_period: 60s
   nextcloud:
-    image: nextcloud:32.0.5-fpm@sha256:859376abea2c2fbee4cd2046cb1d9ed9714d37f200fa8b409bbca10ca3bc52e6
+    image: nextcloud:32.0.5-apache@sha256:aa9bb9bbde6e6afc756f7f101d65fbd57526165184737a85e31cc98dfbaaa2e2
     container_name: nextcloud
     security_opt:
       - no-new-privileges:true
@@ -1577,7 +1577,7 @@ services:
       - /etc/localtime:/etc/localtime:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "php -r '$s=@fsockopen(\"localhost\",9000);if(!$s)exit(1);fclose($s);'"]
+      test: ["CMD", "curl", "-f", "http://localhost/status.php"]
       interval: 30s
       timeout: 10s
       retries: 3
