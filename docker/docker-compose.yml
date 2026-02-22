@@ -1776,7 +1776,7 @@ services:
   # First startup imports the PBF extract into PostgreSQL (can take 1-2 hours).
   nominatim:
     container_name: nominatim
-    image: mediagis/nominatim:4.5
+    image: mediagis/nominatim:4.5@sha256:f5717b87ab30f4d46cbe906ca02887d8882ff15ab2c2ad133e1892be12c8d4ba
     security_opt:
       - no-new-privileges:true
     cap_drop:
