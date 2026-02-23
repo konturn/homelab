@@ -1,5 +1,5 @@
 # Extend official OpenClaw image with additional tooling
-FROM ghcr.io/openclaw/openclaw:2026.2.21@sha256:ce271192cd70250d16fc5911903d9953467a40faf8b34e87cbd042e6b49b6036
+FROM ghcr.io/openclaw/openclaw:2026.2.22@sha256:51c3fe85913545ca6c15c0fe2447230167ed1d329a07088f67d2a1612541b64b
 
 USER root
 
@@ -40,25 +40,6 @@ RUN curl -fsSL https://github.com/profclems/glab/releases/download/v1.22.0/glab_
 # Install yq (YAML processor)
 RUN curl -fsSL https://github.com/mikefarah/yq/releases/download/v4.44.1/yq_linux_amd64 -o /usr/local/bin/yq \
     && chmod +x /usr/local/bin/yq
-
-# Install bun (for qmd and fast JS tooling)
-RUN curl -fsSL https://bun.sh/install | bash \
-    && mv /root/.bun/bin/bun /usr/local/bin/ \
-    && rm -rf /root/.bun
-
-# Install qmd (quick markdown search) - clone, build, and install
-# Must include package.json + node_modules alongside dist/ because the
-# wrapper runs via node and needs to resolve imports (fast-glob, etc.)
-RUN cd /tmp \
-    && git clone --depth 1 https://github.com/tobi/qmd.git \
-    && cd qmd \
-    && bun install \
-    && bun run build \
-    && mkdir -p /usr/local/lib/qmd \
-    && cp -r dist package.json node_modules /usr/local/lib/qmd/ \
-    && cp qmd /usr/local/lib/qmd/qmd.sh \
-    && ln -sf /usr/local/lib/qmd/qmd.sh /usr/local/bin/qmd \
-    && cd / && rm -rf /tmp/qmd
 
 # Install playwright globally first, then agent-browser
 # Uses system Chromium via PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
