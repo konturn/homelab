@@ -26,6 +26,7 @@ groups:
                   |> filter(fn: (r) => r._value > 0)
                   |> group(columns: ["container_name"])
                   |> last()
+                  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -60,6 +61,7 @@ groups:
                   |> difference(nonNegative: true)
                   |> group(columns: ["container_name"])
                   |> sum()
+                  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -92,6 +94,7 @@ groups:
                   |> filter(fn: (r) => r._field == "oomkilled")
                   |> last()
                   |> filter(fn: (r) => r._value == true)
+                  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -125,6 +128,7 @@ groups:
                   |> filter(fn: (r) => r.container_name =~ /grafana|homeassistant|nginx|gitlab|influxdb|plex|bitwarden|vault|loki|promtail/)
                   |> last()
                   |> filter(fn: (r) => r._value != 0)
+                  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
