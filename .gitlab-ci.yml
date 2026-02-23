@@ -271,16 +271,16 @@ jit-approval-svc:test:
 moltbot:build:
   extends: .docker_build
   script:
-    - docker build -t $CI_REGISTRY_IMAGE/moltbot:latest -t $CI_REGISTRY_IMAGE/moltbot:$CI_COMMIT_SHORT_SHA docker/moltbot/
+    - docker build -t $CI_REGISTRY_IMAGE/moltbot:latest -t $CI_REGISTRY_IMAGE/moltbot:$CI_COMMIT_SHORT_SHA docker/openclaw/
     - docker push $CI_REGISTRY_IMAGE/moltbot:latest
     - docker push $CI_REGISTRY_IMAGE/moltbot:$CI_COMMIT_SHORT_SHA
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
-        - docker/moltbot/**/*
+        - docker/openclaw/**/*
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
-        - docker/moltbot/**/*
+        - docker/openclaw/**/*
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       when: manual
       allow_failure: true

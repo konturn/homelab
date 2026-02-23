@@ -407,7 +407,7 @@ while IFS='|' read -r image_ref source; do
       no_auto_merge="true"
     fi
     # Always mark moltbot Dockerfile images as never_auto_merge
-    if [[ "$source" == Dockerfile:docker/moltbot/* ]]; then
+    if [[ "$source" == Dockerfile:docker/openclaw/* ]]; then
       no_auto_merge="true"
     fi
 

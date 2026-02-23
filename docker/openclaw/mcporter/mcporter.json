@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "home-assistant": {
+      "description": "Home Assistant MCP for smart home control",
+      "command": "npx",
+      "args": ["-y", "home-assistant-mcp-server"],
+      "env": {
+        "HASS_URL": "${HASS_URL}",
+        "HASS_TOKEN": "${HASS_TOKEN}"
+      }
+    }
+  }
+}

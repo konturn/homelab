@@ -4,16 +4,15 @@
     "lastTouchedAt": "2026-02-20T20:28:12.814Z"
   },
   "wizard": {
-  "lastRunAt": "2026-02-20T20:28:12.752Z",
-  "lastRunVersion": "2026.2.19",
-  "lastRunCommand": "onboard",
-  "lastRunMode": "local"
+    "lastRunAt": "2026-02-20T20:28:12.752Z",
+    "lastRunVersion": "2026.2.19",
+    "lastRunCommand": "onboard",
+    "lastRunMode": "local"
   },
   "browser": {
-  "enabled": true,
-  "headless": false,
-  "defaultProfile": "sandbox"
-  },
+    "enabled": true,
+    "headless": false,
+    "defaultProfile": "sandbox"
   },
   "auth": {
     "profiles": {
@@ -39,37 +38,31 @@
           "blockrun/auto"
         ]
       },
-  "models": {
-  "blockrun/premium": {
-  "alias": "premium"
-  },
-  "blockrun/auto": {
-  "alias": "auto"
-  },
-  "blockrun/eco": {
-  "alias": "eco"
-  },
-  "blockrun/free": {
-  "alias": "free"
-  }
-  },
-  "router": {
-  "enabled": true,
-  "wallet": {
-  "path": "~/.openclaw/blockrun/wallet.key"
-  }
-  },
-  "workspace": "/home/node/.openclaw/workspace",
-  "memorySearch": {
-  "enabled": true,
-  "sources": ["memory", "sessions"],
+      "models": {
+        "blockrun/premium": {
+          "alias": "premium"
+        },
+        "blockrun/auto": {
+          "alias": "auto"
+        },
+        "blockrun/eco": {
+          "alias": "eco"
+        },
+        "blockrun/free": {
+          "alias": "free"
+        }
+      },
+      "router": {
+        "enabled": true,
+        "wallet": {
+          "path": "~/.openclaw/blockrun/wallet.key"
+        }
+      },
+      "workspace": "/home/node/.openclaw/workspace",
+      "memorySearch": {
+        "enabled": true,
+        "sources": ["memory", "sessions"],
         "provider": "openai",
-  "router": {
-  "enabled": true,
-  "wallet": {
-  "path": "~/.openclaw/blockrun/wallet.key"
-  }
-  },
         "sync": {
           "onSessionStart": true,
           "watch": true
@@ -108,13 +101,13 @@
         }
       },
       "compaction": {
-         "reserveTokensFloor": 20000,
-         "memoryFlush": {
-           "enabled": true,
-           "softThresholdTokens": 4000,
-           "systemPrompt": "Session nearing compaction. Store durable memories now.",
-           "prompt": "Write any lasting notes to memory/YYYY-MM-DD.md; reply with NO_REPLY if nothing to store."
-         }
+        "reserveTokensFloor": 20000,
+        "memoryFlush": {
+          "enabled": true,
+          "softThresholdTokens": 4000,
+          "systemPrompt": "Session nearing compaction. Store durable memories now.",
+          "prompt": "Write any lasting notes to memory/YYYY-MM-DD.md; reply with NO_REPLY if nothing to store."
+        }
       }
     }
   },

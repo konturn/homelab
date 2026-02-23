@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "profiles": {
+    "anthropic:manual": {
+      "type": "token",
+      "provider": "anthropic",
+      "token": "{{ vault_anthropic_api_key }}"
+    },
+    "anthropic:fallback": {
+      "type": "token",
+      "provider": "anthropic",
+      "token": "{{ vault_anthropic_api_key_fallback }}"
+    }
+  }
+}
