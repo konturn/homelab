@@ -629,7 +629,7 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD={{ vault_grafana_admin_password | default(lookup('env', 'GRAFANA_ADMIN_PASSWORD')) | trim | replace("$", "$$") }}
       - GF_SERVER_ROOT_URL=https://grafana.lab.nkontur.com
       - GF_USERS_ALLOW_SIGN_UP=false
-      - INFLUXDB_TOKEN={{ vault_influxdb_admin_token | default(lookup('env', 'INFLUXDB_ADMIN_TOKEN')) | trim | replace("$", "$$") }}
+      - INFLUXDB_TOKEN={{ vault_influxdb_grafana_read_token | default(vault_influxdb_admin_token) | default(lookup('env', 'INFLUXDB_ADMIN_TOKEN')) | trim | replace("$", "$$") }}
       # SMTP for email alerts
       - GF_SMTP_ENABLED=true
       - GF_SMTP_HOST=smtp.gmail.com:587
