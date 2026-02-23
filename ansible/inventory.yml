@@ -198,6 +198,9 @@ all:
           owner: "root"
           group: "root"
           mode: "0700"
+        - path: "{{ docker_persistent_data_path }}/tileserver"
+          owner: "1000"
+          group: "1000"
   children:
     macmini:
       hosts:
