@@ -1755,16 +1755,13 @@ services:
   tileserver:
     container_name: tileserver
     image: maptiler/tileserver-gl:latest@sha256:0472aa881c9965bcd578cbaaeeaf5ab86d5d92e10c64c48c6856a6b1b7beb13f
+    # Run as UID 1000 to match tileserver-gl's expected user.
+    # The deploy-compose role pre-creates the data dir with 1000:1000 ownership.
+    user: "1000:1000"
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    cap_add:
-      - CHOWN
-      - SETUID
-      - SETGID
-      - DAC_OVERRIDE
-      - FOWNER
     networks:
       - internal
     restart: unless-stopped
@@ -1805,13 +1802,14 @@ services:
     deploy:
       resources:
         limits:
-          memory: 4G
+          memory: 8G
         reservations:
-          memory: 1G
+          memory: 6G
     environment:
       - PBF_URL=https://download.geofabrik.de/north-america/us-midwest-latest.osm.pbf
       - REPLICATION_URL=https://download.geofabrik.de/north-america/us-midwest-updates/
       - NOMINATIM_PASSWORD={{ vault_nominatim_password | default(lookup('env', 'NOMINATIM_PASSWORD')) | trim | replace("$", "$$") }}
+      - IMPORT_STYLE=extratags
     volumes:
       - {{ docker_persistent_data_path }}/nominatim/data:/var/lib/postgresql/16/main
     healthcheck:
@@ -1819,4 +1817,5 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 600s
+      # Initial PBF import can take 1-2 hours; 10min was too short causing restart loops
+      start_period: 7200s
