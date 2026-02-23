@@ -66,6 +66,10 @@ RUN npm install -g playwright \
     && npm install -g agent-browser \
     && agent-browser install --skip-download
 
+# Pre-install clawrouter extension
+RUN mkdir -p /home/node/.openclaw/extensions/clawrouter \
+    && npm install --prefix /home/node/.openclaw/extensions/clawrouter @blockrun/clawrouter@0.10.5
+
 # Ensure node user can access installed tools
 RUN chmod -R a+rx /usr/local/bin
 

@@ -222,6 +222,16 @@
       dest: "{{ docker_persistent_data_path }}/grafana/provisioning/alerting/infrastructure.yml"
   when: "'router' in inventory_hostname"
 
+- name: Restart containers if config change
+  ansible.builtin.command:
+    cmd: "docker restart -t 30 {{ item.item.name }}"
+  timeout: 60
+  when: item.changed and not ansible_check_mode
+  loop: "{{ docker_config_copy.results }}"
+  loop_control:
+    label: "{{ item.item.name | default('unknown') }} ({{ item.item.src | default('?') }})"
+  ignore_errors: yes
+
 - name: Rebuild Docker images for changed Dockerfiles
   ansible.builtin.command:
     cmd: "docker compose -f {{ docker_compose_dest_path }}/docker-compose.yml build --no-cache {{ item.item.name }}"
@@ -267,16 +277,6 @@
     replace: '  listeningMode = "ALL"'
   register: pihole_listening_mode
   when: not ansible_check_mode
-  ignore_errors: yes
-
-- name: Restart containers if config change
-  ansible.builtin.command:
-    cmd: "docker restart -t 30 {{ item.item.name }}"
-  timeout: 60
-  when: item.changed and not ansible_check_mode
-  loop: "{{ docker_config_copy.results }}"
-  loop_control:
-    label: "{{ item.item.name | default('unknown') }} ({{ item.item.src | default('?') }})"
   ignore_errors: yes
 
 - name: Restart Grafana if alerting config changed
