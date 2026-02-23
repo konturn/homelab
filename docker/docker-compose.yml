@@ -1733,7 +1733,7 @@ services:
         reservations:
           memory: 4G
     environment:
-      - tile_urls=https://download.geofabrik.de/north-america/us-latest.osm.pbf
+      - tile_urls=https://download.geofabrik.de/north-america-latest.osm.pbf
       - serve_tiles=True
       - build_elevation=True
       - build_admins=True
