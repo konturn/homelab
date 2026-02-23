@@ -38,5 +38,4 @@ $CONFIG = array (
   'maintenance_window_start' => 4,
   'memcache.locking' => '\OC\Memcache\APCu',
   'filelocking.enabled' => true,
-  'config_is_read_only' => true,
 );
