@@ -9,7 +9,7 @@ vault_timeout: 10
 vault_jwt_token: "{{ lookup('env', 'VAULT_ID_TOKEN') }}"
 vault_jwt_role: "ci-deploy"
 
-# AppRole credentials (fallback for non-CI contexts like moltbot)
+# AppRole credentials (fallback for non-CI contexts like openclaw)
 vault_approle_role_id: "{{ lookup('env', 'VAULT_APPROLE_ROLE_ID') }}"
 vault_approle_secret_id: "{{ lookup('env', 'VAULT_APPROLE_SECRET_ID') }}"
 

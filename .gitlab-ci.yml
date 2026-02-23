@@ -16,7 +16,7 @@
 #
 #   BUILD (parallel, path-triggered)
 #   ┌──────────────┬──────────────┬──────────────┬──────────────────────┐
-#   moltbot:build  amcrest2mqtt:build  snapcast:build  snapclient:build  jit-approval-svc:build
+#   openclaw:build  amcrest2mqtt:build  snapcast:build  snapclient:build  jit-approval-svc:build
 #
 #   DEPLOY (main only, parallel)
 #   ┌──────────────────────────┬──────────────┬──────────────┬──────────────────────────┐
@@ -268,12 +268,12 @@ jit-approval-svc:test:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   needs: []
 
-moltbot:build:
+openclaw:build:
   extends: .docker_build
   script:
-    - docker build -t $CI_REGISTRY_IMAGE/moltbot:latest -t $CI_REGISTRY_IMAGE/moltbot:$CI_COMMIT_SHORT_SHA docker/openclaw/
-    - docker push $CI_REGISTRY_IMAGE/moltbot:latest
-    - docker push $CI_REGISTRY_IMAGE/moltbot:$CI_COMMIT_SHORT_SHA
+    - docker build -t $CI_REGISTRY_IMAGE/openclaw:latest -t $CI_REGISTRY_IMAGE/openclaw:$CI_COMMIT_SHORT_SHA docker/openclaw/
+    - docker push $CI_REGISTRY_IMAGE/openclaw:latest
+    - docker push $CI_REGISTRY_IMAGE/openclaw:$CI_COMMIT_SHORT_SHA
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
