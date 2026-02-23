@@ -1717,6 +1717,12 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - FOWNER
     networks:
       - internal
     restart: unless-stopped
@@ -1753,6 +1759,12 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - FOWNER
     networks:
       - internal
     restart: unless-stopped
@@ -1781,6 +1793,12 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - FOWNER
     networks:
       - internal
     restart: unless-stopped
@@ -1795,7 +1813,7 @@ services:
       - REPLICATION_URL=https://download.geofabrik.de/north-america/us-midwest-updates/
       - NOMINATIM_PASSWORD={{ vault_nominatim_password | default(lookup('env', 'NOMINATIM_PASSWORD')) | trim | replace("$", "$$") }}
     volumes:
-      - {{ docker_persistent_data_path }}/nominatim/data:/var/lib/postgresql/14/main
+      - {{ docker_persistent_data_path }}/nominatim/data:/var/lib/postgresql/16/main
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/status"]
       interval: 30s
