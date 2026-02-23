@@ -40,7 +40,7 @@
 
 # === MOLTBOT SELF-MODIFICATION ===
 # Prevent moltbot from expanding its own access
-/docker/moltbot/                         @root
+/docker/openclaw/                         @root
 
 # === VAULT & SECRETS ===
 # Could access or redirect secret storage

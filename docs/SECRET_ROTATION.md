@@ -488,7 +488,7 @@ OpenClaw session transcripts (`.jsonl` files) may contain credentials that were 
 ### Configuration
 
 - **Script:** `/usr/local/bin/scrub-transcripts.sh` (deployed by Ansible)
-- **Source:** `docker/moltbot/scripts/scrub-transcripts.sh` in this repo
+- **Source:** `docker/openclaw/scripts/scrub-transcripts.sh` in this repo
 - **Schedule:** Every 6 hours at :30 (cron)
 - **Logging:** Output goes to syslog via `logger -t scrub-transcripts`
 - **Ansible task:** In `configure-docker` role
