@@ -75,7 +75,7 @@ networks:
   jit-bridge:
     driver: bridge
     internal: true
-  moltbot-nginx-bridge:
+  openclaw-nginx-bridge:
     driver: bridge
     internal: true
     ipam:
@@ -249,7 +249,7 @@ services:
       external:
         ipv4_address: {{ nginx_ip }}
       jit-bridge:
-      moltbot-nginx-bridge:
+      openclaw-nginx-bridge:
         ipv4_address: 172.30.0.10
     restart: unless-stopped
     deploy:
@@ -814,7 +814,7 @@ services:
       start_period: 30s
 
   # JIT Approval Service - Credential brokering with Telegram approval flow
-  # Receives credential requests from moltbot, sends approval prompts via Telegram,
+  # Receives credential requests from openclaw, sends approval prompts via Telegram,
   # and issues short-lived Vault tokens on approval.
   jit-approval-svc:
     image: gitlab-registry.lab.nkontur.com:443/root/homelab/jit-approval-svc:latest
@@ -1650,9 +1650,9 @@ services:
     environment:
       - TZ=America/New_York
       - VNC_PASSWORD={{ vault_chromium_vnc_password | default('changeme') | replace("$", "$$") }}
-  moltbot-gateway:
-    image: gitlab-registry.lab.nkontur.com:443/root/homelab/moltbot:{{ moltbot_image_tag | default('latest') }}
-    container_name: moltbot-gateway
+  openclaw-gateway:
+    image: gitlab-registry.lab.nkontur.com:443/root/homelab/openclaw:{{ openclaw_image_tag | default('latest') }}
+    container_name: openclaw-gateway
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -1662,8 +1662,8 @@ services:
       internal:
       iot:
       mgmt:
-        ipv4_address: {{ moltbot_gateway_ip }}
-      moltbot-nginx-bridge:
+        ipv4_address: {{ openclaw_gateway_ip }}
+      openclaw-nginx-bridge:
     extra_hosts:
       - "nkontur.com:172.30.0.10"
       - "www.nkontur.com:172.30.0.10"
@@ -1683,7 +1683,7 @@ services:
       start_period: 60s
     environment:
       - TZ=America/New_York
-      # Core moltbot configuration
+      # Core openclaw configuration
       - OPENAI_API_KEY={{ vault_openai_api_key | default(lookup('env', 'OPENAI_API_KEY')) | trim | replace("$", "$$") }}
       - CLAWDBOT_GATEWAY_TOKEN={{ vault_moltbot_gateway_token | default(lookup('env', 'MOLTBOT_GATEWAY_TOKEN')) | trim | replace("$", "$$") }}
       - TELEGRAM_BOT_TOKEN={{ vault_moltbot_telegram_token | default(lookup('env', 'MOLTBOT_TELEGRAM_TOKEN')) | trim | replace("$", "$$") }}
@@ -1693,14 +1693,14 @@ services:
       - BRAVE_API_KEY={{ brave_api_key }}
       # Agent platforms
       - ACLAWDEMY_API_KEY={{ vault_aclawdemy_api_key | default(lookup('env', 'ACLAWDEMY_API_KEY')) | trim | replace("$", "$$") }}
-      # Vault AppRole credentials (for moltbot runtime Vault access & JIT)
+      # Vault AppRole credentials (for openclaw runtime Vault access & JIT)
       - VAULT_ADDR=https://vault.lab.nkontur.com:8200
       - VAULT_APPROLE_ROLE_ID={{ lookup('env', 'VAULT_APPROLE_ROLE_ID') }}
       - VAULT_APPROLE_SECRET_ID={{ lookup('env', 'VAULT_APPROLE_SECRET_ID') }}
     volumes:
-      - {{ docker_persistent_data_path }}/moltbot/data:/home/node/.openclaw
-      - {{ docker_persistent_data_path }}/moltbot/mcporter:/home/node/.mcporter
-      - {{ docker_persistent_data_path }}/moltbot/workspace:/home/node/.openclaw/workspace
+      - {{ docker_persistent_data_path }}/openclaw/data:/home/node/.openclaw
+      - {{ docker_persistent_data_path }}/openclaw/mcporter:/home/node/.mcporter
+      - {{ docker_persistent_data_path }}/openclaw/workspace:/home/node/.openclaw/workspace
     command: ["node", "dist/index.js", "gateway", "--bind", "lan", "--port", "18789"]
 
   # =============================================================================

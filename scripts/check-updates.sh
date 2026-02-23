@@ -20,7 +20,7 @@ SKIP_IMAGES=(
 
 # Initialize state file if missing
 if [ ! -f "$STATE_FILE" ]; then
-  echo '{"lastCheck":null,"lastMR":null,"suppressedImages":[],"neverAutoMerge":["moltbot-gateway","moltbot"]}' > "$STATE_FILE"
+  echo '{"lastCheck":null,"lastMR":null,"suppressedImages":[],"neverAutoMerge":["openclaw-gateway","openclaw"]}' > "$STATE_FILE"
 fi
 
 # Extract image references from docker-compose (Jinja2 template — grep for image:)
@@ -407,7 +407,7 @@ while IFS='|' read -r image_ref source; do
       no_auto_merge="true"
     fi
     # Always mark moltbot Dockerfile images as never_auto_merge
-    if [[ "$source" == Dockerfile:docker/moltbot/* ]]; then
+    if [[ "$source" == Dockerfile:docker/openclaw/* ]]; then
       no_auto_merge="true"
     fi
 

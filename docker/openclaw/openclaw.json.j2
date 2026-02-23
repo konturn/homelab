@@ -1,0 +1,1687 @@
+{
+  "meta": {
+    "lastTouchedVersion": "2026.2.21",
+    "lastTouchedAt": "2026-02-23T16:51:25.977Z"
+  },
+  "wizard": {
+    "lastRunAt": "2026-02-20T20:28:12.752Z",
+    "lastRunVersion": "2026.2.19",
+    "lastRunCommand": "onboard",
+    "lastRunMode": "local"
+  },
+  "models": {
+    "providers": {
+      "blockrun": {
+        "baseUrl": "http://127.0.0.1:8402/v1",
+        "apiKey": "x402-proxy-handles-auth",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "auto",
+            "name": "Auto (Smart Router - Balanced)",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1050000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "free",
+            "name": "Free (NVIDIA GPT-OSS-120B only)",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 4096
+          },
+          {
+            "id": "eco",
+            "name": "Eco (Smart Router - Cost Optimized)",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1050000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "premium",
+            "name": "Premium (Smart Router - Best Quality)",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 2000000,
+            "maxTokens": 200000
+          },
+          {
+            "id": "openai/gpt-5.2",
+            "name": "GPT-5.2",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 1.75,
+              "output": 14,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 400000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "openai/gpt-5-mini",
+            "name": "GPT-5 Mini",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.25,
+              "output": 2,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 65536
+          },
+          {
+            "id": "openai/gpt-5-nano",
+            "name": "GPT-5 Nano",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.05,
+              "output": 0.4,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 32768
+          },
+          {
+            "id": "openai/gpt-5.2-pro",
+            "name": "GPT-5.2 Pro",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 21,
+              "output": 168,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 400000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "openai/gpt-5.2-codex",
+            "name": "GPT-5.2 Codex",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 1.75,
+              "output": 14,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 32000
+          },
+          {
+            "id": "openai/gpt-4.1",
+            "name": "GPT-4.1",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 2,
+              "output": 8,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 16384
+          },
+          {
+            "id": "openai/gpt-4.1-mini",
+            "name": "GPT-4.1 Mini",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.4,
+              "output": 1.6,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 16384
+          },
+          {
+            "id": "openai/gpt-4.1-nano",
+            "name": "GPT-4.1 Nano",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.1,
+              "output": 0.4,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 16384
+          },
+          {
+            "id": "openai/gpt-4o",
+            "name": "GPT-4o",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 2.5,
+              "output": 10,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 16384
+          },
+          {
+            "id": "openai/gpt-4o-mini",
+            "name": "GPT-4o Mini",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.15,
+              "output": 0.6,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 16384
+          },
+          {
+            "id": "openai/o1",
+            "name": "o1",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 15,
+              "output": 60,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 100000
+          },
+          {
+            "id": "openai/o1-mini",
+            "name": "o1-mini",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 1.1,
+              "output": 4.4,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 65536
+          },
+          {
+            "id": "openai/o3",
+            "name": "o3",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 2,
+              "output": 8,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 100000
+          },
+          {
+            "id": "openai/o3-mini",
+            "name": "o3-mini",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 1.1,
+              "output": 4.4,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 65536
+          },
+          {
+            "id": "openai/o4-mini",
+            "name": "o4-mini",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 1.1,
+              "output": 4.4,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 65536
+          },
+          {
+            "id": "anthropic/claude-haiku-4.5",
+            "name": "Claude Haiku 4.5",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 1,
+              "output": 5,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "anthropic/claude-sonnet-4.6",
+            "name": "Claude Sonnet 4.6",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "anthropic/claude-opus-4.6",
+            "name": "Claude Opus 4.6",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 32000
+          },
+          {
+            "id": "google/gemini-3.1-pro-preview",
+            "name": "Gemini 3.1 Pro Preview",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 2,
+              "output": 12,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1050000,
+            "maxTokens": 65536
+          },
+          {
+            "id": "google/gemini-3-pro-preview",
+            "name": "Gemini 3 Pro Preview",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 2,
+              "output": 12,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1050000,
+            "maxTokens": 65536
+          },
+          {
+            "id": "google/gemini-3-flash-preview",
+            "name": "Gemini 3 Flash Preview",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0.5,
+              "output": 3,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 65536
+          },
+          {
+            "id": "google/gemini-2.5-pro",
+            "name": "Gemini 2.5 Pro",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 1.25,
+              "output": 10,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1050000,
+            "maxTokens": 65536
+          },
+          {
+            "id": "google/gemini-2.5-flash",
+            "name": "Gemini 2.5 Flash",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.3,
+              "output": 2.5,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 65536
+          },
+          {
+            "id": "google/gemini-2.5-flash-lite",
+            "name": "Gemini 2.5 Flash Lite",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.1,
+              "output": 0.4,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 65536
+          },
+          {
+            "id": "deepseek/deepseek-chat",
+            "name": "DeepSeek V3.2 Chat",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.28,
+              "output": 0.42,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "deepseek/deepseek-reasoner",
+            "name": "DeepSeek V3.2 Reasoner",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.28,
+              "output": 0.42,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "moonshot/kimi-k2.5",
+            "name": "Kimi K2.5",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0.6,
+              "output": 3,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 262144,
+            "maxTokens": 8192
+          },
+          {
+            "id": "xai/grok-3",
+            "name": "Grok 3",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 16384
+          },
+          {
+            "id": "xai/grok-3-mini",
+            "name": "Grok 3 Mini",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.3,
+              "output": 0.5,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 16384
+          },
+          {
+            "id": "xai/grok-4-fast-reasoning",
+            "name": "Grok 4 Fast Reasoning",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.2,
+              "output": 0.5,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 16384
+          },
+          {
+            "id": "xai/grok-4-fast-non-reasoning",
+            "name": "Grok 4 Fast",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.2,
+              "output": 0.5,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 16384
+          },
+          {
+            "id": "xai/grok-4-1-fast-reasoning",
+            "name": "Grok 4.1 Fast Reasoning",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.2,
+              "output": 0.5,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 16384
+          },
+          {
+            "id": "xai/grok-4-1-fast-non-reasoning",
+            "name": "Grok 4.1 Fast",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.2,
+              "output": 0.5,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 16384
+          },
+          {
+            "id": "xai/grok-code-fast-1",
+            "name": "Grok Code Fast",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.2,
+              "output": 1.5,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 16384
+          },
+          {
+            "id": "xai/grok-4-0709",
+            "name": "Grok 4 (0709)",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.2,
+              "output": 1.5,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 16384
+          },
+          {
+            "id": "xai/grok-2-vision",
+            "name": "Grok 2 Vision",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 2,
+              "output": 10,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 16384
+          },
+          {
+            "id": "minimax/minimax-m2.5",
+            "name": "MiniMax M2.5",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.3,
+              "output": 1.2,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 204800,
+            "maxTokens": 16384
+          },
+          {
+            "id": "nvidia/gpt-oss-120b",
+            "name": "NVIDIA GPT-OSS 120B",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 16384
+          },
+          {
+            "id": "nvidia/kimi-k2.5",
+            "name": "NVIDIA Kimi K2.5",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.55,
+              "output": 2.5,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 262144,
+            "maxTokens": 16384
+          },
+          {
+            "id": "claude",
+            "name": "claude \u2192 Claude Sonnet 4.6",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "sonnet",
+            "name": "sonnet \u2192 Claude Sonnet 4.6",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "sonnet-4",
+            "name": "sonnet-4 \u2192 Claude Sonnet 4.6",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "sonnet-4.6",
+            "name": "sonnet-4.6 \u2192 Claude Sonnet 4.6",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "sonnet-4-6",
+            "name": "sonnet-4-6 \u2192 Claude Sonnet 4.6",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "opus",
+            "name": "opus \u2192 Claude Opus 4.6",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 32000
+          },
+          {
+            "id": "opus-4",
+            "name": "opus-4 \u2192 Claude Opus 4.6",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 32000
+          },
+          {
+            "id": "opus-4.6",
+            "name": "opus-4.6 \u2192 Claude Opus 4.6",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 32000
+          },
+          {
+            "id": "opus-4-6",
+            "name": "opus-4-6 \u2192 Claude Opus 4.6",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 32000
+          },
+          {
+            "id": "haiku",
+            "name": "haiku \u2192 Claude Haiku 4.5",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 1,
+              "output": 5,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "anthropic/sonnet",
+            "name": "anthropic/sonnet \u2192 Claude Sonnet 4.6",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "anthropic/opus",
+            "name": "anthropic/opus \u2192 Claude Opus 4.6",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 32000
+          },
+          {
+            "id": "anthropic/haiku",
+            "name": "anthropic/haiku \u2192 Claude Haiku 4.5",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 1,
+              "output": 5,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "anthropic/claude",
+            "name": "anthropic/claude \u2192 Claude Sonnet 4.6",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "anthropic/claude-sonnet-4",
+            "name": "anthropic/claude-sonnet-4 \u2192 Claude Sonnet 4.6",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "anthropic/claude-sonnet-4-6",
+            "name": "anthropic/claude-sonnet-4-6 \u2192 Claude Sonnet 4.6",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "anthropic/claude-opus-4",
+            "name": "anthropic/claude-opus-4 \u2192 Claude Opus 4.6",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 32000
+          },
+          {
+            "id": "anthropic/claude-opus-4-6",
+            "name": "anthropic/claude-opus-4-6 \u2192 Claude Opus 4.6",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 32000
+          },
+          {
+            "id": "anthropic/claude-opus-4.5",
+            "name": "anthropic/claude-opus-4.5 \u2192 Claude Opus 4.6",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 32000
+          },
+          {
+            "id": "anthropic/claude-haiku-4",
+            "name": "anthropic/claude-haiku-4 \u2192 Claude Haiku 4.5",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 1,
+              "output": 5,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "anthropic/claude-haiku-4-5",
+            "name": "anthropic/claude-haiku-4-5 \u2192 Claude Haiku 4.5",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 1,
+              "output": 5,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "gpt",
+            "name": "gpt \u2192 GPT-4o",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 2.5,
+              "output": 10,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 16384
+          },
+          {
+            "id": "gpt4",
+            "name": "gpt4 \u2192 GPT-4o",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 2.5,
+              "output": 10,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 16384
+          },
+          {
+            "id": "gpt5",
+            "name": "gpt5 \u2192 GPT-5.2",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 1.75,
+              "output": 14,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 400000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "codex",
+            "name": "codex \u2192 GPT-5.2 Codex",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 1.75,
+              "output": 14,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 32000
+          },
+          {
+            "id": "mini",
+            "name": "mini \u2192 GPT-4o Mini",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.15,
+              "output": 0.6,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 16384
+          },
+          {
+            "id": "o1",
+            "name": "o1 \u2192 o1",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 15,
+              "output": 60,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 100000
+          },
+          {
+            "id": "o3",
+            "name": "o3 \u2192 o3",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 2,
+              "output": 8,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 100000
+          },
+          {
+            "id": "deepseek",
+            "name": "deepseek \u2192 DeepSeek V3.2 Chat",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.28,
+              "output": 0.42,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "reasoner",
+            "name": "reasoner \u2192 DeepSeek V3.2 Reasoner",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.28,
+              "output": 0.42,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "kimi",
+            "name": "kimi \u2192 Kimi K2.5",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0.6,
+              "output": 3,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 262144,
+            "maxTokens": 8192
+          },
+          {
+            "id": "gemini",
+            "name": "gemini \u2192 Gemini 2.5 Pro",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 1.25,
+              "output": 10,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1050000,
+            "maxTokens": 65536
+          },
+          {
+            "id": "flash",
+            "name": "flash \u2192 Gemini 2.5 Flash",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.3,
+              "output": 2.5,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 65536
+          },
+          {
+            "id": "grok",
+            "name": "grok \u2192 Grok 3",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 16384
+          },
+          {
+            "id": "grok-fast",
+            "name": "grok-fast \u2192 Grok 4 Fast Reasoning",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.2,
+              "output": 0.5,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 16384
+          },
+          {
+            "id": "grok-code",
+            "name": "grok-code \u2192 Grok Code Fast",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.2,
+              "output": 1.5,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 16384
+          },
+          {
+            "id": "nvidia",
+            "name": "nvidia \u2192 NVIDIA GPT-OSS 120B",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 16384
+          },
+          {
+            "id": "gpt-120b",
+            "name": "gpt-120b \u2192 NVIDIA GPT-OSS 120B",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 16384
+          },
+          {
+            "id": "minimax",
+            "name": "minimax \u2192 MiniMax M2.5",
+            "api": "openai-completions",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0.3,
+              "output": 1.2,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 204800,
+            "maxTokens": 16384
+          },
+          {
+            "id": "auto-router",
+            "name": "auto-router \u2192 Auto (Smart Router - Balanced)",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1050000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "router",
+            "name": "router \u2192 Auto (Smart Router - Balanced)",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1050000,
+            "maxTokens": 128000
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "anthropic/claude-opus-4-6",
+        "fallbacks": [
+          "blockrun/premium"
+        ]
+      },
+      "models": {
+        "anthropic/claude-opus-4-6": {
+          "alias": "opus",
+          "params": {
+            "cacheRetention": "long"
+          }
+        },
+        "anthropic/claude-opus-4-5": {
+          "alias": "opus",
+          "params": {
+            "cacheRetention": "long"
+          }
+        },
+        "blockrun/minimax": {
+          "alias": "minimax"
+        },
+        "openai-codex/gpt-5": {
+          "alias": "codex",
+          "params": {}
+        },
+        "blockrun/auto": {
+          "alias": "auto"
+        },
+        "blockrun/eco": {
+          "alias": "eco"
+        },
+        "blockrun/premium": {
+          "alias": "premium"
+        },
+        "blockrun/free": {
+          "alias": "free"
+        },
+        "blockrun/sonnet": {
+          "alias": "sonnet-4.6"
+        },
+        "blockrun/opus": {
+          "alias": "opus"
+        },
+        "blockrun/haiku": {
+          "alias": "haiku"
+        },
+        "blockrun/gpt5": {
+          "alias": "gpt5"
+        },
+        "blockrun/codex": {
+          "alias": "codex"
+        },
+        "blockrun/grok-fast": {
+          "alias": "grok-fast"
+        },
+        "blockrun/grok-code": {
+          "alias": "grok-code"
+        },
+        "blockrun/deepseek": {
+          "alias": "deepseek"
+        },
+        "blockrun/reasoner": {
+          "alias": "reasoner"
+        },
+        "blockrun/kimi": {
+          "alias": "kimi"
+        },
+        "blockrun/gemini": {
+          "alias": "gemini"
+        }
+      },
+      "workspace": "/home/node/.openclaw/workspace",
+      "memorySearch": {
+        "enabled": true,
+        "sources": [
+          "memory",
+          "sessions"
+        ],
+        "provider": "openai",
+        "sync": {
+          "onSessionStart": true,
+          "watch": true
+        },
+        "query": {
+          "hybrid": {
+            "enabled": true,
+            "mmr": {
+              "enabled": true,
+              "lambda": 0.7
+            },
+            "temporalDecay": {
+              "enabled": true,
+              "halfLifeDays": 90
+            }
+          }
+        }
+      },
+      "contextPruning": {
+        "mode": "cache-ttl",
+        "ttl": "5m",
+        "keepLastAssistants": 3,
+        "tools": {
+          "allow": [
+            "exec",
+            "Read",
+            "process",
+            "web_fetch",
+            "web_search"
+          ],
+          "deny": [
+            "image*"
+          ]
+        }
+      },
+      "compaction": {
+        "mode": "safeguard",
+        "reserveTokensFloor": 20000,
+        "memoryFlush": {
+          "enabled": true,
+          "softThresholdTokens": 4000,
+          "prompt": "Write any lasting notes to memory/YYYY-MM-DD.md; reply with NO_REPLY if nothing to store.",
+          "systemPrompt": "Session nearing compaction. Store durable memories now."
+        }
+      },
+      "heartbeat": {
+        "every": "1h"
+      },
+      "subagents": {
+        "archiveAfterMinutes": 30
+      },
+      "sandbox": {
+        "browser": {
+          "enabled": true
+        }
+      }
+    }
+  },
+  "tools": {},
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto",
+    "restart": true,
+    "ownerDisplay": "raw"
+  },
+  "hooks": {
+    "enabled": true,
+    "path": "/hooks",
+    "token": "{{ vault_moltbot_hooks_token }}",
+    "transformsDir": "/home/node/.openclaw/hooks/transforms",
+    "mappings": [
+      {
+        "action": "agent",
+        "name": "grafana",
+        "transform": {
+          "module": "grafana.js"
+        }
+      }
+    ]
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "dmPolicy": "pairing",
+      "groupPolicy": "allowlist",
+      "streaming": true,
+      "heartbeat": {
+        "showOk": false,
+        "showAlerts": true
+      }
+    }
+  },
+  "gateway": {
+    "port": 18789,
+    "mode": "local",
+    "bind": "loopback",
+    "controlUi": {
+      "allowInsecureAuth": true
+    },
+    "auth": {
+      "mode": "token",
+      "token": "{{ vault_moltbot_gateway_token }}"
+    },
+    "trustedProxies": [
+      "10.3.32.1"
+    ],
+    "tailscale": {
+      "mode": "off",
+      "resetOnExit": false
+    }
+  },
+  "plugins": {
+    "allow": [
+      "telegram",
+      "clawrouter"
+    ],
+    "entries": {
+      "telegram": {
+        "enabled": true
+      },
+      "clawrouter": {
+        "enabled": true
+      }
+    },
+    "installs": {
+      "clawrouter": {
+        "source": "npm",
+        "spec": "@blockrun/clawrouter",
+        "installPath": "/home/node/.openclaw/extensions/clawrouter",
+        "version": "0.10.5",
+        "resolvedName": "@blockrun/clawrouter",
+        "resolvedVersion": "0.10.5",
+        "resolvedSpec": "@blockrun/clawrouter@0.10.5",
+        "integrity": "sha512-2Kt5ZsMsB7OCvT7pZTUOlYFg5XKC3/gTDeK3yan9dXlBYxI043obPww8YnXwybZzbXwwc11vaV2tw3zlvouNPA==",
+        "shasum": "6a2a60ab1842aa50b6841882a872c8752b474b34",
+        "resolvedAt": "2026-02-23T16:51:09.704Z",
+        "installedAt": "2026-02-23T16:51:25.919Z"
+      }
+    }
+  }
+}

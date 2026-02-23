@@ -328,12 +328,12 @@
   when: deluge_dir.stat.exists and deluge_config is changed and not ansible_check_mode
 
 ### OpenClaw config
-# Deploy the main OpenClaw config (moltbot.json) from the repo template.
+# Deploy the main OpenClaw config (openclaw.json) from the repo template.
 # The template injects the gateway token from Vault.
 - name: Deploy OpenClaw config
   ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/moltbot/moltbot.json.j2"
-    dest: "{{ docker_persistent_data_path }}/moltbot/data/moltbot.json"
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/openclaw/openclaw.json.j2"
+    dest: "{{ docker_persistent_data_path }}/openclaw/data/openclaw.json"
     owner: konoahko
     group: konoahko
     mode: "0600"
@@ -342,7 +342,7 @@
 
 - name: Restart OpenClaw gateway if config changed
   ansible.builtin.command:
-    cmd: "docker restart moltbot-gateway"
+    cmd: "docker restart openclaw-gateway"
   when: openclaw_config is changed and not ansible_check_mode
 
 ### OpenClaw webhook hook transforms
@@ -350,7 +350,7 @@
 # These parse incoming webhooks (e.g. Grafana alerts) into wake events.
 - name: Ensure OpenClaw hooks transforms directory exists
   ansible.builtin.file:
-    path: "{{ docker_persistent_data_path }}/moltbot/data/hooks/transforms"
+    path: "{{ docker_persistent_data_path }}/openclaw/data/hooks/transforms"
     state: directory
     owner: root
     group: root
@@ -365,8 +365,8 @@
     group: konoahko
     mode: "0600"
   loop:
-    - src: "docker/moltbot/hooks/transforms/grafana.js"
-      dest: "{{ docker_persistent_data_path }}/moltbot/data/hooks/transforms/grafana.js"
+    - src: "docker/openclaw/hooks/transforms/grafana.js"
+      dest: "{{ docker_persistent_data_path }}/openclaw/data/hooks/transforms/grafana.js"
   when: "'router' in inventory_hostname"
 
 ### Transcript credential scrubbing cron
@@ -419,10 +419,10 @@
 
 - name: Set up transcript scrub cron job (every 10 minutes)
   ansible.builtin.cron:
-    name: "Scrub credentials from moltbot transcripts"
+    name: "Scrub credentials from openclaw transcripts"
     minute: "*/10"
     job: >-
-      /usr/local/bin/scrub-transcripts.sh {{ docker_persistent_data_path }}/moltbot/data/agents/main/sessions 2>&1 | logger -t scrub-transcripts
+      /usr/local/bin/scrub-transcripts.sh {{ docker_persistent_data_path }}/openclaw/data/agents/main/sessions 2>&1 | logger -t scrub-transcripts
 
 - name: Daily chromium-browser restart (clear tabs and free memory)
   ansible.builtin.cron:

@@ -63,7 +63,7 @@ all:
     iot_nginx_ip: 10.6.32.5
     weather_mqtt_bridge_ip: 10.6.32.6
     mopidy_address: 10.6.32.7
-    moltbot_gateway_ip: 10.4.0.50
+    openclaw_gateway_ip: 10.4.0.50
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     omapi_secret: "{{ (vault_omapi_secret | default(lookup('env', 'OMAPI_SECRET'))) | trim }}"
     tailscale_api_token: "{{ (vault_tailscale_api_token | default(lookup('env', 'TAILSCALE_API_TOKEN'))) | trim }}"
@@ -149,15 +149,15 @@ all:
           dest: "{{ docker_persistent_data_path }}/vault/scripts/auto-unseal.sh"
           name: "vault"
           mode: "0755"
-        - src: "docker/moltbot/mcporter/mcporter.json"
-          dest: "{{ docker_persistent_data_path }}/moltbot/mcporter/mcporter.json"
-          name: "moltbot-gateway"
+        - src: "docker/openclaw/mcporter/mcporter.json"
+          dest: "{{ docker_persistent_data_path }}/openclaw/mcporter/mcporter.json"
+          name: "openclaw-gateway"
           mode: "0644"
           owner: "1000"
           group: "1000"
-        - src: "docker/moltbot/agents/main/agent/auth-profiles.json"
-          dest: "{{ docker_persistent_data_path }}/moltbot/data/agents/main/agent/auth-profiles.json"
-          name: "moltbot-gateway"
+        - src: "docker/openclaw/agents/main/agent/auth-profiles.json"
+          dest: "{{ docker_persistent_data_path }}/openclaw/data/agents/main/agent/auth-profiles.json"
+          name: "openclaw-gateway"
           mode: "0644"
           owner: "1000"
           group: "1000"
