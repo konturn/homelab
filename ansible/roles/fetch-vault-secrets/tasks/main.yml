@@ -85,11 +85,6 @@
       Vault {{ 'authenticated successfully' if _vault_available
       else 'unavailable — all secrets will use CI env var fallback' }}
 
-- name: Fail if Vault is unreachable
-  ansible.builtin.fail:
-    msg: "Vault authentication failed — refusing to continue with stale/missing secrets. Fix Vault connectivity and retry."
-  when: not _vault_available
-
 # ---------------------------------------------------------------------------
 # Step 2: Fetch secrets from Vault KV v2
 # ---------------------------------------------------------------------------
