@@ -5,7 +5,7 @@
       fetch_ssh_ca_key: true
   - role: claude-user
     vars:
-      claude_user_principal: claude
+      claude_user_principal: claude-zwave
   - configure-zwave
   - configure-snapclient
   - configure-docker
