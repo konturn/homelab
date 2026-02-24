@@ -1712,7 +1712,7 @@ services:
   # Subsequent starts are fast — tiles are cached in the data volume.
   valhalla:
     container_name: valhalla
-    image: ghcr.io/valhalla/valhalla:latest@sha256:6cbf7a8ffdd6ff8524dacc258e7fc8ed5de2e4cccc98694e0e17b01cf1374e28
+    image: ghcr.io/valhalla/valhalla-scripted:latest@sha256:fb1ff25abe95eaefab40016054c248d75776f1f6034e68e156cd2cbc7e791f0e
     security_opt:
       - no-new-privileges:true
     cap_drop:

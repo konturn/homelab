@@ -1,0 +1,8 @@
+[Match]
+MACAddress=6c:1f:f7:6b:2e:c9
+
+[Link]
+NamePolicy=mac
+
+[Ethtool]
+EnergyEfficientEthernet=false
