@@ -1872,9 +1872,9 @@ services:
     container_name: headway-frontend-init
     image: ghcr.io/headwaymaps/headway-init:latest
     environment:
-      - HEADWAY_AREA={{ headway_area | default('Cleveland') }}
+      - HEADWAY_AREA={{ headway_area | default('us') }}
     volumes:
-      - {{ docker_persistent_data_path }}/headway/data/{{ headway_area | default('Cleveland') }}:/bootstrap:ro
+      - {{ docker_persistent_data_path }}/headway/data/{{ headway_area | default('us') }}:/bootstrap:ro
       - headway_frontend_data:/data:rw
     networks:
       - internal
@@ -1884,7 +1884,7 @@ services:
     image: ghcr.io/headwaymaps/headway:latest
     restart: unless-stopped
     environment:
-      - HEADWAY_AREA={{ headway_area | default('Cleveland') }}
+      - HEADWAY_AREA={{ headway_area | default('us') }}
       - HEADWAY_RESOLVER=127.0.0.11
       - HEADWAY_PELIAS_URL=http://pelias-api:4000
       - HEADWAY_TILESERVER_URL=http://tileserver:8080
@@ -1923,10 +1923,10 @@ services:
     container_name: headway-travelmux-init
     image: ghcr.io/headwaymaps/travelmux-init:latest
     environment:
-      - HEADWAY_AREA={{ headway_area | default('Cleveland') }}
-      - TRAVELMUX_ELEVATION_ARTIFACT_SOURCE_PATH=/bootstrap/transit/{{ headway_area | default('Cleveland') }}.elevation-tifs.tar.zst
+      - HEADWAY_AREA={{ headway_area | default('us') }}
+      - TRAVELMUX_ELEVATION_ARTIFACT_SOURCE_PATH=/bootstrap/transit/{{ headway_area | default('us') }}.elevation-tifs.tar.zst
     volumes:
-      - {{ docker_persistent_data_path }}/headway/data/{{ headway_area | default('Cleveland') }}:/bootstrap:ro
+      - {{ docker_persistent_data_path }}/headway/data/{{ headway_area | default('us') }}:/bootstrap:ro
       - headway_travelmux_data:/data:rw
     networks:
       - internal
@@ -1936,7 +1936,7 @@ services:
     image: ghcr.io/headwaymaps/travelmux:latest
     restart: unless-stopped
     environment:
-      - HEADWAY_AREA={{ headway_area | default('Cleveland') }}
+      - HEADWAY_AREA={{ headway_area | default('us') }}
       - ELEVATION_TIFS_DIR=/data/elevation-tifs
     command: ["http://valhalla:8002"]
     networks:
@@ -1958,11 +1958,11 @@ services:
     container_name: pelias-config-init
     image: ghcr.io/headwaymaps/pelias-init:latest
     environment:
-      - HEADWAY_AREA={{ headway_area | default('Cleveland') }}
-      - PELIAS_CONFIG_ARTIFACT_SOURCE_PATH=/bootstrap/{{ headway_area | default('Cleveland') }}.pelias.json
+      - HEADWAY_AREA={{ headway_area | default('us') }}
+      - PELIAS_CONFIG_ARTIFACT_SOURCE_PATH=/bootstrap/{{ headway_area | default('us') }}.pelias.json
     command: ["/bin/bash", "/app/init_config.sh"]
     volumes:
-      - {{ docker_persistent_data_path }}/headway/data/{{ headway_area | default('Cleveland') }}:/bootstrap:ro
+      - {{ docker_persistent_data_path }}/headway/data/{{ headway_area | default('us') }}:/bootstrap:ro
       - headway_pelias_config:/config
     networks:
       - internal
@@ -1971,11 +1971,11 @@ services:
     container_name: pelias-elasticsearch-init
     image: ghcr.io/headwaymaps/pelias-init:latest
     environment:
-      - HEADWAY_AREA={{ headway_area | default('Cleveland') }}
-      - ELASTICSEARCH_ARTIFACT_SOURCE_PATH=/bootstrap/{{ headway_area | default('Cleveland') }}.elasticsearch.tar.zst
+      - HEADWAY_AREA={{ headway_area | default('us') }}
+      - ELASTICSEARCH_ARTIFACT_SOURCE_PATH=/bootstrap/{{ headway_area | default('us') }}.elasticsearch.tar.zst
     command: ["/bin/bash", "/app/init_elastic.sh"]
     volumes:
-      - {{ docker_persistent_data_path }}/headway/data/{{ headway_area | default('Cleveland') }}:/bootstrap:ro
+      - {{ docker_persistent_data_path }}/headway/data/{{ headway_area | default('us') }}:/bootstrap:ro
       - headway_pelias_elasticsearch:/usr/share/elasticsearch/data
     networks:
       - internal
@@ -1984,11 +1984,11 @@ services:
     container_name: pelias-placeholder-init
     image: ghcr.io/headwaymaps/pelias-init:latest
     environment:
-      - HEADWAY_AREA={{ headway_area | default('Cleveland') }}
-      - PLACEHOLDER_ARTIFACT_SOURCE_PATH=/bootstrap/{{ headway_area | default('Cleveland') }}.placeholder.tar.zst
+      - HEADWAY_AREA={{ headway_area | default('us') }}
+      - PLACEHOLDER_ARTIFACT_SOURCE_PATH=/bootstrap/{{ headway_area | default('us') }}.placeholder.tar.zst
     command: ["/bin/bash", "/app/init_placeholder.sh"]
     volumes:
-      - {{ docker_persistent_data_path }}/headway/data/{{ headway_area | default('Cleveland') }}:/bootstrap:ro
+      - {{ docker_persistent_data_path }}/headway/data/{{ headway_area | default('us') }}:/bootstrap:ro
       - headway_pelias_placeholder:/data/placeholder
     networks:
       - internal
@@ -2018,9 +2018,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 4G
+          memory: 18G
         reservations:
-          memory: 2G
+          memory: 8G
     healthcheck:
       test: ["CMD", "nc", "-z", "localhost", "9200"]
       interval: 5s
