@@ -169,6 +169,23 @@
     update_cache: yes
 
 ### Configure telegraf config file
+- name: Telegraf scripts directory
+  ansible.builtin.file:
+    path: /etc/telegraf/scripts
+    state: directory
+    owner: telegraf
+    group: telegraf
+    mode: 0755
+
+- name: Deploy telegraf scripts
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/telegraf/scripts/' }}"
+    dest: /etc/telegraf/scripts/
+    owner: telegraf
+    group: telegraf
+    mode: 0755
+  register: telegraf_scripts
+
 - name: Telegraf config file
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/telegraf/telegraf.conf' }}"
@@ -183,7 +200,7 @@
   ansible.builtin.systemd:
     name: telegraf
     state: restarted
-  when: telegraf.changed
+  when: telegraf.changed or telegraf_scripts.changed
 
 - name: Sets up base cronjob for nextcloud
   ansible.builtin.cron:
