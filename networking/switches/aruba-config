@@ -237,6 +237,12 @@ interface gigabitethernet "0/0/0"
 interface gigabitethernet "0/0/1"
    switching-profile "vlan4"
 !
+interface gigabitethernet "0/0/2"
+   switching-profile "vlan4"
+!
+interface gigabitethernet "0/0/3"
+   switching-profile "vlan4"
+!
 interface gigabitethernet "0/0/9"
 !
 interface gigabitethernet "0/0/13"
