@@ -678,6 +678,10 @@ func (h *Handler) handleApprove(req *store.Request) {
 			"request_id": req.ID,
 			"error":      err.Error(),
 		})
+		_ = h.store.SetError(req.ID)
+		if req.TelegramMessageID != 0 {
+			_ = h.telegram.EditMessageError(req.TelegramMessageID, req.Resource, err.Error())
+		}
 		return
 	}
 
@@ -686,6 +690,10 @@ func (h *Handler) handleApprove(req *store.Request) {
 			"request_id": req.ID,
 			"error":      err.Error(),
 		})
+		_ = h.store.SetError(req.ID)
+		if req.TelegramMessageID != 0 {
+			_ = h.telegram.EditMessageError(req.TelegramMessageID, req.Resource, err.Error())
+		}
 		return
 	}
 

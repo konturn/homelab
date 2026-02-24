@@ -21,7 +21,7 @@ var sshResourceConfig = map[string]struct {
 	role      string
 	principal string
 }{
-	"ssh":           {role: "claude", principal: "claude"},
+	"ssh-router":    {role: "claude", principal: "claude"},
 	"ssh-satellite": {role: "satellite", principal: "claude"},
 	"ssh-zwave":     {role: "zwave", principal: "claude"},
 	"ssh-nkontur":        {role: "nkontur-ws", principal: "nkontur"},

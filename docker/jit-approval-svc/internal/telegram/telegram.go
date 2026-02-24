@@ -139,6 +139,15 @@ func (c *Client) EditMessageDenied(messageID int, info RequestDisplayInfo) error
 	return c.editMessage(messageID, text)
 }
 
+// EditMessageError edits an approval message to show a mint/store error.
+func (c *Client) EditMessageError(messageID int, resource string, errMsg string) error {
+	text := fmt.Sprintf(
+		"❌ <b>Error</b>\n\n<b>Resource:</b> %s\n<b>Error:</b> %s\n\n<b>Failed at:</b> %s",
+		resource, errMsg, time.Now().Format("15:04:05 MST"),
+	)
+	return c.editMessage(messageID, text)
+}
+
 // EditMessageTimeout edits an approval message to show it timed out.
 func (c *Client) EditMessageTimeout(messageID int, info RequestDisplayInfo) error {
 	text := fmt.Sprintf(

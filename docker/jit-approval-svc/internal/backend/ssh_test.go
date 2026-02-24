@@ -25,7 +25,7 @@ func TestSSHBackend_MintCredential(t *testing.T) {
 	}
 
 	b := NewSSHBackend(signer, "ssh-client-signer")
-	cred, err := b.MintCredential("ssh", 1, 15*time.Minute, MintOptions{})
+	cred, err := b.MintCredential("ssh-router", 1, 15*time.Minute, MintOptions{})
 	if err != nil {
 		t.Fatalf("MintCredential failed: %v", err)
 	}
@@ -36,7 +36,7 @@ func TestSSHBackend_MintCredential(t *testing.T) {
 	if cred.LeaseTTL != 15*time.Minute {
 		t.Errorf("expected TTL 15m, got %s", cred.LeaseTTL)
 	}
-	if cred.Metadata["backend"] != "ssh" {
+	if cred.Metadata["backend"] != "ssh-router" {
 		t.Errorf("expected backend ssh, got %s", cred.Metadata["backend"])
 	}
 	if cred.Metadata["type"] != "ssh_certificate" {
@@ -96,7 +96,7 @@ func TestSSHBackend_MintCredential_SignError(t *testing.T) {
 	}
 
 	b := NewSSHBackend(signer, "ssh-client-signer")
-	_, err := b.MintCredential("ssh", 1, 15*time.Minute, MintOptions{})
+	_, err := b.MintCredential("ssh-router", 1, 15*time.Minute, MintOptions{})
 	if err == nil {
 		t.Fatal("expected error from vault ssh sign failure")
 	}

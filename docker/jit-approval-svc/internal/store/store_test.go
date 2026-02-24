@@ -101,7 +101,7 @@ func TestApproveAndClaim(t *testing.T) {
 
 func TestDeny(t *testing.T) {
 	s := New()
-	req, _ := s.Create("prometheus", "ssh", 3, "Router access", nil)
+	req, _ := s.Create("prometheus", "ssh-router", 3, "Router access", nil)
 
 	err := s.Deny(req.ID)
 	if err != nil {

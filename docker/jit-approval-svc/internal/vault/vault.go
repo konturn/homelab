@@ -273,7 +273,7 @@ var resourceTier = map[string]int{
 	"ssh-macmini": 1,
 
 	// Tier 2: Infrastructure (requires approval, 30 min TTL)
-	"ssh":           2,
+	"ssh-router":    2,
 	"ssh-satellite": 2,
 	"ssh-zwave":     2,
 	"ssh-nkontur":        2,
