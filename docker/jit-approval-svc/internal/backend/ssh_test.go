@@ -25,7 +25,7 @@ func TestSSHBackend_MintCredential(t *testing.T) {
 	}
 
 	b := NewSSHBackend(signer, "ssh-client-signer")
-	cred, err := b.MintCredential("ssh", 1, 15*time.Minute, MintOptions{})
+	cred, err := b.MintCredential("ssh-router", 1, 15*time.Minute, MintOptions{})
 	if err != nil {
 		t.Fatalf("MintCredential failed: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestSSHBackend_MintCredential_SignError(t *testing.T) {
 	}
 
 	b := NewSSHBackend(signer, "ssh-client-signer")
-	_, err := b.MintCredential("ssh", 1, 15*time.Minute, MintOptions{})
+	_, err := b.MintCredential("ssh-router", 1, 15*time.Minute, MintOptions{})
 	if err == nil {
 		t.Fatal("expected error from vault ssh sign failure")
 	}

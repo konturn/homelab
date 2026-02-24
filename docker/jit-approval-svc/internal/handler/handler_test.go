@@ -572,7 +572,7 @@ func TestHandleRequest_RejectsSSHBelowMinTier(t *testing.T) {
 
 	body, _ := json.Marshal(CreateRequestBody{
 		Requester: "prometheus",
-		Resource:  "ssh",
+		Resource:  "ssh-router",
 		Tier:      1,
 		Reason:    "need shell access",
 	})

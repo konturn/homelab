@@ -20,7 +20,7 @@ func TestPoliciesForResource_Tier1(t *testing.T) {
 }
 
 func TestPoliciesForResource_Tier2(t *testing.T) {
-	tier2Resources := []string{"gitlab", "homeassistant", "ssh", "tailscale", "pihole", "paperless"}
+	tier2Resources := []string{"gitlab", "homeassistant", "ssh-router", "tailscale", "pihole", "paperless"}
 
 	for _, res := range tier2Resources {
 		policies := policiesForResource(res, 2)
@@ -69,7 +69,7 @@ func TestPoliciesForResource_WrongTier(t *testing.T) {
 }
 
 func TestMinTierForResource(t *testing.T) {
-	if got := MinTierForResource("ssh"); got != 2 {
+	if got := MinTierForResource("ssh-router"); got != 2 {
 		t.Errorf("SSH min tier: expected 2, got %d", got)
 	}
 	if got := MinTierForResource("grafana"); got != 1 {
