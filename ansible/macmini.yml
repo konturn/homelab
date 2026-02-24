@@ -39,4 +39,6 @@
     fetch_ssh_ca_key: true
   roles:
     - fetch-vault-secrets
-    - claude-user-macos
+    - role: claude-user-macos
+      vars:
+        claude_user_principal: claude-macmini

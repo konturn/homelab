@@ -45,8 +45,8 @@ func TestSSHBackend_MintCredential(t *testing.T) {
 	if cred.Metadata["certificate"] != "ssh-ed25519-cert-v01@openssh.com AAAAMockSignedCert" {
 		t.Errorf("expected signed cert in metadata, got %s", cred.Metadata["certificate"])
 	}
-	if cred.Metadata["principal"] != "claude" {
-		t.Errorf("expected principal claude, got %s", cred.Metadata["principal"])
+	if cred.Metadata["principal"] != "claude-router" {
+		t.Errorf("expected principal claude-router, got %s", cred.Metadata["principal"])
 	}
 }
 
@@ -55,8 +55,8 @@ func TestSSHBackend_MintCredential_PerHostRoles(t *testing.T) {
 		resource  string
 		principal string
 	}{
-		{"ssh-satellite", "claude"},
-		{"ssh-zwave", "claude"},
+		{"ssh-satellite", "claude-satellite"},
+		{"ssh-zwave", "claude-zwave"},
 		{"ssh-nkontur", "nkontur"},
 		{"ssh-konoahko", "konoahko"},
 		{"ssh-konturn", "konturn"},

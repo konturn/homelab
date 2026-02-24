@@ -21,8 +21,8 @@ resource "vault_ssh_secret_backend_role" "claude" {
   name                    = "claude"
   backend                 = vault_mount.ssh.path
   key_type                = "ca"
-  default_user            = "claude"
-  allowed_users           = "claude"
+  default_user            = "claude-router"
+  allowed_users           = "claude-router"
   ttl                     = "900"
   max_ttl                 = "1800"
   allow_user_certificates = true
@@ -36,8 +36,8 @@ resource "vault_ssh_secret_backend_role" "satellite" {
   name                    = "satellite"
   backend                 = vault_mount.ssh.path
   key_type                = "ca"
-  default_user            = "claude"
-  allowed_users           = "claude"
+  default_user            = "claude-satellite"
+  allowed_users           = "claude-satellite"
   ttl                     = "900"
   max_ttl                 = "1800"
   allow_user_certificates = true
@@ -51,8 +51,8 @@ resource "vault_ssh_secret_backend_role" "zwave" {
   name                    = "zwave"
   backend                 = vault_mount.ssh.path
   key_type                = "ca"
-  default_user            = "claude"
-  allowed_users           = "claude"
+  default_user            = "claude-zwave"
+  allowed_users           = "claude-zwave"
   ttl                     = "900"
   max_ttl                 = "1800"
   allow_user_certificates = true
@@ -111,8 +111,8 @@ resource "vault_ssh_secret_backend_role" "macmini" {
   name                    = "macmini"
   backend                 = vault_mount.ssh.path
   key_type                = "ca"
-  default_user            = "claude"
-  allowed_users           = "claude"
+  default_user            = "claude-macmini"
+  allowed_users           = "claude-macmini"
   ttl                     = "900"
   max_ttl                 = "1800"
   allow_user_certificates = true
