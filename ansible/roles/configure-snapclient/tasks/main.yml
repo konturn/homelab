@@ -19,6 +19,14 @@
     src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/snapclient/config.txt"
     dest: "/boot/config.txt"
 
+- name: Add armhf architecture for snapclient
+  command: dpkg --add-architecture armhf
+  changed_when: false
+
+- name: Update apt cache after adding armhf architecture
+  apt:
+    update_cache: yes
+
 - name: Install snapclient
   apt:
     deb: https://github.com/badaix/snapcast/releases/download/v0.26.0/snapclient_0.26.0-1_armhf.deb
