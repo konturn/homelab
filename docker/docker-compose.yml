@@ -6,6 +6,11 @@ volumes:
   # registry volume removed - using GitLab registry instead
   mosquitto:
   vault_data:
+  headway_frontend_data:
+  headway_travelmux_data:
+  headway_pelias_config:
+  headway_pelias_elasticsearch:
+  headway_pelias_placeholder:
   nextcloud:
     driver: local
     driver_opts:
@@ -1847,42 +1852,235 @@ services:
       retries: 3
       start_period: 30s
 
-  # Nominatim — geocoding / reverse-geocoding engine
-  # Uses US-Midwest regional extract to keep import fast and memory reasonable.
-  # First startup imports the PBF extract into PostgreSQL (can take 1-2 hours).
-  nominatim:
-    container_name: nominatim
-    image: mediagis/nominatim:5.2.0-2025-12-04T14-31@sha256:3c49ad9443baab1f1ea13a6b1355fa377ae5fb0874dc328cba9b97a0ca7914bb
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    cap_add:
-      - CHOWN
-      - SETUID
-      - SETGID
-      - DAC_OVERRIDE
-      - FOWNER
+  # =============================================================================
+  # Headway Maps — unified map frontend with geocoding, routing, and tiles
+  # https://github.com/headwaymaps/headway
+  #
+  # Architecture:
+  #   - Reuses existing tileserver + valhalla containers (already have US data)
+  #   - Pelias replaces Nominatim for geocoding
+  #   - Travelmux provides multi-modal routing via existing Valhalla
+  #   - Headway frontend ties it all together
+  #
+  # DATA PREREQUISITE: Before first start, you must build Headway data artifacts
+  # using Dagger. See docs/HEADWAY_SETUP.md for instructions.
+  # Data artifacts go in {{ docker_persistent_data_path }}/headway/
+  # =============================================================================
+
+  # Headway frontend — web UI for maps, search, and routing
+  headway-frontend-init:
+    container_name: headway-frontend-init
+    image: ghcr.io/headwaymaps/headway-init:latest
+    environment:
+      - HEADWAY_AREA={{ headway_area | default('Cleveland') }}
+    volumes:
+      - {{ docker_persistent_data_path }}/headway/data/{{ headway_area | default('Cleveland') }}:/bootstrap:ro
+      - headway_frontend_data:/data:rw
     networks:
       - internal
+
+  headway-frontend:
+    container_name: headway-frontend
+    image: ghcr.io/headwaymaps/headway:latest
     restart: unless-stopped
+    environment:
+      - HEADWAY_AREA={{ headway_area | default('Cleveland') }}
+      - HEADWAY_RESOLVER=127.0.0.11
+      - HEADWAY_PELIAS_URL=http://pelias-api:4000
+      - HEADWAY_TILESERVER_URL=http://tileserver:8080
+      - HEADWAY_TRAVELMUX_URL=http://travelmux:8000
+      - HEADWAY_VALHALLA_URL=http://valhalla:8002
+    networks:
+      - internal
+    volumes:
+      - headway_frontend_data:/data:ro
+    depends_on:
+      headway-frontend-init:
+        condition: service_completed_successfully
+      pelias-api:
+        condition: service_started
+      tileserver:
+        condition: service_healthy
+      travelmux:
+        condition: service_started
+      valhalla:
+        condition: service_healthy
     deploy:
       resources:
         limits:
-          memory: 8G
+          memory: 512M
         reservations:
-          memory: 6G
-    environment:
-      - PBF_URL=https://download.geofabrik.de/north-america/us-midwest-latest.osm.pbf
-      - REPLICATION_URL=https://download.geofabrik.de/north-america/us-midwest-updates/
-      - NOMINATIM_PASSWORD={{ vault_nominatim_password | default(lookup('env', 'NOMINATIM_PASSWORD')) | trim | replace("$", "$$") }}
-      - IMPORT_STYLE=extratags
-    volumes:
-      - {{ docker_persistent_data_path }}/nominatim/data:/var/lib/postgresql/16/main
+          memory: 128M
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/status"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
       interval: 30s
       timeout: 10s
       retries: 3
-      # Initial PBF import can take 1-2 hours; 10min was too short causing restart loops
-      start_period: 7200s
+      start_period: 30s
+
+  # Travelmux — multi-modal routing proxy (wraps Valhalla)
+  headway-travelmux-init:
+    container_name: headway-travelmux-init
+    image: ghcr.io/headwaymaps/travelmux-init:latest
+    environment:
+      - HEADWAY_AREA={{ headway_area | default('Cleveland') }}
+      - TRAVELMUX_ELEVATION_ARTIFACT_SOURCE_PATH=/bootstrap/transit/{{ headway_area | default('Cleveland') }}.elevation-tifs.tar.zst
+    volumes:
+      - {{ docker_persistent_data_path }}/headway/data/{{ headway_area | default('Cleveland') }}:/bootstrap:ro
+      - headway_travelmux_data:/data:rw
+    networks:
+      - internal
+
+  travelmux:
+    container_name: travelmux
+    image: ghcr.io/headwaymaps/travelmux:latest
+    restart: unless-stopped
+    environment:
+      - HEADWAY_AREA={{ headway_area | default('Cleveland') }}
+      - ELEVATION_TIFS_DIR=/data/elevation-tifs
+    command: ["http://valhalla:8002"]
+    networks:
+      - internal
+    volumes:
+      - headway_travelmux_data:/data:ro
+    depends_on:
+      headway-travelmux-init:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+
+  # Pelias — geocoding stack (replaces Nominatim)
+  pelias-config-init:
+    container_name: pelias-config-init
+    image: ghcr.io/headwaymaps/pelias-init:latest
+    environment:
+      - HEADWAY_AREA={{ headway_area | default('Cleveland') }}
+      - PELIAS_CONFIG_ARTIFACT_SOURCE_PATH=/bootstrap/{{ headway_area | default('Cleveland') }}.pelias.json
+    command: ["/bin/bash", "/app/init_config.sh"]
+    volumes:
+      - {{ docker_persistent_data_path }}/headway/data/{{ headway_area | default('Cleveland') }}:/bootstrap:ro
+      - headway_pelias_config:/config
+    networks:
+      - internal
+
+  pelias-elasticsearch-init:
+    container_name: pelias-elasticsearch-init
+    image: ghcr.io/headwaymaps/pelias-init:latest
+    environment:
+      - HEADWAY_AREA={{ headway_area | default('Cleveland') }}
+      - ELASTICSEARCH_ARTIFACT_SOURCE_PATH=/bootstrap/{{ headway_area | default('Cleveland') }}.elasticsearch.tar.zst
+    command: ["/bin/bash", "/app/init_elastic.sh"]
+    volumes:
+      - {{ docker_persistent_data_path }}/headway/data/{{ headway_area | default('Cleveland') }}:/bootstrap:ro
+      - headway_pelias_elasticsearch:/usr/share/elasticsearch/data
+    networks:
+      - internal
+
+  pelias-placeholder-init:
+    container_name: pelias-placeholder-init
+    image: ghcr.io/headwaymaps/pelias-init:latest
+    environment:
+      - HEADWAY_AREA={{ headway_area | default('Cleveland') }}
+      - PLACEHOLDER_ARTIFACT_SOURCE_PATH=/bootstrap/{{ headway_area | default('Cleveland') }}.placeholder.tar.zst
+    command: ["/bin/bash", "/app/init_placeholder.sh"]
+    volumes:
+      - {{ docker_persistent_data_path }}/headway/data/{{ headway_area | default('Cleveland') }}:/bootstrap:ro
+      - headway_pelias_placeholder:/data/placeholder
+    networks:
+      - internal
+
+  pelias-elasticsearch:
+    container_name: pelias-elasticsearch
+    image: pelias/elasticsearch:8.12.2-beta
+    restart: unless-stopped
+    networks:
+      - internal
+    volumes:
+      - headway_pelias_elasticsearch:/usr/share/elasticsearch/data
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    cap_add:
+      - IPC_LOCK
+    depends_on:
+      pelias-elasticsearch-init:
+        condition: service_completed_successfully
+      pelias-config-init:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "9200"]
+      interval: 5s
+      start_period: 60s
+
+  pelias-api:
+    container_name: pelias-api
+    image: pelias/api:master
+    restart: unless-stopped
+    environment:
+      - PORT=4000
+      - PELIAS_CONFIG=/config/pelias.json
+    networks:
+      - internal
+    volumes:
+      - headway_pelias_config:/config:ro
+    depends_on:
+      pelias-elasticsearch:
+        condition: service_healthy
+      pelias-config-init:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+  pelias-placeholder:
+    container_name: pelias-placeholder
+    image: pelias/placeholder:master
+    restart: unless-stopped
+    environment:
+      - PORT=4100
+    networks:
+      - internal
+    volumes:
+      - headway_pelias_config:/config:ro
+      - headway_pelias_placeholder:/data/placeholder
+    depends_on:
+      pelias-config-init:
+        condition: service_completed_successfully
+      pelias-placeholder-init:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+  pelias-libpostal:
+    container_name: pelias-libpostal
+    image: pelias/libpostal-service
+    restart: unless-stopped
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G

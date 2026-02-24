@@ -195,7 +195,4 @@ vault_secret_paths:
       vault_loki_push_username: "username"
       vault_loki_push_password: "password"
 
-  # Nominatim geocoding engine
-  - path: "services/nominatim"
-    fields:
-      vault_nominatim_password: "password"
+  # Nominatim vault secret removed — replaced by Pelias geocoding (Headway stack)
