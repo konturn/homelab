@@ -458,7 +458,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.1178@sha256:e227ec8e5e7943b741ab8c4eec89b7e819e2835ea15c69fe9199af7a699eabfa
+    image: linuxserver/jackett:0.24.1193@sha256:f2e811e6ed87fb4953b5b3c127594ab7ce3bfe05e831631fce0c9ade120c50b5
     container_name: jackett
     security_opt:
       - no-new-privileges:true
@@ -650,7 +650,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    image: grafana/loki:3.6.6@sha256:434c7effbd66dbf69c2665fe4b2125549ecf7b45039ac28595d4034031cf47ce
+    image: grafana/loki:3.6.7@sha256:3c8fd3570dd9219951a60d3f919c7f31923d10baee578b77bc26c4a0b32d092d
     networks:
       loki-backend:
     restart: unless-stopped
@@ -904,7 +904,7 @@ services:
       - ALL
     ports:
       - "443:80"
-    image: 'vaultwarden/server:1.35.3-alpine@sha256:c40957876ec13c1cb0d2b08f86e8f738e6d06f7460bad9cdae216cded174c10d'
+    image: 'vaultwarden/server:1.35.4-alpine@sha256:34b4e91ed4c2a4d2191245325608b2a84bedbeb9c9dd561e3c0924b98ef7126c'
     restart: unless-stopped
     networks:
       - external
@@ -997,7 +997,7 @@ services:
       - "443:8080"
     networks:
       internal:
-    image: jgraph/drawio:29.5.1@sha256:ac1dcda00a7dd098930c45eed0e58bf6db9ab1c9b9f780a9309d02dd23965cf0
+    image: jgraph/drawio:29.5.2@sha256:5ef8f7bd04e2b6d059f21312e67e816df33ae7e404fd2fa50facbdf41b4ec8ef
     restart: unless-stopped
     deploy:
       resources:
@@ -1712,7 +1712,7 @@ services:
   # Subsequent starts are fast — tiles are cached in the data volume.
   valhalla:
     container_name: valhalla
-    image: ghcr.io/valhalla/valhalla-scripted:latest@sha256:fb1ff25abe95eaefab40016054c248d75776f1f6034e68e156cd2cbc7e791f0e
+    image: ghcr.io/valhalla/valhalla-scripted:3.6.3@sha256:27edb9e58564e0bf082c21e8c8460a0968dfa2b3892a9db3b1199afc3bee5937
     security_opt:
       - no-new-privileges:true
     cap_drop:
