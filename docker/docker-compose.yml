@@ -1614,6 +1614,69 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+  navidrome:
+    image: deluan/navidrome:latest@sha256:a5dce8f33304714dd138e870cca0dcab3d937ca236be1a9f2b97da009d1a0048
+    container_name: navidrome
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - internal
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+    environment:
+      - ND_SCANSCHEDULE=1h
+      - ND_LOGLEVEL=info
+      - ND_SESSIONTIMEOUT=24h
+      - ND_BASEURL=/
+    volumes:
+      - {{ docker_persistent_data_path }}/navidrome:/data
+      - /mpool/plex/Music:/music:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4533/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+  lidarr:
+    image: lscr.io/linuxserver/lidarr:latest@sha256:37a3df74f4c2a6f10eead66f4d8034362ebf2866f935026b4a71dd888b9e7f08
+    container_name: lidarr
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID         # s6-overlay drops to PUID/configured user
+      - SETGID         # s6-overlay drops to PGID/configured group
+      - CHOWN          # s6-overlay chowns data directories at startup
+      - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
+    networks:
+      - internal
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+    volumes:
+      - {{ docker_persistent_data_path }}/lidarr:/config
+      - /mpool/plex/Music:/music
+      - /mpool/samba_share/nfs:/remote
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8686/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
   chromium-browser:
     build:
       context: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/chromium-browser' }}"
