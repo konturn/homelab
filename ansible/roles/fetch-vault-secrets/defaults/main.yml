@@ -145,6 +145,11 @@ vault_secret_paths:
       vault_moltbot_telegram_token: "telegram_token"
       vault_moltbot_hooks_token: "hooks_token"
 
+  # ClawRouter
+  - path: "clawrouter"
+    fields:
+      vault_moltbot_clawrouter_wallet_address: "wallet_address"
+
   # Backup secrets
   - path: "backup/backblaze"
     fields:
