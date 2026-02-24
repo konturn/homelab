@@ -127,11 +127,19 @@
     group: staff
     mode: '0755'
 
+- name: Validate SSH CA key is not empty
+  ansible.builtin.assert:
+    that:
+      - vault_ssh_ca_public_key | length > 0
+    fail_msg: "vault_ssh_ca_public_key is empty — refusing to write empty CA file"
+  when: fetch_ssh_ca_key | default(false) | bool
+
 - name: Configure SSH to trust Vault CA
   copy:
     dest: /etc/ssh/trusted-user-ca-keys.pem
     content: "{{ vault_ssh_ca_public_key }}"
     mode: '0644'
+  when: vault_ssh_ca_public_key | length > 0
   become: yes
   notify: restart sshd
 
