@@ -1,0 +1,13 @@
+---
+# =============================================================================
+# Switch Configuration Playbook
+# =============================================================================
+# Pushes Aruba S2500 config with dead man's switch rollback safety.
+# Intended to run on the router (which has mgmt network access to the switch).
+# =============================================================================
+
+- name: Configure Aruba S2500 switch
+  hosts: router
+  become: true
+  roles:
+    - configure-switch

@@ -277,7 +277,11 @@
           register: switch_reachable
           ignore_errors: true
 
-        - name: Push switch VLAN/trunk config
+        # NOTE: Full switch config management is now handled by the configure-switch
+        # role (ansible/switch.yml) with dead man's switch rollback safety.
+        # Use the switch:configure CI job for normal operations.
+        # This bootstrap fallback pushes only minimal VLAN/trunk config for disaster recovery.
+        - name: Push minimal switch VLAN/trunk config (bootstrap fallback)
           ansible.builtin.raw: |
             conf t
             vlan 2
@@ -312,8 +316,8 @@
         - name: Report switch status
           ansible.builtin.debug:
             msg: >-
-              {{ 'Switch configured successfully.' if switch_config is succeeded
-                 else 'Switch not reachable or config failed. Configure manually if needed.' }}
+              {{ 'Switch configured (bootstrap fallback).' if switch_config is succeeded
+                 else 'Switch not reachable or config failed. Use switch:configure CI job when available.' }}
 
     # =========================================================================
     # Phase 6: Health checks

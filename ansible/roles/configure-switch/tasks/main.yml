@@ -1,0 +1,141 @@
+---
+# =============================================================================
+# configure-switch: Push Aruba S2500 config with dead man's switch rollback
+# =============================================================================
+#
+# Safety mechanism:
+#   1. Save running-config as backup
+#   2. Schedule a reboot in N minutes (loads startup-config = pre-change state)
+#   3. Push new config
+#   4. Verify connectivity (ping router from switch)
+#   5. If connectivity OK: cancel reboot + write memory (persist new config)
+#   6. If connectivity FAILS: do nothing — switch auto-reboots to backup
+#
+# All switch commands run via delegate_to with ansible.builtin.raw since
+# AOS-S on the S2500 doesn't support modern Ansible network modules reliably.
+# =============================================================================
+
+- name: Check if switch is reachable
+  ansible.builtin.wait_for:
+    host: "{{ switch_host }}"
+    port: 22
+    timeout: 10
+  register: switch_reachable
+
+- name: Template switch config to local file
+  ansible.builtin.template:
+    src: "{{ switch_config_source }}"
+    dest: "{{ switch_config_rendered }}"
+    owner: root
+    group: root
+    mode: '0600'
+  register: switch_config_templated
+
+# -------------------------------------------------------------------------
+# Step 1: Save current running-config as startup-config (backup)
+# -------------------------------------------------------------------------
+- name: "Rollback safety: save running-config to startup-config"
+  ansible.builtin.raw: |
+    write memory
+    exit
+  delegate_to: "{{ switch_host }}"
+  vars:
+    ansible_user: "{{ switch_user }}"
+    ansible_connection: ssh
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o ConnectTimeout=10"
+
+# -------------------------------------------------------------------------
+# Step 2: Schedule reload as dead man's switch
+# -------------------------------------------------------------------------
+- name: "Rollback safety: schedule reload in {{ switch_rollback_timeout_minutes }} minutes"
+  ansible.builtin.raw: |
+    reload after {{ switch_rollback_timeout_minutes }}
+    y
+    exit
+  delegate_to: "{{ switch_host }}"
+  vars:
+    ansible_user: "{{ switch_user }}"
+    ansible_connection: ssh
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o ConnectTimeout=10"
+  register: reload_scheduled
+
+# -------------------------------------------------------------------------
+# Step 3: Read rendered config and push it
+# -------------------------------------------------------------------------
+- name: Read rendered switch config
+  ansible.builtin.slurp:
+    src: "{{ switch_config_rendered }}"
+  register: switch_config_content
+
+- name: Push new config to switch
+  ansible.builtin.raw: |
+    conf t
+    {{ switch_config_content.content | b64decode }}
+    end
+    exit
+  delegate_to: "{{ switch_host }}"
+  vars:
+    ansible_user: "{{ switch_user }}"
+    ansible_connection: ssh
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o ConnectTimeout=10"
+  register: config_push_result
+
+# -------------------------------------------------------------------------
+# Step 4: Verify connectivity — ping router from the Ansible host
+# -------------------------------------------------------------------------
+- name: Wait a few seconds for config to stabilize
+  ansible.builtin.pause:
+    seconds: 5
+
+- name: Verify switch connectivity (ping switch from router)
+  ansible.builtin.command:
+    cmd: "ping -c 3 -W 2 {{ switch_host }}"
+  register: connectivity_check
+  ignore_errors: true
+
+# -------------------------------------------------------------------------
+# Step 5a: SUCCESS — cancel reload and persist config
+# -------------------------------------------------------------------------
+- name: "Success: cancel scheduled reload"
+  ansible.builtin.raw: |
+    reload cancel
+    exit
+  delegate_to: "{{ switch_host }}"
+  vars:
+    ansible_user: "{{ switch_user }}"
+    ansible_connection: ssh
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o ConnectTimeout=10"
+  when: connectivity_check is succeeded
+
+- name: "Success: write memory to persist new config"
+  ansible.builtin.raw: |
+    write memory
+    exit
+  delegate_to: "{{ switch_host }}"
+  vars:
+    ansible_user: "{{ switch_user }}"
+    ansible_connection: ssh
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o ConnectTimeout=10"
+  when: connectivity_check is succeeded
+
+- name: Report success
+  ansible.builtin.debug:
+    msg: "Switch config pushed successfully. Scheduled reload cancelled. Config persisted."
+  when: connectivity_check is succeeded
+
+# -------------------------------------------------------------------------
+# Step 5b: FAILURE — let dead man's switch handle it
+# -------------------------------------------------------------------------
+- name: Report connectivity failure
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Connectivity check FAILED after config push.
+      The switch will automatically reboot in ~{{ switch_rollback_timeout_minutes }} minutes
+      and load the previous startup-config (saved before changes).
+      DO NOT cancel the reload manually unless you have verified connectivity.
+  when: connectivity_check is failed
+
+- name: Fail the play on connectivity loss
+  ansible.builtin.fail:
+    msg: "Switch config push broke connectivity. Automatic rollback via scheduled reload in {{ switch_rollback_timeout_minutes }} minutes."
+  when: connectivity_check is failed

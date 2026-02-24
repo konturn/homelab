@@ -455,6 +455,20 @@ macmini:validate:
         ansible-playbook -i ansible/inventory.yml ansible/macmini.yml --syntax-check
       fi
 
+switch:configure:
+  extends: .ansible
+  stage: deploy
+  resource_group: deploy-switch
+  when: manual
+  allow_failure: true
+  needs:
+    - job: router:deploy
+      optional: true
+  script:
+    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/switch.yml
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
 macmini:deploy:
   extends: .ansible
   stage: deploy
