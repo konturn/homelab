@@ -36,7 +36,7 @@ func TestSSHBackend_MintCredential(t *testing.T) {
 	if cred.LeaseTTL != 15*time.Minute {
 		t.Errorf("expected TTL 15m, got %s", cred.LeaseTTL)
 	}
-	if cred.Metadata["backend"] != "ssh-router" {
+	if cred.Metadata["backend"] != "ssh" {
 		t.Errorf("expected backend ssh, got %s", cred.Metadata["backend"])
 	}
 	if cred.Metadata["type"] != "ssh_certificate" {
