@@ -214,6 +214,10 @@ COMMIT
 -A FORWARD -d {{ pihole_ip }} -i {{ local_interface_name }}.6 -j ACCEPT
 -A FORWARD -d {{ pihole_ip }} -i vlan6-shim -j ACCEPT
 
+# IoT to Vault (for SSH CA key fetch during Ansible deploys)
+-A FORWARD -d {{ vault_ip }} -p tcp -m tcp --dport 8200 -i {{ local_interface_name }}.6 -j ACCEPT
+-A FORWARD -d {{ vault_ip }} -p tcp -m tcp --dport 8200 -i vlan6-shim -j ACCEPT
+
 # All local VLANs to internet (outbound)
 -A FORWARD -i {{ local_interface_name }}+ -o {{ inet_interface_name }} -j ACCEPT
 
