@@ -1,5 +1,5 @@
 # Extend official OpenClaw image with additional tooling
-FROM ghcr.io/openclaw/openclaw:2026.2.22@sha256:51c3fe85913545ca6c15c0fe2447230167ed1d329a07088f67d2a1612541b64b
+FROM ghcr.io/openclaw/openclaw:2026.2.23@sha256:6346f1c619147790cae8df965f770855b3fa175c319080910bcbf7235a84a5d0
 
 USER root
 
