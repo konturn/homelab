@@ -21,13 +21,13 @@ var sshResourceConfig = map[string]struct {
 	role      string
 	principal string
 }{
-	"ssh-router":    {role: "claude", principal: "claude"},
-	"ssh-satellite": {role: "satellite", principal: "claude"},
-	"ssh-zwave":     {role: "zwave", principal: "claude"},
+	"ssh-router":    {role: "claude", principal: "claude-router"},
+	"ssh-satellite": {role: "satellite", principal: "claude-satellite"},
+	"ssh-zwave":     {role: "zwave", principal: "claude-zwave"},
 	"ssh-nkontur":        {role: "nkontur-ws", principal: "nkontur"},
 	"ssh-konoahko":        {role: "konoahko-ws", principal: "konoahko"},
 	"ssh-konturn":        {role: "konturn-ws", principal: "konturn"},
-	"ssh-macmini":        {role: "macmini", principal: "claude"},
+	"ssh-macmini":        {role: "macmini", principal: "claude-macmini"},
 }
 
 // SSHBackend mints ephemeral SSH certificates via Vault's SSH CA.
