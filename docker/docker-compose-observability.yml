@@ -42,7 +42,7 @@ services:
       - {{ docker_persistent_data_path }}/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
       - {{ docker_persistent_data_path }}/telegraf/scripts:/scripts:ro
     environment:
-      CLAWROUTER_WALLET_ADDRESS: "{{ vault_moltbot_clawrouter_wallet_address }}"
+      CLAWROUTER_WALLET_ADDRESS: "{{ vault_moltbot_clawrouter_wallet_address | default('') }}"
     network_mode: host
     mem_limit: 64m
     cpus: 0.15
