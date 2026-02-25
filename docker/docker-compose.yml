@@ -458,7 +458,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.1193@sha256:f2e811e6ed87fb4953b5b3c127594ab7ce3bfe05e831631fce0c9ade120c50b5
+    image: linuxserver/jackett:0.24.1205@sha256:095ba54dd7ac1fe5c70c0e1542c286a81ad42adc0444c060c739ef1eda19ab3d
     container_name: jackett
     security_opt:
       - no-new-privileges:true
@@ -736,7 +736,7 @@ services:
       - "443:80"
     networks:
       - internal
-    image: 'gitlab/gitlab-ee:18.9.0-ee.0@sha256:280be239e059a6b841cdc31e40427ab393d5f23ec55ef36f58f26f30513fc8e0'
+    image: 'gitlab/gitlab-ee:18.9.1-ee.0@sha256:aac923b6b99744d2e2ef846d7b50b9a018b40a152ff716675f2b9caf4eb2d100'
     restart: unless-stopped
     ulimits:
       nofile:
@@ -1615,7 +1615,7 @@ services:
       retries: 3
       start_period: 60s
   navidrome:
-    image: deluan/navidrome:latest@sha256:a5dce8f33304714dd138e870cca0dcab3d937ca236be1a9f2b97da009d1a0048
+    image: deluan/navidrome:0.60.3@sha256:a5dce8f33304714dd138e870cca0dcab3d937ca236be1a9f2b97da009d1a0048
     container_name: navidrome
     security_opt:
       - no-new-privileges:true
@@ -1645,7 +1645,7 @@ services:
       retries: 3
       start_period: 30s
   lidarr:
-    image: lscr.io/linuxserver/lidarr:latest@sha256:37a3df74f4c2a6f10eead66f4d8034362ebf2866f935026b4a71dd888b9e7f08
+    image: lscr.io/linuxserver/lidarr:0.8.0.1896-ls5@sha256:37a3df74f4c2a6f10eead66f4d8034362ebf2866f935026b4a71dd888b9e7f08
     container_name: lidarr
     security_opt:
       - no-new-privileges:true
