@@ -77,7 +77,7 @@ func NewRegistry(vaultMinter VaultTokenMinter, vaultReader VaultSecretReader, ha
 
 	if sshSigner != nil && sshVaultPath != "" {
 		sshBackend := NewSSHBackend(sshSigner, sshVaultPath)
-		for _, res := range []string{"ssh-router", "ssh-satellite", "ssh-zwave", "ssh-nkontur", "ssh-konoahko", "ssh-konturn", "ssh-macmini"} {
+		for _, res := range []string{"ssh-router", "ssh-satellite", "ssh-zwave", "ssh-nkontur", "ssh-konoahko", "ssh-konturn", "ssh-macmini", "ssh-router-elevated", "ssh-zwave-elevated", "ssh-satellite-elevated", "ssh-macmini-elevated"} {
 			r.backends[res] = sshBackend
 			logger.Info("backend_registered", logger.Fields{
 				"resource": res,
