@@ -81,7 +81,6 @@ all:
     is_satellite: false
   hosts:
     router.lab.nkontur.com:
-      ansible_host: 10.4.0.1
       wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/wg0.conf' }}"
       wireguard_interface_name: "wg0"
       local_interface_name: bond0
@@ -227,7 +226,6 @@ all:
             name: "telegraf"
       hosts:
         zwave.lab.nkontur.com:
-          ansible_host: 10.6.128.6
           gitlab_registry_login: false
           location: "Movie Room"
           docker_compose_file_names: 
@@ -238,7 +236,6 @@ all:
             - soundcard: "plughw:CARD=b1,DEV=0"
               name: "movie"
         satellite-2.lab.nkontur.com:
-          ansible_host: 10.6.128.11
           gitlab_registry_login: false
           docker_compose_file_names: 
             - "docker-compose-observability.yml"
