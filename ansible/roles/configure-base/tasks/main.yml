@@ -19,6 +19,16 @@
     repo: "deb [signed-by=/etc/apt/keyrings/openzfs-ppa.asc] https://ppa.launchpadcontent.net/arter97/zfs/ubuntu {{ ansible_distribution_release }} main"
     state: present
 
+- name: Purge potentially conflicting ZFS packages
+  apt:
+    name:
+      - libzfs7linux
+      - zfsutils-linux
+      - zfs-zed
+    state: absent
+    purge: yes
+  ignore_errors: true
+
 - name: Install/upgrade ZFS packages
   apt:
     name:
