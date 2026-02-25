@@ -307,6 +307,19 @@ resource "vault_policy" "jit_approval_svc" {
     path "ssh-client-signer/sign/macmini" {
       capabilities = ["create", "update"]
     }
+    # Elevated SSH roles
+    path "ssh-client-signer/sign/ssh-sign-router-elevated" {
+      capabilities = ["create", "update"]
+    }
+    path "ssh-client-signer/sign/ssh-sign-zwave-elevated" {
+      capabilities = ["create", "update"]
+    }
+    path "ssh-client-signer/sign/ssh-sign-satellite-elevated" {
+      capabilities = ["create", "update"]
+    }
+    path "ssh-client-signer/sign/ssh-sign-macmini-elevated" {
+      capabilities = ["create", "update"]
+    }
     path "ssh-client-signer/config/ca" {
       capabilities = ["read"]
     }
