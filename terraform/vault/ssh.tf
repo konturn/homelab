@@ -121,3 +121,67 @@ resource "vault_ssh_secret_backend_role" "macmini" {
   }
   allowed_extensions = "permit-pty"
 }
+
+# =============================================================================
+# Elevated SSH roles — shorter TTL (30m), claude-elevated principal
+# =============================================================================
+
+resource "vault_ssh_secret_backend_role" "router_elevated" {
+  name                    = "ssh-sign-router-elevated"
+  backend                 = vault_mount.ssh.path
+  key_type                = "ca"
+  default_user            = "claude-elevated"
+  allowed_users           = "claude-elevated"
+  ttl                     = "1800"
+  max_ttl                 = "1800"
+  allow_user_certificates = true
+  default_extensions = {
+    "permit-pty" = ""
+  }
+  allowed_extensions = "permit-pty"
+}
+
+resource "vault_ssh_secret_backend_role" "zwave_elevated" {
+  name                    = "ssh-sign-zwave-elevated"
+  backend                 = vault_mount.ssh.path
+  key_type                = "ca"
+  default_user            = "claude-elevated"
+  allowed_users           = "claude-elevated"
+  ttl                     = "1800"
+  max_ttl                 = "1800"
+  allow_user_certificates = true
+  default_extensions = {
+    "permit-pty" = ""
+  }
+  allowed_extensions = "permit-pty"
+}
+
+resource "vault_ssh_secret_backend_role" "satellite_elevated" {
+  name                    = "ssh-sign-satellite-elevated"
+  backend                 = vault_mount.ssh.path
+  key_type                = "ca"
+  default_user            = "claude-elevated"
+  allowed_users           = "claude-elevated"
+  ttl                     = "1800"
+  max_ttl                 = "1800"
+  allow_user_certificates = true
+  default_extensions = {
+    "permit-pty" = ""
+  }
+  allowed_extensions = "permit-pty"
+}
+
+resource "vault_ssh_secret_backend_role" "macmini_elevated" {
+  name                    = "ssh-sign-macmini-elevated"
+  backend                 = vault_mount.ssh.path
+  key_type                = "ca"
+  default_user            = "claude-elevated"
+  allowed_users           = "claude-elevated"
+  ttl                     = "1800"
+  max_ttl                 = "1800"
+  allow_user_certificates = true
+  default_extensions = {
+    "permit-pty" = ""
+  }
+  allowed_extensions = "permit-pty"
+}

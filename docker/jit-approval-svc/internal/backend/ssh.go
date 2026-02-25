@@ -28,6 +28,12 @@ var sshResourceConfig = map[string]struct {
 	"ssh-konoahko":        {role: "konoahko-ws", principal: "konoahko"},
 	"ssh-konturn":        {role: "konturn-ws", principal: "konturn"},
 	"ssh-macmini":        {role: "macmini", principal: "claude-macmini"},
+
+	// Elevated access — full shell with sudo, T2 approval required
+	"ssh-router-elevated":    {role: "ssh-sign-router-elevated", principal: "claude-elevated"},
+	"ssh-zwave-elevated":     {role: "ssh-sign-zwave-elevated", principal: "claude-elevated"},
+	"ssh-satellite-elevated": {role: "ssh-sign-satellite-elevated", principal: "claude-elevated"},
+	"ssh-macmini-elevated":   {role: "ssh-sign-macmini-elevated", principal: "claude-elevated"},
 }
 
 // SSHBackend mints ephemeral SSH certificates via Vault's SSH CA.
