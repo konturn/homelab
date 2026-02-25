@@ -82,6 +82,7 @@ all:
   hosts:
     router.lab.nkontur.com:
       ansible_host: 10.4.0.1
+      claude_elevated_access: true
       wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/wg0.conf' }}"
       wireguard_interface_name: "wg0"
       local_interface_name: bond0
@@ -208,6 +209,7 @@ all:
         macmini.lab.nkontur.com:
           ansible_host: 10.4.128.24
           ansible_user: root
+          claude_elevated_access: true
     satellites:
       vars:
         docker_compose_file_names: 
@@ -228,6 +230,7 @@ all:
       hosts:
         zwave.lab.nkontur.com:
           ansible_host: 10.6.128.6
+          claude_elevated_access: true
           gitlab_registry_login: false
           location: "Movie Room"
           docker_compose_file_names: 
@@ -239,6 +242,7 @@ all:
               name: "movie"
         satellite-2.lab.nkontur.com:
           ansible_host: 10.6.128.11
+          claude_elevated_access: true
           gitlab_registry_login: false
           docker_compose_file_names: 
             - "docker-compose-observability.yml"
