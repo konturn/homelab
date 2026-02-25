@@ -19,6 +19,12 @@
     repo: "deb [signed-by=/etc/apt/keyrings/openzfs-ppa.asc] https://ppa.launchpadcontent.net/arter97/zfs/ubuntu {{ ansible_distribution_release }} main"
     state: present
 
+- name: Remove old libzfs6linux packages
+  apt:
+    name:
+    - libzfs6linux
+    state: absent
+    purge: yes
 - name: Install/upgrade ZFS packages
   apt:
     name:
