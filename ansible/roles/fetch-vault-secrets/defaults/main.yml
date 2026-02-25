@@ -113,6 +113,7 @@ vault_secret_paths:
   - path: "infrastructure/pihole"
     fields:
       vault_pihole_password: "password"
+      vault_pihole_api_token: "api_token"
   - path: "infrastructure/tailscale"
     fields:
       vault_tailscale_api_token: "api_token"
