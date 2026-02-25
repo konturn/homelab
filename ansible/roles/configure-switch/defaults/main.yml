@@ -1,7 +1,10 @@
 ---
 switch_host: "10.100.0.1"
 switch_user: "admin"
+switch_password: "{{ vault_switch_admin_password }}"
 switch_config_source: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/switches/aruba-config' }}"
 switch_config_rendered: "{{ docker_persistent_data_path + '/ansible_state/aruba-config' }}"
 switch_rollback_timeout_minutes: 5
 switch_connectivity_test_host: "10.100.0.254"  # Router mgmt IP - used to verify switch connectivity
+# Aruba S2500 requires legacy SSH algorithms
+switch_ssh_args: "-o StrictHostKeyChecking=no -o ConnectTimeout=10 -oHostKeyAlgorithms=+ssh-rsa -c aes256-cbc"

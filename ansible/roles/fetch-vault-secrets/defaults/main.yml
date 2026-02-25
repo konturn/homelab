@@ -113,6 +113,9 @@ vault_secret_paths:
   - path: "infrastructure/pihole"
     fields:
       vault_pihole_password: "password"
+  - path: "infrastructure/switch"
+    fields:
+      vault_switch_admin_password: "admin_password"
   - path: "infrastructure/tailscale"
     fields:
       vault_tailscale_api_token: "api_token"
