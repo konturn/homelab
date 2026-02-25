@@ -196,3 +196,39 @@
     line: "AuthorizedPrincipalsFile /etc/ssh/auth_principals/%u"
     regexp: "^AuthorizedPrincipalsFile"
   notify: restart sshd
+
+# =============================================================================
+# Elevated user (claude-elevated) — full shell with sudo, gated by JIT T2
+# =============================================================================
+
+- name: Create claude-elevated group
+  group:
+    name: "{{ claude_elevated_user_group }}"
+    state: present
+  when: claude_elevated_access | default(false)
+
+- name: Create claude-elevated user with full shell
+  user:
+    name: "{{ claude_elevated_user_name }}"
+    group: "{{ claude_elevated_user_group }}"
+    shell: /bin/bash
+    home: "/home/{{ claude_elevated_user_name }}"
+    create_home: yes
+    comment: "Elevated AI agent SSH access with sudo"
+  when: claude_elevated_access | default(false)
+
+- name: Grant claude-elevated passwordless sudo
+  copy:
+    dest: "/etc/sudoers.d/{{ claude_elevated_user_name }}"
+    content: "{{ claude_elevated_user_name }} ALL=(ALL) NOPASSWD: ALL\n"
+    mode: '0440'
+    validate: 'visudo -cf %s'
+  when: claude_elevated_access | default(false)
+
+- name: Configure AuthorizedPrincipals for claude-elevated user
+  copy:
+    dest: "/etc/ssh/auth_principals/{{ claude_elevated_user_name }}"
+    content: "{{ claude_elevated_user_principal }}\n"
+    mode: '0644'
+  notify: restart sshd
+  when: claude_elevated_access | default(false)

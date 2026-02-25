@@ -9,3 +9,11 @@ claude_user_principal: "claude"
 
 # Grant docker socket access (adds user to docker group)
 claude_docker_access: false
+
+# Elevated user configuration
+claude_elevated_user_name: "claude-elevated"
+claude_elevated_user_group: "claude-elevated"
+claude_elevated_user_principal: "claude-elevated"
+
+# Whether to create the elevated user on this host
+claude_elevated_access: false
