@@ -209,7 +209,6 @@ all:
         macmini.lab.nkontur.com:
           ansible_host: 10.4.128.24
           ansible_user: root
-          claude_elevated_access: true
     satellites:
       vars:
         docker_compose_file_names: 
