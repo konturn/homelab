@@ -38,7 +38,7 @@ groups:
               refId: B
               settings: {mode: dropNN}
         noDataState: OK
-        execErrState: Alerting
+        execErrState: Error
         for: 10m
         annotations:
           summary: "Container {{ $labels.container_name }} health check failed"
@@ -71,7 +71,7 @@ groups:
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [3]}}]}
         noDataState: OK
-        execErrState: Alerting
+        execErrState: Error
         for: 5m
         annotations:
           summary: "Container restarting repeatedly (>3 restarts in 15min)"
@@ -104,7 +104,7 @@ groups:
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
         noDataState: OK
-        execErrState: Alerting
+        execErrState: Error
         for: 5m
         annotations:
           summary: "Container killed by OOM"
@@ -134,7 +134,7 @@ groups:
             datasourceUid: __expr__
             model: {type: reduce, expression: A, reducer: last, refId: B, settings: {mode: dropNN}}
         noDataState: OK
-        execErrState: Alerting
+        execErrState: Error
         for: 10m
         annotations:
           summary: "Critical service {{ $labels.container_name }} has non-zero exit code"
@@ -173,7 +173,7 @@ groups:
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [90]}}]}
         noDataState: OK
-        execErrState: Alerting
+        execErrState: Error
         for: 10m
         annotations:
           summary: "System memory usage above 90%"
@@ -205,7 +205,7 @@ groups:
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [80]}}]}
         noDataState: OK
-        execErrState: Alerting
+        execErrState: Error
         for: 5m
         annotations:
           summary: "CPU temperature above 80°C"
@@ -239,7 +239,7 @@ groups:
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [80]}}]}
         noDataState: OK
-        execErrState: Alerting
+        execErrState: Error
         for: 10m
         annotations:
           summary: "Disk usage above 80% on {{ $labels.device }} ({{ $labels.path }})"
@@ -273,45 +273,44 @@ groups:
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [90]}}]}
         noDataState: OK
-        execErrState: Alerting
+        execErrState: Error
         for: 5m
         annotations:
           summary: "CRITICAL: Disk usage above 90% on {{ $labels.device }} ({{ $labels.path }})"
         labels:
           severity: critical
 
-      # DISABLED: smart_device measurement not available - enable when smartmontools Telegraf plugin is configured
-      # - uid: smart-disk-error
-      #   title: SMART Disk Error
-      #   condition: C
-      #   data:
-      #     - refId: A
-      #       relativeTimeRange: {from: 3600, to: 0}
-      #       datasourceUid: influxdb
-      #       model:
-      #         query: |
-      #           from(bucket: "metrics")
-      #             |> range(start: -1h)
-      #             |> filter(fn: (r) => r._measurement == "smart_device")
-      #             |> filter(fn: (r) => r._field == "health_ok")
-      #             |> last()
-      #             |> filter(fn: (r) => r._value == false)
-      #         refId: A
-      #     - refId: B
-      #       relativeTimeRange: {from: 0, to: 0}
-      #       datasourceUid: __expr__
-      #       model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
-      #     - refId: C
-      #       relativeTimeRange: {from: 0, to: 0}
-      #       datasourceUid: __expr__
-      #       model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [-1]}}]}
-      #   noDataState: OK
-      #   execErrState: Alerting
-      #   for: 0s
-      #   annotations:
-      #     summary: "SMART reports disk health issue"
-      #   labels:
-      #     severity: critical
+      - uid: smart-disk-error
+        title: SMART Disk Error
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 3600, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -1h)
+                  |> filter(fn: (r) => r._measurement == "smart_device")
+                  |> filter(fn: (r) => r._field == "health_ok")
+                  |> last()
+                  |> filter(fn: (r) => r._value == false)
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [-1]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "SMART reports disk health issue on {{ $labels.device }} ({{ $labels.model }})"
+        labels:
+          severity: critical
 
   # =========================================================================
   # Network Alerts
@@ -347,7 +346,7 @@ groups:
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
         noDataState: OK
-        execErrState: Alerting
+        execErrState: Error
         for: 10m
         annotations:
           summary: "Internet connectivity loss — ping failures detected"
@@ -379,7 +378,7 @@ groups:
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [2]}}]}
         noDataState: OK
-        execErrState: Alerting
+        execErrState: Error
         for: 10m
         annotations:
           summary: "DNS resolution failing"
@@ -422,7 +421,7 @@ groups:
             # 14 days = 1209600 seconds (comparing raw seconds instead of hours)
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [1209600]}}]}
         noDataState: OK
-        execErrState: Alerting
+        execErrState: Error
         for: 10m
         annotations:
           summary: "SSL certificate expiring within 14 days"
@@ -462,7 +461,7 @@ groups:
       #       datasourceUid: __expr__
       #       model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [50]}}]}
       #   noDataState: OK
-      #   execErrState: Alerting
+      #   execErrState: Error
       #   for: 2m
       #   annotations:
       #     summary: "UPS battery charge below 50%"
@@ -494,7 +493,7 @@ groups:
       #       datasourceUid: __expr__
       #       model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [80]}}]}
       #   noDataState: OK
-      #   execErrState: Alerting
+      #   execErrState: Error
       #   for: 5m
       #   annotations:
       #     summary: "UPS load above 80%"
@@ -528,7 +527,7 @@ groups:
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [1]}}]}
         noDataState: Alerting
-        execErrState: Alerting
+        execErrState: Error
         for: 5m
         annotations:
           summary: "No successful restic backup in 48 hours"
@@ -555,7 +554,7 @@ groups:
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
         noDataState: OK
-        execErrState: Alerting
+        execErrState: Error
         for: 0s
         annotations:
           summary: "Restic backup failed with errors"
@@ -590,7 +589,7 @@ groups:
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [5]}}]}
         noDataState: OK
-        execErrState: Alerting
+        execErrState: Error
         for: 0s
         annotations:
           summary: "Multiple failed SSH login attempts (>5 in 15min)"
