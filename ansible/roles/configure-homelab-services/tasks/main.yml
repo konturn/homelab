@@ -240,6 +240,20 @@
     label: "{{ item.item.name }}"
   when: not ansible_check_mode
 
+### Nextcloud post-deploy upgrade
+# After image updates, Nextcloud requires `occ upgrade` to migrate the DB schema.
+# We capture the container image ID before and after compose-up to detect changes.
+# Only runs occ upgrade when the image actually changed, avoiding unnecessary
+# maintenance mode on every deploy.
+- name: Capture Nextcloud image ID before compose-up
+  ansible.builtin.command:
+    cmd: docker inspect --format '{% raw %}{{.Image}}{% endraw %}' nextcloud
+  register: nextcloud_image_before
+  changed_when: false
+  failed_when: false
+  check_mode: no
+  when: "'router' in inventory_hostname"
+
 - name: Create and start Docker services
   community.docker.docker_compose_v2:
     project_name: "{{ docker_compose_project_name | default('docker') }}"
@@ -260,6 +274,36 @@
     remove_orphans: true
   timeout: 300
   when: docker_conf.changed and not ansible_check_mode
+
+- name: Capture Nextcloud image ID after compose-up
+  ansible.builtin.command:
+    cmd: docker inspect --format '{% raw %}{{.Image}}{% endraw %}' nextcloud
+  register: nextcloud_image_after
+  changed_when: false
+  failed_when: false
+  check_mode: no
+  when: "'router' in inventory_hostname"
+
+- name: Run Nextcloud occ upgrade after image change
+  ansible.builtin.command:
+    cmd: docker exec -u www-data nextcloud php occ upgrade
+  register: nextcloud_occ_upgrade
+  retries: 5
+  delay: 15
+  until: nextcloud_occ_upgrade.rc == 0
+  changed_when: "'Update successful' in nextcloud_occ_upgrade.stdout"
+  when:
+    - "'router' in inventory_hostname"
+    - not ansible_check_mode
+    - nextcloud_image_after.rc == 0
+    - nextcloud_image_before.rc != 0 or nextcloud_image_before.stdout != nextcloud_image_after.stdout
+
+- name: Print Nextcloud occ upgrade output
+  ansible.builtin.debug:
+    var: nextcloud_occ_upgrade.stdout_lines
+  when:
+    - nextcloud_occ_upgrade is defined
+    - nextcloud_occ_upgrade is not skipped
 
 - name: Enable dnsmasq.d config loading for Pi-hole
   ansible.builtin.replace:
