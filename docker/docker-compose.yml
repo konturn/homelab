@@ -15,6 +15,7 @@ volumes:
   influxdb-storage:
   grafana-storage:
   otp_data:
+  tautulli_config:
   nextcloud_aio_mastercontainer:
     name: nextcloud_aio_mastercontainer
 networks:
@@ -166,6 +167,33 @@ services:
       timeout: 10s
       retries: 3
       start_period: 120s
+  tautulli:
+    container_name: tautulli
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    image: lscr.io/linuxserver/tautulli:latest
+    networks:
+      - external
+    ports:
+      - "8181/tcp"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+    volumes:
+      - tautulli_config:/config
+    depends_on:
+      plex:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8181/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
   pihole:
     container_name: pihole
     security_opt:
