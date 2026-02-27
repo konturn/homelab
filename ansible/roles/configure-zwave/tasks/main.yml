@@ -23,6 +23,9 @@
   ansible.builtin.apt:
     deb: "https://github.com/mrene/minidsp-rs/releases/download/v0.1.7/minidsp_0.1.7_{{ minidsp_arch }}.deb"
   register: minidsp_package
+  retries: 3
+  delay: 5
+  until: minidsp_package is success
 
 - name: Make sure minidsp is started and enabled
   service:
