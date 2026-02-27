@@ -19,6 +19,16 @@
     repo: "deb [signed-by=/etc/apt/keyrings/openzfs-ppa.asc] https://ppa.launchpadcontent.net/arter97/zfs/ubuntu {{ ansible_distribution_release }} main"
     state: present
 
+- name: Update apt cache for ZFS packages
+  apt:
+    update_cache: yes
+    cache_valid_time: 300
+  register: zfs_cache_update
+  retries: 3
+  delay: 10
+  until: zfs_cache_update is success
+  ignore_errors: yes
+
 - name: Install/upgrade ZFS packages
   apt:
     name:
@@ -26,7 +36,6 @@
       - zfs-dkms
       - zfs-zed
     state: latest
-    update_cache: yes
   register: zfs_packages
 
 - name: Check if ZFS kernel module needs reload (reboot required)
