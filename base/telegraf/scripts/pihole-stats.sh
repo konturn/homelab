@@ -1,11 +1,12 @@
 #!/bin/bash
 # Pi-hole v6 stats fetcher for Telegraf
-# Pi-hole v6 uses session-based auth — POST to /api/auth, then use SID.
+# Authenticates via /api/auth with app password, fetches stats, then
+# deletes the session to avoid exhausting Pi-hole's session limit.
 # Outputs InfluxDB line protocol.
 #
 # Environment variables:
 #   PIHOLE_URL       - Pi-hole base URL (e.g., http://10.3.32.2)
-#   PIHOLE_API_TOKEN - Pi-hole API password, used to authenticate via /api/auth
+#   PIHOLE_API_TOKEN - Pi-hole app password
 
 set -euo pipefail
 
@@ -25,6 +26,9 @@ if [[ -z "$SID" ]]; then
     echo "Failed to obtain SID from Pi-hole auth response" >&2
     exit 1
 fi
+
+# Ensure session is cleaned up on exit
+trap 'curl -sf -X DELETE "${PIHOLE_URL}/api/auth?sid=${SID}" >/dev/null 2>&1' EXIT
 
 # Fetch summary stats
 RESPONSE=$(curl -sf "${PIHOLE_URL}/api/stats/summary?sid=${SID}" 2>/dev/null) || {
