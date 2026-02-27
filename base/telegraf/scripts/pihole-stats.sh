@@ -4,31 +4,15 @@
 # Outputs InfluxDB line protocol.
 #
 # Environment variables:
-#   PIHOLE_URL      - Pi-hole base URL (e.g., http://10.3.32.2)
-#   PIHOLE_PASSWORD - Pi-hole password for API auth (optional if no password set)
+#   PIHOLE_URL       - Pi-hole base URL (e.g., http://10.3.32.2)
+#   PIHOLE_API_TOKEN - Pi-hole API token (app password), used directly as SID
 
 set -euo pipefail
 
 PIHOLE_URL="${PIHOLE_URL:?PIHOLE_URL must be set}"
-PIHOLE_PASSWORD="${PIHOLE_PASSWORD:-}"
+PIHOLE_API_TOKEN="${PIHOLE_API_TOKEN:?PIHOLE_API_TOKEN must be set}"
 
-# Authenticate if password is set
-SID_PARAM=""
-if [[ -n "$PIHOLE_PASSWORD" ]]; then
-    AUTH_RESPONSE=$(curl -sf -X POST "${PIHOLE_URL}/api/auth" \
-        -H "Content-Type: application/json" \
-        --data "{\"password\":\"${PIHOLE_PASSWORD}\"}" 2>/dev/null) || {
-        echo "Failed to authenticate to Pi-hole API" >&2
-        exit 1
-    }
-
-    SID=$(echo "$AUTH_RESPONSE" | jq -r '.session.sid // empty')
-    if [[ -z "$SID" ]]; then
-        echo "Failed to get SID from Pi-hole API" >&2
-        exit 1
-    fi
-    SID_PARAM="?sid=${SID}"
-fi
+SID_PARAM="?sid=${PIHOLE_API_TOKEN}"
 
 # Fetch summary stats
 RESPONSE=$(curl -sf "${PIHOLE_URL}/api/stats/summary${SID_PARAM}" 2>/dev/null) || {
