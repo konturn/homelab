@@ -173,6 +173,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETUID         # s6-overlay drops to PUID/configured user
+      - SETGID         # s6-overlay drops to PGID/configured group
+      - CHOWN          # s6-overlay chowns data directories at startup
+      - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
     image: lscr.io/linuxserver/tautulli:latest
     networks:
       - external
