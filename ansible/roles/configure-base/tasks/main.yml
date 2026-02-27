@@ -134,6 +134,11 @@
     daemon_reload: yes
 
 ### GitLab Runner APT repository
+- name: Remove old GitLab Runner sources file (bootstrap leftover)
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/runner_gitlab-runner.list
+    state: absent
+
 - name: Download GitLab Runner GPG key
   ansible.builtin.get_url:
     url: "https://packages.gitlab.com/runner/gitlab-runner/gpgkey"
