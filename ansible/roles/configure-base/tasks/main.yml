@@ -133,6 +133,20 @@
     enabled: yes
     daemon_reload: yes
 
+### GitLab Runner APT repository
+- name: Download GitLab Runner GPG key
+  ansible.builtin.get_url:
+    url: "https://packages.gitlab.com/runner/gitlab-runner/gpgkey"
+    dest: /etc/apt/keyrings/runner_gitlab-runner-archive-keyring.asc
+    mode: '0644'
+    force: true
+  check_mode: no
+
+- name: Add GitLab Runner repository
+  apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/runner_gitlab-runner-archive-keyring.asc] https://packages.gitlab.com/runner/gitlab-runner/ubuntu/ {{ ansible_distribution_release }} main"
+    state: present
+
 - name: Install gitlab-runner and glab
   apt:
     name:

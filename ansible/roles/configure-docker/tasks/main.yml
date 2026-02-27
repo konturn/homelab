@@ -52,6 +52,15 @@
     repo: "deb [signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
     state: present
 
+- name: Remove stale Docker source files from dist-upgrades
+  ansible.builtin.file:
+    path: "/etc/apt/sources.list.d/download_docker_com_linux_ubuntu.list{{ item }}"
+    state: absent
+  loop:
+    - ".save"
+    - ".distUpgrade"
+    - ".sources"
+
 - name: Install docker
   apt:
     name:
@@ -62,21 +71,16 @@
     state: latest
     update_cache: yes
 
-- name: Remove legacy NVIDIA Docker GPG key
+- name: Remove legacy nvidia-docker sources file
   ansible.builtin.file:
-    path: /etc/apt/keyrings/nvidia-docker.asc
-    state: absent
-  when: nvidia_container_runtime
-
-- name: Remove legacy NVIDIA Docker repository
-  apt_repository:
-    repo: "deb [signed-by=/etc/apt/keyrings/nvidia-docker.asc] https://nvidia.github.io/nvidia-docker/{{ item }} /"
+    path: "/etc/apt/sources.list.d/nvidia-docker.list{{ item }}"
     state: absent
   loop:
-    - "ubuntu{{ ansible_distribution_version }}/amd64"
-    - "ubuntu18.04/amd64"
+    - ""
+    - ".disabled"
+    - ".save"
+    - ".distUpgrade"
   when: nvidia_container_runtime
-  ignore_errors: yes
 
 - name: Download NVIDIA Container Toolkit GPG key
   ansible.builtin.get_url:
