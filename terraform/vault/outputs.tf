@@ -13,8 +13,8 @@ output "approle_auth_path" {
   value       = vault_auth_backend.approle.path
 }
 
-output "moltbot_role_id" {
-  description = "Role ID for the moltbot AppRole"
-  value       = vault_approle_auth_backend_role.moltbot.role_id
+output "openclaw_role_id" {
+  description = "Role ID for the openclaw AppRole"
+  value       = vault_approle_auth_backend_role.openclaw.role_id
   sensitive   = true
 }
