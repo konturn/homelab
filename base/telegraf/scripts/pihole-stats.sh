@@ -5,17 +5,29 @@
 #
 # Environment variables:
 #   PIHOLE_URL       - Pi-hole base URL (e.g., http://10.3.32.2)
-#   PIHOLE_API_TOKEN - Pi-hole API token (app password), used directly as SID
+#   PIHOLE_API_TOKEN - Pi-hole API password, used to authenticate via /api/auth
 
 set -euo pipefail
 
 PIHOLE_URL="${PIHOLE_URL:?PIHOLE_URL must be set}"
 PIHOLE_API_TOKEN="${PIHOLE_API_TOKEN:?PIHOLE_API_TOKEN must be set}"
 
-SID_PARAM="?sid=${PIHOLE_API_TOKEN}"
+# Authenticate to get a session ID
+AUTH_RESPONSE=$(curl -sf -X POST "${PIHOLE_URL}/api/auth" \
+    -H "Content-Type: application/json" \
+    -d "{\"password\":\"${PIHOLE_API_TOKEN}\"}" 2>/dev/null) || {
+    echo "Failed to authenticate with Pi-hole" >&2
+    exit 1
+}
+
+SID=$(jq -r '.session.sid // empty' <<< "$AUTH_RESPONSE")
+if [[ -z "$SID" ]]; then
+    echo "Failed to obtain SID from Pi-hole auth response" >&2
+    exit 1
+fi
 
 # Fetch summary stats
-RESPONSE=$(curl -sf "${PIHOLE_URL}/api/stats/summary${SID_PARAM}" 2>/dev/null) || {
+RESPONSE=$(curl -sf "${PIHOLE_URL}/api/stats/summary?sid=${SID}" 2>/dev/null) || {
     echo "Failed to fetch Pi-hole stats" >&2
     exit 1
 }
