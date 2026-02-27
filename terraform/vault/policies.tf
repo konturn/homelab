@@ -26,15 +26,15 @@ resource "vault_policy" "ci_deploy" {
 }
 
 # =============================================================================
-# Policy: moltbot-ops
+# Policy: openclaw-ops
 # =============================================================================
-# Minimal access for moltbot: JIT API key + own config only.
+# Minimal access for openclaw: JIT API key + own config only.
 # All service secrets (media, monitoring, IoT, cameras, etc.) are now accessed
 # exclusively through the JIT approval service, which provides audit trails,
 # scoped tokens with short TTLs, and centralized access control.
 
-resource "vault_policy" "moltbot_ops" {
-  name = "moltbot-ops"
+resource "vault_policy" "openclaw_ops" {
+  name = "openclaw-ops"
 
   policy = <<-EOT
     # Agent shared secrets (JIT API key for requesting credentials)
@@ -43,7 +43,7 @@ resource "vault_policy" "moltbot_ops" {
     }
 
     # Moltbot own config (gitlab_token, etc.)
-    path "homelab/data/moltbot/*" {
+    path "homelab/data/openclaw/*" {
       capabilities = ["read"]
     }
   EOT

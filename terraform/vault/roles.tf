@@ -24,15 +24,15 @@ resource "vault_jwt_auth_backend_role" "ci_deploy" {
 }
 
 # =============================================================================
-# AppRole Role: moltbot
+# AppRole Role: openclaw
 # =============================================================================
-# Long-lived role for moltbot service authentication.
+# Long-lived role for openclaw service authentication.
 # secret_id_ttl = 0 means secret IDs don't expire (manual rotation).
 
-resource "vault_approle_auth_backend_role" "moltbot" {
+resource "vault_approle_auth_backend_role" "openclaw" {
   backend        = vault_auth_backend.approle.path
-  role_name      = "moltbot"
-  token_policies = ["moltbot-ops"]
+  role_name      = "openclaw"
+  token_policies = ["openclaw-ops"]
   token_ttl      = 3600
   token_max_ttl  = 86400
 

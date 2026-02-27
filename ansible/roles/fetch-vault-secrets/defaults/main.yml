@@ -142,17 +142,17 @@ vault_secret_paths:
       vault_mqtt_pass: "password"
 
   # Moltbot tokens
-  - path: "moltbot/tokens"
+  - path: "openclaw/tokens"
     fields:
-      vault_moltbot_gateway_token: "gateway_token"
-      vault_moltbot_gitlab_token: "gitlab_token"
-      vault_moltbot_telegram_token: "telegram_token"
-      vault_moltbot_hooks_token: "hooks_token"
+      vault_openclaw_gateway_token: "gateway_token"
+      vault_openclaw_gitlab_token: "gitlab_token"
+      vault_openclaw_telegram_token: "telegram_token"
+      vault_openclaw_hooks_token: "hooks_token"
 
   # ClawRouter
   - path: "clawrouter"
     fields:
-      vault_moltbot_clawrouter_wallet_address: "wallet_address"
+      vault_openclaw_clawrouter_wallet_address: "wallet_address"
 
   # Backup secrets
   - path: "backup/backblaze"

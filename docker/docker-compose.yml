@@ -1787,9 +1787,9 @@ services:
       - TZ=America/New_York
       # Core openclaw configuration
       - OPENAI_API_KEY={{ vault_openai_api_key | default(lookup('env', 'OPENAI_API_KEY')) | trim | replace("$", "$$") }}
-      - CLAWDBOT_GATEWAY_TOKEN={{ vault_moltbot_gateway_token | default(lookup('env', 'MOLTBOT_GATEWAY_TOKEN')) | trim | replace("$", "$$") }}
-      - TELEGRAM_BOT_TOKEN={{ vault_moltbot_telegram_token | default(lookup('env', 'MOLTBOT_TELEGRAM_TOKEN')) | trim | replace("$", "$$") }}
-      - GITLAB_TOKEN={{ vault_moltbot_gitlab_token | default(lookup('env', 'MOLTBOT_GITLAB_TOKEN')) | trim | replace("$", "$$") }}
+      - CLAWDBOT_GATEWAY_TOKEN={{ vault_openclaw_gateway_token | default(lookup('env', 'OPENCLAW_GATEWAY_TOKEN')) | trim | replace("$", "$$") }}
+      - TELEGRAM_BOT_TOKEN={{ vault_openclaw_telegram_token | default(lookup('env', 'OPENCLAW_TELEGRAM_TOKEN')) | trim | replace("$", "$$") }}
+      - GITLAB_TOKEN={{ vault_openclaw_gitlab_token | default(lookup('env', 'OPENCLAW_GITLAB_TOKEN')) | trim | replace("$", "$$") }}
       # IPMI credentials removed — use JIT T2 (ipmi resource) instead
       # Web search
       - BRAVE_API_KEY={{ brave_api_key }}
