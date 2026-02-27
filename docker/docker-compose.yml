@@ -180,6 +180,7 @@ services:
       - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
     image: lscr.io/linuxserver/tautulli:latest@sha256:9d4cd2f0342d4a2e31f4bcf22d9acad1b2e13fc5997a55ceec11344d699c0976
     networks:
+      - internal
       - external
     ports:
       - "8181/tcp"
