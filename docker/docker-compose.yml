@@ -486,7 +486,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.1205@sha256:095ba54dd7ac1fe5c70c0e1542c286a81ad42adc0444c060c739ef1eda19ab3d
+    image: linuxserver/jackett:0.24.1218@sha256:9d09c081428dc32863af181be07333914acaee2bd6329428d7a687e257913b3e
     container_name: jackett
     security_opt:
       - no-new-privileges:true
