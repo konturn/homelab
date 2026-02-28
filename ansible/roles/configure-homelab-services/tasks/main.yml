@@ -261,7 +261,7 @@
     files: "{{ docker_compose_file_names }}"
     state: present
     remove_orphans: true
-  timeout: 300
+  timeout: 600
   when: not ansible_check_mode
 
 - name: Force recreate containers after daemon config change
@@ -272,7 +272,7 @@
     state: present
     recreate: always
     remove_orphans: true
-  timeout: 300
+  timeout: 600
   when: docker_conf.changed and not ansible_check_mode
 
 - name: Capture Nextcloud image ID after compose-up
