@@ -31,6 +31,11 @@
 # Could run arbitrary commands during CI, exfiltrate secrets
 /.gitlab-ci.yml                          @root
 
+# === TELEGRAF ===
+# Exec plugins run arbitrary scripts on the host as telegraf user
+# (which has sudo access to smartctl). Protect scripts and config.
+/base/telegraf/                          @root
+
 # === DOCKER COMPOSE ===
 # Could mount host paths, add privileged containers, modify any service
 # This is the big one — compose controls everything
@@ -69,7 +74,6 @@
 # /docker/images/           — custom Dockerfiles
 # /docker/plex/             — media server configs
 # /docker/nextcloud/        — cloud storage configs
-# /base/telegraf/           — monitoring agent config
 # /base/minidsp/            — audio config
 # /base/sane/               — scanner config
 # /snapclient/              — audio client config
