@@ -262,6 +262,10 @@
     state: present
     remove_orphans: true
   timeout: 300
+  retries: 2
+  delay: 15
+  register: compose_result
+  until: compose_result is success
   when: not ansible_check_mode
 
 - name: Force recreate containers after daemon config change

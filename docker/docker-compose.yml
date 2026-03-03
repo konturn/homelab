@@ -1905,6 +1905,7 @@ services:
   headway-frontend-init:
     container_name: headway-frontend-init
     image: ghcr.io/headwaymaps/headway-init:latest
+    restart: on-failure:3
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
     volumes:
@@ -1956,6 +1957,7 @@ services:
   headway-travelmux-init:
     container_name: headway-travelmux-init
     image: ghcr.io/headwaymaps/travelmux-init:latest
+    restart: on-failure:3
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
       - TRAVELMUX_ELEVATION_ARTIFACT_SOURCE_PATH=/bootstrap/transit/{{ headway_area | default('us') }}.elevation-tifs.tar.zst
@@ -1991,6 +1993,7 @@ services:
   pelias-config-init:
     container_name: pelias-config-init
     image: ghcr.io/headwaymaps/pelias-init:latest
+    restart: on-failure:3
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
       - PELIAS_CONFIG_ARTIFACT_SOURCE_PATH=/bootstrap/{{ headway_area | default('us') }}.pelias.json
@@ -2004,6 +2007,7 @@ services:
   pelias-elasticsearch-init:
     container_name: pelias-elasticsearch-init
     image: ghcr.io/headwaymaps/pelias-init:latest
+    restart: on-failure:3
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
       - ELASTICSEARCH_ARTIFACT_SOURCE_PATH=/bootstrap/{{ headway_area | default('us') }}.elasticsearch.tar.zst
@@ -2017,6 +2021,7 @@ services:
   pelias-placeholder-init:
     container_name: pelias-placeholder-init
     image: ghcr.io/headwaymaps/pelias-init:latest
+    restart: on-failure:3
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
       - PLACEHOLDER_ARTIFACT_SOURCE_PATH=/bootstrap/{{ headway_area | default('us') }}.placeholder.tar.zst
