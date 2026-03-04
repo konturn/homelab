@@ -497,7 +497,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.1247@sha256:341acd3ef781813a8198efb7a911bcb5aa9b00fcc225b3efff526adb6858df0f
+    image: linuxserver/jackett:0.24.1275@sha256:5787573e6b114706798a8c98cfe055d57b459fd21bea90e0573218efdcaf5110
     container_name: jackett
     security_opt:
       - no-new-privileges:true
@@ -1459,7 +1459,7 @@ services:
     cap_drop:
       - ALL
     restart: unless-stopped
-    image: koenkk/zigbee2mqtt:2.9.0@sha256:6cce51b7328afda3670336cd385f53a2f824ac948164e60f304383d1c3c6ef87
+    image: koenkk/zigbee2mqtt:2.9.1@sha256:574b2bd0dcbb59fae6edbbb81a35b5563291d3825da0225f0078aa5575dac37f
     depends_on:
       mosquitto:
         condition: service_healthy
