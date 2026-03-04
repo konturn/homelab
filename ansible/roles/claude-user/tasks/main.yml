@@ -69,7 +69,6 @@
     - { src: /usr/bin/dig, name: dig }
     - { src: /usr/bin/ping, name: ping }
     - { src: /usr/bin/traceroute, name: traceroute }
-    - { src: /usr/bin/docker, name: docker }
   ignore_errors: yes  # Some binaries may not exist on all hosts
 
 - name: Configure restricted .bashrc
@@ -85,7 +84,7 @@
       export HISTSIZE=1000
       readonly PATH
       # No cd allowed in rbash by default
-      echo "Restricted shell. Commands: cat ls head tail grep find df du ps journalctl systemctl ip ss dig docker"
+      echo "Restricted shell. Commands: cat ls head tail grep find df du ps journalctl systemctl ip ss dig"
 
 - name: Create .profile
   copy:
