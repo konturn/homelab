@@ -258,13 +258,10 @@ COMMIT
 # Device-specific rules (by IP address)
 # -----------------------------------------------------------------------------
 
-# Shield TV - Full outbound access
-# Used for: Streaming, gaming, etc.
--A FORWARD -s {{ shield_address }} -j ACCEPT
-
-# Apple TV - Full outbound access  
-# Used for: Streaming, AirPlay, etc.
--A FORWARD -s {{ apple_tv_address }} -j ACCEPT
+# Apple TV - Internet + Plex access
+# AirPlay from VLAN 4 (mgmt/wifi) works via RELATED,ESTABLISHED (phone initiates)
+-A FORWARD -s {{ apple_tv_address }} -o {{ inet_interface_name }} -j ACCEPT
+-A FORWARD -s {{ apple_tv_address }} -d {{ lab_nginx_ip }} -p tcp -m tcp --dport 32400 -j ACCEPT
 
 # Snapserver - Allow all inbound
 # Used for: Multi-room audio clients connecting to server
