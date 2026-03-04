@@ -737,8 +737,8 @@ services:
     networks:
       internal:
         ipv4_address: {{ promtail_ip }}
-    mem_limit: 128m
-    cpus: 0.25
+    mem_limit: 256m
+    cpus: 0.5
     # Use json-file logging to avoid circular dependency (same as Loki)
     logging:
       driver: json-file
