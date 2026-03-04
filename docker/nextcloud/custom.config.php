@@ -1,31 +1,34 @@
 <?php
+/**
+ * Custom configuration overrides.
+ * Deployed by Ansible — DO NOT manually edit on the server.
+ * Nextcloud autoloads all *.config.php files from the config directory.
+ *
+ * Nextcloud manages its own config.php (version, instanceid, etc.)
+ * This file provides infrastructure settings and Vault-injected secrets.
+ */
 $CONFIG = array (
   'memcache.local' => '\OC\Memcache\APCu',
+  'memcache.locking' => '\OC\Memcache\APCu',
+  'filelocking.enabled' => true,
   'apps_paths' => array (
     0 => array ('path' => '/var/www/html/apps', 'url' => '/apps', 'writable' => false),
     1 => array ('path' => '/var/www/html/custom_apps', 'url' => '/custom_apps', 'writable' => true),
   ),
   'upgrade.disable-web' => false,
-  'instanceid' => 'ocwr9cuirtoi',
-  'passwordsalt' => 'grndcyjdVB9ZAhjecJxyiW15Vuu2Eg',
-  'secret' => '{{ vault_nextcloud_secret | default(lookup("env", "NEXTCLOUD_SECRET")) }}',
   'trusted_domains' => array (
     0 => 'nextcloud.nkontur.com',
   ),
   'datadirectory' => '/data',
   'dbtype' => 'mysql',
-  'version' => '32.0.5.0',
-  'overwrite.cli.url' => 'https://nextcloud.nkontur.com',
-  'overwriteprotocol' => 'https',
   'dbname' => 'nextcloud',
   'dbhost' => 'nextcloud_database',
   'dbtableprefix' => 'oc_',
   'mysql.utf8mb4' => true,
   'dbuser' => 'nextcloud',
   'dbpassword' => '{{ vault_nextcloud_db_password }}',
-  'installed' => true,
-  'loglevel' => 3,
-  'maintenance' => false,
+  'overwrite.cli.url' => 'https://nextcloud.nkontur.com',
+  'overwriteprotocol' => 'https',
   'trusted_proxies' => array (
     0 => '172.16.0.0/12',
     1 => '10.0.0.0/8',
@@ -36,6 +39,4 @@ $CONFIG = array (
   ),
   'default_phone_region' => 'US',
   'maintenance_window_start' => 4,
-  'memcache.locking' => '\OC\Memcache\APCu',
-  'filelocking.enabled' => true,
 );
