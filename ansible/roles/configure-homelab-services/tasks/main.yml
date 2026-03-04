@@ -261,6 +261,10 @@
     files: "{{ docker_compose_file_names }}"
     state: present
     remove_orphans: true
+  register: compose_result
+  retries: 2
+  delay: 30
+  until: compose_result is success
   timeout: 300
   when: not ansible_check_mode
 
