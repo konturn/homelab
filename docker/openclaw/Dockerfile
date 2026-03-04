@@ -8,6 +8,11 @@ USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
     ipmitool \
+    texlive-latex-base \
+    texlive-latex-extra \
+    texlive-fonts-recommended \
+    texlive-fonts-extra \
+    lmodern \
     chromium \
     fonts-liberation \
     fonts-noto-color-emoji \
