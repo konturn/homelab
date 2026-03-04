@@ -1989,7 +1989,7 @@ services:
         reservations:
           memory: 256M
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8000/api/v2/plan?fromPlace=0,0\&toPlace=0,0 || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8000/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
