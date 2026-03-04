@@ -183,7 +183,7 @@ services:
       - SETGID         # s6-overlay drops to PGID/configured group
       - CHOWN          # s6-overlay chowns data directories at startup
       - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
-    image: lscr.io/linuxserver/tautulli:latest@sha256:9d4cd2f0342d4a2e31f4bcf22d9acad1b2e13fc5997a55ceec11344d699c0976
+    image: lscr.io/linuxserver/tautulli:18993091-ls1@sha256:9d4cd2f0342d4a2e31f4bcf22d9acad1b2e13fc5997a55ceec11344d699c0976
     networks:
       - internal
       - external
@@ -497,7 +497,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.1275@sha256:5787573e6b114706798a8c98cfe055d57b459fd21bea90e0573218efdcaf5110
+    image: linuxserver/jackett:0.24.1278@sha256:dabcf54891e2639f5c4897219d0096a3317c4e2c061be08fbac0b32a6d4acf33
     container_name: jackett
     security_opt:
       - no-new-privileges:true
@@ -1621,7 +1621,7 @@ services:
       start_period: 120s
 
   prowlarr:
-    image: lscr.io/linuxserver/prowlarr:latest@sha256:e74a1e093dcc223d671d4b7061e2b4946f1989a4d3059654ff4e623b731c9134
+    image: lscr.io/linuxserver/prowlarr:latest@sha256:a8fe7b9c502f979146b6d0f22438b825c38e068241bb8a708c473062dffdbb03
     container_name: prowlarr
     security_opt:
       - no-new-privileges:true
@@ -1904,7 +1904,7 @@ services:
   # Headway frontend — web UI for maps, search, and routing
   headway-frontend-init:
     container_name: headway-frontend-init
-    image: ghcr.io/headwaymaps/headway-init:latest
+    image: ghcr.io/headwaymaps/headway-init:0.4.0
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
       - HEADWAY_ENABLE_TRANSIT_ROUTING=0
@@ -1917,7 +1917,7 @@ services:
 
   headway-frontend:
     container_name: headway-frontend
-    image: ghcr.io/headwaymaps/headway:latest
+    image: ghcr.io/headwaymaps/headway:0.4.0
     restart: unless-stopped
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
@@ -1992,7 +1992,7 @@ services:
   # Pelias — geocoding stack (replaces Nominatim)
   pelias-config-init:
     container_name: pelias-config-init
-    image: ghcr.io/headwaymaps/pelias-init:latest
+    image: ghcr.io/headwaymaps/pelias-init:0.4.0
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
       - PELIAS_CONFIG_ARTIFACT_SOURCE_PATH=/bootstrap/{{ headway_area | default('us') }}.pelias.json
@@ -2005,7 +2005,7 @@ services:
 
   pelias-elasticsearch-init:
     container_name: pelias-elasticsearch-init
-    image: ghcr.io/headwaymaps/pelias-init:latest
+    image: ghcr.io/headwaymaps/pelias-init:0.4.0
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
       - ELASTICSEARCH_ARTIFACT_SOURCE_PATH=/bootstrap/{{ headway_area | default('us') }}.elasticsearch.tar.zst
@@ -2018,7 +2018,7 @@ services:
 
   pelias-placeholder-init:
     container_name: pelias-placeholder-init
-    image: ghcr.io/headwaymaps/pelias-init:latest
+    image: ghcr.io/headwaymaps/pelias-init:0.4.0
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
       - PLACEHOLDER_ARTIFACT_SOURCE_PATH=/bootstrap/{{ headway_area | default('us') }}.placeholder.tar.zst
@@ -2110,7 +2110,7 @@ services:
 
   pelias-libpostal:
     container_name: pelias-libpostal
-    image: pelias/libpostal-service
+    image: pelias/libpostal-service:latest@sha256:2c7aeb35d2de315f1abb00d3d0630eb871f8a6ee770b3cf1a56e4aa140760285
     restart: unless-stopped
     networks:
       - internal
