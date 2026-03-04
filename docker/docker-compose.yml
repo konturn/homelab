@@ -1803,6 +1803,7 @@ services:
       - {{ docker_persistent_data_path }}/openclaw/data:/home/node/.openclaw
       - {{ docker_persistent_data_path }}/openclaw/mcporter:/home/node/.mcporter
       - {{ docker_persistent_data_path }}/openclaw/workspace:/home/node/.openclaw/workspace
+      - {{ docker_persistent_data_path }}/chromium-browser/uploads:/uploads
     command: ["node", "dist/index.js", "gateway", "--bind", "lan", "--port", "18789"]
 
   # =============================================================================
