@@ -37,5 +37,5 @@ ruler:
   alertmanager_url: http://localhost:9093
 
 limits_config:
-  retention_period: 168h  # 7 days
+  # retention: unlimited (no compactor configured)
   reject_old_samples_max_age: 168h
