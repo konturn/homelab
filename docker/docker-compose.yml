@@ -1381,7 +1381,7 @@ services:
     volumes:
       - "{{ docker_persistent_data_path }}/mqtt/conf:/mosquitto/config"
       - mosquitto:/mosquitto/data
-      - "{{ docker_persistent_data_path }}/certs:/mosquitto/certs"
+      - "{{ docker_persistent_data_path }}/certs:/mosquitto/certs:ro"
     healthcheck:
       test: ["CMD-SHELL", "echo | nc -w1 127.0.0.1 1883 || exit 1"]
       interval: 30s
@@ -1548,7 +1548,7 @@ services:
       retries: 3
       start_period: 30s
   nextcloud_db:
-    image: mariadb:12.2.2
+    image: mariadb:12.2.2@sha256:b1cb255a9939d28a1856815f0de6046c20c28c21b92a9f2696bc782b247a47ee
     container_name: nextcloud_database
     security_opt:
       - no-new-privileges:true
@@ -1988,6 +1988,13 @@ services:
           memory: 1G
         reservations:
           memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8000/api/v2/plan?fromPlace=0,0\&toPlace=0,0 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
 
   # Pelias — geocoding stack (replaces Nominatim)
   pelias-config-init:
@@ -2084,6 +2091,12 @@ services:
           memory: 512M
         reservations:
           memory: 128M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:4000/v1/search?text=test || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   pelias-placeholder:
     container_name: pelias-placeholder
@@ -2107,6 +2120,12 @@ services:
           memory: 512M
         reservations:
           memory: 128M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:4100/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   pelias-libpostal:
     container_name: pelias-libpostal
@@ -2120,3 +2139,9 @@ services:
           memory: 4G
         reservations:
           memory: 2G
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:4400/parse?address=test || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s

@@ -2,12 +2,12 @@
 {% if not is_satellite %}
     "data-root": "/persistent_data/docker",
     "iptables": true,
+{% endif %}
     "log-driver": "json-file",
     "log-opts": {
         "max-size": "10m",
         "max-file": "3"
     },
-{% endif %}
     "storage-driver": "overlay2",
     "runtimes": {
       "nvidia": {
