@@ -6,7 +6,7 @@
   - configure-base
   - role: claude-user
     vars:
-      claude_docker_access: true
+      claude_docker_access: false
       claude_user_principal: claude-router
   - configure-router-network
   - role: configure-tailscale
