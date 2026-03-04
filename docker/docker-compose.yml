@@ -1907,6 +1907,8 @@ services:
     image: ghcr.io/headwaymaps/headway-init:latest
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
+      - HEADWAY_ENABLE_TRANSIT_ROUTING=0
+      - HEADWAY_SHARED_VOL=/data
     volumes:
       - {{ docker_persistent_data_path }}/headway/data/{{ headway_area | default('us') }}:/bootstrap:ro
       - headway_frontend_data:/data:rw
