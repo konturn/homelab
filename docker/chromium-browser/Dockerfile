@@ -21,8 +21,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     socat \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
-RUN groupadd -r chrome && useradd -r -g chrome -G audio,video -m -s /bin/bash chrome \
+# Create non-root user with UID 1000 to match openclaw's 'node' user
+# This ensures shared volume mounts (/uploads) have matching ownership
+RUN groupadd -g 1000 chrome && useradd -u 1000 -g chrome -G audio,video -m -s /bin/bash chrome \
     && mkdir -p /data/chrome-profile && chown -R chrome:chrome /data
 
 COPY entrypoint.sh /entrypoint.sh
