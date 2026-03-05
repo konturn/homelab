@@ -2288,6 +2288,7 @@ services:
       - /etc:/host/etc:ro
       - /usr/share/snmp/mibs:/usr/share/snmp/mibs:ro
       - /dev:/dev:ro                                                              # SMART disk access
+      - /run/udev:/run/udev:ro                                                    # diskio device name resolution
       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket:ro                # systemd D-Bus
     environment:
       - HOST_PROC=/host/proc
@@ -2296,6 +2297,8 @@ services:
       - HOST_MOUNT_PREFIX=/host
     networks:
       - internal
+      - external
+      - iot
       - mgmt
     deploy:
       resources:
