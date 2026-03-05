@@ -23,29 +23,29 @@ profile telegraf-dbus-readonly flags=(attach_disconnected,mediate_deleted) {
   ptrace,
 
   # D-Bus: Allow connecting to the system bus
-  dbus bus=system send
+  dbus send bus=system
        interface=org.freedesktop.DBus
        member={Hello,AddMatch,GetNameOwner,GetId},
 
-  dbus bus=system receive
+  dbus receive bus=system
        interface=org.freedesktop.DBus
        member={Hello,AddMatch,GetNameOwner,GetId,NameOwnerChanged,NameAcquired},
 
   # D-Bus: Allow read-only systemd queries
-  dbus bus=system send
+  dbus send bus=system
        interface=org.freedesktop.systemd1.Manager
        member={ListUnits,ListUnitFiles,GetUnit},
 
-  dbus bus=system receive
+  dbus receive bus=system
        interface=org.freedesktop.systemd1.Manager
        member={ListUnits,ListUnitFiles,GetUnit},
 
   # D-Bus: Allow reading systemd unit properties
-  dbus bus=system send
+  dbus send bus=system
        interface=org.freedesktop.DBus.Properties
        member={Get,GetAll},
 
-  dbus bus=system receive
+  dbus receive bus=system
        interface=org.freedesktop.DBus.Properties
        member={Get,GetAll,PropertiesChanged},
 
