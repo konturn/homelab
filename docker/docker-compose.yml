@@ -2183,13 +2183,11 @@ services:
       start_period: 120s
 
   telegraf:
-    build:
-      context: ./telegraf
-      dockerfile: Dockerfile
-    image: telegraf-custom:1.37.3
+    image: gitlab-registry.lab.nkontur.com:443/root/homelab/telegraf:${TELEGRAF_IMAGE_TAG:-latest}
     container_name: telegraf
     user: root
     restart: unless-stopped
+    hostname: satellite-2
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -2220,8 +2218,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
-          cpus: "0.5"
+          memory: 512M
+          cpus: "1.0"
     logging:
       driver: json-file
       options:
