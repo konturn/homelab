@@ -30,7 +30,7 @@ services:
       retries: 3
 
   telegraf:
-    image: telegraf:1.37.3-alpine@sha256:a550e63a2efbea4b49596e475f0fcd3b057ff2ab0dfc8102357de289ee342a37
+    image: gitlab-registry.lab.nkontur.com:443/root/homelab/telegraf:{{ telegraf_image_tag | default('latest') }}
     container_name: telegraf
     restart: unless-stopped
     security_opt:
