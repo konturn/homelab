@@ -5,26 +5,42 @@
 # IMPORTANT: This script does NOT advance the checkpoint.
 # Call advance-checkpoint.sh after successfully processing messages.
 # This ensures no messages are lost if the caller crashes mid-processing.
+#
+# NOTE: Newer iCloud-synced messages may store text in the attributedBody
+# blob (NSAttributedString) instead of the text column. We handle both.
 
 set -euo pipefail
 
 CHECKPOINT_FILE="$HOME/.imessage-checkpoint"
-DB="/Users/konoahko/Library/Messages/chat.db"
+DB="/Users/{{ macos_primary_user }}/Library/Messages/chat.db"
 
 # Get last processed message ROWID (default: 0)
 if [ -f "$CHECKPOINT_FILE" ]; then
   LAST_ROWID=$(cat "$CHECKPOINT_FILE")
 else
   # First run: only process messages from now on (don't replay entire history)
-  LAST_ROWID=$(sudo -n -u konoahko /usr/bin/sqlite3 "$DB" "SELECT MAX(ROWID) FROM message;" 2>/dev/null || echo "0")
+  LAST_ROWID=$(sudo -n -u {{ macos_primary_user }} /usr/bin/sqlite3 "$DB" "SELECT MAX(ROWID) FROM message;" 2>/dev/null || echo "0")
   echo "$LAST_ROWID" > "$CHECKPOINT_FILE"
 fi
 
 # Query for new messages NOT from me, with ROWID > last checkpoint
-MESSAGES=$(sudo -n -u konoahko /usr/bin/sqlite3 -json "$DB" "
+# Uses COALESCE to fall back to extracting text from attributedBody blob
+# when the text column is NULL (common with iCloud-synced messages)
+MESSAGES=$(sudo -n -u {{ macos_primary_user }} /usr/bin/sqlite3 -json "$DB" "
 SELECT
   m.ROWID as id,
-  m.text as text,
+  COALESCE(
+    m.text,
+    CASE
+      WHEN m.attributedBody IS NOT NULL THEN
+        substr(
+          m.attributedBody,
+          instr(m.attributedBody, x'2B') + 2,
+          unicode(substr(m.attributedBody, instr(m.attributedBody, x'2B') + 1, 1))
+        )
+      ELSE NULL
+    END
+  ) as text,
   m.date as date,
   h.id as sender,
   m.is_from_me as is_from_me,
@@ -37,7 +53,7 @@ LEFT JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
 LEFT JOIN chat c ON cmj.chat_id = c.ROWID
 WHERE m.ROWID > $LAST_ROWID
   AND m.is_from_me = 0
-  AND m.text IS NOT NULL
+  AND (m.text IS NOT NULL OR m.attributedBody IS NOT NULL)
 ORDER BY m.ROWID ASC;
 " 2>/dev/null || echo "[]")
 
