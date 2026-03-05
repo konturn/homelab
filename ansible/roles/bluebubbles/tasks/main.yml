@@ -1,0 +1,38 @@
+# =============================================================================
+# Role: bluebubbles
+# =============================================================================
+# Installs BlueBubbles server on macOS and configures a LaunchAgent to keep
+# Messages.app alive (required for BlueBubbles to relay iMessages).
+# =============================================================================
+
+- name: Install BlueBubbles server via Homebrew cask
+  community.general.homebrew_cask:
+    name: bluebubbles
+    state: present
+  become: yes
+  become_user: "{{ bluebubbles_user }}"
+
+- name: Create Scripts directory
+  file:
+    path: "/Users/{{ bluebubbles_user }}/Scripts"
+    state: directory
+    owner: "{{ bluebubbles_user }}"
+    group: staff
+    mode: '0755'
+
+- name: Deploy poke-messages AppleScript
+  copy:
+    src: poke-messages.scpt
+    dest: "/Users/{{ bluebubbles_user }}/Scripts/poke-messages.scpt"
+    owner: "{{ bluebubbles_user }}"
+    group: staff
+    mode: '0644'
+
+- name: Deploy poke-messages LaunchAgent plist
+  copy:
+    src: com.user.poke-messages.plist
+    dest: "/Users/{{ bluebubbles_user }}/Library/LaunchAgents/com.user.poke-messages.plist"
+    owner: "{{ bluebubbles_user }}"
+    group: staff
+    mode: '0644'
+  notify: load poke-messages launchagent

@@ -1,0 +1,7 @@
+- name: load poke-messages launchagent
+  command: >
+    launchctl bootstrap gui/$(id -u {{ bluebubbles_user }})
+    /Users/{{ bluebubbles_user }}/Library/LaunchAgents/com.user.poke-messages.plist
+  become: yes
+  become_user: "{{ bluebubbles_user }}"
+  failed_when: false

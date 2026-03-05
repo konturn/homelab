@@ -149,6 +149,11 @@ vault_secret_paths:
       vault_moltbot_telegram_token: "telegram_token"
       vault_moltbot_hooks_token: "hooks_token"
 
+  # BlueBubbles (iMessage bridge)
+  - path: "moltbot/bluebubbles"
+    fields:
+      vault_moltbot_bluebubbles_password: "password"
+
   # ClawRouter
   - path: "clawrouter"
     fields:

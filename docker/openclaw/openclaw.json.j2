@@ -1634,6 +1634,22 @@
         "showOk": false,
         "showAlerts": true
       }
+    },
+    "bluebubbles": {
+      "enabled": true,
+      "serverUrl": "http://10.4.128.24:1234",
+      "password": "{{ vault_moltbot_bluebubbles_password }}",
+      "webhookPath": "/bluebubbles-webhook",
+      "dmPolicy": "open",
+      "allowFrom": ["*"],
+      "groupPolicy": "open",
+      "groupAllowFrom": ["*"],
+      "sendReadReceipts": true,
+      "actions": {
+        "reactions": true,
+        "reply": true,
+        "sendAttachment": true
+      }
     }
   },
   "gateway": {
@@ -1661,10 +1677,14 @@
   "plugins": {
     "allow": [
       "telegram",
+      "bluebubbles",
       "clawrouter"
     ],
     "entries": {
       "telegram": {
+        "enabled": true
+      },
+      "bluebubbles": {
         "enabled": true
       },
       "clawrouter": {
