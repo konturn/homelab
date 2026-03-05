@@ -1,0 +1,49 @@
+// ============================================================================
+// Grafana Alloy — OTLP receiver for OpenClaw metrics
+// ============================================================================
+// Receives OTLP HTTP metrics from OpenClaw and forwards them to Telegraf's
+// OpenTelemetry gRPC input. Telegraf handles the InfluxDB v2 write.
+//
+// Pipeline: OpenClaw --OTLP/HTTP--> Alloy --OTLP/gRPC--> Telegraf --> InfluxDB v2
+//
+// Traces are intentionally NOT forwarded — only metrics.
+// Logs are handled separately by Loki/Promtail.
+// ============================================================================
+
+// Receive OTLP over HTTP (port 4318) — this is what OpenClaw sends to
+otelcol.receiver.otlp "default" {
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    metrics = [otelcol.processor.batch.default.input]
+    // traces deliberately omitted — not forwarded
+    // logs deliberately omitted — handled by Loki/Promtail
+  }
+}
+
+// Batch metrics before forwarding to reduce gRPC call overhead
+otelcol.processor.batch "default" {
+  timeout = "10s"
+  send_batch_size = 512
+
+  output {
+    metrics = [otelcol.exporter.otlp.telegraf.input]
+  }
+}
+
+// Forward metrics to Telegraf's inputs.opentelemetry gRPC endpoint
+// Telegraf runs on the host with network_mode: host.
+// Containers on the internal macvlan reach the host via the vlan3 shim at 10.3.0.2.
+otelcol.exporter.otlp "telegraf" {
+  client {
+    // 10.3.0.2 is the vlan3 macvlan shim — the host's address on the internal network.
+    // Defined in networking/networkd/vlan3-shim.netdev + .network
+    endpoint = "10.3.0.2:4317"
+
+    tls {
+      insecure = true
+    }
+  }
+}

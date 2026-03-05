@@ -683,6 +683,41 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+
+  alloy:
+    container_name: alloy
+    image: grafana/alloy:v1.8.3
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - internal
+    volumes:
+      - {{ docker_persistent_data_path }}/alloy/config.alloy:/etc/alloy/config.alloy:ro
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --stability.level=generally-available
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 32M
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:12345/-/healthy || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
   loki:
     container_name: loki
     security_opt:
