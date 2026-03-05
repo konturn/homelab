@@ -252,6 +252,48 @@
 
 ### Telegraf AppArmor profile for D-Bus access
 # The systemd_units input plugin needs D-Bus to query unit status.
+# NUT UPS shutdown watcher — monitors for shutdown flag from NUT container
+# When NUT detects critical battery, it creates /var/run/nut/shutdown-requested.
+# This systemd path unit detects the file and triggers a graceful host shutdown.
+- name: Create /var/run/nut directory for shutdown flag
+  ansible.builtin.file:
+    path: /var/run/nut
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: "'router' in inventory_hostname"
+
+- name: Deploy NUT shutdown watcher path unit
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nut/nut-shutdown-watcher.path"
+    dest: /etc/systemd/system/nut-shutdown-watcher.path
+    owner: root
+    group: root
+    mode: '0644'
+  register: nut_watcher_path
+  when: "'router' in inventory_hostname"
+
+- name: Deploy NUT shutdown watcher service unit
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nut/nut-shutdown-watcher.service"
+    dest: /etc/systemd/system/nut-shutdown-watcher.service
+    owner: root
+    group: root
+    mode: '0644'
+  register: nut_watcher_service
+  when: "'router' in inventory_hostname"
+
+- name: Enable and start NUT shutdown watcher
+  ansible.builtin.systemd:
+    name: nut-shutdown-watcher.path
+    enabled: true
+    state: started
+    daemon_reload: true
+  when:
+    - "'router' in inventory_hostname"
+    - not ansible_check_mode
+
 # This custom profile allows only read-only queries (ListUnits, ListUnitFiles,
 # GetUnit) and blocks all mutating operations (Start/Stop/Restart/Kill).
 # Must be loaded before docker-compose starts the telegraf container.

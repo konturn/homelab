@@ -136,6 +136,11 @@ vault_secret_paths:
     fields:
       vault_snmp_password: "password"
 
+  # NUT UPS monitor
+  - path: "infrastructure/nut"
+    fields:
+      vault_nut_monitor_password: "password"
+
   # MQTT secrets
   - path: "mqtt/mosquitto"
     fields:

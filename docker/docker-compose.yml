@@ -830,6 +830,50 @@ services:
       retries: 3
       start_period: 15s
 
+  # =============================================================================
+  # NUT (Network UPS Tools) — UPS monitoring and auto-shutdown
+  # Monitors CyberPower UPS via SNMP. When battery drops to critical level,
+  # writes a shutdown flag that the host-side systemd watcher picks up.
+  # =============================================================================
+  nut:
+    build:
+      context: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/nut' }}"
+    image: gitlab-registry.lab.nkontur.com:443/root/homelab/nut:latest
+    container_name: nut
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN          # fix file ownership at startup
+      - DAC_OVERRIDE   # read config files across users
+      - SETUID         # upsd drops to nut user
+      - SETGID         # upsd drops to nut group
+    networks:
+      - internal
+      - mgmt
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    volumes:
+      - {{ docker_persistent_data_path }}/nut/ups.conf:/etc/nut/ups.conf:ro
+      - {{ docker_persistent_data_path }}/nut/upsd.conf:/etc/nut/upsd.conf:ro
+      - {{ docker_persistent_data_path }}/nut/upsd.users:/etc/nut/upsd.users:ro
+      - {{ docker_persistent_data_path }}/nut/upsmon.conf:/etc/nut/upsmon.conf:ro
+      - {{ docker_persistent_data_path }}/nut/notify.sh:/etc/nut/notify.sh:ro
+      - {{ docker_persistent_data_path }}/nut/nutshutdown:/sbin/nutshutdown:ro
+      - /var/run/nut:/var/run/nut                                                 # shared with host systemd watcher
+    dns:
+      - {{ pihole_ip }}
+    healthcheck:
+      test: ["CMD", "/usr/bin/upsc", "cyberpower@localhost", "ups.status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   gitlab:
     container_name: gitlab
     security_opt:
