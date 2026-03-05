@@ -1658,16 +1658,34 @@
       "resetOnExit": false
     }
   },
+  "diagnostics": {
+    "enabled": true,
+    "otel": {
+      "enabled": true,
+      "endpoint": "http://grafana:3000/api/otlp",
+      "protocol": "http/protobuf",
+      "serviceName": "openclaw-gateway",
+      "traces": true,
+      "metrics": true,
+      "logs": false,
+      "sampleRate": 1.0,
+      "flushIntervalMs": 60000
+    }
+  },
   "plugins": {
     "allow": [
       "telegram",
-      "clawrouter"
+      "clawrouter",
+      "diagnostics-otel"
     ],
     "entries": {
       "telegram": {
         "enabled": true
       },
       "clawrouter": {
+        "enabled": true
+      },
+      "diagnostics-otel": {
         "enabled": true
       }
     },
