@@ -2188,6 +2188,7 @@ services:
     user: root
     restart: unless-stopped
     hostname: satellite-2
+    entrypoint: ["/usr/bin/telegraf"]
     security_opt:
       - no-new-privileges:true
     cap_drop:
