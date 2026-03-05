@@ -269,6 +269,7 @@ var resourceTier = map[string]int{
 	"gmail-read": 1,
 	"gmail-send": 2,
 	"prowlarr":  1,
+	"tautulli":  1,
 	"mqtt":        1,
 	"ssh-macmini": 1,
 

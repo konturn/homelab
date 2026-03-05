@@ -363,6 +363,9 @@ resource "vault_policy" "jit_tier1_services" {
     path "homelab/data/docker/deluge" {
       capabilities = ["read"]
     }
+    path "homelab/data/docker/tautulli" {
+      capabilities = ["read"]
+    }
     path "homelab/data/docker/prowlarr" {
       capabilities = ["read"]
     }
