@@ -204,48 +204,22 @@
     group: root
     mode: 0600
 
-- name: Install telegraf and monitoring dependencies
-  apt:
-    name:
-      - telegraf
-      - smartmontools
-      - lm-sensors
-    state: latest
-    update_cache: yes
-
-### Configure telegraf config file
-- name: Telegraf scripts directory
-  ansible.builtin.file:
-    path: /etc/telegraf/scripts
-    state: directory
-    owner: telegraf
-    group: telegraf
-    mode: 0755
-
-- name: Deploy telegraf scripts
-  ansible.builtin.copy:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/telegraf/scripts/' }}"
-    dest: /etc/telegraf/scripts/
-    owner: telegraf
-    group: telegraf
-    mode: 0755
-  register: telegraf_scripts
-
-- name: Telegraf config file
-  ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/telegraf/telegraf.conf' }}"
-    dest: '/etc/telegraf/telegraf.conf'
-    owner: telegraf
-    group: telegraf
-    mode: 0600
-  no_log: true
-  register: telegraf
-
-- name: Reload telegraf to pick up changes
+### Telegraf — containerized (see docker/docker-compose.yml)
+# Host telegraf package is no longer needed. Stop and disable the systemd
+# service if it exists from a previous deployment, then remove the package.
+- name: Stop and disable host telegraf service
   ansible.builtin.systemd:
     name: telegraf
-    state: restarted
-  when: telegraf.changed or telegraf_scripts.changed
+    state: stopped
+    enabled: false
+  ignore_errors: true
+  register: telegraf_host_stop
+
+- name: Remove host telegraf package
+  apt:
+    name: telegraf
+    state: absent
+  when: telegraf_host_stop is not failed
 
 - name: Sets up base cronjob for nextcloud
   ansible.builtin.cron:

@@ -2181,3 +2181,55 @@ services:
       timeout: 10s
       retries: 3
       start_period: 120s
+
+  telegraf:
+    build:
+      context: ./telegraf
+      dockerfile: Dockerfile
+    image: telegraf-custom:1.37.3
+    container_name: telegraf
+    user: root
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_RAW          # ping native method
+      - DAC_READ_SEARCH  # read host /proc, /sys
+      - SYS_RAWIO        # SMART disk access
+    dns:
+      - {{ pihole_ip }}
+    volumes:
+      - {{ docker_persistent_data_path }}/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+      - {{ docker_persistent_data_path }}/telegraf/scripts:/etc/telegraf/scripts:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /etc:/host/etc:ro
+      - /dev:/dev:ro                                                              # SMART disk access
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket:ro                # systemd D-Bus
+    environment:
+      - HOST_PROC=/host/proc
+      - HOST_SYS=/host/sys
+      - HOST_ETC=/host/etc
+      - HOST_MOUNT_PREFIX=/host
+    networks:
+      - internal
+      - mgmt
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep telegraf > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
