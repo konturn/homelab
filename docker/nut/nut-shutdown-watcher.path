@@ -1,0 +1,10 @@
+# Systemd path unit — watches for NUT container shutdown flag
+# When the file appears, triggers nut-shutdown-watcher.service
+[Unit]
+Description=Watch for NUT UPS Shutdown Request
+
+[Path]
+PathExists=/var/run/nut/shutdown-requested
+
+[Install]
+WantedBy=multi-user.target

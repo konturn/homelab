@@ -1,0 +1,9 @@
+#!/bin/sh
+# NUT shutdown handler — signals the host to shut down.
+#
+# Creates a flag file in a shared volume (/var/run/nut/).
+# The host-side nut-shutdown-watcher.path systemd unit detects
+# this file and triggers a graceful host shutdown.
+
+logger -t nut-shutdown "UPS battery critical — requesting host shutdown"
+echo "$(date -Iseconds) UPS battery critical" > /var/run/nut/shutdown-requested

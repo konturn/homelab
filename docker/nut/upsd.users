@@ -1,0 +1,11 @@
+# NUT user accounts
+
+# Primary monitor user — triggers shutdown
+[upsmon]
+    password = {{ vault_nut_monitor_password }}
+    upsmon primary
+
+# Read-only user for Telegraf/monitoring
+[monitor]
+    password = {{ vault_nut_monitor_password }}
+    upsmon secondary
