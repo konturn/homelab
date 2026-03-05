@@ -38,14 +38,10 @@
         docker_proxy_tls_certs.results | selectattr('stat.isdir', 'defined') | selectattr('stat.isdir', 'equalto', true) | list | length > 0
   register: docker_proxy_tls_generated
 
-- name: Deploy telegraf sudoers for SMART monitoring
-  ansible.builtin.copy:
-    content: "telegraf ALL=(root) NOPASSWD: /usr/sbin/smartctl\n"
-    dest: /etc/sudoers.d/telegraf
-    owner: root
-    group: root
-    mode: "0440"
-    validate: 'visudo -cf %s'
+- name: Remove legacy telegraf sudoers (SMART now disabled in container)
+  ansible.builtin.file:
+    path: /etc/sudoers.d/telegraf
+    state: absent
   when: "'router' in inventory_hostname"
 
 ### Fix systemd-networkd-wait-online boot timeout
