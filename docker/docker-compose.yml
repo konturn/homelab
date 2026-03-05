@@ -1958,7 +1958,7 @@ services:
   # Travelmux — multi-modal routing proxy (wraps Valhalla)
   headway-travelmux-init:
     container_name: headway-travelmux-init
-    image: ghcr.io/headwaymaps/travelmux-init:latest
+    image: ghcr.io/headwaymaps/travelmux-init:latest@sha256:4f9028d9911c5e867f0eec493bf6dd8cffe2c480cd1beed15baaa5950da971f4
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
       - TRAVELMUX_ELEVATION_ARTIFACT_SOURCE_PATH=/bootstrap/transit/{{ headway_area | default('us') }}.elevation-tifs.tar.zst
@@ -1970,7 +1970,7 @@ services:
 
   travelmux:
     container_name: travelmux
-    image: ghcr.io/headwaymaps/travelmux:latest
+    image: ghcr.io/headwaymaps/travelmux:latest@sha256:a555aff6759c752e762b3c43a23da1a6dbf79cc8d6b837a2cfcbe30b3c414c46
     restart: unless-stopped
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
@@ -2039,7 +2039,7 @@ services:
 
   pelias-elasticsearch:
     container_name: pelias-elasticsearch
-    image: pelias/elasticsearch:8.12.2-beta
+    image: pelias/elasticsearch:8.12.2-beta@sha256:f0a92540175bf0183b94528b7e2f6125ed1c79110b73779fd76e48ad2d2ad6f5
     restart: unless-stopped
     networks:
       - internal
@@ -2072,7 +2072,7 @@ services:
 
   pelias-api:
     container_name: pelias-api
-    image: pelias/api:master
+    image: pelias/api:master@sha256:0b8d9287fec447b7495e43e177f4c4257e9ea06283358b320b511c693c39a9af
     restart: unless-stopped
     environment:
       - PORT=4000
@@ -2101,7 +2101,7 @@ services:
 
   pelias-placeholder:
     container_name: pelias-placeholder
-    image: pelias/placeholder:master
+    image: pelias/placeholder:master@sha256:50806f93581ad5ae2cc8ae6dd310d2531878af08819b16e463b8e034ccc1e921
     restart: unless-stopped
     environment:
       - PORT=4100
