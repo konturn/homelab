@@ -250,6 +250,29 @@
   check_mode: no
   when: "'router' in inventory_hostname"
 
+### Telegraf AppArmor profile for D-Bus access
+# The systemd_units input plugin needs D-Bus to query unit status.
+# This custom profile allows only read-only queries (ListUnits, ListUnitFiles,
+# GetUnit) and blocks all mutating operations (Start/Stop/Restart/Kill).
+# Must be loaded before docker-compose starts the telegraf container.
+- name: Deploy Telegraf AppArmor profile
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/telegraf/telegraf-dbus-readonly"
+    dest: /etc/apparmor.d/telegraf-dbus-readonly
+    owner: root
+    group: root
+    mode: '0644'
+  register: telegraf_apparmor_profile
+  when: "'router' in inventory_hostname"
+
+- name: Load Telegraf AppArmor profile
+  ansible.builtin.command:
+    cmd: apparmor_parser -r /etc/apparmor.d/telegraf-dbus-readonly
+  when:
+    - "'router' in inventory_hostname"
+    - telegraf_apparmor_profile is changed
+    - not ansible_check_mode
+
 - name: Create and start Docker services
   community.docker.docker_compose_v2:
     project_name: "{{ docker_compose_project_name | default('docker') }}"

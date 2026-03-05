@@ -2191,6 +2191,7 @@ services:
     entrypoint: ["/usr/bin/telegraf"]
     security_opt:
       - no-new-privileges:true
+      - apparmor:telegraf-dbus-readonly
     cap_drop:
       - ALL
     cap_add:
