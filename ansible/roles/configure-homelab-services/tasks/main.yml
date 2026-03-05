@@ -38,7 +38,7 @@
         docker_proxy_tls_certs.results | selectattr('stat.isdir', 'defined') | selectattr('stat.isdir', 'equalto', true) | list | length > 0
   register: docker_proxy_tls_generated
 
-- name: Remove legacy telegraf sudoers (SMART now disabled in container)
+- name: Remove legacy telegraf sudoers (containerized telegraf runs as root)
   ansible.builtin.file:
     path: /etc/sudoers.d/telegraf
     state: absent

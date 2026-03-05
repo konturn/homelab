@@ -2183,8 +2183,12 @@ services:
       start_period: 120s
 
   telegraf:
-    image: telegraf:1.37.3-alpine@sha256:a550e63a2efbea4b49596e475f0fcd3b057ff2ab0dfc8102357de289ee342a37
+    build:
+      context: ./telegraf
+      dockerfile: Dockerfile
+    image: telegraf-custom:1.37.3
     container_name: telegraf
+    user: root
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -2193,6 +2197,7 @@ services:
     cap_add:
       - NET_RAW          # ping native method
       - DAC_READ_SEARCH  # read host /proc, /sys
+      - SYS_RAWIO        # SMART disk access
     dns:
       - {{ pihole_ip }}
     volumes:
@@ -2202,6 +2207,8 @@ services:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /etc:/host/etc:ro
+      - /dev:/dev:ro                                                              # SMART disk access
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket:ro                # systemd D-Bus
     environment:
       - HOST_PROC=/host/proc
       - HOST_SYS=/host/sys

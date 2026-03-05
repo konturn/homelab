@@ -205,7 +205,13 @@ all:
           dest: "{{ docker_persistent_data_path }}/telegraf/scripts/clawrouter-balance.sh"
           name: "telegraf"
           mode: "0755"
+        - src: "docker/telegraf/Dockerfile"
+          dest: "{{ docker_compose_dest_path }}/telegraf/Dockerfile"
+          name: "telegraf"
       docker_data_dirs:
+        - path: "{{ docker_compose_dest_path }}/telegraf"
+          owner: "root"
+          group: "root"
         - path: "{{ docker_persistent_data_path }}/telegraf/scripts"
           owner: "root"
           group: "root"
