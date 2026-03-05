@@ -1915,6 +1915,13 @@ services:
       - headway_frontend_data:/data:rw
     networks:
       - internal
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 128M
 
   headway-frontend:
     container_name: headway-frontend
@@ -1967,6 +1974,13 @@ services:
       - headway_travelmux_data:/data:rw
     networks:
       - internal
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
 
   travelmux:
     container_name: travelmux
@@ -2010,6 +2024,13 @@ services:
       - headway_pelias_config:/config
     networks:
       - internal
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 64M
 
   pelias-elasticsearch-init:
     container_name: pelias-elasticsearch-init
@@ -2023,6 +2044,13 @@ services:
       - headway_pelias_elasticsearch:/usr/share/elasticsearch/data
     networks:
       - internal
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
 
   pelias-placeholder-init:
     container_name: pelias-placeholder-init
@@ -2036,6 +2064,13 @@ services:
       - headway_pelias_placeholder:/data/placeholder
     networks:
       - internal
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
 
   pelias-elasticsearch:
     container_name: pelias-elasticsearch
