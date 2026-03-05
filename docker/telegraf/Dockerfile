@@ -7,4 +7,5 @@ RUN echo "deb http://deb.debian.org/debian bookworm non-free" >> /etc/apt/source
     ipmitool \
     snmp-mibs-downloader \
     nvme-cli \
+    jq \
     && rm -rf /var/lib/apt/lists/*
