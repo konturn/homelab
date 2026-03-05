@@ -2206,6 +2206,7 @@ services:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /etc:/host/etc:ro
+      - /usr/share/snmp/mibs:/usr/share/snmp/mibs:ro
       - /dev:/dev:ro                                                              # SMART disk access
       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket:ro                # systemd D-Bus
     environment:
