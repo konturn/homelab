@@ -497,7 +497,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.1278@sha256:dabcf54891e2639f5c4897219d0096a3317c4e2c061be08fbac0b32a6d4acf33
+    image: linuxserver/jackett:0.24.1287@sha256:5def3f28961d34fc4a0d34038671a98c7a10c7bd27074623feec87193e4b5f17
     container_name: jackett
     security_opt:
       - no-new-privileges:true
@@ -806,7 +806,7 @@ services:
   # Initial setup uses file storage; will be configured for GitLab JWT auth in future MR
   vault:
     container_name: vault
-    image: hashicorp/vault:1.21.3@sha256:5f244d447c6f90107149c9565da5ffedf847cec673ba0062a82fc3dd83c89e65
+    image: hashicorp/vault:1.21.4@sha256:4e33b126a59c0c333b76fb4e894722462659a6bec7c48c9ee8cea56fccfd2569
     restart: unless-stopped
     networks:
       internal:
@@ -1905,7 +1905,7 @@ services:
   # Headway frontend — web UI for maps, search, and routing
   headway-frontend-init:
     container_name: headway-frontend-init
-    image: ghcr.io/headwaymaps/headway-init:0.4.0
+    image: ghcr.io/headwaymaps/headway-init:0.4.0@sha256:d8ee45cd7d36dd4aa363e5ac6267c304aedb59838788f668d14ba03d57c18f1c
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
       - HEADWAY_ENABLE_TRANSIT_ROUTING=0
@@ -1918,7 +1918,7 @@ services:
 
   headway-frontend:
     container_name: headway-frontend
-    image: ghcr.io/headwaymaps/headway:0.4.0
+    image: ghcr.io/headwaymaps/headway:0.4.0@sha256:91f30093899cbc2590284e0c63fd99a6b75d776bd2d5293be4382107b50ee023
     restart: unless-stopped
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
@@ -2000,7 +2000,7 @@ services:
   # Pelias — geocoding stack (replaces Nominatim)
   pelias-config-init:
     container_name: pelias-config-init
-    image: ghcr.io/headwaymaps/pelias-init:0.4.0
+    image: ghcr.io/headwaymaps/pelias-init:0.4.0@sha256:67d27152719deaf83b8e1c09679704784a73ab153946d4885246a4d229c57c39
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
       - PELIAS_CONFIG_ARTIFACT_SOURCE_PATH=/bootstrap/{{ headway_area | default('us') }}.pelias.json
@@ -2013,7 +2013,7 @@ services:
 
   pelias-elasticsearch-init:
     container_name: pelias-elasticsearch-init
-    image: ghcr.io/headwaymaps/pelias-init:0.4.0
+    image: ghcr.io/headwaymaps/pelias-init:0.4.0@sha256:67d27152719deaf83b8e1c09679704784a73ab153946d4885246a4d229c57c39
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
       - ELASTICSEARCH_ARTIFACT_SOURCE_PATH=/bootstrap/{{ headway_area | default('us') }}.elasticsearch.tar.zst
@@ -2026,7 +2026,7 @@ services:
 
   pelias-placeholder-init:
     container_name: pelias-placeholder-init
-    image: ghcr.io/headwaymaps/pelias-init:0.4.0
+    image: ghcr.io/headwaymaps/pelias-init:0.4.0@sha256:67d27152719deaf83b8e1c09679704784a73ab153946d4885246a4d229c57c39
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
       - PLACEHOLDER_ARTIFACT_SOURCE_PATH=/bootstrap/{{ headway_area | default('us') }}.placeholder.tar.zst
