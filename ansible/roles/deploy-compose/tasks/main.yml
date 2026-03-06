@@ -45,7 +45,21 @@
     mode: "{{ item.mode | default('0640') }}"
   no_log: true
   loop: "{{ docker_config | default([]) }}"
+  register: _config_template_results
   when: docker_config is defined and docker_config | length > 0
+
+- name: Restart containers whose config files changed
+  ansible.builtin.command:
+    cmd: "docker restart -t 30 {{ item.item.name }}"
+  timeout: 60
+  when:
+    - item.changed | default(false)
+    - item.item.name is defined
+    - not ansible_check_mode
+  loop: "{{ _config_template_results.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name | default('unknown') }} ({{ item.item.src | default('?') }})"
+  ignore_errors: yes
 
 - name: Template out compose file to ansible state directory on host
   ansible.builtin.template:
