@@ -1,6 +1,6 @@
 services:
   promtail:
-    image: grafana/promtail:3.6.7@sha256:51346af8682f7a664affaca4f34a62f5a4f0f83ace9931df94590375a94ff8f1
+    image: grafana/promtail:3.5.8
     container_name: promtail
     restart: unless-stopped
     security_opt:
@@ -11,6 +11,8 @@ services:
       - DAC_READ_SEARCH
     volumes:
       - /var/log:/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /etc/machine-id:/etc/machine-id:ro
       - promtail-positions:/tmp/positions
       - {{ docker_persistent_data_path }}/promtail/config.yml:/etc/promtail/config.yml:ro
@@ -29,9 +31,25 @@ services:
       timeout: 5s
       retries: 3
 
-  # Telegraf runs on baremetal (systemd service), not as a container.
-  # Hardware monitoring (SMART, IPMI, sensors, systemd) requires host access.
-  # See ansible/roles/configure-homelab-services/ for baremetal telegraf config.
+  telegraf:
+    image: telegraf:1.34@sha256:2173764352db5591bebe02d3f965cc64cdd357ff8439f57e45b6a1885eb50333
+    container_name: telegraf
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - {{ docker_persistent_data_path }}/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    network_mode: host
+    mem_limit: 64m
+    cpus: 0.15
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
 
 volumes:
   promtail-positions:
