@@ -64,6 +64,7 @@ variables:
         - docker/docker-compose.yml
         - docker/**/*
         - networking/**/*
+  - ansible/roles/configure-homelab-services/**/*
         - base/**/*
         - requirements.txt
         - ansible/requirements.yml
