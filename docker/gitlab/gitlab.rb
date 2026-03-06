@@ -46,6 +46,7 @@ puma['max_threads'] = 8
 # Sidekiq (background jobs) - High concurrency for pipeline bursts
 ###
 sidekiq['concurrency'] = 20
+sidekiq['metrics_enabled'] = true
 
 ###
 # PostgreSQL - Right-sized for small instance
@@ -75,11 +76,11 @@ alertmanager['enable'] = false
 node_exporter['enable'] = false
 redis_exporter['enable'] = false
 postgres_exporter['enable'] = false
-gitlab_exporter['enable'] = false
+gitlab_exporter['enable'] = true
 
 # Allow /-/metrics endpoint access from internal networks
 # This exposes Puma/Sidekiq/GC metrics without the full Prometheus stack
-gitlab_rails['monitoring_whitelist'] = ['10.3.0.0/16', '10.6.0.0/16', '10.4.0.0/16', '127.0.0.0/8', '172.16.0.0/12']
+gitlab_rails['monitoring_whitelist'] = ['10.0.0.0/8', '172.16.0.0/12', '127.0.0.0/8']
 
 ###
 # Disable unused features to reduce memory and background worker load
