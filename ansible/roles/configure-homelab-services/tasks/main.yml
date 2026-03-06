@@ -313,6 +313,78 @@
     state: absent
   when: "'router' in inventory_hostname"
 
+### NUT (Network UPS Tools) — baremetal installation
+# Runs directly on the host so upsmon can call shutdown without container tricks.
+# Monitors CyberPower UPS via SNMP and shuts down the host on critical battery.
+
+- name: Install NUT packages
+  ansible.builtin.apt:
+    name:
+      - nut
+      - nut-snmp
+    state: present
+    update_cache: true
+  when: "'router' in inventory_hostname"
+
+- name: Set NUT mode to netserver
+  ansible.builtin.copy:
+    content: |
+      # Managed by Ansible
+      MODE=netserver
+    dest: /etc/nut/nut.conf
+    owner: root
+    group: nut
+    mode: '0640'
+  register: nut_conf
+  when: "'router' in inventory_hostname"
+
+- name: Deploy NUT config files
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/base/nut/{{ item.src }}"
+    dest: "/etc/nut/{{ item.dest }}"
+    owner: root
+    group: nut
+    mode: "{{ item.mode }}"
+  loop:
+    - { src: "ups.conf", dest: "ups.conf", mode: "0640" }
+    - { src: "upsd.conf", dest: "upsd.conf", mode: "0640" }
+    - { src: "upsd.users", dest: "upsd.users", mode: "0640" }
+    - { src: "upsmon.conf", dest: "upsmon.conf", mode: "0640" }
+    - { src: "notify.sh", dest: "notify.sh", mode: "0755" }
+  register: nut_configs
+  when: "'router' in inventory_hostname"
+
+- name: Enable and start NUT server (upsd)
+  ansible.builtin.systemd:
+    name: nut-server
+    enabled: true
+    state: started
+  when:
+    - "'router' in inventory_hostname"
+    - not ansible_check_mode
+
+- name: Enable and start NUT monitor (upsmon)
+  ansible.builtin.systemd:
+    name: nut-monitor
+    enabled: true
+    state: started
+  when:
+    - "'router' in inventory_hostname"
+    - not ansible_check_mode
+
+- name: Restart NUT services on config change
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: restarted
+    daemon_reload: true
+  loop:
+    - nut-server
+    - nut-monitor
+  when:
+    - "'router' in inventory_hostname"
+    - not ansible_check_mode
+    - nut_configs.changed or nut_conf.changed
+
 - name: Create and start Docker services
   community.docker.docker_compose_v2:
     project_name: "{{ docker_compose_project_name | default('docker') }}"

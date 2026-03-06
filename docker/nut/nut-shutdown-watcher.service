@@ -1,9 +1,0 @@
-# Systemd service triggered by nut-shutdown-watcher.path
-# Executes host shutdown when NUT container requests it
-[Unit]
-Description=NUT UPS Shutdown Handler
-After=docker.service
-
-[Service]
-Type=oneshot
-ExecStart=/bin/sh -c 'logger -t nut-shutdown "Host shutdown requested by NUT"; /sbin/shutdown -h +0 "UPS battery critical — NUT triggered shutdown"'
