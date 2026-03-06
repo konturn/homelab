@@ -1889,6 +1889,8 @@ services:
       - {{ docker_persistent_data_path }}/openclaw/mcporter:/home/node/.mcporter
       - {{ docker_persistent_data_path }}/openclaw/workspace:/home/node/.openclaw/workspace
       - {{ docker_persistent_data_path }}/chromium-browser/uploads:/uploads
+      - {{ docker_persistent_data_path }}/openclaw/entrypoint-wrapper.sh:/usr/local/bin/entrypoint-wrapper.sh:ro
+    entrypoint: ["entrypoint-wrapper.sh"]
     command: ["node", "dist/index.js", "gateway", "--bind", "lan", "--port", "18789"]
 
   # =============================================================================
