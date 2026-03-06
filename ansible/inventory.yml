@@ -223,10 +223,7 @@ all:
           dest: "/etc/telegraf/scripts/deluge-stats.sh"
           name: "telegraf"
           mode: "0755"
-        - src: "docker/telegraf/scripts/clawrouter-balance.sh"
-          dest: "/etc/telegraf/scripts/clawrouter-balance.sh"
-          name: "telegraf"
-          mode: "0755"
+
       docker_data_dirs:
         - path: "{{ docker_persistent_data_path }}/tempo"
           owner: "10001"
