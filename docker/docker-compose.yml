@@ -924,6 +924,11 @@ services:
       - VAULT_SKIP_VERIFY=true
       # Path to unseal keys file inside the container
       - VAULT_UNSEAL_KEYS_FILE=/vault/unseal/unseal-keys
+      # OpenTelemetry tracing
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_SERVICE_NAME=vault
+      - OTEL_TRACES_EXPORTER=otlp
     entrypoint: /bin/sh
     command: ["/vault/scripts/auto-unseal.sh"]
     healthcheck:
@@ -1880,6 +1885,14 @@ services:
       - VAULT_ADDR=https://vault.lab.nkontur.com:8200
       - VAULT_APPROLE_ROLE_ID={{ lookup('env', 'VAULT_APPROLE_ROLE_ID') }}
       - VAULT_APPROLE_SECRET_ID={{ lookup('env', 'VAULT_APPROLE_SECRET_ID') }}
+      # OpenTelemetry tracing — env vars ready, needs @opentelemetry/auto-instrumentations-node
+      # in the OpenClaw image to activate. Follow-up: upstream feature request or custom image.
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_SERVICE_NAME=openclaw-gateway
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=none
+      - OTEL_LOGS_EXPORTER=none
     volumes:
       - {{ docker_persistent_data_path }}/openclaw/data:/home/node/.openclaw
       - {{ docker_persistent_data_path }}/openclaw/mcporter:/home/node/.mcporter
