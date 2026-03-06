@@ -681,6 +681,10 @@ services:
       - GF_SMTP_FROM_ADDRESS=konoahko@gmail.com
       - GF_SMTP_FROM_NAME=Grafana Homelab
       - GF_SMTP_STARTTLS_POLICY=MandatoryStartTLS
+      # OpenTelemetry tracing — export Grafana's own traces via OTLP gRPC
+      - GF_TRACING_OPENTELEMETRY_OTLP_ADDRESS=otel-collector:4317
+      - GF_TRACING_OPENTELEMETRY_SAMPLER_TYPE=const
+      - GF_TRACING_OPENTELEMETRY_SAMPLER_PARAM=1
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s
