@@ -42,15 +42,24 @@
 # Telegraf runs as a systemd service (not containerized) for direct access to
 # host hardware (SMART, IPMI, sensors, systemd D-Bus). Config files are
 # templated from docker/telegraf/ to /etc/telegraf/ via docker_config entries.
-- name: Add InfluxData APT signing key
-  ansible.builtin.apt_key:
+- name: Download InfluxData GPG key
+  ansible.builtin.get_url:
     url: https://repos.influxdata.com/influxdata-archive_compat.key
-    state: present
+    dest: /tmp/influxdata-archive_compat.key
+    mode: '0644'
+  when: "'router' in inventory_hostname"
+  check_mode: no
+
+- name: Dearmor and install InfluxData GPG key
+  ansible.builtin.shell: |
+    cat /tmp/influxdata-archive_compat.key | gpg --dearmor -o /usr/share/keyrings/influxdata-archive-keyring.gpg
+  args:
+    creates: /usr/share/keyrings/influxdata-archive-keyring.gpg
   when: "'router' in inventory_hostname"
 
-- name: Add InfluxData APT repository
+- name: Add InfluxData APT repository (signed-by)
   ansible.builtin.apt_repository:
-    repo: "deb https://repos.influxdata.com/ubuntu noble stable"
+    repo: "deb [signed-by=/usr/share/keyrings/influxdata-archive-keyring.gpg] https://repos.influxdata.com/ubuntu noble stable"
     filename: influxdata
     state: present
   when: "'router' in inventory_hostname"
