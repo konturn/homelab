@@ -805,13 +805,9 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    group_add:
-      - "{{ docker_gid }}"
     restart: unless-stopped
     networks:
       internal:
-      external:
-      iot:
       loki-backend:
     deploy:
       resources:
@@ -821,7 +817,6 @@ services:
           memory: 128M
     volumes:
       - {{ docker_persistent_data_path }}/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       tempo:
         condition: service_healthy

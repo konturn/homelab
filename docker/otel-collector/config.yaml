@@ -13,49 +13,6 @@ receivers:
       http:
         endpoint: "0.0.0.0:4318"
 
-  # ============================================================================
-  # Docker Stats — Container resource usage (moved from Telegraf)
-  # ============================================================================
-  docker_stats:
-    endpoint: "unix:///var/run/docker.sock"
-    collection_interval: 10s
-    timeout: 20s
-    api_version: "1.44"
-
-  # ============================================================================
-  # Nginx — Request rates and connection stats via stub_status
-  # (moved from Telegraf inputs.nginx)
-  # ============================================================================
-  nginx/lab:
-    endpoint: "http://{{ lab_nginx_ip }}/stub_status"
-    collection_interval: 30s
-  nginx/external:
-    endpoint: "http://{{ nginx_ip }}/stub_status"
-    collection_interval: 30s
-  nginx/iot:
-    endpoint: "http://{{ iot_nginx_ip }}/stub_status"
-    collection_interval: 30s
-
-  # ============================================================================
-  # Prometheus — GitLab application metrics (moved from Telegraf inputs.prometheus)
-  # ============================================================================
-  prometheus:
-    config:
-      scrape_configs:
-        - job_name: 'gitlab'
-          scrape_interval: 60s
-          scheme: https
-          tls_config:
-            insecure_skip_verify: true
-          static_configs:
-            - targets: ['gitlab.lab.nkontur.com']
-          metrics_path: '/-/metrics'
-          metric_relabel_configs:
-            - source_labels: [__name__]
-              regex: 'sidekiq_.*|puma_.*|gitaly_.*|gitlab_sql_.*|gitlab_cache_.*|gitlab_transaction_.*|ruby_.*|gitlab_workhorse_.*'
-              action: keep
-
-
 processors:
   batch:
     send_batch_size: 1024
@@ -66,23 +23,6 @@ processors:
     attributes:
       - key: deployment.environment
         value: homelab
-        action: upsert
-
-  # Add nginx instance labels based on receiver
-  attributes/nginx_lab:
-    actions:
-      - key: nginx.instance
-        value: lab
-        action: upsert
-  attributes/nginx_external:
-    actions:
-      - key: nginx.instance
-        value: external
-        action: upsert
-  attributes/nginx_iot:
-    actions:
-      - key: nginx.instance
-        value: iot
         action: upsert
 
 exporters:
@@ -110,19 +50,7 @@ service:
       processors: [resource, batch]
       exporters: [otlp/tempo]
 
-    # Service metrics from receivers that replaced Telegraf inputs
-    metrics/services:
-      receivers:
-        - docker_stats
-        - nginx/lab
-        - nginx/external
-        - nginx/iot
-        - prometheus
-      processors: [resource, batch]
-      exporters: [influxdb]
-
-    # OTLP metrics from instrumented apps
-    metrics/otlp:
+    metrics:
       receivers: [otlp]
       processors: [resource, batch]
       exporters: [influxdb]
