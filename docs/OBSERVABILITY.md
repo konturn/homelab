@@ -10,7 +10,6 @@ graph TB
         direction LR
         docker["Docker<br/>Containers"]
         system["System<br/>(host)"]
-        switches["Aruba<br/>Switches"]
         openclaw["OpenClaw<br/>Gateway"]
         gitlab["GitLab"]
         other["Other<br/>Services"]
@@ -34,11 +33,9 @@ graph TB
 
     %% Log paths
     docker -- logs --> promtail
-    switches -- syslog --> promtail
 
     %% Metric paths
     system -- metrics --> telegraf
-    switches -- SNMP --> telegraf
     other -- metrics --> telegraf
 
     %% OTLP paths
@@ -100,12 +97,11 @@ Config: `docker/otel-collector/config.yaml`
 
 #### Instrumented Services
 
-| Service        | Method                           | Signals          |
-|----------------|----------------------------------|------------------|
-| OpenClaw       | Native `diagnostics-otel` plugin | Traces + Metrics |
-| GitLab         | Ruby OTel SDK (env vars)         | Traces           |
-| Grafana        | Built-in OTel support            | Traces           |
-| Aruba switches | SNMP (Telegraf) + Syslog (Promtail) | Metrics + Logs |
+| Service   | Method                           | Signals          |
+|-----------|----------------------------------|------------------|
+| OpenClaw  | Native `diagnostics-otel` plugin | Traces + Metrics |
+| GitLab    | Ruby OTel SDK (env vars)         | Traces           |
+| Grafana   | Built-in OTel support            | Traces           |
 
 ### Alerting: Grafana
 

@@ -324,9 +324,5 @@ snmp-server engine-id 100039E703001a1e0ec280
 
 snmp-server enable trap
 
-logging {{ dhcp_address }}
-logging level warnings
-logging facility local6
-
 process monitor log
 end

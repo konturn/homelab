@@ -740,8 +740,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - {{ docker_persistent_data_path }}/docker/containers:/var/lib/docker/containers:ro
     command: -config.file=/etc/promtail/config.yml
-    ports:
-      - "1514:1514/udp"   # Syslog from network devices (Aruba switches)
     extra_hosts:
       - "loki.lab.nkontur.com:{{ lab_nginx_ip }}"
     networks:
