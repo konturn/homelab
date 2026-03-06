@@ -803,6 +803,8 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    group_add:
+      - "{{ docker_gid }}"
     restart: unless-stopped
     networks:
       internal:

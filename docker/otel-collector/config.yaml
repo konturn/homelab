@@ -72,9 +72,6 @@ receivers:
         tls:
           insecure_skip_verify: true
     collection_interval: 6h
-    metrics:
-      httpcheck.tls.cert_remaining:
-        enabled: true
 
 processors:
   batch:
