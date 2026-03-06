@@ -35,6 +35,11 @@ services:
     image: telegraf:1.34@sha256:2173764352db5591bebe02d3f965cc64cdd357ff8439f57e45b6a1885eb50333
     container_name: telegraf
     restart: unless-stopped
+    # Run telegraf directly as root — the default entrypoint uses setpriv to
+    # drop privileges, which fails with no-new-privileges + cap_drop ALL.
+    # Security is enforced by no-new-privileges + cap_drop instead.
+    entrypoint: ["/usr/bin/telegraf"]
+    command: ["--config", "/etc/telegraf/telegraf.conf"]
     security_opt:
       - no-new-privileges:true
     cap_drop:
