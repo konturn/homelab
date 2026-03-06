@@ -166,6 +166,7 @@ all:
           mode: "0644"
           owner: "1000"
           group: "1000"
+          force: false  # OpenClaw mutates this file at runtime (usageStats, dynamic profiles)
         - src: "docker/grafana/provisioning/datasources/influxdb.yml"
           dest: "{{ docker_persistent_data_path }}/grafana/provisioning/datasources/influxdb.yml"
           name: "grafana"

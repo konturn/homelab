@@ -240,6 +240,7 @@
     owner: "{{ item.owner | default('root') }}"
     group: "{{ item.group | default(item.owner | default('root')) }}"
     mode: "{{ item.mode | default('0640') }}"
+    force: "{{ item.force | default(true) }}"
   register: docker_config_copy
   loop: "{{ docker_config + (docker_config_nginx | default([])) }}"
 
