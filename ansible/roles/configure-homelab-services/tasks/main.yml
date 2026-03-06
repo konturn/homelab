@@ -391,7 +391,6 @@
     daemon_reload: true
   loop:
     - nut-server
-    - nut-monitor
   when:
     - "'router' in inventory_hostname"
     - not ansible_check_mode
