@@ -50,6 +50,8 @@ ansible-playbook -i ansible/inventory.yml ansible/zwave.yml
 
 > 📖 **See [docs/NETWORK.md](docs/NETWORK.md)** for detailed network documentation including traffic flows, Wireguard VPN setup, and Mullvad egress routing.
 
+> 📊 **See [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md)** for the full observability stack — logs (Loki), metrics (Telegraf/InfluxDB), traces (OpenTelemetry/Tempo), and alerting (Grafana).
+
 ## Services
 
 ### External (10.2.x.x)
