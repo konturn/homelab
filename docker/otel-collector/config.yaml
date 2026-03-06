@@ -55,24 +55,6 @@ receivers:
               regex: 'sidekiq_.*|puma_.*|gitaly_.*|gitlab_sql_.*|gitlab_cache_.*|gitlab_transaction_.*|ruby_.*|gitlab_workhorse_.*'
               action: keep
 
-  # ============================================================================
-  # HTTP Check — Certificate expiry and endpoint health (moved from Telegraf inputs.x509_cert)
-  # ============================================================================
-  httpcheck/certs:
-    targets:
-      - endpoint: "https://grafana.lab.nkontur.com"
-        tls:
-          insecure_skip_verify: true
-      - endpoint: "https://gitlab.lab.nkontur.com"
-        tls:
-          insecure_skip_verify: true
-      - endpoint: "https://nextcloud.nkontur.com"
-        tls:
-          insecure_skip_verify: true
-      - endpoint: "https://plex.nkontur.com"
-        tls:
-          insecure_skip_verify: true
-    collection_interval: 6h
 
 processors:
   batch:
@@ -136,7 +118,6 @@ service:
         - nginx/external
         - nginx/iot
         - prometheus
-        - httpcheck/certs
       processors: [resource, batch]
       exporters: [influxdb]
 
