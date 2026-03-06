@@ -9,6 +9,7 @@ graph TD
     subgraph sources["Data Sources"]
         docker["Docker Containers"]
         system["System (host)"]
+        switches["Aruba Switches"]
         openclaw["OpenClaw Gateway"]
         gitlab["GitLab"]
         other["Other Services"]
@@ -30,6 +31,8 @@ graph TD
 
     docker -- logs --> promtail
     system -- metrics --> telegraf
+    switches -- "SNMP (metrics)" --> telegraf
+    switches -- "syslog (logs)" --> promtail
     other -- metrics --> telegraf
     openclaw -- "OTLP (traces + metrics)" --> otel
     gitlab -- "OTLP (traces)" --> otel
@@ -87,11 +90,12 @@ Config: `docker/otel-collector/config.yaml`
 
 #### Instrumented Services
 
-| Service   | Method                           | Signals          |
-|-----------|----------------------------------|------------------|
-| OpenClaw  | Native `diagnostics-otel` plugin | Traces + Metrics |
-| GitLab    | Ruby OTel SDK (env vars)         | Traces           |
-| Grafana   | Built-in OTel support            | Traces           |
+| Service        | Method                           | Signals          |
+|----------------|----------------------------------|------------------|
+| OpenClaw       | Native `diagnostics-otel` plugin | Traces + Metrics |
+| GitLab         | Ruby OTel SDK (env vars)         | Traces           |
+| Grafana        | Built-in OTel support            | Traces           |
+| Aruba switches | SNMP (Telegraf) + Syslog (Promtail) | Metrics + Logs |
 
 ### Alerting: Grafana
 
