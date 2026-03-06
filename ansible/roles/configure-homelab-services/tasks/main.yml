@@ -366,6 +366,16 @@
   register: nut_configs
   when: "'router' in inventory_hostname"
 
+- name: Enable and start NUT driver
+  ansible.builtin.systemd:
+    name: nut-driver-enumerator.service
+    enabled: true
+    state: started
+  when:
+    - "'router' in inventory_hostname"
+    - not ansible_check_mode
+    - vault_nut_monitor_password | default('') | length > 0
+
 - name: Enable and start NUT server (upsd)
   ansible.builtin.systemd:
     name: nut-server
@@ -374,6 +384,7 @@
   when:
     - "'router' in inventory_hostname"
     - not ansible_check_mode
+    - vault_nut_monitor_password | default('') | length > 0
 
 - name: Enable and start NUT monitor (upsmon)
   ansible.builtin.systemd:
@@ -383,6 +394,7 @@
   when:
     - "'router' in inventory_hostname"
     - not ansible_check_mode
+    - vault_nut_monitor_password | default('') | length > 0
 
 - name: Restart NUT services on config change
   ansible.builtin.systemd:
@@ -390,12 +402,21 @@
     state: restarted
     daemon_reload: true
   loop:
+    - nut-driver-enumerator
     - nut-server
     - nut-monitor
   when:
     - "'router' in inventory_hostname"
     - not ansible_check_mode
     - nut_configs.changed or nut_conf.changed
+    - vault_nut_monitor_password | default('') | length > 0
+
+- name: Warn if NUT password not in Vault
+  ansible.builtin.debug:
+    msg: "NUT services NOT started — vault secret 'infrastructure/nut' is missing. Create it with a 'password' field."
+  when:
+    - "'router' in inventory_hostname"
+    - vault_nut_monitor_password | default('') | length == 0
 
 - name: Create and start Docker services
   community.docker.docker_compose_v2:
