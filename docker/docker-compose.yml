@@ -832,7 +832,11 @@ services:
         max-size: "10m"
         max-file: "3"
     healthcheck:
-      disable: true
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:13133/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   gitlab:
     container_name: gitlab
