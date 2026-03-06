@@ -59,7 +59,8 @@
 
 - name: Add InfluxData APT repository (signed-by)
   ansible.builtin.apt_repository:
-    repo: "deb [signed-by=/usr/share/keyrings/influxdata-archive-keyring.gpg] https://repos.influxdata.com/ubuntu noble stable"
+    # InfluxData does not publish packages for Noble (24.04); use Jammy (22.04) which is compatible
+    repo: "deb [signed-by=/usr/share/keyrings/influxdata-archive-keyring.gpg] https://repos.influxdata.com/ubuntu jammy stable"
     filename: influxdata
     state: present
   when: "'router' in inventory_hostname"
