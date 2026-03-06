@@ -33,8 +33,3 @@ ui = true
 
 # Log level
 log_level = "info"
-
-# Telemetry — export traces and metrics via OTLP to otel-collector
-telemetry {
-  disable_hostname = true
-}
