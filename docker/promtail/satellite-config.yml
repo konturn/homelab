@@ -7,11 +7,11 @@ positions:
 
 clients:
   - url: https://loki.lab.nkontur.com/loki/api/v1/push
-{% if vault_loki_push_username is defined and vault_loki_push_password is defined %}
     basic_auth:
-      username: {{ vault_loki_push_username }}
-      password: {{ vault_loki_push_password }}
-{% endif %}
+      username: promtail
+      password: "{{ vault_loki_push_password }}"
+    tls_config:
+      insecure_skip_verify: true
 
 scrape_configs:
   # Systemd journal - scrapes all host logs directly from journal
@@ -21,7 +21,7 @@ scrape_configs:
       max_age: 48h
       labels:
         job: systemd-journal
-        host: {{ inventory_hostname | regex_replace('\.lab\.nkontur\.com$', '') }}
+        host: "{{ inventory_hostname | regex_replace('\\.lab\\.nkontur\\.com$', '') }}"
     relabel_configs:
       - source_labels: ['__journal__systemd_unit']
         target_label: 'unit'
@@ -29,3 +29,26 @@ scrape_configs:
         target_label: 'syslog_identifier'
       - source_labels: ['__journal_priority_keyword']
         target_label: 'level'
+
+  # Docker container logs (json-file driver)
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 30s
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: 'container'
+      - source_labels: ['__meta_docker_container_id']
+        target_label: 'container_id'
+      - action: replace
+        target_label: 'source'
+        replacement: 'docker'
+      - action: replace
+        target_label: 'host'
+        replacement: "{{ inventory_hostname | regex_replace('\\.lab\\.nkontur\\.com$', '') }}"
+      - action: replace
+        target_label: 'job'
+        replacement: 'docker'
+    pipeline_stages:
+      - docker: {}
