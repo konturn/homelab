@@ -16,7 +16,7 @@
 #
 #   BUILD (parallel, path-triggered)
 #   ┌──────────────┬──────────────┬──────────────┬──────────────────────┐
-#   openclaw:build  amcrest2mqtt:build  snapcast:build  snapclient:build  jit-approval-svc:build  telegraf:build
+#   openclaw:build  amcrest2mqtt:build  snapcast:build  snapclient:build  jit-approval-svc:build
 #
 #   DEPLOY (main only, parallel)
 #   ┌──────────────────────────┬──────────────┬──────────────┬──────────────────────────┐
@@ -388,25 +388,6 @@ chromium-browser:build:
       when: manual
       allow_failure: true
 
-telegraf:build:
-  extends: .docker_build
-  script:
-    - docker build -t $CI_REGISTRY_IMAGE/telegraf:latest -t $CI_REGISTRY_IMAGE/telegraf:$CI_COMMIT_SHORT_SHA docker/telegraf/
-    - docker push $CI_REGISTRY_IMAGE/telegraf:latest
-    - docker push $CI_REGISTRY_IMAGE/telegraf:$CI_COMMIT_SHORT_SHA
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
-      changes:
-        - docker/telegraf/Dockerfile
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      changes:
-        - docker/telegraf/Dockerfile
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      when: manual
-      allow_failure: true
-    - if: $CI_COMMIT_BRANCH == "main"
-      when: manual
-      allow_failure: true
 
 # =============================================================================
 # Deploy Stage - Parallel deployment (main only)

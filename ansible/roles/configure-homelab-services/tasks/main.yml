@@ -38,11 +38,55 @@
         docker_proxy_tls_certs.results | selectattr('stat.isdir', 'defined') | selectattr('stat.isdir', 'equalto', true) | list | length > 0
   register: docker_proxy_tls_generated
 
-- name: Remove legacy telegraf sudoers (containerized telegraf runs as root)
-  ansible.builtin.file:
-    path: /etc/sudoers.d/telegraf
-    state: absent
+### Telegraf — baremetal host agent for hardware and service monitoring
+# Telegraf runs as a systemd service (not containerized) for direct access to
+# host hardware (SMART, IPMI, sensors, systemd D-Bus). Config files are
+# templated from docker/telegraf/ to /etc/telegraf/ via docker_config entries.
+- name: Add InfluxData APT signing key
+  ansible.builtin.apt_key:
+    url: https://repos.influxdata.com/influxdata-archive_compat.key
+    state: present
   when: "'router' in inventory_hostname"
+
+- name: Add InfluxData APT repository
+  ansible.builtin.apt_repository:
+    repo: "deb https://repos.influxdata.com/ubuntu noble stable"
+    filename: influxdata
+    state: present
+  when: "'router' in inventory_hostname"
+
+- name: Install Telegraf and hardware monitoring dependencies
+  ansible.builtin.apt:
+    name:
+      - telegraf
+      - smartmontools
+      - lm-sensors
+      - ipmitool
+      - snmp
+      - snmp-mibs-downloader
+      - nvme-cli
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: "'router' in inventory_hostname"
+
+- name: Create Telegraf scripts directory
+  ansible.builtin.file:
+    path: /etc/telegraf/scripts
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  when: "'router' in inventory_hostname"
+
+- name: Enable and start Telegraf service
+  ansible.builtin.systemd:
+    name: telegraf
+    enabled: true
+    state: started
+  when:
+    - "'router' in inventory_hostname"
+    - not ansible_check_mode
 
 ### Fix systemd-networkd-wait-online boot timeout
 # Default waits for ALL interfaces, causing 2min+ timeout on boot.
@@ -222,11 +266,23 @@
   ansible.builtin.command:
     cmd: "docker restart -t 30 {{ item.item.name }}"
   timeout: 60
-  when: item.changed and not ansible_check_mode
+  when:
+    - item.changed
+    - item.item.name != 'telegraf'
+    - not ansible_check_mode
   loop: "{{ docker_config_copy.results }}"
   loop_control:
     label: "{{ item.item.name | default('unknown') }} ({{ item.item.src | default('?') }})"
   ignore_errors: yes
+
+- name: Restart Telegraf systemd service if config changed
+  ansible.builtin.systemd:
+    name: telegraf
+    state: restarted
+  when:
+    - "'router' in inventory_hostname"
+    - docker_config_copy.results | selectattr('item.name', 'equalto', 'telegraf') | selectattr('changed', 'equalto', true) | list | length > 0
+    - not ansible_check_mode
 
 - name: Rebuild Docker images for changed Dockerfiles
   ansible.builtin.command:
@@ -250,28 +306,12 @@
   check_mode: no
   when: "'router' in inventory_hostname"
 
-### Telegraf AppArmor profile for D-Bus access
-# The systemd_units input plugin needs D-Bus to query unit status.
-# This custom profile allows only read-only queries (ListUnits, ListUnitFiles,
-# GetUnit) and blocks all mutating operations (Start/Stop/Restart/Kill).
-# Must be loaded before docker-compose starts the telegraf container.
-- name: Deploy Telegraf AppArmor profile
-  ansible.builtin.copy:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/telegraf/telegraf-dbus-readonly"
-    dest: /etc/apparmor.d/telegraf-dbus-readonly
-    owner: root
-    group: root
-    mode: '0644'
-  register: telegraf_apparmor_profile
+### Clean up legacy containerized Telegraf artifacts
+- name: Remove legacy Telegraf AppArmor profile
+  ansible.builtin.file:
+    path: /etc/apparmor.d/telegraf-dbus-readonly
+    state: absent
   when: "'router' in inventory_hostname"
-
-- name: Load Telegraf AppArmor profile
-  ansible.builtin.command:
-    cmd: apparmor_parser -r /etc/apparmor.d/telegraf-dbus-readonly
-  when:
-    - "'router' in inventory_hostname"
-    - telegraf_apparmor_profile is changed
-    - not ansible_check_mode
 
 - name: Create and start Docker services
   community.docker.docker_compose_v2:
