@@ -20,6 +20,7 @@ receivers:
     endpoint: "unix:///var/run/docker.sock"
     collection_interval: 10s
     timeout: 20s
+    api_version: "1.44"
 
   # ============================================================================
   # Nginx — Request rates and connection stats via stub_status
