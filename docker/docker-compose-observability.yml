@@ -29,34 +29,9 @@ services:
       timeout: 5s
       retries: 3
 
-  telegraf:
-    image: telegraf:1.37.3-alpine@sha256:a550e63a2efbea4b49596e475f0fcd3b057ff2ab0dfc8102357de289ee342a37
-    container_name: telegraf
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    environment:
-      - PIHOLE_URL=http://{{ pihole_ip }}
-      - PIHOLE_API_TOKEN={{ vault_pihole_api_token }}
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - {{ docker_persistent_data_path }}/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
-    network_mode: host
-    mem_limit: 64m
-    cpus: 0.15
-    logging:
-      driver: json-file
-      options:
-        max-size: "5m"
-        max-file: "2"
-    healthcheck:
-      test: ["CMD-SHELL", "pgrep telegraf > /dev/null || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
+  # Telegraf runs on baremetal (systemd service), not as a container.
+  # Hardware monitoring (SMART, IPMI, sensors, systemd) requires host access.
+  # See ansible/roles/configure-homelab-services/ for baremetal telegraf config.
 
 volumes:
   promtail-positions:
