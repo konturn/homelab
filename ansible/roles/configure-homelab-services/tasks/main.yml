@@ -44,17 +44,19 @@
 # templated from docker/telegraf/ to /etc/telegraf/ via docker_config entries.
 - name: Download InfluxData GPG key
   ansible.builtin.get_url:
-    url: https://repos.influxdata.com/influxdata-archive_compat.key
-    dest: /tmp/influxdata-archive_compat.key
+    # Rotated Jan 2026 — influxdata-archive.key includes both old (exp 2026)
+    # and new (exp 2029) signing subkeys under the same primary key.
+    url: https://repos.influxdata.com/influxdata-archive.key
+    dest: /tmp/influxdata-archive.key
     mode: '0644'
+    force: true
   when: "'router' in inventory_hostname"
   check_mode: no
 
 - name: Dearmor and install InfluxData GPG key
   ansible.builtin.shell: |
-    cat /tmp/influxdata-archive_compat.key | gpg --dearmor -o /usr/share/keyrings/influxdata-archive-keyring.gpg
-  args:
-    creates: /usr/share/keyrings/influxdata-archive-keyring.gpg
+    gpg --batch --yes --dearmor -o /usr/share/keyrings/influxdata-archive-keyring.gpg /tmp/influxdata-archive.key
+  changed_when: true
   when: "'router' in inventory_hostname"
 
 - name: Add InfluxData APT repository (signed-by)
