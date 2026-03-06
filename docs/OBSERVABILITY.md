@@ -5,47 +5,57 @@ The observability stack covers three pillars — **logs**, **metrics**, and **tr
 ## Architecture
 
 ```mermaid
-graph TD
-    subgraph sources["Data Sources"]
-        docker["Docker Containers"]
-        system["System (host)"]
-        switches["Aruba Switches"]
-        openclaw["OpenClaw Gateway"]
+graph TB
+    subgraph sources [" Data Sources "]
+        direction LR
+        docker["Docker<br/>Containers"]
+        system["System<br/>(host)"]
+        switches["Aruba<br/>Switches"]
+        openclaw["OpenClaw<br/>Gateway"]
         gitlab["GitLab"]
-        other["Other Services"]
+        other["Other<br/>Services"]
     end
 
-    subgraph collectors["Collectors"]
+    subgraph collectors [" Collectors "]
+        direction LR
         promtail["Promtail"]
         telegraf["Telegraf"]
-        otel["otel-collector<br/>:4317 gRPC / :4318 HTTP"]
+        otel["otel-collector<br/>:4317 gRPC · :4318 HTTP"]
     end
 
-    subgraph backends["Backends"]
+    subgraph backends [" Storage Backends "]
+        direction LR
         loki["Loki :3100<br/>Logs"]
-        tempo["Tempo :3200<br/>Traces"]
         influx["InfluxDB :8086<br/>Metrics"]
+        tempo["Tempo :3200<br/>Traces"]
     end
 
-    grafana["Grafana :3000<br/>Dashboards · Alerting · Explore"]
+    grafana["🔍 Grafana :3000<br/>Dashboards · Alerting · Explore"]
 
+    %% Log paths
     docker -- logs --> promtail
-    system -- metrics --> telegraf
-    switches -- "SNMP (metrics)" --> telegraf
-    switches -- "syslog (logs)" --> promtail
-    other -- metrics --> telegraf
-    openclaw -- "OTLP (traces + metrics)" --> otel
-    gitlab -- "OTLP (traces)" --> otel
-    grafana -. "OTLP (traces)" .-> otel
+    switches -- syslog --> promtail
 
+    %% Metric paths
+    system -- metrics --> telegraf
+    switches -- SNMP --> telegraf
+    other -- metrics --> telegraf
+
+    %% OTLP paths
+    openclaw -- OTLP --> otel
+    gitlab -- OTLP --> otel
+    grafana -. OTLP .-> otel
+
+    %% Collectors to backends
     promtail --> loki
     telegraf --> influx
     otel -- traces --> tempo
     otel -- metrics --> influx
 
+    %% Backends to Grafana
     loki --> grafana
-    tempo --> grafana
     influx --> grafana
+    tempo --> grafana
 ```
 
 ## Signal Routing
