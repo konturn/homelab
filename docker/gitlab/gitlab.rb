@@ -94,6 +94,8 @@ mattermost['enable'] = false
 gitlab_rails['env'] = {
   'MALLOC_CONF' => 'dirty_decay_ms:1000,muzzy_decay_ms:1000',
   # OpenTelemetry tracing — export GitLab traces via OTLP to otel-collector
+  # GITLAB_ENABLE_OTEL_EXPORTERS enables the Rails initializer that wires up exporters
+  'GITLAB_ENABLE_OTEL_EXPORTERS' => 'true',
   'OTEL_EXPORTER' => 'otlphttp',
   'OTEL_EXPORTER_OTLP_ENDPOINT' => 'http://otel-collector:4318',
   'OTEL_SERVICE_NAME' => 'gitlab',
