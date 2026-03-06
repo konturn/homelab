@@ -12,7 +12,6 @@ all:
     jit_approval_svc_ip: 10.3.32.8
     chromium_browser_ip: 10.3.32.9
     docker_persistent_data_path: /persistent_data/application
-    docker_gid: "115"
     docker_compose_version: '3.9'
     movie_switch_mac: 8c:3b:ad:6f:0e:d0
     movie_switch_address: 10.4.128.3
