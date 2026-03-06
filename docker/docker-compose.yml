@@ -803,6 +803,8 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    group_add:
+      - "{{ docker_gid }}"
     restart: unless-stopped
     networks:
       internal:
@@ -827,11 +829,7 @@ services:
         max-size: "10m"
         max-file: "3"
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:13133/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
+      disable: true
 
   gitlab:
     container_name: gitlab

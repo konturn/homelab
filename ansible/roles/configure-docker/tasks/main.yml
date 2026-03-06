@@ -137,6 +137,16 @@
 #      - PyYAML
 #      - docker-compose
 
+- name: Look up docker group GID dynamically
+  ansible.builtin.getent:
+    database: group
+    key: docker
+  register: docker_group_info
+
+- name: Set docker_gid fact
+  ansible.builtin.set_fact:
+    docker_gid: "{{ getent_group.docker[1] }}"
+
 - name: Log in to GitLab container registry
   docker_login:
     username: "{{ lookup('env', 'CI_REGISTRY_USER') }}"
