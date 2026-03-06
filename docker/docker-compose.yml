@@ -681,6 +681,10 @@ services:
       - GF_SMTP_FROM_ADDRESS=konoahko@gmail.com
       - GF_SMTP_FROM_NAME=Grafana Homelab
       - GF_SMTP_STARTTLS_POLICY=MandatoryStartTLS
+      # OpenTelemetry tracing — export Grafana's own traces via OTLP gRPC
+      - GF_TRACING_OPENTELEMETRY_OTLP_ADDRESS=otel-collector:4317
+      - GF_TRACING_OPENTELEMETRY_SAMPLER_TYPE=const
+      - GF_TRACING_OPENTELEMETRY_SAMPLER_PARAM=1
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s
@@ -1876,6 +1880,8 @@ services:
       - VAULT_ADDR=https://vault.lab.nkontur.com:8200
       - VAULT_APPROLE_ROLE_ID={{ lookup('env', 'VAULT_APPROLE_ROLE_ID') }}
       - VAULT_APPROLE_SECRET_ID={{ lookup('env', 'VAULT_APPROLE_SECRET_ID') }}
+      # OpenTelemetry — uses native diagnostics-otel plugin (configured in openclaw.json)
+      # See: https://docs.openclaw.ai/logging#export-to-opentelemetry
     volumes:
       - {{ docker_persistent_data_path }}/openclaw/data:/home/node/.openclaw
       - {{ docker_persistent_data_path }}/openclaw/mcporter:/home/node/.mcporter

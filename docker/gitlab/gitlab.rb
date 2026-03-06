@@ -92,7 +92,13 @@ mattermost['enable'] = false
 # Memory management - jemalloc tuning to prevent RSS creep
 ###
 gitlab_rails['env'] = {
-  'MALLOC_CONF' => 'dirty_decay_ms:1000,muzzy_decay_ms:1000'
+  'MALLOC_CONF' => 'dirty_decay_ms:1000,muzzy_decay_ms:1000',
+  # OpenTelemetry tracing — export GitLab traces via OTLP to otel-collector
+  'OTEL_EXPORTER' => 'otlphttp',
+  'OTEL_EXPORTER_OTLP_ENDPOINT' => 'http://otel-collector:4318',
+  'OTEL_SERVICE_NAME' => 'gitlab',
+  'OTEL_TRACES_EXPORTER' => 'otlp',
+  'OTEL_LOG_LEVEL' => 'warn'
 }
 
 # Preserve caches on restart to avoid cold-start performance issues
