@@ -3,12 +3,69 @@ extensions:
     endpoint: "0.0.0.0:13133"
 
 receivers:
+  # ============================================================================
+  # OTLP — Traces, metrics, logs from instrumented applications
+  # ============================================================================
   otlp:
     protocols:
       grpc:
         endpoint: "0.0.0.0:4317"
       http:
         endpoint: "0.0.0.0:4318"
+
+  # ============================================================================
+  # Docker Stats — Container resource usage (moved from Telegraf)
+  # ============================================================================
+  docker_stats:
+    endpoint: "unix:///var/run/docker.sock"
+    collection_interval: 10s
+    timeout: 20s
+
+  # ============================================================================
+  # Nginx — Request rates and connection stats via stub_status
+  # (moved from Telegraf inputs.nginx)
+  # ============================================================================
+  nginx/lab:
+    endpoint: "http://{{ lab_nginx_ip }}/stub_status"
+    collection_interval: 30s
+  nginx/external:
+    endpoint: "http://{{ nginx_ip }}/stub_status"
+    collection_interval: 30s
+  nginx/iot:
+    endpoint: "http://{{ iot_nginx_ip }}/stub_status"
+    collection_interval: 30s
+
+  # ============================================================================
+  # Prometheus — GitLab application metrics (moved from Telegraf inputs.prometheus)
+  # ============================================================================
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'gitlab'
+          scrape_interval: 60s
+          scheme: https
+          tls_config:
+            insecure_skip_verify: true
+          static_configs:
+            - targets: ['gitlab.lab.nkontur.com']
+          metrics_path: '/-/metrics'
+          metric_relabel_configs:
+            - source_labels: [__name__]
+              regex: 'sidekiq_.*|puma_.*|gitaly_.*|gitlab_sql_.*|gitlab_cache_.*|gitlab_transaction_.*|ruby_.*|gitlab_workhorse_.*'
+              action: keep
+
+  # ============================================================================
+  # HTTP Check — Certificate expiry and endpoint health (moved from Telegraf inputs.x509_cert)
+  # ============================================================================
+  httpcheck/certs:
+    targets:
+      - endpoint: "https://grafana.lab.nkontur.com"
+      - endpoint: "https://gitlab.lab.nkontur.com"
+      - endpoint: "https://nextcloud.nkontur.com"
+      - endpoint: "https://plex.nkontur.com"
+    collection_interval: 6h
+    tls:
+      insecure_skip_verify: true
 
 processors:
   batch:
@@ -22,11 +79,34 @@ processors:
         value: homelab
         action: upsert
 
+  # Add nginx instance labels based on receiver
+  attributes/nginx_lab:
+    actions:
+      - key: nginx.instance
+        value: lab
+        action: upsert
+  attributes/nginx_external:
+    actions:
+      - key: nginx.instance
+        value: external
+        action: upsert
+  attributes/nginx_iot:
+    actions:
+      - key: nginx.instance
+        value: iot
+        action: upsert
+
 exporters:
   otlp/tempo:
     endpoint: tempo:4317
     tls:
       insecure: true
+
+  influxdb:
+    endpoint: "http://{{ influxdb_ip }}:8086"
+    org: "homelab"
+    bucket: "metrics"
+    token: "{{ vault_influxdb_telegraf_token }}"
 
   debug:
     verbosity: basic
@@ -40,10 +120,25 @@ service:
       receivers: [otlp]
       processors: [resource, batch]
       exporters: [otlp/tempo]
-    metrics:
+
+    # Service metrics from receivers that replaced Telegraf inputs
+    metrics/services:
+      receivers:
+        - docker_stats
+        - nginx/lab
+        - nginx/external
+        - nginx/iot
+        - prometheus
+        - httpcheck/certs
+      processors: [resource, batch]
+      exporters: [influxdb]
+
+    # OTLP metrics from instrumented apps
+    metrics/otlp:
       receivers: [otlp]
       processors: [resource, batch]
-      exporters: [debug]
+      exporters: [influxdb]
+
     logs:
       receivers: [otlp]
       processors: [resource, batch]

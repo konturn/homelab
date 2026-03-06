@@ -806,6 +806,8 @@ services:
     restart: unless-stopped
     networks:
       internal:
+      external:
+      iot:
       loki-backend:
     deploy:
       resources:
@@ -815,6 +817,7 @@ services:
           memory: 128M
     volumes:
       - {{ docker_persistent_data_path }}/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       tempo:
         condition: service_healthy
@@ -2261,58 +2264,3 @@ services:
       retries: 3
       start_period: 120s
 
-  telegraf:
-    image: gitlab-registry.lab.nkontur.com:443/root/homelab/telegraf:${TELEGRAF_IMAGE_TAG:-latest}
-    container_name: telegraf
-    user: root
-    restart: unless-stopped
-    hostname: satellite-2
-    entrypoint: ["/usr/bin/telegraf"]
-    security_opt:
-      - no-new-privileges:true
-      - apparmor:telegraf-dbus-readonly
-    cap_drop:
-      - ALL
-    cap_add:
-      - NET_RAW          # ping native method
-      - DAC_READ_SEARCH  # read host /proc, /sys
-      - SYS_RAWIO        # SMART disk access
-    dns:
-      - {{ pihole_ip }}
-    volumes:
-      - {{ docker_persistent_data_path }}/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
-      - {{ docker_persistent_data_path }}/telegraf/scripts:/etc/telegraf/scripts:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /proc:/host/proc:ro
-      - /sys:/host/sys:ro
-      - /etc:/host/etc:ro
-      - /usr/share/snmp/mibs:/usr/share/snmp/mibs:ro
-      - /dev:/dev:ro                                                              # SMART disk access
-      - /run/udev:/run/udev:ro                                                    # diskio device name resolution
-      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket:ro                # systemd D-Bus
-    environment:
-      - HOST_PROC=/host/proc
-      - HOST_SYS=/host/sys
-      - HOST_ETC=/host/etc
-      - HOST_MOUNT_PREFIX=/host
-    networks:
-      - internal
-      - external
-      - iot
-      - mgmt
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "1.0"
-    logging:
-      driver: json-file
-      options:
-        max-size: "5m"
-        max-file: "2"
-    healthcheck:
-      test: ["CMD-SHELL", "pgrep telegraf > /dev/null || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
