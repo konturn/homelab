@@ -60,12 +60,21 @@ receivers:
   httpcheck/certs:
     targets:
       - endpoint: "https://grafana.lab.nkontur.com"
+        tls:
+          insecure_skip_verify: true
       - endpoint: "https://gitlab.lab.nkontur.com"
+        tls:
+          insecure_skip_verify: true
       - endpoint: "https://nextcloud.nkontur.com"
+        tls:
+          insecure_skip_verify: true
       - endpoint: "https://plex.nkontur.com"
+        tls:
+          insecure_skip_verify: true
     collection_interval: 6h
-    tls:
-      insecure_skip_verify: true
+    metrics:
+      httpcheck.tls.cert_remaining:
+        enabled: true
 
 processors:
   batch:
