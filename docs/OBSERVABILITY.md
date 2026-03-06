@@ -8,48 +8,45 @@ The observability stack covers three pillars — **logs**, **metrics**, and **tr
 graph TB
     subgraph sources [" Data Sources "]
         direction LR
-        docker["Docker<br/>Containers"]
-        system["System<br/>(host)"]
-        openclaw["OpenClaw<br/>Gateway"]
+        docker["Docker Containers"]
+        system["System (host)"]
+        openclaw["OpenClaw Gateway"]
         gitlab["GitLab"]
-        other["Other<br/>Services"]
+        other["Other Services"]
     end
 
     subgraph collectors [" Collectors "]
         direction LR
         promtail["Promtail"]
         telegraf["Telegraf"]
-        otel["otel-collector<br/>:4317 gRPC · :4318 HTTP"]
+        otel["otel-collector\n:4317 gRPC · :4318 HTTP"]
     end
 
     subgraph backends [" Storage Backends "]
         direction LR
-        loki["Loki :3100<br/>Logs"]
-        influx["InfluxDB :8086<br/>Metrics"]
-        tempo["Tempo :3200<br/>Traces"]
+        loki["Loki :3100\nLogs"]
+        influx["InfluxDB :8086\nMetrics"]
+        tempo["Tempo :3200\nTraces"]
     end
 
-    grafana["🔍 Grafana :3000<br/>Dashboards · Alerting · Explore"]
+    subgraph viz [" Visualization "]
+        grafana["Grafana :3000\nDashboards · Alerting · Explore"]
+    end
 
-    %% Log paths
+    %% Source to collector
     docker -- logs --> promtail
-
-    %% Metric paths
     system -- metrics --> telegraf
     other -- metrics --> telegraf
-
-    %% OTLP paths
     openclaw -- OTLP --> otel
     gitlab -- OTLP --> otel
-    grafana -. OTLP .-> otel
 
-    %% Collectors to backends
+    %% Collector to backend
     promtail --> loki
     telegraf --> influx
     otel -- traces --> tempo
     otel -- metrics --> influx
 
-    %% Backends to Grafana
+    %% Backend to viz
     loki --> grafana
     influx --> grafana
     tempo --> grafana
