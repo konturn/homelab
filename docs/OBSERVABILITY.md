@@ -4,51 +4,45 @@ The observability stack covers three pillars — **logs**, **metrics**, and **tr
 
 ## Architecture
 
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                           Data Sources                                       │
-│                                                                              │
-│  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐  │
-│  │  Docker   │  │  System   │  │  OpenClaw  │  │  GitLab   │  │  Other    │  │
-│  │ Containers│  │  (host)   │  │  Gateway   │  │           │  │ Services  │  │
-│  └─────┬─────┘  └─────┬─────┘  └──┬─────┬──┘  └─────┬─────┘  └─────┬─────┘  │
-│        │              │           │     │           │              │          │
-└────────┼──────────────┼───────────┼─────┼───────────┼──────────────┼──────────┘
-         │              │           │     │           │              │
-    ┌────▼────┐    ┌────▼────┐     │     │      ┌───▼───┐     ┌───▼────┐
-    │Promtail │    │Telegraf │     │     │      │  OTLP │     │Telegraf│
-    │(logs)   │    │(metrics)│     │     │      │env var│     │(metrics│
-    └────┬────┘    └────┬────┘     │     │      └───┬───┘     └───┬────┘
-         │              │          │     │          │             │
-         │              │          │     │          │             │
-    ─ ─ ─┼─ ─ ─ ─ ─ ─ ─┼─ ─ ─ ─ ─┼─ ─ ─┼─ ─ ─ ─ ─┼─ ─ ─ ─ ─ ─ ┼─ ─ ─
-    LOGS │        METRICS│    TRACES│METRICS    TRACES│       METRICS│
-         │              │          │     │          │             │
-         │              │     ┌────▼─────▼────┐    │             │
-         │              │     │               │◄───┘             │
-         │              │     │otel-collector │                  │
-         │              │     │  :4317 (gRPC) │                  │
-         │              │     │  :4318 (HTTP) │                  │
-         │              │     └──┬──────────┬─┘                  │
-         │              │        │          │                    │
-         │              │   TRACES     METRICS                   │
-         │              │        │          │                    │
-    ┌────▼────┐    ┌────▼────────▼───┐ ┌────▼────────────────────▼───┐
-    │  Loki   │    │     Tempo       │ │        InfluxDB             │
-    │  :3100  │    │     :3200       │ │         :8086               │
-    │  (logs) │    │    (traces)     │ │       (metrics)             │
-    └────┬────┘    └────────┬────────┘ └────────────┬────────────────┘
-         │                  │                       │
-         └──────────┬───────┴───────────────────────┘
-                    │
-              ┌─────▼─────┐
-              │  Grafana   │
-              │   :3000    │
-              │            │
-              │ Dashboards │
-              │  Alerting  │
-              │  Explore   │
-              └────────────┘
+```mermaid
+graph TD
+    subgraph sources["Data Sources"]
+        docker["Docker Containers"]
+        system["System (host)"]
+        openclaw["OpenClaw Gateway"]
+        gitlab["GitLab"]
+        other["Other Services"]
+    end
+
+    subgraph collectors["Collectors"]
+        promtail["Promtail"]
+        telegraf["Telegraf"]
+        otel["otel-collector<br/>:4317 gRPC / :4318 HTTP"]
+    end
+
+    subgraph backends["Backends"]
+        loki["Loki :3100<br/>Logs"]
+        tempo["Tempo :3200<br/>Traces"]
+        influx["InfluxDB :8086<br/>Metrics"]
+    end
+
+    grafana["Grafana :3000<br/>Dashboards · Alerting · Explore"]
+
+    docker -- logs --> promtail
+    system -- metrics --> telegraf
+    other -- metrics --> telegraf
+    openclaw -- "OTLP (traces + metrics)" --> otel
+    gitlab -- "OTLP (traces)" --> otel
+    grafana -. "OTLP (traces)" .-> otel
+
+    promtail --> loki
+    telegraf --> influx
+    otel -- traces --> tempo
+    otel -- metrics --> influx
+
+    loki --> grafana
+    tempo --> grafana
+    influx --> grafana
 ```
 
 ## Signal Routing
