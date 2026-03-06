@@ -238,7 +238,7 @@
     src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/{{ item.src }}"
     dest: "{{ item.dest }}"
     owner: "{{ item.owner | default('root') }}"
-    group: "{{ item.owner | default('root') }}"
+    group: "{{ item.group | default(item.owner | default('root')) }}"
     mode: "{{ item.mode | default('0640') }}"
   register: docker_config_copy
   loop: "{{ docker_config + (docker_config_nginx | default([])) }}"
