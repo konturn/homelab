@@ -423,7 +423,7 @@ services:
       retries: 3
       start_period: 60s
   nzbget:
-    image: linuxserver/nzbget:26.0.20260227@sha256:33e28111e4395227115002a39583a3bda36c4406ac126af32bffd5a2774d59fa
+    image: linuxserver/nzbget:26.0.20260306@sha256:ec3ef0ae7dc410084086a7fdd447deda4747531154aa1cc5c7c48ac60794e277
     container_name: nzbget
     security_opt:
       - no-new-privileges:true
@@ -498,7 +498,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.1292@sha256:b0b7b55eb6b8fe2216d6c658b4cf88b41fa153bd15de6607fe16f1fdd0a28280
+    image: linuxserver/jackett:0.24.1316@sha256:1c258a1128ad8d74830df6b813d6d9819787fcaafe45e8a133e2bce4f17d7ab9
     container_name: jackett
     security_opt:
       - no-new-privileges:true
@@ -806,7 +806,7 @@ services:
   # =============================================================================
   otel-collector:
     container_name: otel-collector
-    image: otel/opentelemetry-collector-contrib:0.120.0@sha256:85ac41c2db88d0df9bd6145e608a3cb023f5d8443868adbfbbf66efb51087917
+    image: otel/opentelemetry-collector-contrib:0.147.0@sha256:e7c92c715f28ff142f3bcaccd4fc5603cf4c71276ef09954a38eb4038500a5a5
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -1119,7 +1119,7 @@ services:
       - "443:8080"
     networks:
       internal:
-    image: jgraph/drawio:29.5.2@sha256:5ef8f7bd04e2b6d059f21312e67e816df33ae7e404fd2fa50facbdf41b4ec8ef
+    image: jgraph/drawio:29.6.1@sha256:c1e03149ba0d6b5038cf1c87f3fa22d18e37aff9132365be60963af14572428b
     restart: unless-stopped
     deploy:
       resources:
@@ -1142,7 +1142,7 @@ services:
     devices: 
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_ETDRb11A920-if00-port0:/dev/ttyUSB0"
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0:/dev/ttyUSB1"
-    image: "homeassistant/home-assistant:2026.2.3@sha256:96fa92d83fa8dae987fbbbcf58b1fea1140985ff6a8517b37f7b65c76ef20133"
+    image: "homeassistant/home-assistant:2026.3.1@sha256:0e091dfce3068339c3e1d14382e6c34141e05cd589a1972ebd4d9a8e6b5d8969"
     deploy:
       resources:
         limits:
