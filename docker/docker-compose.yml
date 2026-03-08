@@ -199,6 +199,8 @@ services:
     depends_on:
       plex:
         condition: service_healthy
+    # Tautulli averages ~80MB usage. 512M limit provides ample headroom
+    # while preventing unbounded memory consumption.
     deploy:
       resources:
         limits:
@@ -2247,8 +2249,8 @@ services:
         condition: service_completed_successfully
       pelias-placeholder-init:
         condition: service_completed_successfully
-    # Memory increased from 1G to 2G: container consistently at 96% usage with
-    # 31,000+ OOM kills per week. The placeholder dataset lives in memory.
+    # Memory increased from 1G to 2G: container averages 85% usage (910MB/1G)
+    # and has been OOM-killed 40,000+ times in the past week. 2G gives ~50% headroom.
     deploy:
       resources:
         limits:
