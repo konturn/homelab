@@ -151,30 +151,36 @@ func TestGrafanaBackend_MintCredential(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		if r.Method != http.MethodPost {
-			t.Errorf("expected POST, got %s", r.Method)
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
 		if r.Header.Get("Authorization") != "Bearer grafana-admin-token" {
 			t.Errorf("unexpected auth header: %s", r.Header.Get("Authorization"))
 		}
 
-		var body map[string]interface{}
-		json.NewDecoder(r.Body).Decode(&body)
-		if name, ok := body["name"].(string); !ok || name == "" {
-			t.Error("expected non-empty name in body")
-		}
-		if _, ok := body["expires"].(string); !ok {
-			t.Error("expected expires in body")
-		}
+		switch r.Method {
+		case http.MethodGet:
+			// cleanupExpiredTokens lists tokens — return empty list
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode([]interface{}{})
+		case http.MethodPost:
+			var body map[string]interface{}
+			json.NewDecoder(r.Body).Decode(&body)
+			if name, ok := body["name"].(string); !ok || name == "" {
+				t.Error("expected non-empty name in body")
+			}
+			if _, ok := body["expires"].(string); !ok {
+				t.Error("expected expires in body")
+			}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"id":  1,
-			"key": "glsa_grafana-ephemeral-token",
-		})
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"id":  1,
+				"key": "glsa_grafana-ephemeral-token",
+			})
+		default:
+			t.Errorf("unexpected method: %s", r.Method)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
 	}))
 	defer server.Close()
 
