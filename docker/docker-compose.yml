@@ -2045,6 +2045,7 @@ services:
       - HEADWAY_TILESERVER_URL=http://tileserver:8080
       - HEADWAY_TRAVELMUX_URL=http://travelmux:8000
       - HEADWAY_VALHALLA_URL=http://valhalla:8002
+      - HEADWAY_ENABLE_TRANSIT_ROUTING=0
     networks:
       - internal
     volumes:
@@ -2102,7 +2103,9 @@ services:
       - ELEVATION_TIFS_DIR=/data/elevation-tifs
     command: ["http://valhalla:8002"]
     networks:
-      - internal
+      internal:
+        aliases:
+          - transitmux
     volumes:
       - headway_travelmux_data:/data:ro
     depends_on:
