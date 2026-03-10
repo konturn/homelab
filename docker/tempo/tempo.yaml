@@ -4,6 +4,12 @@ server:
   http_listen_port: 3200
   grpc_listen_port: 9095
 
+# Disable usage reporting — Tempo runs on an internal-only bridge network
+# (loki-backend) with no external DNS, causing repeated lookup failures
+# for stats.grafana.org that pollute container logs.
+usage_report:
+  reporting_enabled: false
+
 distributor:
   receivers:
     otlp:
