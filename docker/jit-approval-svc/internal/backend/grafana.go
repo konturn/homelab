@@ -32,6 +32,68 @@ func NewGrafanaBackend(baseURL string, vaultReader VaultSecretReader) *GrafanaBa
 	}
 }
 
+// cleanupExpiredTokens removes expired tokens from the Grafana service account.
+// Best-effort: logs warnings but does not fail the mint operation.
+func (b *GrafanaBackend) cleanupExpiredTokens(adminToken, serviceAccountID string) {
+	url := fmt.Sprintf("%s/api/serviceaccounts/%s/tokens", b.baseURL, serviceAccountID)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		logger.Warn("grafana_cleanup_list_error", logger.Fields{"error": err.Error()})
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+
+	resp, err := b.http.Do(req)
+	if err != nil {
+		logger.Warn("grafana_cleanup_list_error", logger.Fields{"error": err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		logger.Warn("grafana_cleanup_list_status", logger.Fields{"status": resp.StatusCode})
+		return
+	}
+
+	var tokens []struct {
+		ID         int        `json:"id"`
+		Name       string     `json:"name"`
+		Expiration *time.Time `json:"expiration"`
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(body, &tokens); err != nil {
+		logger.Warn("grafana_cleanup_decode_error", logger.Fields{"error": err.Error()})
+		return
+	}
+
+	now := time.Now().UTC()
+	deleted := 0
+	for _, t := range tokens {
+		if t.Expiration != nil && t.Expiration.Before(now) {
+			delURL := fmt.Sprintf("%s/api/serviceaccounts/%s/tokens/%d", b.baseURL, serviceAccountID, t.ID)
+			delReq, err := http.NewRequest(http.MethodDelete, delURL, nil)
+			if err != nil {
+				continue
+			}
+			delReq.Header.Set("Authorization", "Bearer "+adminToken)
+			delResp, err := b.http.Do(delReq)
+			if err != nil {
+				continue
+			}
+			delResp.Body.Close()
+			if delResp.StatusCode == http.StatusOK || delResp.StatusCode == http.StatusNoContent {
+				deleted++
+			}
+		}
+	}
+	if deleted > 0 {
+		logger.Info("grafana_expired_tokens_cleaned", logger.Fields{
+			"deleted": deleted,
+			"total":   len(tokens),
+		})
+	}
+}
+
 // MintCredential creates a short-lived Grafana service account token.
 func (b *GrafanaBackend) MintCredential(resource string, tier int, ttl time.Duration, opts MintOptions) (*Credential, error) {
 	secrets, err := b.vaultReader.ReadSecret(b.vaultPath)
@@ -47,6 +109,9 @@ func (b *GrafanaBackend) MintCredential(resource string, tier int, ttl time.Dura
 	if !ok || serviceAccountID == "" {
 		return nil, fmt.Errorf("missing service_account_id in vault path %s", b.vaultPath)
 	}
+
+	// Clean up expired tokens before minting a new one (best-effort)
+	b.cleanupExpiredTokens(adminToken, serviceAccountID)
 
 	// Create a token with expiration
 	expires := time.Now().Add(ttl).UTC().Format(time.RFC3339)
