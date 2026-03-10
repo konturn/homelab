@@ -148,8 +148,9 @@ services:
       - "32400/tcp"
     image: plexinc/pms-docker:1.43.0.10492-121068a07@sha256:1131c4cd21fa22f8196f749f1dbb69af306776c3c83c7f5b061e51dc49bcff7f
     networks:
-      - external
-      - internal
+      external:
+      internal:
+        ipv4_address: {{ plex_ip }}
     restart: unless-stopped
     # GPU disabled until NVML driver/library mismatch is fixed
     # runtime: nvidia

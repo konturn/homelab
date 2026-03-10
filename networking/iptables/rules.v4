@@ -260,8 +260,9 @@ COMMIT
 
 # Apple TV - Internet + Plex access
 # AirPlay from VLAN 4 (mgmt/wifi) works via RELATED,ESTABLISHED (phone initiates)
+# Plex has a static IP on the internal Docker network ({{ plex_ip }}).
 -A FORWARD -s {{ apple_tv_address }} -o {{ inet_interface_name }} -j ACCEPT
--A FORWARD -s {{ apple_tv_address }} -d {{ lab_nginx_ip }} -p tcp -m tcp --dport 32400 -j ACCEPT
+-A FORWARD -s {{ apple_tv_address }} -d {{ plex_ip }} -p tcp -m tcp --dport 32400 -j ACCEPT
 
 # Snapserver - Allow all inbound
 # Used for: Multi-room audio clients connecting to server
