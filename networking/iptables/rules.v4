@@ -259,7 +259,9 @@ COMMIT
 # -----------------------------------------------------------------------------
 
 # Apple TV - Internet + Plex access
-# AirPlay from VLAN 4 (mgmt/wifi) works via RELATED,ESTABLISHED (phone initiates)
+# Plex ADVERTISE_IP points clients to lab_nginx:32400 (nginx stream-proxies to Plex container).
+# GDM broadcast discovery doesn't cross VLANs; clients discover via plex.tv → ADVERTISE_IP.
+# AirPlay from VLAN 4 (mgmt/wifi) works via RELATED,ESTABLISHED (phone initiates).
 -A FORWARD -s {{ apple_tv_address }} -o {{ inet_interface_name }} -j ACCEPT
 -A FORWARD -s {{ apple_tv_address }} -d {{ lab_nginx_ip }} -p tcp -m tcp --dport 32400 -j ACCEPT
 
