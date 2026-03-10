@@ -63,6 +63,9 @@ func ValidateVaultPaths(paths []VaultPathRequest) error {
 		if p.Path == "" {
 			return fmt.Errorf("vault_paths[%d]: path is required", i)
 		}
+		if strings.Contains(p.Path, "..") {
+			return fmt.Errorf("vault_paths[%d]: path %q contains illegal traversal sequence", i, p.Path)
+		}
 		if !strings.HasPrefix(p.Path, vaultPathPrefix) {
 			return fmt.Errorf("vault_paths[%d]: path %q must start with %q", i, p.Path, vaultPathPrefix)
 		}

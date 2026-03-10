@@ -86,6 +86,30 @@ func TestValidateVaultPaths_BadPrefix(t *testing.T) {
 	}
 }
 
+func TestValidateVaultPaths_PathTraversal(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+	}{
+		{"dotdot in middle", "homelab/data/../secret/admin"},
+		{"dotdot at start", "../etc/passwd"},
+		{"dotdot at end", "homelab/data/test/.."},
+		{"encoded traversal", "homelab/data/..%2fsecret"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			paths := []VaultPathRequest{{Path: tt.path, Capabilities: []string{"read"}}}
+			err := ValidateVaultPaths(paths)
+			if err == nil {
+				t.Fatalf("expected error for path traversal in %q", tt.path)
+			}
+			if !strings.Contains(err.Error(), "illegal traversal") {
+				t.Fatalf("expected 'illegal traversal' error, got: %v", err)
+			}
+		})
+	}
+}
+
 func TestValidateVaultPaths_BadCapabilities(t *testing.T) {
 	tests := []struct {
 		name string
