@@ -161,6 +161,11 @@ services:
           memory: 2G
     environment:
       - TZ=America/New_York
+      # Advertise lab nginx IP so cross-VLAN clients (Apple TV on IoT) can
+      # discover and direct-connect via the nginx stream proxy on port 32400.
+      # Without this, Plex only advertises Docker container IPs which are
+      # unreachable from other VLANs, forcing clients to use the cloud relay.
+      - ADVERTISE_IP=http://{{ lab_nginx_ip }}:32400
       # - NVIDIA_VISIBLE_DEVICES=all
       # - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
     volumes:
