@@ -55,6 +55,8 @@ vault_secret_paths:
       vault_grafana_admin_password: "admin_password"
       vault_grafana_smtp_password: "smtp_password"
       vault_grafana_token: "token"
+      vault_jit_admin_token: "jit_admin_token"
+      vault_grafana_service_account_id: "service_account_id"
   - path: "docker/homeassistant"
     fields:
       vault_hass_token: "token"
