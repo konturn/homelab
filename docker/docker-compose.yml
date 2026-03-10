@@ -190,6 +190,13 @@ services:
       - external
     ports:
       - "8181/tcp"
+    # Tautulli uses ~87MB peak; 512M limit gives ample headroom
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
     environment:
       - PUID=1000
       - PGID=1000
