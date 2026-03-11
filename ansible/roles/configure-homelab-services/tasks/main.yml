@@ -640,6 +640,25 @@
     hour: "4"
     job: "docker restart chromium-browser 2>&1 | logger -t chromium-restart"
 
+- name: Template Grafana cleanup env file
+  ansible.builtin.copy:
+    dest: /etc/grafana-cleanup.env
+    content: |
+      GRAFANA_URL=https://grafana.lab.nkontur.com
+      GRAFANA_ADMIN_TOKEN={{ vault_jit_admin_token }}
+      GRAFANA_SA_ID={{ vault_grafana_service_account_id }}
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Daily Grafana expired token cleanup
+  ansible.builtin.cron:
+    name: "Clean expired Grafana JIT service account tokens"
+    minute: "30"
+    hour: "5"
+    job: >-
+      {{ docker_project_path }}/scripts/grafana-token-cleanup.sh 2>&1 | logger -t grafana-token-cleanup
+
 ### Router boot optimization
 # Mask Hyper-V guest services that are unnecessary on bare metal (not a VM).
 # Saves ~30s boot time by eliminating timeout waits for missing vmbus.
