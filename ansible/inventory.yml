@@ -229,6 +229,9 @@ all:
         - src: "docker/tileserver/config.json"
           dest: "{{ docker_persistent_data_path }}/tileserver/config.json"
           name: "tileserver"
+        - src: "docker/headway/nginx.conf.template"
+          dest: "{{ docker_persistent_data_path }}/headway/nginx.conf.template"
+          name: "headway-frontend"
 
       docker_data_dirs:
         - path: "{{ docker_persistent_data_path }}/tempo"

@@ -2045,6 +2045,7 @@ services:
       - internal
     volumes:
       - headway_frontend_data:/data:ro
+      - {{ docker_persistent_data_path }}/headway/nginx.conf.template:/etc/nginx/templates/nginx.conf.template:ro
     depends_on:
       headway-frontend-init:
         condition: service_completed_successfully
