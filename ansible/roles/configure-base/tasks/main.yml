@@ -204,23 +204,6 @@
     group: root
     mode: 0600
 
-### Telegraf — containerized (see docker/docker-compose.yml)
-# Host telegraf package is no longer needed. Stop and disable the systemd
-# service if it exists from a previous deployment, then remove the package.
-- name: Stop and disable host telegraf service
-  ansible.builtin.systemd:
-    name: telegraf
-    state: stopped
-    enabled: false
-  ignore_errors: true
-  register: telegraf_host_stop
-
-- name: Remove host telegraf package
-  apt:
-    name: telegraf
-    state: absent
-  when: telegraf_host_stop is not failed
-
 - name: Sets up base cronjob for nextcloud
   ansible.builtin.cron:
     name: "Nextcloud base cronjob"
