@@ -1,0 +1,24 @@
+{
+  "options": {
+    "paths": {
+      "root": "/usr/src/app/node_modules/tileserver-gl-styles",
+      "fonts": "fonts",
+      "styles": "styles",
+      "mbtiles": "/data"
+    }
+  },
+  "styles": {
+    "basic": {
+      "style": "basic-preview/style.json",
+      "tilejson": {
+        "type": "overlay",
+        "bounds": [-180, 15.92097, 180, 72.98845]
+      }
+    }
+  },
+  "data": {
+    "v3": {
+      "mbtiles": "us.mbtiles"
+    }
+  }
+}
