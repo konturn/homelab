@@ -1,0 +1,56 @@
+worker_processes  5;
+worker_rlimit_nofile 8192;
+
+events {
+  worker_connections  4096;
+}
+
+http {
+  index    index.html;
+  root /usr/share/nginx/html/;
+  include mime.types;
+
+  sendfile     on;
+  tcp_nopush   on;
+  server_names_hash_bucket_size 128;
+
+  proxy_http_version 1.1;
+
+  server {
+    resolver ${HEADWAY_RESOLVER};
+    listen ${HEADWAY_HTTP_PORT} default_server;
+
+    location /pelias/  {
+      proxy_pass      ${HEADWAY_PELIAS_URL}/;
+    }
+
+    location /transitmux/ {
+      set $enable_transit_routing ${HEADWAY_ENABLE_TRANSIT_ROUTING};
+      if ($enable_transit_routing != 1) {
+        return 404;
+      }
+      proxy_pass      ${HEADWAY_TRANSITMUX_URL}/;
+    }
+
+    location /valhalla/  {
+      proxy_pass      ${HEADWAY_VALHALLA_URL}/;
+    }
+
+    location /tileserver/  {
+      proxy_pass       ${HEADWAY_TILESERVER_URL}/;
+      proxy_set_header Host ${ESC}host;
+      proxy_set_header Accept-Encoding "";
+      sub_filter_types application/json;
+      sub_filter_once off;
+      sub_filter "://${ESC}host/" "://${ESC}host/tileserver/";
+    }
+
+    location /static/  {
+      alias ${HEADWAY_SHARED_VOL}/;
+    }
+
+    location / {
+      try_files ${ESC}uri /index.html;
+    }
+  }
+}
