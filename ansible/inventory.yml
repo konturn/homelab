@@ -226,6 +226,9 @@ all:
           dest: "/etc/telegraf/scripts/deluge-stats.sh"
           name: "telegraf"
           mode: "0755"
+        - src: "docker/tileserver/config.json"
+          dest: "{{ docker_persistent_data_path }}/tileserver/config.json"
+          name: "tileserver"
 
       docker_data_dirs:
         - path: "{{ docker_persistent_data_path }}/tempo"
