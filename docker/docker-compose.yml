@@ -843,11 +843,10 @@ services:
         max-size: "10m"
         max-file: "3"
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:13133/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
+      # Scratch-based image has no shell or HTTP utilities (curl/wget).
+      # Health is monitored externally via Grafana alerting on the
+      # health_check extension (port 13133).
+      disable: true
 
   gitlab:
     container_name: gitlab
