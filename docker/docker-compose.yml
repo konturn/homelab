@@ -2258,12 +2258,12 @@ services:
         condition: service_completed_successfully
       pelias-placeholder-init:
         condition: service_completed_successfully
-    # Memory increased from 1G to 2G: container averages 85% usage (910MB/1G)
-    # and has been OOM-killed 40,000+ times in the past week. 2G gives ~50% headroom.
+    # Memory increased from 2G to 3G: container averages 878MB but bursts beyond 2G,
+    # causing 14,000+ OOM kills per week. 3G gives sufficient headroom for burst allocation.
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 3G
         reservations:
           memory: 1G
     healthcheck:
