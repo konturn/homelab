@@ -279,7 +279,7 @@ services:
       - "-s"
     restart: unless-stopped
   nginx: 
-    image: nginx:1.29.5-alpine3.23-perl@sha256:db0a3121225ffbc32fa36cc7a02c6c11002fec0c7fd2596ba204a811cc4a71dc
+    image: nginx:1.29.6-alpine3.23-perl@sha256:c41a994789a430dd5626d836315e35f4837f5bc93e0224f0f25cfc7513d69162
     container_name: nginx
     security_opt:
       - no-new-privileges:true
@@ -320,7 +320,7 @@ services:
       - /var/log/nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   lab_nginx: 
-    image: nginx:1.29.5-alpine3.23-perl@sha256:db0a3121225ffbc32fa36cc7a02c6c11002fec0c7fd2596ba204a811cc4a71dc
+    image: nginx:1.29.6-alpine3.23-perl@sha256:c41a994789a430dd5626d836315e35f4837f5bc93e0224f0f25cfc7513d69162
     container_name: lab_nginx
     security_opt:
       - no-new-privileges:true
@@ -363,7 +363,7 @@ services:
       - {{ docker_persistent_data_path }}/certs:/data/certs
       - {{ docker_persistent_data_path }}/docker-proxy-tls:/data/docker-proxy-tls:ro
   iot_nginx: 
-    image: nginx:1.29.5-alpine3.23-perl@sha256:db0a3121225ffbc32fa36cc7a02c6c11002fec0c7fd2596ba204a811cc4a71dc
+    image: nginx:1.29.6-alpine3.23-perl@sha256:c41a994789a430dd5626d836315e35f4837f5bc93e0224f0f25cfc7513d69162
     container_name: iot_nginx
     security_opt:
       - no-new-privileges:true
@@ -509,7 +509,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.1332@sha256:f4c654578d4ea8b2bb73036d032e741cce637a4527148baaf9112132964f4ead
+    image: linuxserver/jackett:0.24.1341@sha256:6033e022682dc8982a02de93eb88066e0fc315aefa09dce469c6bef38274993e
     container_name: jackett
     security_opt:
       - no-new-privileges:true
@@ -1059,7 +1059,7 @@ services:
       retries: 3
       start_period: 30s
   blog:
-    image: wordpress:6.9.1-php8.3-apache@sha256:0324d403512533271f85831518d0d8618ae794f8d50e40103cbac473119188af
+    image: wordpress:6.9.2-php8.3-apache@sha256:ba1996f128e96e06613cffd9efa17e619d077a427c2d135204b1bc3bc9fa0510
     container_name: wordpress
     security_opt:
       - no-new-privileges:true
@@ -1718,7 +1718,7 @@ services:
       start_period: 120s
 
   prowlarr:
-    image: lscr.io/linuxserver/prowlarr:latest@sha256:a8fe7b9c502f979146b6d0f22438b825c38e068241bb8a708c473062dffdbb03
+    image: lscr.io/linuxserver/prowlarr:latest@sha256:9ef5d8bf832edcacb6082f9262cb36087854e78eb7b1c3e1d4375056055b2d82
     container_name: prowlarr
     security_opt:
       - no-new-privileges:true
