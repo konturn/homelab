@@ -1981,17 +1981,17 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 2G
         reservations:
-          memory: 256M
+          memory: 512M
     volumes:
       - {{ docker_persistent_data_path }}/tileserver:/data
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:8080/health',r=>{r.statusCode===200?process.exit(0):process.exit(1)}).on('error',()=>process.exit(1))\"" ]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 120s
 
   # =============================================================================
   # Headway Maps — unified map frontend with geocoding, routing, and tiles
