@@ -121,6 +121,8 @@ all:
         - "{{ promtail_ip }} promtail.lab.nkontur.com"
         - "{{ lab_nginx_ip }} tempo.lab.nkontur.com"
         - "{{ lab_nginx_ip }} otel.lab.nkontur.com"
+        - "{{ lab_nginx_ip }} music.lab.nkontur.com"
+        - "{{ lab_nginx_ip }} lidarr.lab.nkontur.com"
         - "{{ jit_approval_svc_ip }} jit-approval-svc.lab.nkontur.com"
         - "10.6.0.1 router.lab.nkontur.com"
       docker_config: 
@@ -196,6 +198,9 @@ all:
           name: "lab_nginx"
         - src: "docker/nginx/lab.nkontur.com/stream.conf"
           dest: "{{ docker_persistent_data_path }}/lab_nginx/conf/conf.d/stream.conf"
+          name: "lab_nginx"
+        - src: "docker/nginx/lab.nkontur.com/http.conf"
+          dest: "{{ docker_persistent_data_path }}/lab_nginx/conf/conf.d/http.conf"
           name: "lab_nginx"
         - src: "docker/bitwarden/global.override.env"
           dest: "{{ docker_persistent_data_path }}/bitwarden/global.override.env"
