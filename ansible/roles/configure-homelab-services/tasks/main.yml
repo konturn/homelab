@@ -244,12 +244,6 @@
   register: docker_config_copy
   loop: "{{ docker_config + (docker_config_nginx | default([])) }}"
 
-- name: Remove old Grafana alerting rules subdirectory
-  ansible.builtin.file:
-    path: "{{ docker_persistent_data_path }}/grafana/provisioning/alerting/rules"
-    state: absent
-  when: "'router' in inventory_hostname"
-
 - name: Template Grafana alerting contact points (injects Vault secrets)
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/grafana/provisioning/alerting/contactpoints.yml.j2"
@@ -317,13 +311,6 @@
   changed_when: false
   failed_when: false
   check_mode: no
-  when: "'router' in inventory_hostname"
-
-### Clean up legacy containerized Telegraf artifacts
-- name: Remove legacy Telegraf AppArmor profile
-  ansible.builtin.file:
-    path: /etc/apparmor.d/telegraf-dbus-readonly
-    state: absent
   when: "'router' in inventory_hostname"
 
 ### NUT (Network UPS Tools) — baremetal installation
