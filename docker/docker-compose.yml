@@ -1940,6 +1940,10 @@ services:
           memory: 16G
         reservations:
           memory: 4G
+    # Tiles are pre-built from Headway bootstrap data (us.valhalla.tar.zst).
+    # use_tiles_ignore_pbf=True prevents re-importing from the PBF (which produces broken tiles).
+    # To rebuild tiles from scratch: set force_rebuild=True, remove use_tiles_ignore_pbf,
+    # and allow several hours for the full US tile build.
     environment:
       - tile_urls=https://download.geofabrik.de/north-america/us-latest.osm.pbf
       - serve_tiles=True
@@ -1947,6 +1951,7 @@ services:
       - build_admins=True
       - build_time_zones=True
       - force_rebuild=False
+      - use_tiles_ignore_pbf=True
     volumes:
       - {{ docker_persistent_data_path }}/valhalla/custom_files:/custom_files
     healthcheck:
@@ -2108,11 +2113,9 @@ services:
         reservations:
           memory: 256M
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8000/ || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
+      # Travelmux image has no shell HTTP utilities (curl/wget).
+      # Health is verified externally; the /health/alive endpoint is available.
+      disable: true
 
 
   # Pelias — geocoding stack (replaces Nominatim)
