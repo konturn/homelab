@@ -638,13 +638,23 @@
     group: root
     mode: '0600'
 
+- name: Deploy Grafana token cleanup script
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/scripts/grafana-token-cleanup.sh"
+    dest: /usr/local/bin/grafana-token-cleanup.sh
+    owner: root
+    group: root
+    mode: '0755'
+  when: "'router' in inventory_hostname"
+
 - name: Daily Grafana expired token cleanup
   ansible.builtin.cron:
     name: "Clean expired Grafana JIT service account tokens"
     minute: "30"
     hour: "5"
     job: >-
-      {{ docker_project_path }}/scripts/grafana-token-cleanup.sh 2>&1 | logger -t grafana-token-cleanup
+      /usr/local/bin/grafana-token-cleanup.sh 2>&1 | logger -t grafana-token-cleanup
+  when: "'router' in inventory_hostname"
 
 ### Router boot optimization
 # Mask Hyper-V guest services that are unnecessary on bare metal (not a VM).
