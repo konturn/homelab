@@ -425,8 +425,7 @@ services:
       - BASE_URL=/plex-requests
     volumes:
       - ombi:/config
-      - /etc/ssl/certs:/etc/ssl/certs
-      - /etc/ssl/private:/etc/ssl/private
+      - /etc/ssl/certs:/etc/ssl/certs:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3579/api/v1/Status"]
