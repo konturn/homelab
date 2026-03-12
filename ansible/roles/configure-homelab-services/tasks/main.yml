@@ -627,6 +627,31 @@
     hour: "4"
     job: "docker restart chromium-browser 2>&1 | logger -t chromium-restart"
 
+- name: Template homelab repo sync script
+  ansible.builtin.copy:
+    dest: /usr/local/bin/homelab-repo-sync.sh
+    content: |
+      #!/bin/bash
+      REPO={{ docker_persistent_data_path }}/openclaw/workspace/homelab
+      cd "$REPO" || exit 1
+      git fetch origin main --quiet 2>/dev/null
+      git reset --hard origin/main --quiet 2>/dev/null
+      git clean -fd --quiet 2>/dev/null
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Mark homelab repo as safe directory for git
+  ansible.builtin.command:
+    cmd: git config --global --add safe.directory {{ docker_persistent_data_path }}/openclaw/workspace/homelab
+  changed_when: false
+
+- name: Sync homelab repo to latest main every 5 minutes
+  ansible.builtin.cron:
+    name: "Sync homelab repo for openclaw agent"
+    minute: "*/5"
+    job: "/usr/local/bin/homelab-repo-sync.sh 2>&1 | logger -t homelab-sync"
+
 - name: Template Grafana cleanup env file
   ansible.builtin.copy:
     dest: /etc/grafana-cleanup.env
