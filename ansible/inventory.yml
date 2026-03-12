@@ -24,7 +24,7 @@ all:
     ups_address: 10.4.128.8
     privileged_access_point_1_mac: d2:3f:2a:7e:a7:98
     privileged_access_point_1_address: 10.4.128.21
-    privileged_access_point_2_mac: 4e:83:ba:97:05:47
+    privileged_access_point_2_mac: 84:2f:57:03:cf:43
     privileged_access_point_2_address: 10.4.128.22
     privileged_access_point_3_mac: 80:a9:97:12:5b:30
     privileged_access_point_3_address: 10.4.128.23
