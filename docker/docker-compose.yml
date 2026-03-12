@@ -1854,6 +1854,7 @@ services:
   openclaw-gateway:
     image: gitlab-registry.lab.nkontur.com:443/root/homelab/openclaw:{{ openclaw_image_tag | default('latest') }}
     container_name: openclaw-gateway
+    init: true
     security_opt:
       - no-new-privileges:true
     cap_drop:

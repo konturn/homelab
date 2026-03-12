@@ -88,13 +88,14 @@ func TestValidateVaultPaths_BadPrefix(t *testing.T) {
 
 func TestValidateVaultPaths_PathTraversal(t *testing.T) {
 	tests := []struct {
-		name string
-		path string
+		name    string
+		path    string
+		errText string
 	}{
-		{"dotdot in middle", "homelab/data/../secret/admin"},
-		{"dotdot at start", "../etc/passwd"},
-		{"dotdot at end", "homelab/data/test/.."},
-		{"encoded traversal", "homelab/data/..%2fsecret"},
+		{"dotdot in middle", "homelab/data/../secret/admin", "illegal traversal"},
+		{"dotdot at start", "../etc/passwd", "illegal traversal"},
+		{"dotdot at end", "homelab/data/test/..", "illegal traversal"},
+		{"encoded traversal", "homelab/data/..%2fsecret", "invalid characters"}, // % blocked by regex before traversal check
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -103,8 +104,8 @@ func TestValidateVaultPaths_PathTraversal(t *testing.T) {
 			if err == nil {
 				t.Fatalf("expected error for path traversal in %q", tt.path)
 			}
-			if !strings.Contains(err.Error(), "illegal traversal") {
-				t.Fatalf("expected 'illegal traversal' error, got: %v", err)
+			if !strings.Contains(err.Error(), tt.errText) {
+				t.Fatalf("expected %q error, got: %v", tt.errText, err)
 			}
 		})
 	}
@@ -266,5 +267,63 @@ func TestVaultDynamicBackend_MintCredential_TokenMintFails(t *testing.T) {
 	// Policy should be cleaned up on mint failure
 	if _, ok := pm.policies["jit-vault-req-mintfail"]; ok {
 		t.Error("expected policy to be cleaned up after mint failure")
+	}
+}
+
+func TestValidateVaultPaths_InvalidCharacters(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+	}{
+		{"HCL close brace", "homelab/data/foo}bar"},
+		{"HCL open brace", "homelab/data/foo{bar"},
+		{"HCL double quote", `homelab/data/foo"bar`},
+		{"HCL single quote", "homelab/data/foo'bar"},
+		{"HCL injection full", `homelab/data/foo}path "bar" { capabilities = ["sudo"]`},
+		{"newline injection", "homelab/data/foo\nbar"},
+		{"carriage return", "homelab/data/foo\rbar"},
+		{"space in path", "homelab/data/foo bar"},
+		{"semicolon", "homelab/data/foo;bar"},
+		{"backtick", "homelab/data/foo\x60bar"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			paths := []VaultPathRequest{{Path: tt.path, Capabilities: []string{"read"}}}
+			err := ValidateVaultPaths(paths)
+			if err == nil {
+				t.Fatalf("expected error for path %q", tt.path)
+			}
+			if !strings.Contains(err.Error(), "invalid characters") {
+				t.Fatalf("expected 'invalid characters' error, got: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateVaultPaths_WildcardAllowed(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+	}{
+		{"wildcard all", "homelab/data/*"},
+		{"wildcard subpath", "homelab/data/docker/*"},
+		{"wildcard nested", "homelab/data/docker/*/config"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			paths := []VaultPathRequest{{Path: tt.path, Capabilities: []string{"read"}}}
+			if err := ValidateVaultPaths(paths); err != nil {
+				t.Fatalf("wildcard path %q should be allowed: %v", tt.path, err)
+			}
+		})
+	}
+}
+
+func TestValidateVaultPaths_ValidDeepPath(t *testing.T) {
+	paths := []VaultPathRequest{
+		{Path: "homelab/data/docker/plex", Capabilities: []string{"read"}},
+	}
+	if err := ValidateVaultPaths(paths); err != nil {
+		t.Fatalf("expected valid deep path to pass: %v", err)
 	}
 }
