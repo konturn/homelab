@@ -629,19 +629,30 @@ vault:rotate-approles:
           echo "  ERROR: No GitLab token available"
           FAILURES=$((FAILURES + 1))
         else
+          # Try PUT (update existing variable)
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
             "https://gitlab.lab.nkontur.com/api/v4/projects/${CI_PROJECT_ID}/variables/VAULT_APPROLE_SECRET_ID" \
             -H "PRIVATE-TOKEN: ${GL_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "{\"value\":\"${_ROTATED_SECRET_ID}\",\"protected\":true,\"masked\":true}")
-          unset GL_TOKEN
 
           if [ "$HTTP_CODE" = "200" ]; then
             echo "  CI variable updated ✓"
           else
-            echo "  ERROR: Failed to update CI variable (HTTP $HTTP_CODE)"
-            FAILURES=$((FAILURES + 1))
+            echo "  PUT failed (HTTP $HTTP_CODE), trying POST to create..."
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+              "https://gitlab.lab.nkontur.com/api/v4/projects/${CI_PROJECT_ID}/variables" \
+              -H "PRIVATE-TOKEN: ${GL_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "{\"key\":\"VAULT_APPROLE_SECRET_ID\",\"value\":\"${_ROTATED_SECRET_ID}\",\"protected\":true,\"masked\":true}")
+            if [ "$HTTP_CODE" = "201" ]; then
+              echo "  CI variable created ✓"
+            else
+              echo "  ERROR: Failed to create CI variable (HTTP $HTTP_CODE)"
+              FAILURES=$((FAILURES + 1))
+            fi
           fi
+          unset GL_TOKEN
         fi
       else
         FAILURES=$((FAILURES + 1))
