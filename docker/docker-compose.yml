@@ -2052,7 +2052,7 @@ services:
       pelias-api:
         condition: service_started
       tileserver:
-        condition: service_healthy
+        condition: service_started
       travelmux:
         condition: service_started
       valhalla:
