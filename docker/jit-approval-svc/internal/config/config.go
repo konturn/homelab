@@ -58,6 +58,10 @@ type Config struct {
 
 	// Google OAuth2 token URL (enables Gmail dynamic backends)
 	GoogleTokenURL string
+
+	// ResourceTTLOverrides allows specific resources to use a fixed TTL
+	// instead of the tier default. Key is resource name, value is TTL.
+	ResourceTTLOverrides map[string]time.Duration
 }
 
 // Load reads configuration from environment variables.
@@ -113,6 +117,12 @@ func Load() (*Config, error) {
 		PaperlessURL:    getEnvOrEmpty("PAPERLESS_URL", ""),
 		SSHVaultPath:    getEnv("SSH_VAULT_PATH", "ssh-client-signer"),
 		GoogleTokenURL:  getEnvOrEmpty("GOOGLE_TOKEN_URL", "https://oauth2.googleapis.com/token"),
+
+		ResourceTTLOverrides: map[string]time.Duration{
+			"ssh-nkontur":  8 * time.Hour,
+			"ssh-konoahko": 8 * time.Hour,
+			"ssh-konturn":  8 * time.Hour,
+		},
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -153,6 +163,19 @@ func (c *Config) TierFor(tier int) (TierConfig, error) {
 		return TierConfig{}, fmt.Errorf("unknown tier: %d", tier)
 	}
 	return tc, nil
+}
+
+// TTLFor returns the TTL for a given resource and tier. If the resource has
+// a per-resource override configured, that takes precedence over the tier default.
+func (c *Config) TTLFor(resource string, tier int) (time.Duration, error) {
+	if override, ok := c.ResourceTTLOverrides[resource]; ok {
+		return override, nil
+	}
+	tc, err := c.TierFor(tier)
+	if err != nil {
+		return 0, err
+	}
+	return tc.TTL, nil
 }
 
 // IsRequesterAllowed checks if the given requester ID is in the allowlist.

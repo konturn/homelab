@@ -50,6 +50,73 @@ func TestTierFor(t *testing.T) {
 	}
 }
 
+func TestTTLFor(t *testing.T) {
+	cfg := &Config{
+		Tiers: map[int]TierConfig{
+			1: {TTL: 15 * time.Minute, AutoApprove: true},
+			2: {TTL: 30 * time.Minute, AutoApprove: false},
+			3: {TTL: 60 * time.Minute, AutoApprove: false},
+		},
+		ResourceTTLOverrides: map[string]time.Duration{
+			"ssh-nkontur":  8 * time.Hour,
+			"ssh-konoahko": 8 * time.Hour,
+		},
+	}
+
+	tests := []struct {
+		name     string
+		resource string
+		tier     int
+		wantTTL  time.Duration
+		wantErr  bool
+	}{
+		{"override resource gets override TTL", "ssh-nkontur", 2, 8 * time.Hour, false},
+		{"another override resource", "ssh-konoahko", 2, 8 * time.Hour, false},
+		{"override ignores tier", "ssh-nkontur", 1, 8 * time.Hour, false},
+		{"non-override resource gets tier TTL", "grafana", 2, 30 * time.Minute, false},
+		{"non-override T1", "homeassistant", 1, 15 * time.Minute, false},
+		{"non-override T3", "vault", 3, 60 * time.Minute, false},
+		{"non-override unknown tier errors", "grafana", 99, 0, true},
+		{"override resource ignores bad tier", "ssh-nkontur", 99, 8 * time.Hour, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := cfg.TTLFor(tt.resource, tt.tier)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("expected error, got TTL=%v", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+			if got != tt.wantTTL {
+				t.Errorf("TTLFor(%q, %d) = %v, want %v", tt.resource, tt.tier, got, tt.wantTTL)
+			}
+		})
+	}
+}
+
+func TestTTLForNilOverrides(t *testing.T) {
+	cfg := &Config{
+		Tiers: map[int]TierConfig{
+			1: {TTL: 15 * time.Minute, AutoApprove: true},
+		},
+	}
+
+	// nil map should fall through to tier default
+	got, err := cfg.TTLFor("anything", 1)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if got != 15*time.Minute {
+		t.Errorf("expected 15m, got %v", got)
+	}
+}
+
 func TestIsRequesterAllowed(t *testing.T) {
 	cfg := &Config{
 		AllowedRequesters: []string{"prometheus", "backup-agent"},
