@@ -54,6 +54,10 @@ type Request struct {
 	// Credential data (only returned once via claim)
 	Credential *Credential `json:"-"`
 
+	// RequestedTTL is the client-requested TTL. If set and less than the
+	// resource/tier max, the effective TTL will be this value instead.
+	RequestedTTL time.Duration `json:"-"`
+
 	// SSH host (for display/audit, not enforced by certificate)
 	SSHHost   string `json:"ssh_host,omitempty"`
 	ProjectID string `json:"project_id,omitempty"`

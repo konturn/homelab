@@ -4,6 +4,8 @@
 # Configures Vault as an SSH CA for signing short-lived user certificates.
 # The 'claude' role issues certificates valid for 15 minutes (T1), used by
 # the JIT approval service to grant ephemeral SSH access to target hosts.
+# Workstation roles (nkontur-ws, konoahko-ws, konturn-ws) allow up to 8h
+# certificates to support long-running sessions.
 # =============================================================================
 
 resource "vault_mount" "ssh" {
@@ -68,8 +70,8 @@ resource "vault_ssh_secret_backend_role" "nkontur_ws" {
   key_type                = "ca"
   default_user            = "nkontur"
   allowed_users           = "nkontur"
-  ttl                     = "900"
-  max_ttl                 = "1800"
+  ttl                     = "28800"
+  max_ttl                 = "28800"
   allow_user_certificates = true
   default_extensions = {
     "permit-pty" = ""
@@ -83,8 +85,8 @@ resource "vault_ssh_secret_backend_role" "konoahko_ws" {
   key_type                = "ca"
   default_user            = "konoahko"
   allowed_users           = "konoahko"
-  ttl                     = "900"
-  max_ttl                 = "1800"
+  ttl                     = "28800"
+  max_ttl                 = "28800"
   allow_user_certificates = true
   default_extensions = {
     "permit-pty" = ""
@@ -98,8 +100,8 @@ resource "vault_ssh_secret_backend_role" "konturn_ws" {
   key_type                = "ca"
   default_user            = "konturn"
   allowed_users           = "konturn"
-  ttl                     = "900"
-  max_ttl                 = "1800"
+  ttl                     = "28800"
+  max_ttl                 = "28800"
   allow_user_certificates = true
   default_extensions = {
     "permit-pty" = ""

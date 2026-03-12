@@ -595,6 +595,213 @@ func TestHandleRequest_RejectsSSHBelowMinTier(t *testing.T) {
 	}
 }
 
+func TestHandleRequest_TTL_DefaultWhenNotSet(t *testing.T) {
+	h := mockHandler()
+	// Add a resource TTL override for ssh-nkontur (8h)
+	h.cfg.ResourceTTLOverrides = map[string]time.Duration{
+		"ssh-nkontur": 8 * time.Hour,
+	}
+
+	body, _ := json.Marshal(CreateRequestBody{
+		Requester: "prometheus",
+		Resource:  "ssh-nkontur",
+		Tier:      1,
+		Reason:    "workstation access",
+		SSHHost:   "10.4.128.21",
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-JIT-API-Key", "test-api-key")
+	w := httptest.NewRecorder()
+
+	h.HandleRequest(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp CreateRequestResponse
+	json.Unmarshal(w.Body.Bytes(), &resp)
+
+	// Auto-approved T1 with 8h override, no requested TTL → should get 8h
+	if resp.Status != "approved" {
+		t.Fatalf("expected approved, got %s", resp.Status)
+	}
+	if resp.Credential == nil {
+		t.Fatal("expected credential")
+	}
+	if resp.Credential.LeaseTTL != (8 * time.Hour).String() {
+		t.Errorf("expected lease_ttl 8h0m0s, got %s", resp.Credential.LeaseTTL)
+	}
+}
+
+func TestHandleRequest_TTL_RequestedLessThanMax(t *testing.T) {
+	h := mockHandler()
+	h.cfg.ResourceTTLOverrides = map[string]time.Duration{
+		"ssh-nkontur": 8 * time.Hour,
+	}
+
+	body, _ := json.Marshal(CreateRequestBody{
+		Requester: "prometheus",
+		Resource:  "ssh-nkontur",
+		Tier:      1,
+		Reason:    "quick task",
+		SSHHost:   "10.4.128.21",
+		TTL:       "1h",
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-JIT-API-Key", "test-api-key")
+	w := httptest.NewRecorder()
+
+	h.HandleRequest(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp CreateRequestResponse
+	json.Unmarshal(w.Body.Bytes(), &resp)
+
+	if resp.Status != "approved" {
+		t.Fatalf("expected approved, got %s", resp.Status)
+	}
+	if resp.Credential == nil {
+		t.Fatal("expected credential")
+	}
+	// Requested 1h which is less than 8h max → should get 1h
+	if resp.Credential.LeaseTTL != (1 * time.Hour).String() {
+		t.Errorf("expected lease_ttl 1h0m0s, got %s", resp.Credential.LeaseTTL)
+	}
+}
+
+func TestHandleRequest_TTL_RequestedGreaterThanMax(t *testing.T) {
+	h := mockHandler()
+	h.cfg.ResourceTTLOverrides = map[string]time.Duration{
+		"ssh-nkontur": 8 * time.Hour,
+	}
+
+	body, _ := json.Marshal(CreateRequestBody{
+		Requester: "prometheus",
+		Resource:  "ssh-nkontur",
+		Tier:      1,
+		Reason:    "long session",
+		SSHHost:   "10.4.128.21",
+		TTL:       "24h",
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-JIT-API-Key", "test-api-key")
+	w := httptest.NewRecorder()
+
+	h.HandleRequest(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp CreateRequestResponse
+	json.Unmarshal(w.Body.Bytes(), &resp)
+
+	if resp.Status != "approved" {
+		t.Fatalf("expected approved, got %s", resp.Status)
+	}
+	if resp.Credential == nil {
+		t.Fatal("expected credential")
+	}
+	// Requested 24h which is greater than 8h max → should be capped to 8h
+	if resp.Credential.LeaseTTL != (8 * time.Hour).String() {
+		t.Errorf("expected lease_ttl 8h0m0s (capped to max), got %s", resp.Credential.LeaseTTL)
+	}
+}
+
+func TestHandleRequest_TTL_InvalidString(t *testing.T) {
+	h := mockHandler()
+
+	body, _ := json.Marshal(CreateRequestBody{
+		Requester: "prometheus",
+		Resource:  "radarr",
+		Tier:      1,
+		Reason:    "test",
+		TTL:       "not-a-duration",
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-JIT-API-Key", "test-api-key")
+	w := httptest.NewRecorder()
+
+	h.HandleRequest(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid TTL, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleRequest_TTL_NegativeValue(t *testing.T) {
+	h := mockHandler()
+
+	body, _ := json.Marshal(CreateRequestBody{
+		Requester: "prometheus",
+		Resource:  "radarr",
+		Tier:      1,
+		Reason:    "test",
+		TTL:       "-5m",
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-JIT-API-Key", "test-api-key")
+	w := httptest.NewRecorder()
+
+	h.HandleRequest(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for negative TTL, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleRequest_TTL_TierDefault(t *testing.T) {
+	h := mockHandler()
+	// No resource overrides — uses tier TTL as max
+
+	body, _ := json.Marshal(CreateRequestBody{
+		Requester: "prometheus",
+		Resource:  "radarr",
+		Tier:      1,
+		Reason:    "quick check",
+		TTL:       "5m",
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-JIT-API-Key", "test-api-key")
+	w := httptest.NewRecorder()
+
+	h.HandleRequest(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp CreateRequestResponse
+	json.Unmarshal(w.Body.Bytes(), &resp)
+
+	if resp.Status != "approved" {
+		t.Fatalf("expected approved, got %s", resp.Status)
+	}
+	if resp.Credential == nil {
+		t.Fatal("expected credential")
+	}
+	// Tier 1 default is 15m, requested 5m → should get 5m
+	if resp.Credential.LeaseTTL != (5 * time.Minute).String() {
+		t.Errorf("expected lease_ttl 5m0s, got %s", resp.Credential.LeaseTTL)
+	}
+}
+
 func TestMethodNotAllowed(t *testing.T) {
 	h := mockHandler()
 

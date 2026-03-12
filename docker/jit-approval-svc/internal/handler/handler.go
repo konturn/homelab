@@ -58,6 +58,7 @@ type CreateRequestBody struct {
 	VaultPaths []VaultPathRequest `json:"vault_paths,omitempty"`
 	SSHHost    string             `json:"ssh_host,omitempty"`
 	ProjectID  string             `json:"project_id,omitempty"`
+	TTL        string             `json:"ttl,omitempty"` // Optional: requested TTL (e.g. "1h", "30m"). Capped at resource/tier max.
 }
 
 // CreateRequestResponse is the JSON response for POST /request.
@@ -210,6 +211,20 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	// Attach project ID override if present
 	if body.ProjectID != "" {
 		req.ProjectID = body.ProjectID
+	}
+
+	// Parse and attach requested TTL if present
+	if body.TTL != "" {
+		parsed, err := time.ParseDuration(body.TTL)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid ttl %q: %s", body.TTL, err.Error()))
+			return
+		}
+		if parsed <= 0 {
+			writeError(w, http.StatusBadRequest, "ttl must be positive")
+			return
+		}
+		req.RequestedTTL = parsed
 	}
 
 	// Attach vault paths if present
@@ -530,16 +545,18 @@ func (h *Handler) mintCredential(req *store.Request, ttl time.Duration) (*store.
 // autoApprove immediately approves a tier 1 request by minting a credential.
 // Returns the minted credential on success, or an error if minting failed.
 func (h *Handler) autoApprove(req *store.Request, tierCfg config.TierConfig) (*store.Credential, error) {
-	ttl, err := h.cfg.TTLFor(req.Resource, req.Tier)
+	ttl, maxTTL, err := h.effectiveTTL(req)
 	if err != nil {
 		return nil, err
 	}
 
 	logger.Info("auto_approve", logger.Fields{
-		"request_id": req.ID,
-		"tier":       req.Tier,
-		"resource":   req.Resource,
-		"ttl":        ttl.String(),
+		"request_id":    req.ID,
+		"tier":          req.Tier,
+		"resource":      req.Resource,
+		"ttl":           ttl.String(),
+		"max_ttl":       maxTTL.String(),
+		"requested_ttl": req.RequestedTTL.String(),
 	})
 
 	cred, err := h.mintCredential(req, ttl)
@@ -578,10 +595,11 @@ func (h *Handler) sendApprovalMessage(req *store.Request, tierCfg config.TierCon
 		return
 	}
 
-	// Resolve the effective TTL (may be overridden per resource)
-	ttl, err := h.cfg.TTLFor(req.Resource, req.Tier)
+	// Resolve the effective TTL (respects client-requested + per-resource overrides)
+	ttl, maxTTL, err := h.effectiveTTL(req)
 	if err != nil {
 		ttl = tierCfg.TTL // fallback to tier default
+		maxTTL = ttl
 	}
 
 	// Convert vault paths for Telegram display
@@ -599,13 +617,19 @@ func (h *Handler) sendApprovalMessage(req *store.Request, tierCfg config.TierCon
 		reason = fmt.Sprintf("%s (host: %s)", req.Reason, req.SSHHost)
 	}
 
+	// Show requested TTL vs max if they differ
+	ttlStr := ttl.String()
+	if ttl != maxTTL {
+		ttlStr = fmt.Sprintf("%s (requested, max: %s)", ttl.String(), maxTTL.String())
+	}
+
 	msgID, err := h.telegram.SendApprovalMessage(
 		req.ID,
 		req.Resource,
 		req.Tier,
 		reason,
 		req.Requester,
-		ttl.String(),
+		ttlStr,
 		req.Scopes,
 		tgVaultPaths,
 	)
@@ -684,7 +708,7 @@ func (h *Handler) handleApprove(req *store.Request) {
 		return
 	}
 
-	ttl, err := h.cfg.TTLFor(req.Resource, req.Tier)
+	ttl, _, err := h.effectiveTTL(req)
 	if err != nil {
 		logger.Error("approve_ttl_error", logger.Fields{
 			"request_id": req.ID,
@@ -819,10 +843,16 @@ func (h *Handler) buildDisplayInfo(req *store.Request, tierCfg config.TierConfig
 		reason = fmt.Sprintf("%s (host: %s)", req.Reason, req.SSHHost)
 	}
 
-	// Use resolved TTL (respects per-resource overrides)
-	ttl, err := h.cfg.TTLFor(req.Resource, req.Tier)
+	// Use resolved TTL (respects client-requested + per-resource overrides)
+	ttl, maxTTL, err := h.effectiveTTL(req)
 	if err != nil {
 		ttl = tierCfg.TTL
+		maxTTL = ttl
+	}
+
+	ttlStr := ttl.String()
+	if ttl != maxTTL {
+		ttlStr = fmt.Sprintf("%s (requested, max: %s)", ttl.String(), maxTTL.String())
 	}
 
 	return telegram.RequestDisplayInfo{
@@ -831,10 +861,25 @@ func (h *Handler) buildDisplayInfo(req *store.Request, tierCfg config.TierConfig
 		Tier:       req.Tier,
 		Reason:     reason,
 		Requester:  req.Requester,
-		TTL:        ttl.String(),
+		TTL:        ttlStr,
 		Scopes:     req.Scopes,
 		VaultPaths: tgVaultPaths,
 	}
+}
+
+// effectiveTTL resolves the TTL for a request: starts with the resource/tier
+// max, then caps to the client-requested TTL if it's smaller. Returns the
+// effective TTL and the max TTL (for display purposes).
+func (h *Handler) effectiveTTL(req *store.Request) (effective time.Duration, max time.Duration, err error) {
+	max, err = h.cfg.TTLFor(req.Resource, req.Tier)
+	if err != nil {
+		return 0, 0, err
+	}
+	effective = max
+	if req.RequestedTTL > 0 && req.RequestedTTL < max {
+		effective = req.RequestedTTL
+	}
+	return effective, max, nil
 }
 
 // --- Utility ---
