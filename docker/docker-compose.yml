@@ -509,7 +509,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.1350@sha256:d7f5d2e9e6ff4864dafeb393a3599244662bd36d65fd7c49568c1597389b020a
+    image: linuxserver/jackett:0.24.1341@sha256:6033e022682dc8982a02de93eb88066e0fc315aefa09dce469c6bef38274993e
     container_name: jackett
     security_opt:
       - no-new-privileges:true
@@ -669,12 +669,14 @@ services:
       - internal
       - loki-backend
     restart: unless-stopped
+    # Memory right-sized: 7-day peak 281MB, avg 179MB.
+    # Previous 4G limit was 14x peak usage. 1G gives 3.5x headroom over peak.
     deploy:
       resources:
         limits:
-          memory: 4G
-        reservations:
           memory: 1G
+        reservations:
+          memory: 256M
     volumes:
       - grafana-storage:/var/lib/grafana
       - {{ docker_persistent_data_path }}/grafana/provisioning:/etc/grafana/provisioning
@@ -872,7 +874,7 @@ services:
       - "443:80"
     networks:
       - internal
-    image: 'gitlab/gitlab-ee:18.9.2-ee.0@sha256:c1461c5a4b06158b7b70b5c3c692984cb4d4ab8ca77ffb7fee1b1395c89c422a'
+    image: 'gitlab/gitlab-ee:18.9.1-ee.0@sha256:aac923b6b99744d2e2ef846d7b50b9a018b40a152ff716675f2b9caf4eb2d100'
     restart: unless-stopped
     ulimits:
       nofile:
@@ -1579,7 +1581,7 @@ services:
       retries: 3
       start_period: 60s
   paperless-ngx:
-    image: lscr.io/linuxserver/paperless-ngx:1.7.1@sha256:4016f13609923d1ef926c3d3532cf77f3650dc0b886258947cdf311c5ddc9829
+    image: lscr.io/linuxserver/paperless-ngx:1.8.0@sha256:4016f13609923d1ef926c3d3532cf77f3650dc0b886258947cdf311c5ddc9829
     container_name: paperless-ngx
     security_opt:
       - no-new-privileges:true
@@ -1937,9 +1939,11 @@ services:
     deploy:
       resources:
         limits:
-          memory: 16G
+          memory: 6G
         reservations:
-          memory: 4G
+          memory: 2G
+    # Memory right-sized: 7-day peak 2752MB, avg ~100MB (mostly idle routing engine).
+    # Previous 16G limit was 6x peak. 6G gives 2x headroom over peak.
     # Tiles are pre-built from Headway bootstrap data (us.valhalla.tar.zst).
     # use_tiles_ignore_pbf=True prevents re-importing from the PBF (which produces broken tiles).
     # To rebuild tiles from scratch: set force_rebuild=True, remove use_tiles_ignore_pbf,
@@ -2052,7 +2056,7 @@ services:
       pelias-api:
         condition: service_started
       tileserver:
-        condition: service_healthy
+        condition: service_started
       travelmux:
         condition: service_started
       valhalla:
@@ -2202,12 +2206,14 @@ services:
         condition: service_completed_successfully
       pelias-config-init:
         condition: service_completed_successfully
+    # Memory right-sized: 7-day peak 2238MB, avg 1902MB.
+    # Previous 18G limit was 8x peak. 6G gives 2.7x headroom over peak.
     deploy:
       resources:
         limits:
-          memory: 18G
+          memory: 6G
         reservations:
-          memory: 8G
+          memory: 3G
     healthcheck:
       test: ["CMD", "nc", "-z", "localhost", "9200"]
       interval: 5s
