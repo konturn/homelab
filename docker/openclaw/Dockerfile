@@ -8,6 +8,7 @@ USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
     ipmitool \
+    unzip \
     texlive-latex-base \
     texlive-latex-extra \
     texlive-fonts-recommended \
@@ -30,6 +31,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcairo2 \
     libnss3 \
     libxshmfence1 \
+    # Pentesting / security tools
+    nmap \
+    nikto \
+    hydra \
+    sqlmap \
+    dirb \
+    net-tools \
+    dnsutils \
+    whois \
+    tcpdump \
+    netcat-openbsd \
+    openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Set Chromium flags for container/sandbox environment
@@ -45,6 +58,30 @@ RUN curl -fsSL https://github.com/profclems/glab/releases/download/v1.22.0/glab_
 # Install yq (YAML processor)
 RUN curl -fsSL https://github.com/mikefarah/yq/releases/download/v4.44.1/yq_linux_amd64 -o /usr/local/bin/yq \
     && chmod +x /usr/local/bin/yq
+
+# Install nuclei (template-based vulnerability scanner)
+RUN curl -fsSL https://github.com/projectdiscovery/nuclei/releases/download/v3.7.1/nuclei_3.7.1_linux_amd64.zip -o /tmp/nuclei.zip \
+    && unzip /tmp/nuclei.zip -d /tmp/nuclei \
+    && mv /tmp/nuclei/nuclei /usr/local/bin/nuclei \
+    && chmod +x /usr/local/bin/nuclei \
+    && rm -rf /tmp/nuclei /tmp/nuclei.zip
+
+# Install ffuf (web fuzzer)
+RUN curl -fsSL https://github.com/ffuf/ffuf/releases/download/v2.1.0/ffuf_2.1.0_linux_amd64.tar.gz -o /tmp/ffuf.tar.gz \
+    && tar -xzf /tmp/ffuf.tar.gz -C /usr/local/bin ffuf \
+    && chmod +x /usr/local/bin/ffuf \
+    && rm /tmp/ffuf.tar.gz
+
+# Install testssl.sh (TLS configuration testing)
+RUN curl -fsSL https://github.com/testssl/testssl.sh/archive/refs/tags/v3.2.3.tar.gz -o /tmp/testssl.tar.gz \
+    && tar -xzf /tmp/testssl.tar.gz -C /opt \
+    && ln -s /opt/testssl.sh-3.2.3/testssl.sh /usr/local/bin/testssl \
+    && rm /tmp/testssl.tar.gz
+
+# Install trivy (container image vulnerability scanner)
+RUN curl -fsSL https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.deb -o /tmp/trivy.deb \
+    && dpkg -i /tmp/trivy.deb \
+    && rm /tmp/trivy.deb
 
 # Install playwright globally first, then agent-browser
 # Uses system Chromium via PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
