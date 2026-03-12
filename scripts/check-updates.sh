@@ -406,7 +406,7 @@ while IFS='|' read -r image_ref source; do
     if echo "$never_auto_merge" | grep -qF "$(basename "$image")"; then
       no_auto_merge="true"
     fi
-    # Always mark moltbot Dockerfile images as never_auto_merge
+    # Always mark openclaw Dockerfile images as never_auto_merge
     if [[ "$source" == Dockerfile:docker/openclaw/* ]]; then
       no_auto_merge="true"
     fi
