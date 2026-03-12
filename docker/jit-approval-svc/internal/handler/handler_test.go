@@ -597,17 +597,16 @@ func TestHandleRequest_RejectsSSHBelowMinTier(t *testing.T) {
 
 func TestHandleRequest_TTL_DefaultWhenNotSet(t *testing.T) {
 	h := mockHandler()
-	// Add a resource TTL override for ssh-nkontur (8h)
+	// Use a T1 resource with a TTL override (avoids SSH min-tier restrictions)
 	h.cfg.ResourceTTLOverrides = map[string]time.Duration{
-		"ssh-nkontur": 8 * time.Hour,
+		"grafana": 8 * time.Hour,
 	}
 
 	body, _ := json.Marshal(CreateRequestBody{
 		Requester: "prometheus",
-		Resource:  "ssh-nkontur",
+		Resource:  "grafana",
 		Tier:      1,
-		Reason:    "workstation access",
-		SSHHost:   "10.4.128.21",
+		Reason:    "dashboard access",
 	})
 
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
@@ -639,15 +638,14 @@ func TestHandleRequest_TTL_DefaultWhenNotSet(t *testing.T) {
 func TestHandleRequest_TTL_RequestedLessThanMax(t *testing.T) {
 	h := mockHandler()
 	h.cfg.ResourceTTLOverrides = map[string]time.Duration{
-		"ssh-nkontur": 8 * time.Hour,
+		"grafana": 8 * time.Hour,
 	}
 
 	body, _ := json.Marshal(CreateRequestBody{
 		Requester: "prometheus",
-		Resource:  "ssh-nkontur",
+		Resource:  "grafana",
 		Tier:      1,
-		Reason:    "quick task",
-		SSHHost:   "10.4.128.21",
+		Reason:    "quick check",
 		TTL:       "1h",
 	})
 
@@ -680,15 +678,14 @@ func TestHandleRequest_TTL_RequestedLessThanMax(t *testing.T) {
 func TestHandleRequest_TTL_RequestedGreaterThanMax(t *testing.T) {
 	h := mockHandler()
 	h.cfg.ResourceTTLOverrides = map[string]time.Duration{
-		"ssh-nkontur": 8 * time.Hour,
+		"grafana": 8 * time.Hour,
 	}
 
 	body, _ := json.Marshal(CreateRequestBody{
 		Requester: "prometheus",
-		Resource:  "ssh-nkontur",
+		Resource:  "grafana",
 		Tier:      1,
 		Reason:    "long session",
-		SSHHost:   "10.4.128.21",
 		TTL:       "24h",
 	})
 
