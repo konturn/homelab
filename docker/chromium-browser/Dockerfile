@@ -14,6 +14,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     websockify \
     fonts-liberation \
     fonts-noto-color-emoji \
+    fonts-dejavu-core \
+    fonts-freefont-ttf \
     dbus-x11 \
     procps \
     curl \
@@ -28,6 +30,9 @@ RUN groupadd -g 1000 chrome && useradd -u 1000 -g chrome -G audio,video -m -s /b
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+# Stealth extension for anti-detection patches
+COPY stealth-extension /opt/stealth-ext
 
 EXPOSE 6080 9222
 

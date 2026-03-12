@@ -66,14 +66,18 @@ echo "Starting Chromium..."
 exec gosu chrome chromium \
     --no-sandbox \
     --disable-blink-features=AutomationControlled \
+    --disable-features=AutomationControlled,TranslateUI \
+    --enable-features=NetworkService,NetworkServiceInProcess \
     --disable-dev-shm-usage \
     --remote-debugging-port=9223 \
     --remote-allow-origins=* \
     --user-data-dir=/data/chrome-profile \
     --window-size="${SCREEN_WIDTH},${SCREEN_HEIGHT}" \
     --start-maximized \
-    --disable-gpu \
     --no-first-run \
     --no-default-browser-check \
     --disable-background-networking=false \
+    --disable-infobars \
+    --lang=en-US \
+    --load-extension=/opt/stealth-ext \
     "$@"
