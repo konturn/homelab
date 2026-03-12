@@ -79,5 +79,7 @@ exec gosu chrome chromium \
     --disable-background-networking=false \
     --disable-infobars \
     --lang=en-US \
+    --use-gl=angle \
+    --use-angle=swiftshader-webgl \
     --load-extension=/opt/stealth-ext \
     "$@"
