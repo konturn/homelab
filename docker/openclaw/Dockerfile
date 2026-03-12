@@ -33,7 +33,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxshmfence1 \
     # Pentesting / security tools
     nmap \
-    nikto \
     hydra \
     sqlmap \
     dirb \
@@ -82,6 +81,11 @@ RUN curl -fsSL https://github.com/testssl/testssl.sh/archive/refs/tags/v3.2.3.ta
 RUN curl -fsSL https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.deb -o /tmp/trivy.deb \
     && dpkg -i /tmp/trivy.deb \
     && rm /tmp/trivy.deb
+
+# Install nikto (web server vulnerability scanner) - not in base image repos
+RUN git clone --depth 1 https://github.com/sullo/nikto.git /opt/nikto \
+    && ln -s /opt/nikto/program/nikto.pl /usr/local/bin/nikto \
+    && chmod +x /opt/nikto/program/nikto.pl
 
 # Install playwright globally first, then agent-browser
 # Uses system Chromium via PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
