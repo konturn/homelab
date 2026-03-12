@@ -39,9 +39,16 @@ func formatRequestDetails(info RequestDisplayInfo) string {
 
 	vaultPathStr := ""
 	if len(info.VaultPaths) > 0 {
+		hasWildcard := false
 		vaultPathStr = "\n\n📂 <b>Vault Paths Requested:</b>"
 		for _, vp := range info.VaultPaths {
 			vaultPathStr += fmt.Sprintf("\n  • <code>%s</code> [%s]", vp.Path, strings.Join(vp.Capabilities, ", "))
+			if strings.Contains(vp.Path, "*") {
+				hasWildcard = true
+			}
+		}
+		if hasWildcard {
+			vaultPathStr += "\n\n⚠️ <b>WILDCARD PATH</b> — grants access to all secrets matching pattern"
 		}
 	}
 

@@ -2,11 +2,17 @@ package backend
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/nkontur/jit-approval-svc/internal/logger"
 )
+
+// validPathPattern restricts Vault paths to safe characters only.
+// Allows wildcards (*) for legitimate glob access but blocks HCL injection
+// characters ({, }, ", '), newlines, and other dangerous chars.
+var validPathPattern = regexp.MustCompile(`^[a-zA-Z0-9/_.*\-]+$`)
 
 const (
 	// vaultPathPrefix is the required prefix for all requested Vault paths.
@@ -62,6 +68,9 @@ func ValidateVaultPaths(paths []VaultPathRequest) error {
 	for i, p := range paths {
 		if p.Path == "" {
 			return fmt.Errorf("vault_paths[%d]: path is required", i)
+		}
+		if !validPathPattern.MatchString(p.Path) {
+			return fmt.Errorf("vault_paths[%d]: path %q contains invalid characters", i, p.Path)
 		}
 		if strings.Contains(p.Path, "..") {
 			return fmt.Errorf("vault_paths[%d]: path %q contains illegal traversal sequence", i, p.Path)
