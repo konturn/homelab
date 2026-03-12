@@ -613,26 +613,15 @@ vault:rotate-approles:
       # -----------------------------------------------------------------
       if rotate_approle "openclaw"; then
         echo "=== Updating openclaw CI variable ==="
-        # Fetch GitLab token from Vault for CI variable update
-        GL_TOKEN=""
-        GL_SECRET_RESP=$(vault_api GET "homelab/data/openclaw/tokens") || true
-        GL_TOKEN=$(echo "$GL_SECRET_RESP" | jq -r '.data.data.gitlab_token // empty' 2>/dev/null)
-        if [ -n "$GL_TOKEN" ]; then
-          echo "  GitLab token fetched from Vault"
-        else
-          echo "  ERROR: Could not fetch GitLab token from Vault"
-          FAILURES=$((FAILURES + 1))
-        fi
-        unset GL_SECRET_RESP
-
-        if [ -z "$GL_TOKEN" ]; then
-          echo "  ERROR: No GitLab token available"
+        # GITLAB_API_TOKEN is a protected CI variable containing a PAT with api scope
+        if [ -z "${GITLAB_API_TOKEN:-}" ]; then
+          echo "  ERROR: GITLAB_API_TOKEN CI variable not set"
           FAILURES=$((FAILURES + 1))
         else
           # Try PUT (update existing variable)
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
             "https://gitlab.lab.nkontur.com/api/v4/projects/${CI_PROJECT_ID}/variables/VAULT_APPROLE_SECRET_ID" \
-            -H "PRIVATE-TOKEN: ${GL_TOKEN}" \
+            -H "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "{\"value\":\"${_ROTATED_SECRET_ID}\",\"protected\":true,\"masked\":true}")
 
@@ -642,7 +631,7 @@ vault:rotate-approles:
             echo "  PUT failed (HTTP $HTTP_CODE), trying POST to create..."
             HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
               "https://gitlab.lab.nkontur.com/api/v4/projects/${CI_PROJECT_ID}/variables" \
-              -H "PRIVATE-TOKEN: ${GL_TOKEN}" \
+              -H "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
               -H "Content-Type: application/json" \
               -d "{\"key\":\"VAULT_APPROLE_SECRET_ID\",\"value\":\"${_ROTATED_SECRET_ID}\",\"protected\":true,\"masked\":true}")
             if [ "$HTTP_CODE" = "201" ]; then
@@ -652,7 +641,6 @@ vault:rotate-approles:
               FAILURES=$((FAILURES + 1))
             fi
           fi
-          unset GL_TOKEN
         fi
       else
         FAILURES=$((FAILURES + 1))
