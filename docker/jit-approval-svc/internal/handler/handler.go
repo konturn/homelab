@@ -487,7 +487,7 @@ type TelegramUser struct {
 
 // mintCredential attempts to mint a credential via the dynamic backend first,
 // falling back to the static Vault token if the dynamic backend fails.
-func (h *Handler) mintCredential(req *store.Request, tierCfg config.TierConfig) (*store.Credential, error) {
+func (h *Handler) mintCredential(req *store.Request, ttl time.Duration) (*store.Credential, error) {
 	b := h.backends.For(req.Resource)
 	isDynamic := h.backends.IsDynamic(req.Resource)
 
@@ -500,7 +500,7 @@ func (h *Handler) mintCredential(req *store.Request, tierCfg config.TierConfig) 
 		}
 		opts.VaultPaths = bPaths
 	}
-	cred, err := b.MintCredential(req.Resource, req.Tier, tierCfg.TTL, opts)
+	cred, err := b.MintCredential(req.Resource, req.Tier, ttl, opts)
 	if err != nil {
 		if isDynamic {
 			logger.Error("dynamic_backend_failed", logger.Fields{
@@ -530,13 +530,19 @@ func (h *Handler) mintCredential(req *store.Request, tierCfg config.TierConfig) 
 // autoApprove immediately approves a tier 1 request by minting a credential.
 // Returns the minted credential on success, or an error if minting failed.
 func (h *Handler) autoApprove(req *store.Request, tierCfg config.TierConfig) (*store.Credential, error) {
+	ttl, err := h.cfg.TTLFor(req.Resource, req.Tier)
+	if err != nil {
+		return nil, err
+	}
+
 	logger.Info("auto_approve", logger.Fields{
 		"request_id": req.ID,
 		"tier":       req.Tier,
 		"resource":   req.Resource,
+		"ttl":        ttl.String(),
 	})
 
-	cred, err := h.mintCredential(req, tierCfg)
+	cred, err := h.mintCredential(req, ttl)
 	if err != nil {
 		logger.Error("auto_approve_mint_failed", logger.Fields{
 			"request_id": req.ID,
@@ -545,7 +551,7 @@ func (h *Handler) autoApprove(req *store.Request, tierCfg config.TierConfig) (*s
 		return nil, err
 	}
 
-	if err := h.store.Approve(req.ID, cred, tierCfg.TTL); err != nil {
+	if err := h.store.Approve(req.ID, cred, ttl); err != nil {
 		logger.Error("auto_approve_store_failed", logger.Fields{
 			"request_id": req.ID,
 			"error":      err.Error(),
@@ -556,7 +562,7 @@ func (h *Handler) autoApprove(req *store.Request, tierCfg config.TierConfig) (*s
 	logger.Info("approved", logger.Fields{
 		"request_id":  req.ID,
 		"approver":    "auto",
-		"ttl_granted": tierCfg.TTL.String(),
+		"ttl_granted": ttl.String(),
 		"backend":     cred.Metadata["backend"],
 	})
 
@@ -570,6 +576,12 @@ func (h *Handler) sendApprovalMessage(req *store.Request, tierCfg config.TierCon
 			"request_id": req.ID,
 		})
 		return
+	}
+
+	// Resolve the effective TTL (may be overridden per resource)
+	ttl, err := h.cfg.TTLFor(req.Resource, req.Tier)
+	if err != nil {
+		ttl = tierCfg.TTL // fallback to tier default
 	}
 
 	// Convert vault paths for Telegram display
@@ -593,7 +605,7 @@ func (h *Handler) sendApprovalMessage(req *store.Request, tierCfg config.TierCon
 		req.Tier,
 		reason,
 		req.Requester,
-		tierCfg.TTL.String(),
+		ttl.String(),
 		req.Scopes,
 		tgVaultPaths,
 	)
@@ -672,7 +684,16 @@ func (h *Handler) handleApprove(req *store.Request) {
 		return
 	}
 
-	cred, err := h.mintCredential(req, tierCfg)
+	ttl, err := h.cfg.TTLFor(req.Resource, req.Tier)
+	if err != nil {
+		logger.Error("approve_ttl_error", logger.Fields{
+			"request_id": req.ID,
+			"error":      err.Error(),
+		})
+		return
+	}
+
+	cred, err := h.mintCredential(req, ttl)
 	if err != nil {
 		logger.Error("approve_mint_failed", logger.Fields{
 			"request_id": req.ID,
@@ -685,7 +706,7 @@ func (h *Handler) handleApprove(req *store.Request) {
 		return
 	}
 
-	if err := h.store.Approve(req.ID, cred, tierCfg.TTL); err != nil {
+	if err := h.store.Approve(req.ID, cred, ttl); err != nil {
 		logger.Error("approve_store_failed", logger.Fields{
 			"request_id": req.ID,
 			"error":      err.Error(),
@@ -700,7 +721,7 @@ func (h *Handler) handleApprove(req *store.Request) {
 	logger.Info("approved", logger.Fields{
 		"request_id":  req.ID,
 		"approver":    fmt.Sprintf("telegram:%d", h.cfg.TelegramChatID),
-		"ttl_granted": tierCfg.TTL.String(),
+		"ttl_granted": ttl.String(),
 		"backend":     cred.Metadata["backend"],
 	})
 
@@ -798,13 +819,19 @@ func (h *Handler) buildDisplayInfo(req *store.Request, tierCfg config.TierConfig
 		reason = fmt.Sprintf("%s (host: %s)", req.Reason, req.SSHHost)
 	}
 
+	// Use resolved TTL (respects per-resource overrides)
+	ttl, err := h.cfg.TTLFor(req.Resource, req.Tier)
+	if err != nil {
+		ttl = tierCfg.TTL
+	}
+
 	return telegram.RequestDisplayInfo{
 		RequestID:  req.ID,
 		Resource:   req.Resource,
 		Tier:       req.Tier,
 		Reason:     reason,
 		Requester:  req.Requester,
-		TTL:        tierCfg.TTL.String(),
+		TTL:        ttl.String(),
 		Scopes:     req.Scopes,
 		VaultPaths: tgVaultPaths,
 	}
