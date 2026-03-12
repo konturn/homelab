@@ -669,12 +669,14 @@ services:
       - internal
       - loki-backend
     restart: unless-stopped
+    # Memory right-sized: 7-day peak 281MB, avg 179MB.
+    # Previous 4G limit was 14x peak usage. 1G gives 3.5x headroom over peak.
     deploy:
       resources:
         limits:
-          memory: 4G
-        reservations:
           memory: 1G
+        reservations:
+          memory: 256M
     volumes:
       - grafana-storage:/var/lib/grafana
       - {{ docker_persistent_data_path }}/grafana/provisioning:/etc/grafana/provisioning
@@ -1937,9 +1939,11 @@ services:
     deploy:
       resources:
         limits:
-          memory: 16G
+          memory: 6G
         reservations:
-          memory: 4G
+          memory: 2G
+    # Memory right-sized: 7-day peak 2752MB, avg ~100MB (mostly idle routing engine).
+    # Previous 16G limit was 6x peak. 6G gives 2x headroom over peak.
     # Tiles are pre-built from Headway bootstrap data (us.valhalla.tar.zst).
     # use_tiles_ignore_pbf=True prevents re-importing from the PBF (which produces broken tiles).
     # To rebuild tiles from scratch: set force_rebuild=True, remove use_tiles_ignore_pbf,
@@ -2202,12 +2206,14 @@ services:
         condition: service_completed_successfully
       pelias-config-init:
         condition: service_completed_successfully
+    # Memory right-sized: 7-day peak 2238MB, avg 1902MB.
+    # Previous 18G limit was 8x peak. 6G gives 2.7x headroom over peak.
     deploy:
       resources:
         limits:
-          memory: 18G
+          memory: 6G
         reservations:
-          memory: 8G
+          memory: 3G
     healthcheck:
       test: ["CMD", "nc", "-z", "localhost", "9200"]
       interval: 5s
