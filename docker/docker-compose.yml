@@ -1581,7 +1581,7 @@ services:
       retries: 3
       start_period: 60s
   paperless-ngx:
-    image: lscr.io/linuxserver/paperless-ngx:1.7.1@sha256:4016f13609923d1ef926c3d3532cf77f3650dc0b886258947cdf311c5ddc9829
+    image: lscr.io/linuxserver/paperless-ngx:1.8.0@sha256:4016f13609923d1ef926c3d3532cf77f3650dc0b886258947cdf311c5ddc9829
     container_name: paperless-ngx
     security_opt:
       - no-new-privileges:true

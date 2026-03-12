@@ -2,7 +2,7 @@ networks:
   zwave:
 services:
   nginx: 
-    image: nginx:latest@sha256:3040aee8d792887190feb77276924597cf8a50cb9304723816a5e68047d49b3a
+    image: nginx:latest@sha256:bc45d248c4e1d1709321de61566eb2b64d4f0e32765239d66573666be7f13349
     container_name: nginx
     security_opt:
       - no-new-privileges:true
