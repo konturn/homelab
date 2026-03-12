@@ -17,7 +17,7 @@ http {
   proxy_http_version 1.1;
 
   server {
-    resolver ${HEADWAY_RESOLVER};
+    resolver ${HEADWAY_RESOLVER} valid=10s;
     listen ${HEADWAY_HTTP_PORT} default_server;
 
     location /pelias/  {
