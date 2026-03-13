@@ -1821,9 +1821,15 @@ services:
   # Auth is handled by macOS Screen Sharing; noVNC just proxies the connection.
   # Dev1 (10.4.128.21) — Screen Sharing not yet enabled, container added for when it is.
   novnc-dev1:
-    image: cuteminded/novnc:latest
+    build:
+      context: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/novnc' }}"
+    image: gitlab-registry.lab.nkontur.com:443/root/homelab/novnc:latest
     container_name: novnc-dev1
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       - internal
       - mgmt
@@ -1837,16 +1843,22 @@ services:
         limits:
           memory: 256M
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:6080/ || exit 1"]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:6080/')\" || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 15s
 
   novnc-dev2:
-    image: cuteminded/novnc:latest
+    build:
+      context: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/novnc' }}"
+    image: gitlab-registry.lab.nkontur.com:443/root/homelab/novnc:latest
     container_name: novnc-dev2
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       - internal
       - mgmt
@@ -1860,16 +1872,22 @@ services:
         limits:
           memory: 256M
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:6080/ || exit 1"]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:6080/')\" || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 15s
 
   novnc-dev3:
-    image: cuteminded/novnc:latest
+    build:
+      context: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/novnc' }}"
+    image: gitlab-registry.lab.nkontur.com:443/root/homelab/novnc:latest
     container_name: novnc-dev3
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       - internal
       - mgmt
@@ -1883,7 +1901,7 @@ services:
         limits:
           memory: 256M
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:6080/ || exit 1"]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:6080/')\" || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
