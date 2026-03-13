@@ -388,6 +388,26 @@ chromium-browser:build:
       when: manual
       allow_failure: true
 
+novnc:build:
+  extends: .docker_build
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE/novnc:latest -t $CI_REGISTRY_IMAGE/novnc:$CI_COMMIT_SHORT_SHA docker/novnc/
+    - docker push $CI_REGISTRY_IMAGE/novnc:latest
+    - docker push $CI_REGISTRY_IMAGE/novnc:$CI_COMMIT_SHORT_SHA
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - docker/novnc/**/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - docker/novnc/**/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
+
 
 # =============================================================================
 # Deploy Stage - Parallel deployment (main only)
