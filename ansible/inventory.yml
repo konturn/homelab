@@ -123,9 +123,9 @@ all:
         - "{{ lab_nginx_ip }} otel.lab.nkontur.com"
         - "{{ lab_nginx_ip }} music.lab.nkontur.com"
         - "{{ lab_nginx_ip }} lidarr.lab.nkontur.com"
-        - "{{ lab_nginx_ip }} novnc-j1.lab.nkontur.com"
-        - "{{ lab_nginx_ip }} novnc-j2.lab.nkontur.com"
-        - "{{ lab_nginx_ip }} novnc-j3.lab.nkontur.com"
+        - "{{ lab_nginx_ip }} novnc-dev1.lab.nkontur.com"
+        - "{{ lab_nginx_ip }} novnc-dev2.lab.nkontur.com"
+        - "{{ lab_nginx_ip }} novnc-dev3.lab.nkontur.com"
         - "{{ jit_approval_svc_ip }} jit-approval-svc.lab.nkontur.com"
         - "10.6.0.1 router.lab.nkontur.com"
       docker_config: 

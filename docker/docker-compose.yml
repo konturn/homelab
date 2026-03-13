@@ -1816,13 +1816,13 @@ services:
       retries: 3
       start_period: 60s
 
-  # noVNC — web-accessible remote desktops for job machines (Mac Minis)
+  # noVNC — web-accessible remote desktops for development workstations (Mac Minis)
   # Proxies VNC connections over WebSocket so Noah can access them from a browser.
   # Auth is handled by macOS Screen Sharing; noVNC just proxies the connection.
-  # J1 (10.4.128.21) — Screen Sharing not yet enabled, container added for when it is.
-  novnc-j1:
+  # Dev1 (10.4.128.21) — Screen Sharing not yet enabled, container added for when it is.
+  novnc-dev1:
     image: cuteminded/novnc:latest
-    container_name: novnc-j1
+    container_name: novnc-dev1
     restart: unless-stopped
     networks:
       - internal
@@ -1843,9 +1843,9 @@ services:
       retries: 3
       start_period: 15s
 
-  novnc-j2:
+  novnc-dev2:
     image: cuteminded/novnc:latest
-    container_name: novnc-j2
+    container_name: novnc-dev2
     restart: unless-stopped
     networks:
       - internal
@@ -1866,9 +1866,9 @@ services:
       retries: 3
       start_period: 15s
 
-  novnc-j3:
+  novnc-dev3:
     image: cuteminded/novnc:latest
-    container_name: novnc-j3
+    container_name: novnc-dev3
     restart: unless-stopped
     networks:
       - internal

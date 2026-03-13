@@ -393,7 +393,7 @@ docker compose logs -f
 | DHCP | Check client gets IP | 10.x.x.x range |
 | GitLab | `curl -I https://gitlab.lab.nkontur.com` | 200 OK |
 | Nginx | `curl -I https://nkontur.com` | 200 OK |
-| noVNC | `curl -I https://novnc-j2.lab.nkontur.com` | 200 OK (requires Mac Mini Screen Sharing) |
+| noVNC | `curl -I https://novnc-dev2.lab.nkontur.com` | 200 OK (requires Mac Mini Screen Sharing) |
 
 ### 6.2 Network Verification
 
