@@ -152,6 +152,26 @@ Infrastructure services:
 
 ---
 
+## Docker and iptables
+
+Docker's iptables management is **disabled** on the router (`"iptables": false` in `daemon.json`).
+
+**Why:** The router manages its own iptables rules via `netfilter-persistent`. When Docker has
+`iptables: true`, it inserts its own chains (`DOCKER-USER`, `DOCKER-FORWARD`, `DOCKER-CT`,
+`DOCKER-INTERNAL`, `DOCKER-BRIDGE`) at the top of the FORWARD chain on every restart. This
+clobbers custom forwarding rules and can break non-Docker traffic (e.g., guest WiFi on VLAN 5).
+
+**Why it's safe:** All containers in this homelab use macvlan networks — they're placed directly
+on the appropriate VLAN interface. Docker's iptables rules (bridge NAT, port mapping, inter-container
+isolation) are only relevant for bridge-mode networking, which we don't use. The existing custom
+iptables rules already handle all necessary forwarding.
+
+**If Docker networking breaks after a change**, check that the custom iptables rules in
+`networking/iptables/rules.v4` cover any new forwarding needs — don't re-enable Docker iptables
+management, as it will conflict with the existing ruleset.
+
+---
+
 ## Known Issues
 
 ### 🔐 Security Recommendations
@@ -245,3 +265,4 @@ iptables -A FORWARD -j LOG --log-prefix "FWD-DROPPED: "
 |------|--------|
 | 2022-07-03 | Original rules generated |
 | 2025-01 | Audit and documentation added |
+| 2026-03 | Document Docker iptables disabled on router |
