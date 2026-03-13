@@ -1821,9 +1821,7 @@ services:
   # Auth is handled by macOS Screen Sharing; noVNC just proxies the connection.
   # Dev1 (10.4.128.21) — Screen Sharing not yet enabled, container added for when it is.
   novnc-dev1:
-    build:
-      context: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/novnc' }}"
-    image: gitlab-registry.lab.nkontur.com:443/root/homelab/novnc:latest
+    image: cuteminded/novnc:latest
     container_name: novnc-dev1
     restart: unless-stopped
     security_opt:
@@ -1850,9 +1848,7 @@ services:
       start_period: 15s
 
   novnc-dev2:
-    build:
-      context: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/novnc' }}"
-    image: gitlab-registry.lab.nkontur.com:443/root/homelab/novnc:latest
+    image: cuteminded/novnc:latest
     container_name: novnc-dev2
     restart: unless-stopped
     security_opt:
@@ -1879,9 +1875,7 @@ services:
       start_period: 15s
 
   novnc-dev3:
-    build:
-      context: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/novnc' }}"
-    image: gitlab-registry.lab.nkontur.com:443/root/homelab/novnc:latest
+    image: cuteminded/novnc:latest
     container_name: novnc-dev3
     restart: unless-stopped
     security_opt:
