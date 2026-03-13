@@ -1815,6 +1815,80 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+
+  # noVNC — web-accessible remote desktops for job machines (Mac Minis)
+  # Proxies VNC connections over WebSocket so Noah can access them from a browser.
+  # Auth is handled by macOS Screen Sharing; noVNC just proxies the connection.
+  # J1 (10.4.128.21) — Screen Sharing not yet enabled, container added for when it is.
+  novnc-j1:
+    image: cuteminded/novnc:latest
+    container_name: novnc-j1
+    restart: unless-stopped
+    networks:
+      - internal
+      - mgmt
+    environment:
+      - VNCSERVER=10.4.128.21
+      - VNCPORT=5900
+    ports:
+      - "6081:6080"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:6080/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  novnc-j2:
+    image: cuteminded/novnc:latest
+    container_name: novnc-j2
+    restart: unless-stopped
+    networks:
+      - internal
+      - mgmt
+    environment:
+      - VNCSERVER=10.4.128.22
+      - VNCPORT=5900
+    ports:
+      - "6082:6080"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:6080/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  novnc-j3:
+    image: cuteminded/novnc:latest
+    container_name: novnc-j3
+    restart: unless-stopped
+    networks:
+      - internal
+      - mgmt
+    environment:
+      - VNCSERVER=10.4.128.23
+      - VNCPORT=5900
+    ports:
+      - "6083:6080"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:6080/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
   chromium-browser:
     build:
       context: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/chromium-browser' }}"
