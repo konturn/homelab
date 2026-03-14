@@ -1018,13 +1018,15 @@ services:
     networks:
       internal:
         ipv4_address: {{ deluge_ip }}
-    # Memory limit set to 2G after reducing libtorrent disk cache.
-    # Default cache_size (512 pieces) causes 28GB+ RAM usage with large torrents.
-    # Reduced to 128 pieces via core.conf — see configure-docker ansible role.
+    # Memory right-sized: 7-day avg 1374MB, peak 2047MB (99.9% of previous 2G limit).
+    # libtorrent disk cache reduced to 128 pieces via core.conf — see configure-docker ansible role.
+    # 3G gives ~1.5x headroom over observed peak.
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 3G
+        reservations:
+          memory: 1G
     volumes:
       - '{{ docker_persistent_data_path }}/deluge:/config'
       - '/mpool/samba_share/nfs:/downloads'
