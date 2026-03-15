@@ -2114,6 +2114,10 @@ services:
   # Headway frontend — web UI for maps, search, and routing
   headway-frontend-init:
     container_name: headway-frontend-init
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     image: ghcr.io/headwaymaps/headway-init:0.4.0@sha256:d8ee45cd7d36dd4aa363e5ac6267c304aedb59838788f668d14ba03d57c18f1c
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
@@ -2134,6 +2138,10 @@ services:
 
   headway-frontend:
     container_name: headway-frontend
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     image: ghcr.io/headwaymaps/headway:0.4.0@sha256:91f30093899cbc2590284e0c63fd99a6b75d776bd2d5293be4382107b50ee023
     restart: unless-stopped
     environment:
@@ -2176,6 +2184,10 @@ services:
   # Travelmux — multi-modal routing proxy (wraps Valhalla)
   headway-travelmux-init:
     container_name: headway-travelmux-init
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     image: ghcr.io/headwaymaps/travelmux-init:latest@sha256:4f9028d9911c5e867f0eec493bf6dd8cffe2c480cd1beed15baaa5950da971f4
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
@@ -2195,6 +2207,10 @@ services:
 
   travelmux:
     container_name: travelmux
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     image: ghcr.io/headwaymaps/travelmux:latest@sha256:a555aff6759c752e762b3c43a23da1a6dbf79cc8d6b837a2cfcbe30b3c414c46
     restart: unless-stopped
     environment:
@@ -2225,6 +2241,10 @@ services:
   # Pelias — geocoding stack (replaces Nominatim)
   pelias-config-init:
     container_name: pelias-config-init
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     image: ghcr.io/headwaymaps/pelias-init:0.4.0@sha256:67d27152719deaf83b8e1c09679704784a73ab153946d4885246a4d229c57c39
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
@@ -2245,6 +2265,10 @@ services:
 
   pelias-elasticsearch-init:
     container_name: pelias-elasticsearch-init
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     image: ghcr.io/headwaymaps/pelias-init:0.4.0@sha256:67d27152719deaf83b8e1c09679704784a73ab153946d4885246a4d229c57c39
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
@@ -2265,6 +2289,10 @@ services:
 
   pelias-placeholder-init:
     container_name: pelias-placeholder-init
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     image: ghcr.io/headwaymaps/pelias-init:0.4.0@sha256:67d27152719deaf83b8e1c09679704784a73ab153946d4885246a4d229c57c39
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
@@ -2285,6 +2313,16 @@ services:
 
   pelias-elasticsearch:
     container_name: pelias-elasticsearch
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - IPC_LOCK       # mlockall for Elasticsearch memory locking
+      - CHOWN          # data dir ownership on startup
+      - DAC_OVERRIDE   # cross-user file access
+      - SETGID         # drop to elasticsearch group
+      - SETUID         # drop to elasticsearch user
     image: pelias/elasticsearch:8.12.2-beta@sha256:f0a92540175bf0183b94528b7e2f6125ed1c79110b73779fd76e48ad2d2ad6f5
     restart: unless-stopped
     networks:
@@ -2298,8 +2336,6 @@ services:
       nofile:
         soft: 65536
         hard: 65536
-    cap_add:
-      - IPC_LOCK
     depends_on:
       pelias-elasticsearch-init:
         condition: service_completed_successfully
@@ -2320,6 +2356,10 @@ services:
 
   pelias-api:
     container_name: pelias-api
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     image: pelias/api:master@sha256:0b8d9287fec447b7495e43e177f4c4257e9ea06283358b320b511c693c39a9af
     restart: unless-stopped
     environment:
@@ -2349,6 +2389,10 @@ services:
 
   pelias-placeholder:
     container_name: pelias-placeholder
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     image: pelias/placeholder:master@sha256:50806f93581ad5ae2cc8ae6dd310d2531878af08819b16e463b8e034ccc1e921
     restart: unless-stopped
     environment:
@@ -2380,6 +2424,10 @@ services:
 
   pelias-libpostal:
     container_name: pelias-libpostal
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     image: pelias/libpostal-service:latest@sha256:2c7aeb35d2de315f1abb00d3d0630eb871f8a6ee770b3cf1a56e4aa140760285
     restart: unless-stopped
     networks:
