@@ -1,5 +1,5 @@
 FROM rust:slim-bullseye
-RUN apt update &&  DEBIAN_FRONTEND=noninteractive apt install -y wget pkg-config libasound2-dev
+RUN apt update &&  DEBIAN_FRONTEND=noninteractive apt install -y wget pkg-config libasound2-dev libssl-dev
 RUN wget https://github.com/badaix/snapcast/releases/download/v0.34.0/snapserver_0.34.0-1_amd64_bullseye.deb && apt install -y ./snapserver_0.34.0-1_amd64_bullseye.deb
 RUN wget https://github.com/librespot-org/librespot/archive/refs/tags/v0.8.0.tar.gz && tar -xvf v0.8.0.tar.gz
 RUN cd librespot-0.8.0 && cargo build --release
