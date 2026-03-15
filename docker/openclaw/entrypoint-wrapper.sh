@@ -36,5 +36,9 @@ install_plugin_deps() {
 # Install deps for extensions that need them
 install_plugin_deps /app/extensions/diagnostics-otel
 
+# Security: disable git hooks in workspace to prevent persistence attacks
+# (writable .git/hooks/ could be abused via prompt injection)
+git config --global core.hooksPath /dev/null 2>/dev/null || true
+
 # Hand off to the original entrypoint
 exec docker-entrypoint.sh "$@"

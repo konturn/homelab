@@ -652,6 +652,7 @@ services:
       - DOCKER_INFLUXDB_INIT_ORG=homelab
       - DOCKER_INFLUXDB_INIT_BUCKET=metrics
       - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN={{ vault_influxdb_admin_token | default(lookup('env', 'INFLUXDB_ADMIN_TOKEN')) | trim | replace("$", "$$") }}
+      - INFLUXD_PPROF_DISABLED=true
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
       interval: 30s
@@ -1958,6 +1959,8 @@ services:
     cap_drop:
       - ALL
     restart: unless-stopped
+    dns:
+      - {{ pihole_ip | default("10.3.32.2") }}
     networks:
       internal:
       iot:
