@@ -1019,13 +1019,13 @@ services:
     networks:
       internal:
         ipv4_address: {{ deluge_ip }}
-    # Memory right-sized: 7-day avg 1374MB, peak 2047MB (99.9% of previous 2G limit).
+    # Memory right-sized (March 2026): 7-day avg 1566MB, peak 3.0GB (99.94% of previous 3G limit).
     # libtorrent disk cache reduced to 128 pieces via core.conf — see configure-docker ansible role.
-    # 3G gives ~1.5x headroom over observed peak.
+    # 4G gives ~1.3x headroom over observed peak.
     deploy:
       resources:
         limits:
-          memory: 3G
+          memory: 4G
         reservations:
           memory: 1G
     volumes:
