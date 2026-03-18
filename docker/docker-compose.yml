@@ -278,6 +278,12 @@ services:
     command:
       - "-s"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep iperf3 > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
   nginx: 
     image: nginx:1.29.6-alpine3.23-perl@sha256:c41a994789a430dd5626d836315e35f4837f5bc93e0224f0f25cfc7513d69162
     container_name: nginx
