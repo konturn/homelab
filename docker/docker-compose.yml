@@ -153,12 +153,15 @@ services:
     restart: unless-stopped
     # GPU disabled until NVML driver/library mismatch is fixed
     # runtime: nvidia
+    # Memory right-sized: 7-day peak 5186MB, OOM kills detected (3178 samples).
+    # Previous 6G limit caused OOM under transcoding/library scan bursts.
+    # 8G gives ~1.5x headroom over observed peak.
     deploy:
       resources:
         limits:
-          memory: 6G
+          memory: 8G
         reservations:
-          memory: 2G
+          memory: 3G
     environment:
       - TZ=America/New_York
       # Advertise lab nginx IP so cross-VLAN clients (Apple TV on IoT) can
