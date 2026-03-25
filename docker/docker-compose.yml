@@ -279,7 +279,7 @@ services:
       - "-s"
     restart: unless-stopped
   nginx: 
-    image: nginx:1.29.6-alpine3.23-perl@sha256:c41a994789a430dd5626d836315e35f4837f5bc93e0224f0f25cfc7513d69162
+    image: nginx:1.29.7-alpine3.23-perl@sha256:e2e7b6b54ad96a1ce8611a821ffe544995ce2324a07119a16e2cf8d2db1d211d
     container_name: nginx
     security_opt:
       - no-new-privileges:true
@@ -320,7 +320,7 @@ services:
       - /var/log/nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   lab_nginx: 
-    image: nginx:1.29.6-alpine3.23-perl@sha256:c41a994789a430dd5626d836315e35f4837f5bc93e0224f0f25cfc7513d69162
+    image: nginx:1.29.7-alpine3.23-perl@sha256:e2e7b6b54ad96a1ce8611a821ffe544995ce2324a07119a16e2cf8d2db1d211d
     container_name: lab_nginx
     security_opt:
       - no-new-privileges:true
@@ -363,7 +363,7 @@ services:
       - {{ docker_persistent_data_path }}/certs:/data/certs
       - {{ docker_persistent_data_path }}/docker-proxy-tls:/data/docker-proxy-tls:ro
   iot_nginx: 
-    image: nginx:1.29.6-alpine3.23-perl@sha256:c41a994789a430dd5626d836315e35f4837f5bc93e0224f0f25cfc7513d69162
+    image: nginx:1.29.7-alpine3.23-perl@sha256:e2e7b6b54ad96a1ce8611a821ffe544995ce2324a07119a16e2cf8d2db1d211d
     container_name: iot_nginx
     security_opt:
       - no-new-privileges:true
@@ -434,7 +434,7 @@ services:
       retries: 3
       start_period: 60s
   nzbget:
-    image: linuxserver/nzbget:26.0.20260306@sha256:ec3ef0ae7dc410084086a7fdd447deda4747531154aa1cc5c7c48ac60794e277
+    image: linuxserver/nzbget:26.0.20260320@sha256:c476c76281b17c05bab8001af37c0b8cab93f0690369e290f81fa33f098e5052
     container_name: nzbget
     security_opt:
       - no-new-privileges:true
@@ -509,7 +509,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.1368@sha256:0d9af15a0e2679a62cbd3f6ef6c078a003a69a4c13c7a8ec3c43b99462e4889c
+    image: linuxserver/jackett:0.24.1459@sha256:80ad382f7e843ecb6c045a87a64a9ce51bc8731ff147de743e651916194a9639
     container_name: jackett
     security_opt:
       - no-new-privileges:true
@@ -784,7 +784,7 @@ services:
   # =============================================================================
   tempo:
     container_name: tempo
-    image: grafana/tempo:2.10.2@sha256:b6ade23a821c6bdb89487130dee39bd7bf6595e9fc521212ecb7878feb934d72
+    image: grafana/tempo:2.10.3@sha256:cac9de2ac9f6da8efca5b64b690a7cb8c786a0c49cac7b4517dd1b0089a6c703
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -1138,7 +1138,7 @@ services:
       - "443:8080"
     networks:
       internal:
-    image: jgraph/drawio:29.6.1@sha256:ee402283000956612457fa7df0a6ce9d697d2afa799f7e41dcfe8b2965d7466f
+    image: jgraph/drawio:29.6.5@sha256:80cd09f2ae4bf92579e1512de7c382ee1ba26cd529a666f5e940fb17d01becd3
     restart: unless-stopped
     deploy:
       resources:
@@ -1161,7 +1161,7 @@ services:
     devices: 
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_ETDRb11A920-if00-port0:/dev/ttyUSB0"
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0:/dev/ttyUSB1"
-    image: "homeassistant/home-assistant:2026.3.1@sha256:0e091dfce3068339c3e1d14382e6c34141e05cd589a1972ebd4d9a8e6b5d8969"
+    image: "homeassistant/home-assistant:2026.3.4@sha256:916682086154a7390114a9788782b8efb199852d4f7d47066722c2bc5d1829e6"
     deploy:
       resources:
         limits:
