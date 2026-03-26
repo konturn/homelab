@@ -406,6 +406,26 @@
     - "'router' in inventory_hostname"
     - vault_nut_monitor_password | default('') | length == 0
 
+### Snapserver FIFO pipe
+# Snapserver reads Bluetooth audio from /tmp/snapfifo (a named pipe).
+# If the path doesn't exist, Docker creates it as a directory on bind-mount,
+# causing a type mismatch error. Ensure the FIFO exists before compose-up.
+- name: Ensure /tmp/snapfifo is a named pipe (FIFO) for snapserver
+  ansible.builtin.shell: |
+    if [ -e /tmp/snapfifo ] && [ ! -p /tmp/snapfifo ]; then
+      rm -rf /tmp/snapfifo
+      mkfifo /tmp/snapfifo
+      echo changed
+    elif [ ! -e /tmp/snapfifo ]; then
+      mkfifo /tmp/snapfifo
+      echo changed
+    fi
+  register: snapfifo_ensure
+  changed_when: "'changed' in snapfifo_ensure.stdout"
+  when:
+    - "'router' in inventory_hostname"
+    - not ansible_check_mode
+
 - name: Create and start Docker services
   community.docker.docker_compose_v2:
     project_name: "{{ docker_compose_project_name | default('docker') }}"
