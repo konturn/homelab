@@ -183,6 +183,15 @@
     validate: 'visudo -cf %s'
   become: yes
 
+- name: Grant claude ACL access to Apple Notes directory
+  # Allows the claude user to read/write Apple Notes sqlite database directly,
+  # without needing elevated SSH (T2) or sudo. ACL is recursive and inheritable
+  # so new files created by Notes.app are also accessible.
+  shell: |
+    /bin/chmod -R +a "{{ claude_user_name }} allow read,write,append,readattr,writeattr,readextattr,writeextattr,readsecurity,list,search,add_file,add_subdirectory,delete_child,file_inherit,directory_inherit" "/Users/{{ macos_primary_user }}/Library/Group Containers/group.com.apple.notes/"
+  become: yes
+  changed_when: true
+
 - name: Add AuthorizedPrincipalsFile to sshd_config
   lineinfile:
     path: /etc/ssh/sshd_config
