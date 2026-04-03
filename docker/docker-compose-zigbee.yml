@@ -14,7 +14,10 @@ services:
       - 8081:8080
     networks:
       - zwave
-    mem_limit: 256m
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     environment:
       - TZ=America/New_York
     healthcheck:
