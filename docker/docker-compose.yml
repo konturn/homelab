@@ -437,7 +437,7 @@ services:
       retries: 3
       start_period: 60s
   nzbget:
-    image: linuxserver/nzbget:26.0.20260320@sha256:c476c76281b17c05bab8001af37c0b8cab93f0690369e290f81fa33f098e5052
+    image: linuxserver/nzbget:26.0.20260327@sha256:25075e7d96f06f448ad1e9cb5c2b6e7d254eec5c12b074e9c0c5bc6c4acece4f
     container_name: nzbget
     security_opt:
       - no-new-privileges:true
@@ -512,7 +512,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.1465@sha256:cb9989e508b9625a8afb486a6527672a2e9a3d2a26032665f84bf5a3540ab0cd
+    image: linuxserver/jackett:0.24.1489@sha256:2deef29d80b88537566daa6e7478a4ae4154623b444d9a9ca4aeb6ac4f9df008
     container_name: jackett
     security_opt:
       - no-new-privileges:true
@@ -718,7 +718,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    image: grafana/loki:3.6.8@sha256:9db961170b729dc38277963cbb4a79941626388562cc455db61bf85564aa8945
+    image: grafana/loki:3.7.1@sha256:73e905b51a7f917f7a1075e4be68759df30226e03dcb3cd2213b989cc0dc8eb4
     networks:
       loki-backend:
     restart: unless-stopped
@@ -1713,7 +1713,7 @@ services:
       retries: 3
       start_period: 60s
   nextcloud:
-    image: nextcloud:33.0.0-apache@sha256:ff2cbaab14c85e587b5541e3aff4216a8a484e06424ebae661581937c0c8da0c
+    image: nextcloud:33.0.1-apache@sha256:0b14848e05d19aa25e8a189eb9cfef4215489e0cbf5eb999e8784bf03027c226
     container_name: nextcloud
     security_opt:
       - no-new-privileges:true
@@ -2460,7 +2460,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    image: pelias/libpostal-service:latest@sha256:2c7aeb35d2de315f1abb00d3d0630eb871f8a6ee770b3cf1a56e4aa140760285
+    image: pelias/libpostal-service:latest@sha256:af8a5c9b1e6eb366aa2c8c0a7530ea578029d5132cc8ceb9026a128653a9264a
     restart: unless-stopped
     networks:
       - internal
