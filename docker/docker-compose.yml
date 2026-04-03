@@ -1033,10 +1033,14 @@ services:
     # (99.9% of previous 4G limit). libtorrent disk cache reduced to 128 pieces
     # via core.conf but memory still climbs under heavy torrent loads.
     # 6G gives ~1.6x headroom over P95.
+    # Memory right-sized (March 2026 audit): 7-day peak 6139MB hitting 99.9% of
+    # previous 6G limit. libtorrent disk cache already reduced to 128 pieces.
+    # 8G gives ~1.3x headroom over observed peak. Monitor for continued growth
+    # which may indicate a libtorrent memory leak.
     deploy:
       resources:
         limits:
-          memory: 6G
+          memory: 8G
         reservations:
           memory: 2G
     volumes:
@@ -1081,6 +1085,14 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # Apache master binds to port 80 and forks workers as www-data;
+    # entrypoint chowns wp-content directories.
+    cap_add:
+      - CHOWN            # chown wp-content and uploads directories
+      - DAC_OVERRIDE     # read/write config files across www-data/root
+      - NET_BIND_SERVICE # Apache binds to port 80
+      - SETGID           # Apache workers drop to www-data group
+      - SETUID           # Apache workers drop to www-data user
     ports:
       - "443:80"
     networks:
@@ -1151,10 +1163,12 @@ services:
       internal:
     image: jgraph/drawio:29.6.6@sha256:04ac62e1cf7c4a35df9c32550d34754777e3b5b843079c48fe93a48a6c68e0eb
     restart: unless-stopped
+    # Memory right-sized (March 2026 audit): 7-day peak 158MB, avg 140MB.
+    # 768M was 5x peak. 384M gives 2.4x headroom over peak.
     deploy:
       resources:
         limits:
-          memory: 768M
+          memory: 384M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080"]
       interval: 30s
