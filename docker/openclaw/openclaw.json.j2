@@ -1466,9 +1466,7 @@
     "defaults": {
       "model": {
         "primary": "anthropic/claude-opus-4-6",
-        "fallbacks": [
-          "blockrun/premium"
-        ]
+        "fallbacks": []
       },
       "models": {
         "anthropic/claude-opus-4-6": {
@@ -1590,10 +1588,14 @@
         }
       },
       "heartbeat": {
-        "every": "1h"
+        "every": "1h",
+        "model": "anthropic/claude-haiku-3.5"
       },
+      "timeoutSeconds": 300,
+      "maxConcurrent": 4,
       "subagents": {
-        "archiveAfterMinutes": 30
+        "archiveAfterMinutes": 30,
+        "maxConcurrent": 8
       },
       "sandbox": {
         "browser": {
