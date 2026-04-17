@@ -436,6 +436,9 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+  # nzbget.conf is NOT managed by ansible — it's mutated by the web UI.
+  # Path overrides (MainDir=/remote, DestDir/TempDir/etc under /remote) were
+  # applied manually to /persistent_data/application/nzbget/nzbget.conf.
   nzbget:
     image: linuxserver/nzbget:26.0.20260327@sha256:25075e7d96f06f448ad1e9cb5c2b6e7d254eec5c12b074e9c0c5bc6c4acece4f
     container_name: nzbget
@@ -467,7 +470,7 @@ services:
       - /mpool/samba_share/nfs:/remote
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6789"]
+      test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://localhost:6789 | grep -qE '200|401'"]
       interval: 30s
       timeout: 10s
       retries: 3
