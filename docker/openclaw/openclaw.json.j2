@@ -1465,10 +1465,30 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "anthropic/claude-opus-4-6",
-        "fallbacks": []
+        "primary": "claude-cli/opus[1m]",
+        "fallbacks": ["claude-cli/opus", "claude-cli/claude-opus-4-6"]
+      },
+      "cliBackends": {
+        "claude-cli": {
+          "command": "/usr/local/bin/claude"
+        }
       },
       "models": {
+        "claude-cli/opus[1m]": {
+          "alias": "opus"
+        },
+        "claude-cli/opus": {
+          "alias": "opus"
+        },
+        "claude-cli/claude-opus-4-6": {
+          "alias": "opus"
+        },
+        "claude-cli/claude-sonnet-4-6": {
+          "alias": "sonnet-4.6"
+        },
+        "claude-cli/claude-haiku-4-5": {
+          "alias": "haiku"
+        },
         "anthropic/claude-opus-4-6": {
           "alias": "opus",
           "params": {
@@ -1589,7 +1609,7 @@
       },
       "heartbeat": {
         "every": "1h",
-        "model": "anthropic/claude-haiku-3.5"
+        "model": "claude-cli/claude-haiku-4-5"
       },
       "timeoutSeconds": 300,
       "maxConcurrent": 4,
@@ -1682,7 +1702,8 @@
     "allow": [
       "telegram",
       "clawrouter",
-      "diagnostics-otel"
+      "diagnostics-otel",
+      "anthropic"
     ],
     "entries": {
       "telegram": {
@@ -1692,6 +1713,9 @@
         "enabled": true
       },
       "diagnostics-otel": {
+        "enabled": true
+      },
+      "anthropic": {
         "enabled": true
       }
     },
