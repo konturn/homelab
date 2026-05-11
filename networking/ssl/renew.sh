@@ -35,5 +35,7 @@ echo "Certificate sync to zwave succeeded."
 
 docker restart lab_nginx
 docker restart nginx
+docker restart iot_nginx
 docker restart mosquitto
+docker restart vault
 echo "SSL renewal complete."
