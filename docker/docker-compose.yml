@@ -146,7 +146,7 @@ services:
       - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
     ports:
       - "32400/tcp"
-    image: plexinc/pms-docker:1.43.0.10492-121068a07@sha256:1131c4cd21fa22f8196f749f1dbb69af306776c3c83c7f5b061e51dc49bcff7f
+    image: plexinc/pms-docker:1.43.1.10611-1e34174b1@sha256:8b5bcdf7b506fe051aa1a0a0d464efdb3ad8c0fb1f8a4dfb27a8c489b609920c
     networks:
       - external
       - internal
@@ -236,7 +236,7 @@ services:
       - NET_RAW          # DHCP raw socket access
       - SETGID           # drop to pihole group
       - SETUID           # drop to pihole user
-    image: pihole/pihole:2026.02.0@sha256:ee348529cea9601df86ad94d62a39cad26117e1eac9e82d8876aa0ec7fe1ba27
+    image: pihole/pihole:2026.04.1@sha256:1c32c36b862a12762656b6471c854cebc01fe945639ba3a893611337c2c95e99
     ports:
       - "443:80"
     networks:
@@ -282,7 +282,7 @@ services:
       - "-s"
     restart: unless-stopped
   nginx: 
-    image: nginx:1.29.7-alpine3.23-perl@sha256:e2e7b6b54ad96a1ce8611a821ffe544995ce2324a07119a16e2cf8d2db1d211d
+    image: nginx:1.30.0-alpine3.23-perl@sha256:54d05684e0dccb53f2b373ec0a3c652f1e06e2b3705652f58be67e54b2ba26b7
     container_name: nginx
     security_opt:
       - no-new-privileges:true
@@ -323,7 +323,7 @@ services:
       - /var/log/nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   lab_nginx: 
-    image: nginx:1.29.7-alpine3.23-perl@sha256:e2e7b6b54ad96a1ce8611a821ffe544995ce2324a07119a16e2cf8d2db1d211d
+    image: nginx:1.30.0-alpine3.23-perl@sha256:54d05684e0dccb53f2b373ec0a3c652f1e06e2b3705652f58be67e54b2ba26b7
     container_name: lab_nginx
     security_opt:
       - no-new-privileges:true
@@ -366,7 +366,7 @@ services:
       - {{ docker_persistent_data_path }}/certs:/data/certs
       - {{ docker_persistent_data_path }}/docker-proxy-tls:/data/docker-proxy-tls:ro
   iot_nginx: 
-    image: nginx:1.29.7-alpine3.23-perl@sha256:e2e7b6b54ad96a1ce8611a821ffe544995ce2324a07119a16e2cf8d2db1d211d
+    image: nginx:1.30.0-alpine3.23-perl@sha256:54d05684e0dccb53f2b373ec0a3c652f1e06e2b3705652f58be67e54b2ba26b7
     container_name: iot_nginx
     security_opt:
       - no-new-privileges:true
@@ -403,7 +403,7 @@ services:
       - /var/log/iot_nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   ombi:
-    image: linuxserver/ombi:4.53.4@sha256:fcad7b900ab2bc910f8271435953d99fd8dd4a1d877d09e478c9183bd4591193
+    image: linuxserver/ombi:4.53.5@sha256:2a1edf438ebfc4f1aae148c32914d7d7c1ba4c92923b32fed7a19d03933812ed
     container_name: ombi
     security_opt:
       - no-new-privileges:true
@@ -440,7 +440,7 @@ services:
   # Path overrides (MainDir=/remote, DestDir/TempDir/etc under /remote) were
   # applied manually to /persistent_data/application/nzbget/nzbget.conf.
   nzbget:
-    image: linuxserver/nzbget:26.0.20260327@sha256:25075e7d96f06f448ad1e9cb5c2b6e7d254eec5c12b074e9c0c5bc6c4acece4f
+    image: linuxserver/nzbget:26.1.20260508@sha256:9411ec5427087209528779a085c18fb73902502bdc2466cb0f083d00132833b8
     container_name: nzbget
     security_opt:
       - no-new-privileges:true
@@ -515,7 +515,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.1489@sha256:2deef29d80b88537566daa6e7478a4ae4154623b444d9a9ca4aeb6ac4f9df008
+    image: linuxserver/jackett:0.24.1831@sha256:e8e102c53219b0b8287b415349d843626b4384829390d355b425a4261fd71fe6
     container_name: jackett
     security_opt:
       - no-new-privileges:true
@@ -888,7 +888,7 @@ services:
       - "443:80"
     networks:
       - internal
-    image: 'gitlab/gitlab-ee:18.10.1-ee.0@sha256:1d4f55209efda97f6303ce0cb3044410b092a9babfb86c4818a49c3e5be11451'
+    image: 'gitlab/gitlab-ee:18.11.2-ee.0@sha256:8e6445af81761a2f12274b88cbe7a8679ae654c8a7e9f74bf21cd8a27cdda458'
     restart: unless-stopped
     ulimits:
       nofile:
@@ -1063,7 +1063,7 @@ services:
       - ALL
     ports:
       - "443:80"
-    image: 'vaultwarden/server:1.35.4-alpine@sha256:34b4e91ed4c2a4d2191245325608b2a84bedbeb9c9dd561e3c0924b98ef7126c'
+    image: 'vaultwarden/server:1.36.0-alpine@sha256:d3531610b486905943706b235e97159331801c6856e1367a93a5905e2b40f204'
     restart: unless-stopped
     networks:
       - external
@@ -1121,7 +1121,7 @@ services:
       retries: 3
       start_period: 60s
   wordpress_db:
-    image: mysql:9.6.0-oraclelinux9@sha256:db32c8ec843c042a728efb0ac7aa814d6f010eaac8923e20ae0a849d09c5baf8
+    image: mysql:9.7.0-oraclelinux9@sha256:f0ef1d92fa650fcfa5b85f1d82bb1a56a6dd579bf256b8f8f2a5a0b1b61c8b0b
     container_name: wordpress_db
     security_opt:
       - no-new-privileges:true
@@ -1189,7 +1189,7 @@ services:
     devices: 
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_ETDRb11A920-if00-port0:/dev/ttyUSB0"
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0:/dev/ttyUSB1"
-    image: "homeassistant/home-assistant:2026.3.4@sha256:916682086154a7390114a9788782b8efb199852d4f7d47066722c2bc5d1829e6"
+    image: "homeassistant/home-assistant:2026.5.1@sha256:d4fbec16196d5c8bedf32647f0ca7165f654d92a2e81f35a373508d3226cb867"
     deploy:
       resources:
         limits:
@@ -1589,7 +1589,7 @@ services:
     cap_drop:
       - ALL
     restart: unless-stopped
-    image: koenkk/zigbee2mqtt:2.9.1@sha256:574b2bd0dcbb59fae6edbbb81a35b5563291d3825da0225f0078aa5575dac37f
+    image: koenkk/zigbee2mqtt:2.10.1@sha256:67c26dcf8346aced02fe1380a6afd1b57268bcef10faae3f6057c13d5d3dfa80
     depends_on:
       mosquitto:
         condition: service_healthy
@@ -1716,7 +1716,7 @@ services:
       retries: 3
       start_period: 60s
   nextcloud:
-    image: nextcloud:33.0.1-apache@sha256:0b14848e05d19aa25e8a189eb9cfef4215489e0cbf5eb999e8784bf03027c226
+    image: nextcloud:33.0.3-apache@sha256:90a730e9a3dd290d9626ca64740c4d2fa901b4f231fe4ab6eb0dcf300dbc7271
     container_name: nextcloud
     security_opt:
       - no-new-privileges:true
@@ -1755,7 +1755,7 @@ services:
       start_period: 120s
 
   prowlarr:
-    image: lscr.io/linuxserver/prowlarr:latest@sha256:9ef5d8bf832edcacb6082f9262cb36087854e78eb7b1c3e1d4375056055b2d82
+    image: lscr.io/linuxserver/prowlarr:latest@sha256:4b52038b7b6452a20c145239fa07d8218d1541d736a96c43aa0a5f60141cab28
     container_name: prowlarr
     security_opt:
       - no-new-privileges:true
@@ -1788,7 +1788,7 @@ services:
       retries: 3
       start_period: 60s
   navidrome:
-    image: deluan/navidrome:0.60.3@sha256:a5dce8f33304714dd138e870cca0dcab3d937ca236be1a9f2b97da009d1a0048
+    image: deluan/navidrome:0.61.2@sha256:9fa40b3d8dec43ceb2213d1fa551da3dcfef6ac6d19c2e534efb92527c2bafd2
     container_name: navidrome
     security_opt:
       - no-new-privileges:true
@@ -2052,7 +2052,7 @@ services:
   # Subsequent starts are fast — tiles are cached in the data volume.
   valhalla:
     container_name: valhalla
-    image: ghcr.io/valhalla/valhalla-scripted:3.6.3@sha256:27edb9e58564e0bf082c21e8c8460a0968dfa2b3892a9db3b1199afc3bee5937
+    image: ghcr.io/valhalla/valhalla-scripted:3.7.0@sha256:2bafe8a908da3f538caabf867350d4e7c3dfb6e9a7e286bcf7a4cfa0f90b5e57
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -2105,7 +2105,7 @@ services:
   # Place .mbtiles files in {{ docker_persistent_data_path }}/tileserver/
   tileserver:
     container_name: tileserver
-    image: maptiler/tileserver-gl:latest@sha256:0472aa881c9965bcd578cbaaeeaf5ab86d5d92e10c64c48c6856a6b1b7beb13f
+    image: maptiler/tileserver-gl:latest@sha256:3a9ccdb24820b6814c8119bcc8a4376c39867cb0ffe69d62919ef898b90c2427
     # Run as UID 1000 to match tileserver-gl's expected user.
     # The deploy-compose role pre-creates the data dir with 1000:1000 ownership.
     user: "1000:1000"
