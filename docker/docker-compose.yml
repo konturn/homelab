@@ -2030,10 +2030,14 @@ services:
       - VAULT_APPROLE_SECRET_ID={{ lookup('env', 'VAULT_APPROLE_SECRET_ID') }}
       # OpenTelemetry — uses native diagnostics-otel plugin (configured in openclaw.json)
       # See: https://docs.openclaw.ai/logging#export-to-opentelemetry
+      # Claude subscription auth for the claude-cli backend (see openclaw.json.j2)
+      - CLAUDE_CODE_OAUTH_TOKEN={{ vault_openclaw_claude_oauth_token | default(lookup('env', 'OPENCLAW_CLAUDE_OAUTH_TOKEN')) | trim | replace("$", "$$") }}
     volumes:
       - {{ docker_persistent_data_path }}/openclaw/data:/home/node/.openclaw
       - {{ docker_persistent_data_path }}/openclaw/mcporter:/home/node/.mcporter
       - {{ docker_persistent_data_path }}/openclaw/workspace:/home/node/.openclaw/workspace
+      - {{ docker_persistent_data_path }}/openclaw/claude:/home/node/.claude
+      - {{ docker_persistent_data_path }}/openclaw/claude.json:/home/node/.claude.json
       - {{ docker_persistent_data_path }}/chromium-browser/uploads:/uploads
       - {{ docker_persistent_data_path }}/openclaw/entrypoint-wrapper.sh:/usr/local/bin/entrypoint-wrapper.sh:ro
     entrypoint: ["entrypoint-wrapper.sh"]

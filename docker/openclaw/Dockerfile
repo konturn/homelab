@@ -93,6 +93,9 @@ RUN npm install -g playwright \
     && npm install -g agent-browser \
     && agent-browser install --skip-download
 
+# Install Claude CLI for the openclaw claude-cli backend (auth via CLAUDE_CODE_OAUTH_TOKEN env)
+RUN npm install -g @anthropic-ai/claude-code
+
 # Pre-install clawrouter extension
 RUN mkdir -p /home/node/.openclaw/extensions/clawrouter \
     && npm install --prefix /home/node/.openclaw/extensions/clawrouter @blockrun/clawrouter@0.10.5
