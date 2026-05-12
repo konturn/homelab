@@ -570,11 +570,11 @@ services:
     networks:
     - internal
     # 308K history records — Sonarr benefits from memory headroom for DB operations.
-    # Added reservation to prevent OOM kills during heavy queries.
+    # 2026-05-12: 7-day peak hit 1.95G (97.7% of 2G). Bumped to 3G for headroom.
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 3G
         reservations:
           memory: 512M
     environment:
@@ -648,12 +648,12 @@ services:
         ipv4_address: {{ influxdb_iot_ip }}
     image: influxdb:2.8.0@sha256:8e911da5f7b482230e61fe4bad9af0697d97a75e087f19f5f0ddfee62c2bd686
     restart: unless-stopped
-    # Memory right-sized: 7-day peak 1.6GB, avg 607MB. 16G was 10x peak.
-    # 4G gives 2.5x headroom over peak.
+    # 2026-05-12: 7-day peak hit 3.97G (99.3% of 4G). Workload grew since the
+    # original 4G sizing; bumped to 6G for ~50% headroom over current peak.
     deploy:
       resources:
         limits:
-          memory: 4G
+          memory: 6G
         reservations:
           memory: 1G
     volumes:
