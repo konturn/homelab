@@ -2185,8 +2185,19 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # nginx entrypoint chowns cache dir and drops to nginx user.
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
     image: ghcr.io/headwaymaps/headway:0.4.0@sha256:91f30093899cbc2590284e0c63fd99a6b75d776bd2d5293be4382107b50ee023
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+      - /var/cache/nginx
     environment:
       - HEADWAY_AREA={{ headway_area | default('us') }}
       - HEADWAY_RESOLVER=127.0.0.11
