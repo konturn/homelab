@@ -2185,6 +2185,13 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # nginx entrypoint chowns /var/cache/nginx/* and binds to port 80; workers drop to nginx user
+    cap_add:
+      - CHOWN            # entrypoint chowns /var/cache/nginx/{client_temp,...}
+      - DAC_OVERRIDE     # read config and write logs across users
+      - NET_BIND_SERVICE # bind to port 80
+      - SETGID           # worker processes drop to nginx group
+      - SETUID           # worker processes drop to nginx user
     image: ghcr.io/headwaymaps/headway:0.4.0@sha256:91f30093899cbc2590284e0c63fd99a6b75d776bd2d5293be4382107b50ee023
     restart: unless-stopped
     environment:
