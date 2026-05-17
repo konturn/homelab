@@ -715,6 +715,13 @@ services:
       - GF_TRACING_OPENTELEMETRY_OTLP_ADDRESS=otel-collector:4317
       - GF_TRACING_OPENTELEMETRY_SAMPLER_TYPE=const
       - GF_TRACING_OPENTELEMETRY_SAMPLER_PARAM=1
+      # Alert state history -> Loki. The default SQLite "annotations" backend
+      # fails every minute with "too many SQL variables" because multi-series
+      # rules (e.g. container-health-failure) batch-insert more bind params
+      # than SQLite allows, silently dropping all alert state history. Grafana
+      # already shares the loki-backend network with the loki container.
+      - GF_UNIFIED_ALERTING_STATE_HISTORY_BACKEND=loki
+      - GF_UNIFIED_ALERTING_STATE_HISTORY_LOKI_REMOTE_URL=http://loki:3100
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s
