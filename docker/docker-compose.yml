@@ -236,7 +236,7 @@ services:
       - NET_RAW          # DHCP raw socket access
       - SETGID           # drop to pihole group
       - SETUID           # drop to pihole user
-    image: pihole/pihole:2026.04.1@sha256:1c32c36b862a12762656b6471c854cebc01fe945639ba3a893611337c2c95e99
+    image: pihole/pihole:2026.05.0@sha256:70a9c11171ded2eee735d88c127996da209284a329d50f5ae59c06b861d401b3
     ports:
       - "443:80"
     networks:
@@ -288,7 +288,7 @@ services:
       retries: 3
       start_period: 10s
   nginx: 
-    image: nginx:1.30.0-alpine3.23-perl@sha256:54d05684e0dccb53f2b373ec0a3c652f1e06e2b3705652f58be67e54b2ba26b7
+    image: nginx:1.31.0-alpine3.23-perl@sha256:7725b425b6df0a2222051ad1201cdba8f7b7cc0b6351b77f82815410e602afc7
     container_name: nginx
     security_opt:
       - no-new-privileges:true
@@ -329,7 +329,7 @@ services:
       - /var/log/nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   lab_nginx: 
-    image: nginx:1.30.0-alpine3.23-perl@sha256:54d05684e0dccb53f2b373ec0a3c652f1e06e2b3705652f58be67e54b2ba26b7
+    image: nginx:1.31.0-alpine3.23-perl@sha256:7725b425b6df0a2222051ad1201cdba8f7b7cc0b6351b77f82815410e602afc7
     container_name: lab_nginx
     security_opt:
       - no-new-privileges:true
@@ -372,7 +372,7 @@ services:
       - {{ docker_persistent_data_path }}/certs:/data/certs
       - {{ docker_persistent_data_path }}/docker-proxy-tls:/data/docker-proxy-tls:ro
   iot_nginx: 
-    image: nginx:1.30.0-alpine3.23-perl@sha256:54d05684e0dccb53f2b373ec0a3c652f1e06e2b3705652f58be67e54b2ba26b7
+    image: nginx:1.31.0-alpine3.23-perl@sha256:7725b425b6df0a2222051ad1201cdba8f7b7cc0b6351b77f82815410e602afc7
     container_name: iot_nginx
     security_opt:
       - no-new-privileges:true
@@ -446,7 +446,7 @@ services:
   # Path overrides (MainDir=/remote, DestDir/TempDir/etc under /remote) were
   # applied manually to /persistent_data/application/nzbget/nzbget.conf.
   nzbget:
-    image: linuxserver/nzbget:26.1.20260508@sha256:9411ec5427087209528779a085c18fb73902502bdc2466cb0f083d00132833b8
+    image: linuxserver/nzbget:26.1.20260515@sha256:56e92b2eb265b79bbf502a8fc8a59aa9d5dbf48d9681a251b92bce1c1718ecae
     container_name: nzbget
     security_opt:
       - no-new-privileges:true
@@ -521,7 +521,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.1831@sha256:e8e102c53219b0b8287b415349d843626b4384829390d355b425a4261fd71fe6
+    image: linuxserver/jackett:0.24.1867@sha256:42d4e2fb798018c924c305a576d7c73b3dc3a5326e518811ea2952b12dc9160d
     container_name: jackett
     security_opt:
       - no-new-privileges:true
@@ -727,7 +727,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    image: grafana/loki:3.7.1@sha256:73e905b51a7f917f7a1075e4be68759df30226e03dcb3cd2213b989cc0dc8eb4
+    image: grafana/loki:3.7.2@sha256:191d4fdfb7264f16989f0a57f320872620a5a7c2ceeec6229212c4190ec49b86
     networks:
       loki-backend:
     restart: unless-stopped
@@ -894,7 +894,7 @@ services:
       - "443:80"
     networks:
       - internal
-    image: 'gitlab/gitlab-ee:18.11.2-ee.0@sha256:8e6445af81761a2f12274b88cbe7a8679ae654c8a7e9f74bf21cd8a27cdda458'
+    image: 'gitlab/gitlab-ee:18.11.3-ee.0@sha256:f2436e268fd622d043f99e71b2911acbc167ccfb7630531f4865682e611856ad'
     restart: unless-stopped
     ulimits:
       nofile:
@@ -1195,7 +1195,7 @@ services:
     devices: 
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_ETDRb11A920-if00-port0:/dev/ttyUSB0"
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0:/dev/ttyUSB1"
-    image: "homeassistant/home-assistant:2026.5.1@sha256:d4fbec16196d5c8bedf32647f0ca7165f654d92a2e81f35a373508d3226cb867"
+    image: "homeassistant/home-assistant:2026.5.2@sha256:f0baa7922ecec7790c40c41baf08ab218b6ab8db5f96dc03b03a0ae33d987c3d"
     deploy:
       resources:
         limits:
