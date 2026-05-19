@@ -2185,6 +2185,13 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # nginx-based image: master runs as root and chowns /var/cache/nginx at
+    # startup, workers drop to the nginx user. Listens on 8080 (no NET_BIND_SERVICE).
+    cap_add:
+      - CHOWN          # chown /var/cache/nginx/* at startup (without this nginx exits [emerg])
+      - DAC_OVERRIDE   # cross-user access to cache/log/pid files
+      - SETGID         # worker processes drop to nginx group
+      - SETUID         # worker processes drop to nginx user
     image: ghcr.io/headwaymaps/headway:0.4.0@sha256:91f30093899cbc2590284e0c63fd99a6b75d776bd2d5293be4382107b50ee023
     restart: unless-stopped
     environment:
