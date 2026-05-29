@@ -2030,7 +2030,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 3G
+          memory: 5G
         reservations:
           memory: 1G
     healthcheck:
