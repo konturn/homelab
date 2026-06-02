@@ -894,7 +894,7 @@ services:
       - "443:80"
     networks:
       - internal
-    image: 'gitlab/gitlab-ee:18.11.2-ee.0@sha256:8e6445af81761a2f12274b88cbe7a8679ae654c8a7e9f74bf21cd8a27cdda458'
+    image: 'gitlab/gitlab-ee:19.0.1-ee.0@sha256:6a7fd7d917a76a4cbedd3c3d9f5abba0a5d198c4637dc7916e5a466611f21439'
     restart: unless-stopped
     ulimits:
       nofile:
