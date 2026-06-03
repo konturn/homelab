@@ -777,12 +777,12 @@ services:
     networks:
       internal:
         ipv4_address: {{ promtail_ip }}
-    # Promtail is a lightweight log shipper; 256M and half a CPU core is plenty.
-    # Peak usage: ~87MB (7-day max).
+    # Promtail is a lightweight log shipper; ~85MB typical, spikes to ~245MB during
+    # log bursts (observed 2026-06-01). 384M leaves ~36% headroom on the spike peak.
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
           cpus: '0.5'
     # Use json-file logging to avoid circular dependency (same as Loki)
     logging:
