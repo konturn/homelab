@@ -16,7 +16,7 @@ registry_external_url 'https://gitlab-registry.lab.nkontur.com'
 gitlab_rails['registry_enabled'] = true
 gitlab_rails['registry_host'] = "gitlab-registry.lab.nkontur.com"
 gitlab_rails['registry_port'] = "443"
-gitlab_rails['registry_api_url'] = "http://127.0.0.1:5000"
+gitlab_rails['registry_api_url'] = "http://127.0.0.1:5050"
 
 # Registry runs on port 5050, exposed to nginx proxy
 registry['enable'] = true
