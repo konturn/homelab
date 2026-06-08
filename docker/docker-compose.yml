@@ -146,7 +146,7 @@ services:
       - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
     ports:
       - "32400/tcp"
-    image: plexinc/pms-docker:1.43.1.10611-1e34174b1@sha256:8b5bcdf7b506fe051aa1a0a0d464efdb3ad8c0fb1f8a4dfb27a8c489b609920c
+    image: plexinc/pms-docker:1.43.2.10687-563d026ea@sha256:c37106c57fed7a6624f5dee5a3ce460ff011f09a2aa7f4ee9e8dbbd08ae1b87e
     networks:
       - external
       - internal
@@ -236,7 +236,7 @@ services:
       - NET_RAW          # DHCP raw socket access
       - SETGID           # drop to pihole group
       - SETUID           # drop to pihole user
-    image: pihole/pihole:2026.04.1@sha256:1c32c36b862a12762656b6471c854cebc01fe945639ba3a893611337c2c95e99
+    image: pihole/pihole:2026.05.0@sha256:70a9c11171ded2eee735d88c127996da209284a329d50f5ae59c06b861d401b3
     ports:
       - "443:80"
     networks:
@@ -288,7 +288,7 @@ services:
       retries: 3
       start_period: 10s
   nginx: 
-    image: nginx:1.30.0-alpine3.23-perl@sha256:54d05684e0dccb53f2b373ec0a3c652f1e06e2b3705652f58be67e54b2ba26b7
+    image: nginx:1.31.1-alpine3.23-perl@sha256:b4f40fc790074a4af0d6fc81923a30459910d6f01efc048246ef288b14654354
     container_name: nginx
     security_opt:
       - no-new-privileges:true
@@ -329,7 +329,7 @@ services:
       - /var/log/nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   lab_nginx: 
-    image: nginx:1.30.0-alpine3.23-perl@sha256:54d05684e0dccb53f2b373ec0a3c652f1e06e2b3705652f58be67e54b2ba26b7
+    image: nginx:1.31.1-alpine3.23-perl@sha256:b4f40fc790074a4af0d6fc81923a30459910d6f01efc048246ef288b14654354
     container_name: lab_nginx
     security_opt:
       - no-new-privileges:true
@@ -372,7 +372,7 @@ services:
       - {{ docker_persistent_data_path }}/certs:/data/certs
       - {{ docker_persistent_data_path }}/docker-proxy-tls:/data/docker-proxy-tls:ro
   iot_nginx: 
-    image: nginx:1.30.0-alpine3.23-perl@sha256:54d05684e0dccb53f2b373ec0a3c652f1e06e2b3705652f58be67e54b2ba26b7
+    image: nginx:1.31.1-alpine3.23-perl@sha256:b4f40fc790074a4af0d6fc81923a30459910d6f01efc048246ef288b14654354
     container_name: iot_nginx
     security_opt:
       - no-new-privileges:true
@@ -409,7 +409,7 @@ services:
       - /var/log/iot_nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   ombi:
-    image: linuxserver/ombi:4.53.5@sha256:2a1edf438ebfc4f1aae148c32914d7d7c1ba4c92923b32fed7a19d03933812ed
+    image: linuxserver/ombi:4.53.10@sha256:db3642d3fd492c399e1c879fe38fe77b59db6ca2e966b0d3df2aad7d376489da
     container_name: ombi
     security_opt:
       - no-new-privileges:true
@@ -446,7 +446,7 @@ services:
   # Path overrides (MainDir=/remote, DestDir/TempDir/etc under /remote) were
   # applied manually to /persistent_data/application/nzbget/nzbget.conf.
   nzbget:
-    image: linuxserver/nzbget:26.1.20260508@sha256:9411ec5427087209528779a085c18fb73902502bdc2466cb0f083d00132833b8
+    image: linuxserver/nzbget:26.1.20260606@sha256:fafa04ac8cffa735282917778f78f8343db6db5aa44da6df90e3c57d4cc7183e
     container_name: nzbget
     security_opt:
       - no-new-privileges:true
@@ -521,7 +521,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.1831@sha256:e8e102c53219b0b8287b415349d843626b4384829390d355b425a4261fd71fe6
+    image: linuxserver/jackett:0.24.2031@sha256:5fca95003ee60643d26133157005144132b085edf41c665c7694c898763e5161
     container_name: jackett
     security_opt:
       - no-new-privileges:true
@@ -593,7 +593,7 @@ services:
       retries: 3
       start_period: 60s
   booksonic:
-    image: izderadicka/audioserve:latest@sha256:c3609321701765671cae121fc0f61db122e8c124643c04770fbc9326c74b18e3
+    image: izderadicka/audioserve:latest@sha256:aac13420d5ef2cf322fdffecd49108708b82096d6a04b1db88ec7e7e9fc39fb3
     container_name: audioserve
     security_opt:
       - no-new-privileges:true
@@ -727,7 +727,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    image: grafana/loki:3.7.1@sha256:73e905b51a7f917f7a1075e4be68759df30226e03dcb3cd2213b989cc0dc8eb4
+    image: grafana/loki:3.7.2@sha256:191d4fdfb7264f16989f0a57f320872620a5a7c2ceeec6229212c4190ec49b86
     networks:
       loki-backend:
     restart: unless-stopped
@@ -1195,7 +1195,7 @@ services:
     devices: 
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_ETDRb11A920-if00-port0:/dev/ttyUSB0"
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0:/dev/ttyUSB1"
-    image: "homeassistant/home-assistant:2026.5.1@sha256:d4fbec16196d5c8bedf32647f0ca7165f654d92a2e81f35a373508d3226cb867"
+    image: "homeassistant/home-assistant:2026.6.1@sha256:59aa8824955c9db491b75d2eebe42bd68494f80c2ec69ec0d66d9dae37d37514"
     deploy:
       resources:
         limits:
@@ -1595,7 +1595,7 @@ services:
     cap_drop:
       - ALL
     restart: unless-stopped
-    image: koenkk/zigbee2mqtt:2.10.1@sha256:67c26dcf8346aced02fe1380a6afd1b57268bcef10faae3f6057c13d5d3dfa80
+    image: koenkk/zigbee2mqtt:2.11.0@sha256:f1f5195076d771727e9ff3db638de0f54d37969a66f317cd34624a7af5faf364
     depends_on:
       mosquitto:
         condition: service_healthy
@@ -1684,7 +1684,7 @@ services:
       retries: 3
       start_period: 30s
   nextcloud_db:
-    image: mariadb:12.2.2@sha256:b1cb255a9939d28a1856815f0de6046c20c28c21b92a9f2696bc782b247a47ee
+    image: mariadb:12.3.2-ubi10@sha256:098a8827e35c8b5f68ba25d7ce0f605122a525c83f533e2189e015ac9dcb77ae
     container_name: nextcloud_database
     security_opt:
       - no-new-privileges:true
@@ -1722,7 +1722,7 @@ services:
       retries: 3
       start_period: 60s
   nextcloud:
-    image: nextcloud:33.0.3-apache@sha256:90a730e9a3dd290d9626ca64740c4d2fa901b4f231fe4ab6eb0dcf300dbc7271
+    image: nextcloud:33.0.5-apache@sha256:56bdc45109067500fd0832fa64832b7c77a167d9394cbf5f0f4b59740b94194d
     container_name: nextcloud
     security_opt:
       - no-new-privileges:true
@@ -1761,7 +1761,7 @@ services:
       start_period: 120s
 
   prowlarr:
-    image: lscr.io/linuxserver/prowlarr:latest@sha256:4b52038b7b6452a20c145239fa07d8218d1541d736a96c43aa0a5f60141cab28
+    image: lscr.io/linuxserver/prowlarr:latest@sha256:2489c6dbaf11e3a6d71aeb2e6980d04193d4af611aa7064a974851222fd41722
     container_name: prowlarr
     security_opt:
       - no-new-privileges:true
