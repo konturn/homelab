@@ -1105,7 +1105,7 @@ services:
       retries: 3
       start_period: 30s
   blog:
-    image: wordpress:6.9.2-php8.3-apache@sha256:ba1996f128e96e06613cffd9efa17e619d077a427c2d135204b1bc3bc9fa0510
+    image: wordpress:7.0.0-php8.3-apache@sha256:d32999a243ee5051babf8580ff22e7254129fe2f209f3d10aacdc81fdcd33959
     container_name: wordpress
     security_opt:
       - no-new-privileges:true
