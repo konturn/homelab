@@ -101,7 +101,7 @@ services:
   docker-socket-proxy:
     container_name: docker-socket-proxy
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: tecnativa/docker-socket-proxy:0.3.0@sha256:9e4b9e7517a6b660f2cc903a19b257b1852d5b3344794e3ea334ff00ae677ac2
@@ -136,7 +136,7 @@ services:
   plex:
     container_name: plex
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -184,7 +184,7 @@ services:
   tautulli:
     container_name: tautulli
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -224,7 +224,7 @@ services:
   pihole:
     container_name: pihole
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -263,7 +263,7 @@ services:
   iperf3:
     container_name: iperf3
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     read_only: true
@@ -291,7 +291,7 @@ services:
     image: nginx:1.31.1-alpine3.23-perl@sha256:b4f40fc790074a4af0d6fc81923a30459910d6f01efc048246ef288b14654354
     container_name: nginx
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # nginx master runs as root, workers drop to nginx user; binds to port 80
@@ -332,7 +332,7 @@ services:
     image: nginx:1.31.1-alpine3.23-perl@sha256:b4f40fc790074a4af0d6fc81923a30459910d6f01efc048246ef288b14654354
     container_name: lab_nginx
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Same as nginx above
@@ -375,7 +375,7 @@ services:
     image: nginx:1.31.1-alpine3.23-perl@sha256:b4f40fc790074a4af0d6fc81923a30459910d6f01efc048246ef288b14654354
     container_name: iot_nginx
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Same as nginx above
@@ -412,7 +412,7 @@ services:
     image: linuxserver/ombi:4.53.10@sha256:db3642d3fd492c399e1c879fe38fe77b59db6ca2e966b0d3df2aad7d376489da
     container_name: ombi
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -449,7 +449,7 @@ services:
     image: linuxserver/nzbget:26.1.20260606@sha256:fafa04ac8cffa735282917778f78f8343db6db5aa44da6df90e3c57d4cc7183e
     container_name: nzbget
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -485,7 +485,7 @@ services:
     image: linuxserver/radarr:6.0.4.10291-ls292@sha256:f08dda38e7d12e5a722d9a5cb6e54acaf63c8598fefeefec88effe0c0d0038dd
     container_name: radarr
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -529,7 +529,7 @@ services:
     image: linuxserver/jackett:0.24.2031@sha256:5fca95003ee60643d26133157005144132b085edf41c665c7694c898763e5161
     container_name: jackett
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -562,7 +562,7 @@ services:
     image: linuxserver/sonarr:4.0.16.2944-ls303@sha256:37be832b78548e3f55f69c45b50e3b14d18df1b6def2a4994258217e67efb1a1
     container_name: sonarr
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -606,7 +606,7 @@ services:
     image: izderadicka/audioserve:latest@sha256:aac13420d5ef2cf322fdffecd49108708b82096d6a04b1db88ec7e7e9fc39fb3
     container_name: audioserve
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     ports:
@@ -640,7 +640,7 @@ services:
   influxdb:
     container_name: influxdb
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Entrypoint chowns data dirs and switches to influxdb user
@@ -686,7 +686,7 @@ services:
   grafana:
     container_name: grafana
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: grafana/grafana:12.4.0-ubuntu@sha256:9a14379bd5a91671e196f148a6e965b9db78fc70ed4f2f1716d70c240cd9161f
@@ -741,7 +741,7 @@ services:
   loki:
     container_name: loki
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: grafana/loki:3.7.2@sha256:191d4fdfb7264f16989f0a57f320872620a5a7c2ceeec6229212c4190ec49b86
@@ -772,7 +772,7 @@ services:
     image: grafana/promtail:3.5.8
     container_name: promtail
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -822,7 +822,7 @@ services:
     container_name: tempo
     image: grafana/tempo:2.10.3@sha256:cac9de2ac9f6da8efca5b64b690a7cb8c786a0c49cac7b4517dd1b0089a6c703
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     restart: unless-stopped
@@ -858,7 +858,7 @@ services:
     container_name: otel-collector
     image: otel/opentelemetry-collector-contrib:0.120.0@sha256:85ac41c2db88d0df9bd6145e608a3cb023f5d8443868adbfbbf66efb51087917
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     restart: unless-stopped
@@ -890,7 +890,7 @@ services:
   gitlab:
     container_name: gitlab
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Omnibus GitLab runs ~10 internal services (postgres, redis, nginx, puma, etc.)
@@ -963,7 +963,7 @@ services:
       - SETUID      # Process UID changes
       - SETGID      # Process GID changes
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     volumes:
       - vault_data:/vault/file
       - '{{ docker_persistent_data_path }}/vault/config:/vault/config:ro'
@@ -996,7 +996,7 @@ services:
     container_name: jit-approval-svc
     restart: unless-stopped
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     read_only: true
     cap_drop:
       - ALL
@@ -1040,7 +1040,7 @@ services:
   deluge:
     container_name: deluge
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -1081,7 +1081,7 @@ services:
   bitwarden:
     container_name: bitwarden
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     ports:
@@ -1108,7 +1108,7 @@ services:
     image: wordpress:7.0.0-php8.3-apache@sha256:d32999a243ee5051babf8580ff22e7254129fe2f209f3d10aacdc81fdcd33959
     container_name: wordpress
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Apache master binds to port 80 and forks workers as www-data;
@@ -1147,7 +1147,7 @@ services:
     image: mysql:9.7.0-oraclelinux9@sha256:f0ef1d92fa650fcfa5b85f1d82bb1a56a6dd579bf256b8f8f2a5a0b1b61c8b0b
     container_name: wordpress_db
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     networks:
@@ -1180,7 +1180,7 @@ services:
   diagram:
     container_name: diagram
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     ports:
@@ -1231,7 +1231,7 @@ services:
       # whatever Docker assigns. Without NET_ADMIN, the ip route commands fail and HA gets wrong default gateway.
       - NET_ADMIN
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:8123/"]
@@ -1242,7 +1242,7 @@ services:
   snapserver:
     container_name: snapserver
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     hostname: snapserver
@@ -1271,7 +1271,7 @@ services:
   snapclient_office:
     container_name: snapclient_office
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Audio clients need user switching and real-time scheduling for playback
@@ -1305,7 +1305,7 @@ services:
   snapclient_global:
     container_name: snapclient_global
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -1338,7 +1338,7 @@ services:
   snapclient_kitchen:
     container_name: snapclient_kitchen
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Same as snapclient_office
@@ -1372,7 +1372,7 @@ services:
   snapclient_main_bedroom:
     container_name: snapclient_main_bedroom
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Same as snapclient_office
@@ -1406,7 +1406,7 @@ services:
   snapclient_main_bathroom:
     container_name: snapclient_main_bathroom
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Same as snapclient_office
@@ -1440,7 +1440,7 @@ services:
   snapclient_guest_bathroom:
     container_name: snapclient_guest_bathroom
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Same as snapclient_office
@@ -1474,7 +1474,7 @@ services:
   snapclient_guest_bedroom:
     container_name: snapclient_guest_bedroom
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Same as snapclient_office
@@ -1510,7 +1510,7 @@ services:
   mosquitto:
     container_name: mosquitto
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Entrypoint chowns data/config and drops to mosquitto user
@@ -1544,7 +1544,7 @@ services:
   amcrest2mqtt:
     container_name: amcrest2mqtt
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/amcrest2mqtt:latest"
@@ -1581,7 +1581,7 @@ services:
     restart: unless-stopped
     container_name: ambientweather
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     networks:
@@ -1608,7 +1608,7 @@ services:
   zigbee2mqtt:
     container_name: zigbee2mqtt
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     restart: unless-stopped
@@ -1638,7 +1638,7 @@ services:
     image: lscr.io/linuxserver/paperless-ngx:1.8.0@sha256:4016f13609923d1ef926c3d3532cf77f3650dc0b886258947cdf311c5ddc9829
     container_name: paperless-ngx
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -1671,7 +1671,7 @@ services:
     image: wernight/mopidy:latest@sha256:e3156f3da69d3e88b191c852d1fa60907c91e36668bca1f5afb5b57b74a8407d
     container_name: mopidy
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     networks:
@@ -1704,7 +1704,7 @@ services:
     image: mariadb:12.3.2-ubi10@sha256:098a8827e35c8b5f68ba25d7ce0f605122a525c83f533e2189e015ac9dcb77ae
     container_name: nextcloud_database
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # MariaDB entrypoint chowns data dir and drops to mysql user
@@ -1742,7 +1742,7 @@ services:
     image: nextcloud:33.0.5-apache@sha256:56bdc45109067500fd0832fa64832b7c77a167d9394cbf5f0f4b59740b94194d
     container_name: nextcloud
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -1781,7 +1781,7 @@ services:
     image: lscr.io/linuxserver/prowlarr:latest@sha256:2489c6dbaf11e3a6d71aeb2e6980d04193d4af611aa7064a974851222fd41722
     container_name: prowlarr
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -1814,7 +1814,7 @@ services:
     image: deluan/navidrome:0.61.2@sha256:9fa40b3d8dec43ceb2213d1fa551da3dcfef6ac6d19c2e534efb92527c2bafd2
     container_name: navidrome
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     networks:
@@ -1844,7 +1844,7 @@ services:
     image: lscr.io/linuxserver/lidarr:0.8.0.1896-ls5@sha256:37a3df74f4c2a6f10eead66f4d8034362ebf2866f935026b4a71dd888b9e7f08
     container_name: lidarr
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -1885,7 +1885,7 @@ services:
     container_name: novnc-dev1
     restart: unless-stopped
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     networks:
@@ -1914,7 +1914,7 @@ services:
     container_name: novnc-dev2
     restart: unless-stopped
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     networks:
@@ -1943,7 +1943,7 @@ services:
     container_name: novnc-dev3
     restart: unless-stopped
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     networks:
@@ -1971,7 +1971,7 @@ services:
     image: gitlab-registry.lab.nkontur.com:443/root/homelab/chromium-browser:latest
     container_name: chromium-browser
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -2006,7 +2006,7 @@ services:
     container_name: openclaw-gateway
     init: true
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     restart: unless-stopped
@@ -2077,7 +2077,7 @@ services:
     container_name: valhalla
     image: ghcr.io/valhalla/valhalla-scripted:3.7.0@sha256:2bafe8a908da3f538caabf867350d4e7c3dfb6e9a7e286bcf7a4cfa0f90b5e57
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -2133,7 +2133,7 @@ services:
     # The deploy-compose role pre-creates the data dir with 1000:1000 ownership.
     user: "1000:1000"
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     networks:
@@ -2175,7 +2175,7 @@ services:
   headway-frontend-init:
     container_name: headway-frontend-init
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: ghcr.io/headwaymaps/headway-init:0.4.0@sha256:d8ee45cd7d36dd4aa363e5ac6267c304aedb59838788f668d14ba03d57c18f1c
@@ -2199,7 +2199,7 @@ services:
   headway-frontend:
     container_name: headway-frontend
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Stock nginx entrypoint chowns /var/cache/nginx/* and forks workers as the
@@ -2253,7 +2253,7 @@ services:
   headway-travelmux-init:
     container_name: headway-travelmux-init
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: ghcr.io/headwaymaps/travelmux-init:latest@sha256:4f9028d9911c5e867f0eec493bf6dd8cffe2c480cd1beed15baaa5950da971f4
@@ -2276,7 +2276,7 @@ services:
   travelmux:
     container_name: travelmux
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: ghcr.io/headwaymaps/travelmux:latest@sha256:a555aff6759c752e762b3c43a23da1a6dbf79cc8d6b837a2cfcbe30b3c414c46
@@ -2312,7 +2312,7 @@ services:
   pelias-config-init:
     container_name: pelias-config-init
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: ghcr.io/headwaymaps/pelias-init:0.4.0@sha256:67d27152719deaf83b8e1c09679704784a73ab153946d4885246a4d229c57c39
@@ -2336,7 +2336,7 @@ services:
   pelias-elasticsearch-init:
     container_name: pelias-elasticsearch-init
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: ghcr.io/headwaymaps/pelias-init:0.4.0@sha256:67d27152719deaf83b8e1c09679704784a73ab153946d4885246a4d229c57c39
@@ -2360,7 +2360,7 @@ services:
   pelias-placeholder-init:
     container_name: pelias-placeholder-init
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: ghcr.io/headwaymaps/pelias-init:0.4.0@sha256:67d27152719deaf83b8e1c09679704784a73ab153946d4885246a4d229c57c39
@@ -2384,7 +2384,7 @@ services:
   pelias-elasticsearch:
     container_name: pelias-elasticsearch
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -2427,7 +2427,7 @@ services:
   pelias-api:
     container_name: pelias-api
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: pelias/api:master@sha256:0b8d9287fec447b7495e43e177f4c4257e9ea06283358b320b511c693c39a9af
@@ -2460,7 +2460,7 @@ services:
   pelias-placeholder:
     container_name: pelias-placeholder
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: pelias/placeholder:master@sha256:50806f93581ad5ae2cc8ae6dd310d2531878af08819b16e463b8e034ccc1e921
@@ -2495,7 +2495,7 @@ services:
   pelias-libpostal:
     container_name: pelias-libpostal
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: pelias/libpostal-service:latest@sha256:af8a5c9b1e6eb366aa2c8c0a7530ea578029d5132cc8ceb9026a128653a9264a

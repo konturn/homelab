@@ -4,7 +4,7 @@ services:
     container_name: promtail
     restart: unless-stopped
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -44,7 +44,7 @@ services:
     entrypoint: ["/usr/bin/telegraf"]
     command: ["--config", "/etc/telegraf/telegraf.conf"]
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
