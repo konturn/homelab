@@ -2195,6 +2195,14 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # Stock nginx entrypoint chowns /var/cache/nginx/* and forks workers as the
+    # nginx user. Without these caps the container crash-loops on every restart
+    # with: chown("/var/cache/nginx/client_temp", 101) failed (Operation not permitted).
+    cap_add:
+      - CHOWN          # chown cache dirs at startup
+      - DAC_OVERRIDE   # cross-user file access during init
+      - SETGID         # worker processes drop to nginx group
+      - SETUID         # worker processes drop to nginx user
     image: ghcr.io/headwaymaps/headway:0.4.0@sha256:91f30093899cbc2590284e0c63fd99a6b75d776bd2d5293be4382107b50ee023
     restart: unless-stopped
     environment:
