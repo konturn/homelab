@@ -509,6 +509,11 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=America/New_York
+      # LinuxServer.io mod: install ffmpeg/ffprobe at startup so Radarr's
+      # sample-detection / media-analysis steps work (the base image ships
+      # without them).
+      - DOCKER_MODS=linuxserver/mods:universal-package-install
+      - INSTALL_PACKAGES=ffmpeg
     volumes:
       - {{ docker_persistent_data_path }}/radarr:/config
       - /mpool/plex/Movies:/movies
@@ -581,6 +586,11 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=America/New_York
+      # LinuxServer.io mod: install ffmpeg/ffprobe at startup so Sonarr's
+      # sample-detection / media-analysis steps work (the base image ships
+      # without them).
+      - DOCKER_MODS=linuxserver/mods:universal-package-install
+      - INSTALL_PACKAGES=ffmpeg
     volumes:
       - {{ docker_persistent_data_path }}/sonarr:/config
       - /mpool/plex/TV:/tv
