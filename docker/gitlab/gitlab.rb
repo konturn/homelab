@@ -87,7 +87,8 @@ gitlab_rails['monitoring_whitelist'] = ['10.0.0.0/8', '172.16.0.0/12', '127.0.0.
 ###
 gitlab_kas['enable'] = false
 gitlab_pages['enable'] = false
-mattermost['enable'] = false
+# mattermost was removed in GitLab 19.0 — the key is no longer a valid setting
+# and aborts `gitlab-ctl reconfigure` if present (crash-loops the container).
 
 ###
 # Memory management - jemalloc tuning to prevent RSS creep
