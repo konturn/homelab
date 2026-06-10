@@ -820,7 +820,13 @@ services:
   # =============================================================================
   tempo:
     container_name: tempo
-    image: grafana/tempo:3.0.0@sha256:78439f7f7cf3c97122846c13a832e060c6c7ef67dcc814dccf0a5f3f78393a93
+    # ROLLBACK 2026-06-10: Tempo 3.0.0 single-binary fails to start with the
+    # 2.x config — `field compactor not found in type app.Config`. 3.0 removes
+    # the top-level `compactor:` block (functionality split into backend_scheduler
+    # / backend_worker / live_store / ingest in the new architecture). Migration
+    # requires a config rewrite. Pin to 2.10.3 until that's planned — see
+    # docker/tempo/tempo.yaml. Do NOT auto-bump past 2.x.
+    image: grafana/tempo:2.10.3@sha256:cac9de2ac9f6da8efca5b64b690a7cb8c786a0c49cac7b4517dd1b0089a6c703
     security_opt:
       - no-new-privileges=true
     cap_drop:
