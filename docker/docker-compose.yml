@@ -526,7 +526,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.2033@sha256:2e71552bf6b9247dcfa1de5c5e420baafcbf49c993d05fd334611d5b5312ecd5
+    image: linuxserver/jackett:0.24.2051@sha256:4e2ef852d2ac53c2c059f4993fff67ee089029640e23430c1e4508981cf2d5f6
     container_name: jackett
     security_opt:
       - no-new-privileges=true
@@ -820,7 +820,7 @@ services:
   # =============================================================================
   tempo:
     container_name: tempo
-    image: grafana/tempo:3.0.0@sha256:78439f7f7cf3c97122846c13a832e060c6c7ef67dcc814dccf0a5f3f78393a93
+    image: grafana/tempo:3.0.2@sha256:cda87c212d8c584dc0b89e337e7ed648a5100feb657e5d528480ee4fa03dbbe3
     security_opt:
       - no-new-privileges=true
     cap_drop:
@@ -911,7 +911,7 @@ services:
       - "443:80"
     networks:
       - internal
-    image: 'gitlab/gitlab-ee:19.0.1-ee.0@sha256:6a7fd7d917a76a4cbedd3c3d9f5abba0a5d198c4637dc7916e5a466611f21439'
+    image: 'gitlab/gitlab-ee:19.0.2-ee.0@sha256:93e2bc632f4f38ef79d83b13b1be48da2cab2910d31b66e4383bb7b597c747c0'
     restart: unless-stopped
     ulimits:
       nofile:
@@ -1212,7 +1212,7 @@ services:
     devices: 
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_ETDRb11A920-if00-port0:/dev/ttyUSB0"
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0:/dev/ttyUSB1"
-    image: "homeassistant/home-assistant:2026.6.1@sha256:59aa8824955c9db491b75d2eebe42bd68494f80c2ec69ec0d66d9dae37d37514"
+    image: "homeassistant/home-assistant:2026.6.2@sha256:b82fab7973fa1ba5eb69a8aaab3a830d56d986d495d894faf0ee969ad27839a6"
     deploy:
       resources:
         limits:
@@ -1612,7 +1612,7 @@ services:
     cap_drop:
       - ALL
     restart: unless-stopped
-    image: koenkk/zigbee2mqtt:2.11.0@sha256:f1f5195076d771727e9ff3db638de0f54d37969a66f317cd34624a7af5faf364
+    image: koenkk/zigbee2mqtt:2.12.0@sha256:1debff565ab6841417bd9f7ce8ad44f8c5f25a8b02a24ce3fd79e4779a4763a5
     depends_on:
       mosquitto:
         condition: service_healthy
