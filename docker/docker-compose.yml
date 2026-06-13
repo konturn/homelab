@@ -462,10 +462,12 @@ services:
       - "127.0.0.1:6789:6789"
     networks:
       - internal
+    # Memory right-sized: 7-day peak 62MB, avg 33MB. 512M was 8x peak.
+    # 256M gives ~4x headroom over peak.
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 256M
     environment:
       - PUID=1000
       - PGID=1000
@@ -1824,12 +1826,14 @@ services:
     networks:
       - internal
     restart: unless-stopped
+    # Memory right-sized: 7-day peak 33MB, avg 17MB. 512M was 15x peak.
+    # 128M gives ~3.8x headroom over peak.
     deploy:
       resources:
         limits:
-          memory: 512M
-        reservations:
           memory: 128M
+        reservations:
+          memory: 32M
     environment:
       - ND_SCANSCHEDULE=1h
       - ND_LOGLEVEL=info
@@ -2240,12 +2244,14 @@ services:
         condition: service_started
       valhalla:
         condition: service_healthy
+    # Memory right-sized: 7-day peak 20MB, avg 11MB. 512M was 26x peak.
+    # 128M gives 6.5x headroom over peak (static nginx-served frontend).
     deploy:
       resources:
         limits:
-          memory: 512M
-        reservations:
           memory: 128M
+        reservations:
+          memory: 32M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/"]
       interval: 30s
