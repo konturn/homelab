@@ -446,7 +446,7 @@ services:
   # Path overrides (MainDir=/remote, DestDir/TempDir/etc under /remote) were
   # applied manually to /persistent_data/application/nzbget/nzbget.conf.
   nzbget:
-    image: linuxserver/nzbget:26.1.20260606@sha256:fafa04ac8cffa735282917778f78f8343db6db5aa44da6df90e3c57d4cc7183e
+    image: linuxserver/nzbget:26.1.20260612@sha256:9fd97d831a5cfc9749afbdb6b5f5623128eb06f42dbe91053478fd14f00e42b0
     container_name: nzbget
     security_opt:
       - no-new-privileges=true
@@ -526,7 +526,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.2051@sha256:4e2ef852d2ac53c2c059f4993fff67ee089029640e23430c1e4508981cf2d5f6
+    image: linuxserver/jackett:0.24.2057@sha256:8cc3feee2b42ce6bc59dd721c5b3074450747f4da53eb66b195da257e49a5ccf
     container_name: jackett
     security_opt:
       - no-new-privileges=true
@@ -1212,7 +1212,7 @@ services:
     devices: 
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_ETDRb11A920-if00-port0:/dev/ttyUSB0"
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0:/dev/ttyUSB1"
-    image: "homeassistant/home-assistant:2026.6.2@sha256:b82fab7973fa1ba5eb69a8aaab3a830d56d986d495d894faf0ee969ad27839a6"
+    image: "homeassistant/home-assistant:2026.6.3@sha256:aed891b8f801072302815b4b0fab5adb714182967e9d2e2d4a2be558241c73ad"
     deploy:
       resources:
         limits:
