@@ -242,10 +242,12 @@ services:
     networks:
       internal:
         ipv4_address: {{ pihole_ip }}
+    # Memory right-sized: 7-day peak 62MB, avg 53MB. 512M was 8x peak.
+    # 256M gives ~4.1x headroom (room for gravity update spikes).
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 256M
     environment:
       TZ: America/New_York
       WEBPASSWORD: {{ vault_pihole_password | default(lookup('env', 'PIHOLE_PASSWORD')) | trim | replace("$", "$$") }}
@@ -1527,10 +1529,12 @@ services:
     networks:
       iot:
         ipv4_address: {{ mosquitto_address }}
+    # Memory right-sized: 7-day peak 9.9MB, avg 5.7MB. 256M was 26x peak.
+    # 64M gives ~6.5x headroom (broker has very small steady-state footprint).
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 64M
     volumes:
       - "{{ docker_persistent_data_path }}/mqtt/conf:/mosquitto/config"
       - mosquitto:/mosquitto/data
@@ -1677,10 +1681,12 @@ services:
     networks:
       iot:
         ipv4_address: {{ mopidy_address }}
+    # Memory right-sized: 7-day peak 41MB, avg 32MB. 512M was 12x peak.
+    # 192M gives ~4.7x headroom over peak (Python music server, modest footprint).
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 192M
     environment:
       - TZ=America/New_York
     volumes:
