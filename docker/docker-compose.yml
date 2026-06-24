@@ -949,10 +949,14 @@ services:
         ipv4_address: {{ vault_ip }}
     ports:
       - "8200:8200"
+    # Memory right-sized 2026-06-24: 30-day peak 142MB, avg 102MB. 768M was 5.4x peak.
+    # 384M gives 2.7x headroom over peak.
     deploy:
       resources:
         limits:
-          memory: 768M
+          memory: 384M
+        reservations:
+          memory: 128M
     cap_drop:
       - ALL
     cap_add:
@@ -1761,14 +1765,14 @@ services:
     hostname: nkontur.com
     ports:
       - "443:80"
-    # Memory right-sized: 7-day peak 1.2GB, avg 627MB. 8G was 6.7x peak.
-    # 3G gives 2.5x headroom over peak.
+    # Memory right-sized 2026-06-24: 30-day peak 172MB, avg ~130MB. 3G was 18x peak.
+    # 512M gives 3x headroom over peak (previous 1.2GB peak no longer observed).
     deploy:
       resources:
         limits:
-          memory: 3G
-        reservations:
           memory: 512M
+        reservations:
+          memory: 192M
     volumes:
       - nextcloud:/data
       - {{ docker_persistent_data_path }}/nextcloud/custom.config.php:/var/www/html/config/custom.config.php
