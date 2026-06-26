@@ -2,7 +2,7 @@
 
 This document describes the iptables firewall configuration for the homelab infrastructure.
 
-**Last Audit:** January 2025  
+**Last Audit:** June 2026  
 **Rules File:** `networking/iptables/rules.v4`
 
 ---
@@ -49,10 +49,11 @@ This document describes the iptables firewall configuration for the homelab infr
 
 | Interface | Purpose |
 |-----------|---------|
-| `wg0`     | Primary WireGuard VPN (port 51871) |
-| `wg1`     | Secondary WireGuard VPN (port 51872) |
 | `{{ mullvad_interface_name }}` | Mullvad VPN tunnel (privacy routing) |
 | `vlanX-shim` | Docker macvlan shim interfaces |
+
+> WireGuard interfaces `wg0` / `wg1` (ports 51871 / 51872) were removed January 2025 —
+> see `networking/iptables/rules.v4` comments.
 
 ---
 
@@ -62,11 +63,11 @@ This document describes the iptables firewall configuration for the homelab infr
 
 | Port | Protocol | Destination | Service |
 |------|----------|-------------|---------|
+| 22   | TCP      | router      | SSH (rate-limited: max 4 new conns / 60s per source IP) |
 | 443  | TCP      | nginx       | HTTPS (reverse proxy) |
 | 32400| TCP      | nginx       | Plex Media Server |
 | 25564| TCP      | nginx       | Minecraft (Bedrock/secondary) |
 | 25565| TCP      | nginx       | Minecraft (Java) |
-| 51871| UDP      | router      | WireGuard VPN |
 | 62941| TCP      | deluge (via Mullvad) | BitTorrent |
 
 ### Outbound (Internal → Internet)
