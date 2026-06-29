@@ -14,6 +14,10 @@ NoNewPrivileges=no
 ProtectSystem=full
 ProtectHome=yes
 PrivateTmp=yes
+# ProtectSystem=full makes /etc read-only; the script writes the rendered
+# WireGuard config to /etc/wireguard. Without this exemption, every timer
+# fire fails with "Read-only file system" and failover never executes.
+ReadWritePaths=/etc/wireguard
 
 [Install]
 WantedBy=multi-user.target
