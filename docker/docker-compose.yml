@@ -820,7 +820,7 @@ services:
   # =============================================================================
   tempo:
     container_name: tempo
-    image: grafana/tempo:3.0.0@sha256:78439f7f7cf3c97122846c13a832e060c6c7ef67dcc814dccf0a5f3f78393a93
+    image: grafana/tempo:2.10.7@sha256:6616b00287a4d7001951b5de117828ad5c6f93744935c1b7a5e044736373352c
     security_opt:
       - no-new-privileges=true
     cap_drop:
