@@ -770,7 +770,7 @@ services:
       retries: 3
       start_period: 30s
   promtail:
-    image: grafana/promtail:3.5.8
+    image: grafana/promtail:3.5.8@sha256:f4e9181d7bc551125d5b570dcca5adf57a8632b6843bf364bb4c95c38f0524e1
     container_name: promtail
     security_opt:
       - no-new-privileges=true
