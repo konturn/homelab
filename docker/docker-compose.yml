@@ -659,12 +659,14 @@ services:
         ipv4_address: {{ influxdb_iot_ip }}
     image: influxdb:2.8.0@sha256:8e911da5f7b482230e61fe4bad9af0697d97a75e087f19f5f0ddfee62c2bd686
     restart: unless-stopped
-    # Memory right-sized: 7-day peak 1.6GB, avg 607MB. 16G was 10x peak.
-    # 4G gives 2.5x headroom over peak.
+    # Memory sized for observed spikes: normal usage ~1GB, but transient spikes
+    # (compactions, high-cardinality queries) exceed the previous 4G limit —
+    # OOM-killed 2026-07-13 with anon-rss 4.15GB. 6G gives ~45% headroom over
+    # the observed OOM spike while remaining well below the historical 16G.
     deploy:
       resources:
         limits:
-          memory: 4G
+          memory: 6G
         reservations:
           memory: 1G
     volumes:
