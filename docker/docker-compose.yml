@@ -424,10 +424,14 @@ services:
     networks:
       - external
       - internal
+    # Memory bumped 2026-07-14: 30d peak climbed from ~60% (mid-June) to 79.9%
+    # (07-13) on the 768M limit — ~614 MB used, only 20% headroom. Preemptive
+    # bump to 1G matches ~40% headroom pattern used for sonarr/influxdb. No
+    # OOMs yet; catching the trend before it becomes an incident.
     deploy:
       resources:
         limits:
-          memory: 768M
+          memory: 1G
     environment:
       - PUID=1000
       - PGID=1000
