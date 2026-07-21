@@ -16,6 +16,7 @@ ERRORS=0
 # temporary/user-driven suppression.
 SKIP_IMAGES=(
   "grafana/promtail"  # 3.6.0+ Docker images don't include systemd journal support (grafana/loki#19911)
+  "grafana/tempo"     # 3.0.0+ removed top-level `compactor` config; docker/tempo/tempo.yaml requires migration to backend_scheduler/backend_worker layout before bumping past 2.x
 )
 
 # Initialize state file if missing
