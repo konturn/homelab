@@ -1465,8 +1465,8 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "claude-cli/opus[1m]",
-        "fallbacks": ["claude-cli/opus", "claude-cli/claude-opus-4-6"]
+        "primary": "claude-cli/claude-opus-4-7[1m]",
+        "fallbacks": ["claude-cli/claude-opus-4-7", "claude-cli/opus[1m]", "claude-cli/opus", "claude-cli/claude-opus-4-6"]
       },
       "cliBackends": {
         "claude-cli": {
@@ -1474,6 +1474,12 @@
         }
       },
       "models": {
+        "claude-cli/claude-opus-4-7[1m]": {
+          "alias": "claude-opus-4-7"
+        },
+        "claude-cli/claude-opus-4-7": {
+          "alias": "claude-opus-4-7"
+        },
         "claude-cli/opus[1m]": {
           "alias": "opus"
         },
