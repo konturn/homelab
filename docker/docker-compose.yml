@@ -951,7 +951,9 @@ services:
       internal:
         ipv4_address: {{ vault_ip }}
     ports:
-      - "8200:8200"
+      # Bound to loopback: LAN clients reach vault via the macvlan IP ({{ vault_ip }}) / vault.lab.nkontur.com.
+      # This publish exists only for host-local access; 0.0.0.0 would be a duplicate attack surface.
+      - "127.0.0.1:8200:8200"
     deploy:
       resources:
         limits:
@@ -1923,7 +1925,9 @@ services:
       - VNCSERVER=10.4.128.21
       - VNCPORT=5900
     ports:
-      - "6081:6080"
+      # Dev-only noVNC — accessed via SSH tunnel from operator workstations. Container
+      # also has macvlan IPs on internal + mgmt if direct LAN access is ever needed.
+      - "127.0.0.1:6081:6080"
     # Memory right-sized 2026-07-01: 30-day peak 42 MB, avg 17 MB. 128M gives 3.0x headroom.
     deploy:
       resources:
@@ -1953,7 +1957,9 @@ services:
       - VNCSERVER=10.4.128.22
       - VNCPORT=5900
     ports:
-      - "6082:6080"
+      # Dev-only noVNC — accessed via SSH tunnel from operator workstations. Container
+      # also has macvlan IPs on internal + mgmt if direct LAN access is ever needed.
+      - "127.0.0.1:6082:6080"
     # Memory right-sized 2026-07-01: 30-day peak 38 MB, avg 13 MB. 128M gives 3.4x headroom.
     deploy:
       resources:
@@ -1983,7 +1989,9 @@ services:
       - VNCSERVER=10.4.128.23
       - VNCPORT=5900
     ports:
-      - "6083:6080"
+      # Dev-only noVNC — accessed via SSH tunnel from operator workstations. Container
+      # also has macvlan IPs on internal + mgmt if direct LAN access is ever needed.
+      - "127.0.0.1:6083:6080"
     # Memory right-sized 2026-07-01: 30-day peak 38 MB, avg 17 MB. 128M gives 3.4x headroom.
     deploy:
       resources:
@@ -2051,7 +2059,11 @@ services:
       - "nkontur.com:172.30.0.10"
       - "www.nkontur.com:172.30.0.10"
     ports:
-      - "18789:18789"
+      # Bound to loopback: nginx (internal + iot) reaches the gateway via docker DNS
+      # (`http://openclaw-gateway:18789`); LAN clients reach it via the macvlan IP
+      # ({{ openclaw_gateway_ip }}) / openclaw-gateway.{iot,lab}.nkontur.com. This
+      # publish exists only for host-local access / testing.
+      - "127.0.0.1:18789:18789"
     # Memory (2026-09-01, 30d max): 2313M of 3072M = 75.3%. 5G gives 2.2x headroom.
     deploy:
       resources:
