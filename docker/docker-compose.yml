@@ -2004,7 +2004,7 @@ services:
       start_period: 30s
     environment:
       - TZ=America/New_York
-      - VNC_PASSWORD={{ vault_chromium_vnc_password | default('changeme') | replace("$", "$$") }}
+      - VNC_PASSWORD={{ vault_chromium_vnc_password | default(lookup('env', 'CHROMIUM_VNC_PASSWORD')) | trim | replace("$", "$$") }}
   openclaw-gateway:
     image: gitlab-registry.lab.nkontur.com:443/root/homelab/openclaw:{{ openclaw_image_tag | default('latest') }}
     container_name: openclaw-gateway
