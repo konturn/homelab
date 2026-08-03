@@ -27,10 +27,6 @@ storage:
     wal:
       path: /var/tempo/wal
 
-compactor:
-  compaction:
-    block_retention: 336h   # 14 days
-
 metrics_generator:
   registry:
     external_labels:
@@ -39,7 +35,11 @@ metrics_generator:
     path: /var/tempo/generator/wal
     remote_write: []
 
+# Tempo 3.0 removed the top-level `compactor` section (grafana/tempo#6273).
+# Block retention is now a per-tenant override under `overrides.defaults.compaction`.
 overrides:
   defaults:
+    compaction:
+      block_retention: 336h   # 14 days
     metrics_generator:
       processors: [service-graphs, span-metrics]
