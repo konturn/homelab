@@ -245,7 +245,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 192M
     environment:
       TZ: America/New_York
       WEBPASSWORD: {{ vault_pihole_password | default(lookup('env', 'PIHOLE_PASSWORD')) | trim | replace("$", "$$") }}
@@ -696,14 +696,14 @@ services:
       - internal
       - loki-backend
     restart: unless-stopped
-    # Memory right-sized: 7-day peak 281MB, avg 179MB.
-    # Previous 4G limit was 14x peak usage. 1G gives 3.5x headroom over peak.
+    # Memory right-sized: 7-day peak 146MB (14.3%), 30d peak 158 MiB, avg 125MB.
+    # 384M gives ~50% headroom above 30-day peak.
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 384M
         reservations:
-          memory: 256M
+          memory: 96M
     volumes:
       - grafana-storage:/var/lib/grafana
       - {{ docker_persistent_data_path }}/grafana/provisioning:/etc/grafana/provisioning
@@ -868,9 +868,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 192M
         reservations:
-          memory: 128M
+          memory: 48M
     volumes:
       - {{ docker_persistent_data_path }}/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
     depends_on:
@@ -952,7 +952,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 768M
+          memory: 256M
     cap_drop:
       - ALL
     cap_add:
@@ -1683,7 +1683,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 128M
     environment:
       - TZ=America/New_York
     volumes:
@@ -2146,14 +2146,14 @@ services:
     networks:
       - internal
     restart: unless-stopped
-    # Memory right-sized: 7-day peak 105MB, avg 76MB. 2G was 19x peak.
-    # 512M gives 5x headroom over peak.
+    # Memory right-sized: 7-day peak 92MB (17.9%), 30d peak 97 MiB, avg 58MB.
+    # 192M gives ~50% headroom above 30-day peak.
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 192M
         reservations:
-          memory: 128M
+          memory: 48M
     volumes:
       - {{ docker_persistent_data_path }}/tileserver:/data
     healthcheck:
