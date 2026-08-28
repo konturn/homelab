@@ -1290,12 +1290,11 @@ services:
     devices:
       - "/dev/snd"
     command:
-      - "-h"
-      - {{ snapserver_address }}
       - "-s"
       - "plughw:CARD=Office,DEV=0"
       - "--hostID"
       - "office"
+      - {{ snapserver_address }}
     healthcheck:
       test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
@@ -1323,12 +1322,11 @@ services:
     devices:
       - "/dev/snd"
     command:
-      - "-h"
-      - {{ snapserver_address }}
       - "-s"
       - "plughw:CARD=Global,DEV=0"
       - "--hostID"
       - "global"
+      - {{ snapserver_address }}
     healthcheck:
       test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
@@ -1357,12 +1355,11 @@ services:
     devices:
       - "/dev/snd"
     command:
-      - "-h"
-      - {{ snapserver_address }}
       - "-s"
       - "plughw:CARD=Kitchen,DEV=0"
       - "--hostID"
       - "kitchen"
+      - {{ snapserver_address }}
     healthcheck:
       test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
@@ -1391,12 +1388,11 @@ services:
     devices:
       - "/dev/snd"
     command:
-      - "-h"
-      - {{ snapserver_address }}
       - "-s"
       - "plughw:CARD=Main_Bedroom,DEV=0"
       - "--hostID"
       - "main_bedroom"
+      - {{ snapserver_address }}
     healthcheck:
       test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
@@ -1425,12 +1421,11 @@ services:
     devices:
       - "/dev/snd"
     command:
-      - "-h"
-      - {{ snapserver_address }}
       - "-s"
       - "plughw:CARD=Main_Bathroom,DEV=0"
       - "--hostID"
       - "main_bathroom"
+      - {{ snapserver_address }}
     healthcheck:
       test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
@@ -1459,12 +1454,11 @@ services:
     devices:
       - "/dev/snd"
     command:
-      - "-h"
-      - {{ snapserver_address }}
       - "-s"
       - "plughw:CARD=Guest_Bathroom,DEV=0"
       - "--hostID"
       - "guest_bathroom"
+      - {{ snapserver_address }}
     healthcheck:
       test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
@@ -1493,12 +1487,11 @@ services:
     devices:
       - "/dev/snd"
     command:
-      - "-h"
-      - {{ snapserver_address }}
       - "-s"
       - "plughw:CARD=Guest_Bedroom,DEV=0"
       - "--hostID"
       - "guest_bedroom"
+      - {{ snapserver_address }}
     healthcheck:
       test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
