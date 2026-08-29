@@ -2016,7 +2016,7 @@ services:
       - TZ=America/New_York
       # Core openclaw configuration
       - OPENAI_API_KEY={{ vault_openai_api_key | default(lookup('env', 'OPENAI_API_KEY')) | trim | replace("$", "$$") }}
-      - CLAWDBOT_GATEWAY_TOKEN={{ vault_openclaw_gateway_token | default(lookup('env', 'OPENCLAW_GATEWAY_TOKEN')) | trim | replace("$", "$$") }}
+      - OPENCLAW_GATEWAY_TOKEN={{ vault_openclaw_gateway_token | default(lookup('env', 'OPENCLAW_GATEWAY_TOKEN')) | trim | replace("$", "$$") }}
       - TELEGRAM_BOT_TOKEN={{ vault_openclaw_telegram_token | default(lookup('env', 'OPENCLAW_TELEGRAM_TOKEN')) | trim | replace("$", "$$") }}
       - GITLAB_TOKEN={{ vault_openclaw_gitlab_token | default(lookup('env', 'OPENCLAW_GITLAB_TOKEN')) | trim | replace("$", "$$") }}
       # IPMI credentials removed — use JIT T2 (ipmi resource) instead
@@ -2041,7 +2041,7 @@ services:
       - {{ docker_persistent_data_path }}/chromium-browser/uploads:/uploads
       - {{ docker_persistent_data_path }}/openclaw/entrypoint-wrapper.sh:/usr/local/bin/entrypoint-wrapper.sh:ro
     entrypoint: ["entrypoint-wrapper.sh"]
-    command: ["node", "dist/index.js", "gateway", "--bind", "lan", "--port", "18789"]
+    command: ["node", "/app/dist/index.js", "gateway", "--bind", "lan", "--port", "18789"]
 
   # =============================================================================
   # OpenStreetMap Stack — self-hosted mapping services
