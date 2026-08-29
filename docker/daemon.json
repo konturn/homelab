@@ -1,7 +1,7 @@
 {
 {% if not is_satellite %}
     "data-root": "/persistent_data/docker",
-    "iptables": true,
+    "iptables": false,
 {% endif %}
     "log-driver": "json-file",
     "log-opts": {
