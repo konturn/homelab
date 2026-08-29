@@ -394,10 +394,11 @@ services:
       iot:
         ipv4_address: {{ iot_nginx_ip }}
     restart: unless-stopped
+    # Memory right-sized 2026-07-01: 30-day peak 29 MB, avg 22 MB. 128M gives 4.4x headroom.
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 128M
     healthcheck:
       test: ["CMD-SHELL", "pgrep nginx > /dev/null || exit 1"]
       interval: 30s
@@ -1896,10 +1897,11 @@ services:
       - VNCPORT=5900
     ports:
       - "6081:6080"
+    # Memory right-sized 2026-07-01: 30-day peak 42 MB, avg 17 MB. 128M gives 3.0x headroom.
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 128M
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:6080/')\" || exit 1"]
       interval: 30s
@@ -1925,10 +1927,11 @@ services:
       - VNCPORT=5900
     ports:
       - "6082:6080"
+    # Memory right-sized 2026-07-01: 30-day peak 38 MB, avg 13 MB. 128M gives 3.4x headroom.
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 128M
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:6080/')\" || exit 1"]
       interval: 30s
@@ -1954,10 +1957,11 @@ services:
       - VNCPORT=5900
     ports:
       - "6083:6080"
+    # Memory right-sized 2026-07-01: 30-day peak 38 MB, avg 17 MB. 128M gives 3.4x headroom.
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 128M
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:6080/')\" || exit 1"]
       interval: 30s
