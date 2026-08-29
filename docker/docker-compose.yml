@@ -146,7 +146,7 @@ services:
       - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
     ports:
       - "32400/tcp"
-    image: plexinc/pms-docker:1.43.2.10687-563d026ea@sha256:c37106c57fed7a6624f5dee5a3ce460ff011f09a2aa7f4ee9e8dbbd08ae1b87e
+    image: plexinc/pms-docker:1.43.3.10896-cb3ebc72d@sha256:83a425ae9e133b1cb2cc3b809556e01c61cd8ff65c582e41b4374bc2210bac9e
     networks:
       - external
       - internal
@@ -236,7 +236,7 @@ services:
       - NET_RAW          # DHCP raw socket access
       - SETGID           # drop to pihole group
       - SETUID           # drop to pihole user
-    image: pihole/pihole:2026.05.0@sha256:70a9c11171ded2eee735d88c127996da209284a329d50f5ae59c06b861d401b3
+    image: pihole/pihole:2026.07.2@sha256:f7d1be836e3bc608b56d82fc9904f5a831cdfbc0dc9c6d58f94e4c985c70038b
     ports:
       - "443:80"
     networks:
@@ -446,7 +446,7 @@ services:
   # Path overrides (MainDir=/remote, DestDir/TempDir/etc under /remote) were
   # applied manually to /persistent_data/application/nzbget/nzbget.conf.
   nzbget:
-    image: linuxserver/nzbget:26.1.20260606@sha256:fafa04ac8cffa735282917778f78f8343db6db5aa44da6df90e3c57d4cc7183e
+    image: linuxserver/nzbget:26.3.20260827@sha256:5f3d3fa71029004156eff2cbf4ef4455ce4ce59517cf13fa7d1d7c8a4cd2c8a4
     container_name: nzbget
     security_opt:
       - no-new-privileges=true
@@ -526,7 +526,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.2033@sha256:2e71552bf6b9247dcfa1de5c5e420baafcbf49c993d05fd334611d5b5312ecd5
+    image: linuxserver/jackett:0.24.2486@sha256:184a2944a14d6e42e0cbe7068e1b5f8fe215c38dfb0901e7bace371c699caa1a
     container_name: jackett
     security_opt:
       - no-new-privileges=true
@@ -744,7 +744,7 @@ services:
       - no-new-privileges=true
     cap_drop:
       - ALL
-    image: grafana/loki:3.7.2@sha256:191d4fdfb7264f16989f0a57f320872620a5a7c2ceeec6229212c4190ec49b86
+    image: grafana/loki:3.7.7@sha256:d70e4659623f3e109af669cae76fe2a5dd5be54e2298fe8aed380d982fbc2500
     networks:
       loki-backend:
     restart: unless-stopped
@@ -911,7 +911,7 @@ services:
       - "443:80"
     networks:
       - internal
-    image: 'gitlab/gitlab-ee:19.0.1-ee.0@sha256:6a7fd7d917a76a4cbedd3c3d9f5abba0a5d198c4637dc7916e5a466611f21439'
+    image: 'gitlab/gitlab-ee:19.3.1-ee.0@sha256:b5167605564d64acf896be614791092d1409ac3f78214a9e4394ebb24a0be1b5'
     restart: unless-stopped
     ulimits:
       nofile:
@@ -1086,7 +1086,7 @@ services:
       - ALL
     ports:
       - "443:80"
-    image: 'vaultwarden/server:1.36.0-alpine@sha256:d3531610b486905943706b235e97159331801c6856e1367a93a5905e2b40f204'
+    image: 'vaultwarden/server:1.37.2-alpine@sha256:d16a304c2476fd787634ddde2c00be8fdfa1a72539438c626ece3686b5b88ab4'
     restart: unless-stopped
     networks:
       - external
@@ -1105,7 +1105,7 @@ services:
       retries: 3
       start_period: 30s
   blog:
-    image: wordpress:7.0.0-php8.3-apache@sha256:d32999a243ee5051babf8580ff22e7254129fe2f209f3d10aacdc81fdcd33959
+    image: wordpress:7.1.0-php8.3-apache@sha256:8801a1239d7ba9fb340a5fc5ba0bf7f8d3652adbd64893e3fba7992ba618108e
     container_name: wordpress
     security_opt:
       - no-new-privileges=true
@@ -1605,7 +1605,7 @@ services:
     cap_drop:
       - ALL
     restart: unless-stopped
-    image: koenkk/zigbee2mqtt:2.11.0@sha256:f1f5195076d771727e9ff3db638de0f54d37969a66f317cd34624a7af5faf364
+    image: koenkk/zigbee2mqtt:2.13.0@sha256:4fb4db4d49a217bed6d0204f454ce809febc565bbe051b85c556ee2bcef73d8c
     depends_on:
       mosquitto:
         condition: service_healthy
@@ -1811,7 +1811,7 @@ services:
       retries: 3
       start_period: 60s
   navidrome:
-    image: deluan/navidrome:0.62.0@sha256:c4b5cb36a790b3eb63ca6a68bbe2fe149c2d7fa2e586f7a480e61db630e6664b
+    image: deluan/navidrome:0.63.2@sha256:9012939114fbb1bb641b81cf96dec5ded15f0aafefe8d47a511d7cb919658e40
     container_name: navidrome
     security_opt:
       - no-new-privileges=true
@@ -2075,7 +2075,7 @@ services:
   # Subsequent starts are fast — tiles are cached in the data volume.
   valhalla:
     container_name: valhalla
-    image: ghcr.io/valhalla/valhalla-scripted:3.7.0@sha256:2bafe8a908da3f538caabf867350d4e7c3dfb6e9a7e286bcf7a4cfa0f90b5e57
+    image: ghcr.io/valhalla/valhalla-scripted:3.8.3@sha256:24ef7955899dececb94e26c6dfb89d64fabfae875f980432694b0261eb6c251b
     security_opt:
       - no-new-privileges=true
     cap_drop:
