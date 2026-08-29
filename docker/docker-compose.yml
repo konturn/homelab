@@ -1973,8 +1973,6 @@ services:
       start_period: 15s
 
   chromium-browser:
-    build:
-      context: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/chromium-browser' }}"
     image: gitlab-registry.lab.nkontur.com:443/root/homelab/chromium-browser:latest
     container_name: chromium-browser
     security_opt:
