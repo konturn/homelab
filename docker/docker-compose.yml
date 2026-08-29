@@ -1758,14 +1758,16 @@ services:
     hostname: nkontur.com
     ports:
       - "443:80"
-    # Memory right-sized: 7-day peak 1.2GB, avg 627MB. 8G was 6.7x peak.
-    # 3G gives 2.5x headroom over peak.
+    # Memory right-sized 2026-07-02: 8-day peak (since 2026-06-24 3G re-size)
+    # 148 MB, avg 86 MB. 30-day peak (mixed pre/post) 164 MB. Historic pre-right-size
+    # peak was 1.2 GB. 1.5G keeps 25% headroom over the historic peak and 10x over
+    # observed post-right-size peaks — meaningful reduction without risking OOM.
     deploy:
       resources:
         limits:
-          memory: 3G
+          memory: 1536M
         reservations:
-          memory: 512M
+          memory: 256M
     volumes:
       - nextcloud:/data
       - {{ docker_persistent_data_path }}/nextcloud/custom.config.php:/var/www/html/config/custom.config.php
@@ -1821,12 +1823,13 @@ services:
     networks:
       - internal
     restart: unless-stopped
+    # Memory right-sized 2026-07-02: 30-day peak 37 MB, avg 17 MB. 192M gives 5.2x headroom.
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 192M
         reservations:
-          memory: 128M
+          memory: 64M
     environment:
       - ND_SCANSCHEDULE=1h
       - ND_LOGLEVEL=info
@@ -2240,12 +2243,13 @@ services:
         condition: service_started
       valhalla:
         condition: service_healthy
+    # Memory right-sized 2026-07-02: 30-day peak 20 MB, avg 8 MB. 192M gives 9.5x headroom.
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 192M
         reservations:
-          memory: 128M
+          memory: 64M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/"]
       interval: 30s
