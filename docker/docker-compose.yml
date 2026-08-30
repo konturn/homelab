@@ -2060,6 +2060,10 @@ services:
       # See: https://docs.openclaw.ai/logging#export-to-opentelemetry
       # Claude subscription auth for the claude-cli backend (see openclaw.json.j2)
       - CLAUDE_CODE_OAUTH_TOKEN={{ vault_openclaw_claude_oauth_token | default(lookup('env', 'OPENCLAW_CLAUDE_OAUTH_TOKEN')) | trim | replace("$", "$$") }}
+      # OpenClaw >=2026.7 scrubs auth env vars (backend clearEnv) before spawning
+      # CLI backends; without this exemption the claude CLI sees no token and
+      # every turn fails with "Not logged in · Please run /login"
+      - OPENCLAW_LIVE_CLI_BACKEND_PRESERVE_ENV=CLAUDE_CODE_OAUTH_TOKEN
     volumes:
       - {{ docker_persistent_data_path }}/openclaw/data:/home/node/.openclaw
       - {{ docker_persistent_data_path }}/openclaw/mcporter:/home/node/.mcporter
