@@ -1295,7 +1295,7 @@ services:
       - "plughw:CARD=Office,DEV=0"
       - "--hostID"
       - "office"
-      - {{ snapserver_address }}
+      - "tcp://{{ snapserver_address }}"
     healthcheck:
       test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
@@ -1327,7 +1327,7 @@ services:
       - "plughw:CARD=Global,DEV=0"
       - "--hostID"
       - "global"
-      - {{ snapserver_address }}
+      - "tcp://{{ snapserver_address }}"
     healthcheck:
       test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
@@ -1360,7 +1360,7 @@ services:
       - "plughw:CARD=Kitchen,DEV=0"
       - "--hostID"
       - "kitchen"
-      - {{ snapserver_address }}
+      - "tcp://{{ snapserver_address }}"
     healthcheck:
       test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
@@ -1393,7 +1393,7 @@ services:
       - "plughw:CARD=Main_Bedroom,DEV=0"
       - "--hostID"
       - "main_bedroom"
-      - {{ snapserver_address }}
+      - "tcp://{{ snapserver_address }}"
     healthcheck:
       test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
@@ -1426,7 +1426,7 @@ services:
       - "plughw:CARD=Main_Bathroom,DEV=0"
       - "--hostID"
       - "main_bathroom"
-      - {{ snapserver_address }}
+      - "tcp://{{ snapserver_address }}"
     healthcheck:
       test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
@@ -1459,7 +1459,7 @@ services:
       - "plughw:CARD=Guest_Bathroom,DEV=0"
       - "--hostID"
       - "guest_bathroom"
-      - {{ snapserver_address }}
+      - "tcp://{{ snapserver_address }}"
     healthcheck:
       test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
@@ -1492,7 +1492,7 @@ services:
       - "plughw:CARD=Guest_Bedroom,DEV=0"
       - "--hostID"
       - "guest_bedroom"
-      - {{ snapserver_address }}
+      - "tcp://{{ snapserver_address }}"
     healthcheck:
       test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
