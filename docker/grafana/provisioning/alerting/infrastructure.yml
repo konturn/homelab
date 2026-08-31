@@ -652,12 +652,17 @@ groups:
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__
             model: {type: reduce, expression: A, reducer: last, refId: B, settings: {mode: dropNN}}
-          # telegraf active_code: 0=active 1=activating 2=deactivating 3=inactive 4=failed.
-          # Only 4 is a failure; oneshot units idle at 3 between timer runs.
+          # telegraf active_code, verified against live data 2026-08-31:
+          #   0=active  2=inactive  3=failed  4=activating
+          # (An earlier revision of this rule assumed 3=inactive / 4=failed and
+          # used "gt 3". That never fires on a failed unit and does fire on any
+          # unit that is merely activating. Confirmed wrong while
+          # restic-check.service sat at active_code=3 / active="failed" with the
+          # alert silent.) Match failed exactly rather than using a threshold.
           - refId: C
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__
-            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [3]}}]}
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: within_range, params: [2.5, 3.5]}}]}
         noDataState: OK
         execErrState: Error
         for: 10m
