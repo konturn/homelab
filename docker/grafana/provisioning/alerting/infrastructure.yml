@@ -348,6 +348,7 @@ groups:
                   |> range(start: -5m)
                   |> filter(fn: (r) => r._measurement == "ping")
                   |> filter(fn: (r) => r._field == "result_code")
+                  |> filter(fn: (r) => not exists r.probe or r.probe == "internet")
                   |> filter(fn: (r) => r._value != 0)
                   |> group(columns: ["url"])
                   |> count()
@@ -369,6 +370,46 @@ groups:
           summary: "Internet connectivity loss — ping failures detected"
         labels:
           severity: critical
+
+      # Device probes are tagged probe="device" by telegraf and excluded from
+      # the rule above, which is scoped to the three internet/gateway targets.
+      # Threshold is 4 of the last 15 one-minute samples so a single dropped
+      # reply does not page; "for: 15m" then requires it to stay bad.
+      - uid: iot-device-unreachable
+        title: IoT Device Unreachable
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -15m)
+                  |> filter(fn: (r) => r._measurement == "ping")
+                  |> filter(fn: (r) => r._field == "result_code")
+                  |> filter(fn: (r) => r.probe == "device")
+                  |> filter(fn: (r) => r._value != 0)
+                  |> group(columns: ["url"])
+                  |> count()
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "url"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [3]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 15m
+        annotations:
+          summary: "IoT device {{ $labels.url }} unreachable — dependent container will crash-loop or stop reporting"
+        labels:
+          severity: warning
 
       - uid: dns-resolution-failure
         title: DNS Resolution Failure
