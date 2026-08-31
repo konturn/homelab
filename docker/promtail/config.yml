@@ -50,6 +50,19 @@ scrape_configs:
         target_label: 'syslog_identifier'
       - source_labels: ['__journal_priority_keyword']
         target_label: 'level'
+    pipeline_stages:
+      # Redact credentials that upstream services embed in request URLs.
+      # Telegraf logs the full URL when an HTTP input errors (Tautulli requires
+      # its API key as a query parameter, so it cannot move to a header) and
+      # Sonarr does the same. Without this the keys reach Loki in cleartext and
+      # sit there for the whole retention window. Only the captured secret is
+      # rewritten, the surrounding log line is preserved.
+      - replace:
+          expression: '(?i)apikey=([^&\s"\]]+)'
+          replace: 'REDACTED'
+      - replace:
+          expression: '(?i)api_key=([^&\s"\]]+)'
+          replace: 'REDACTED'
 
   # Docker container logs (json-file driver)
   # Discovers containers via Docker socket, reads JSON log files
@@ -74,6 +87,18 @@ scrape_configs:
         replacement: 'docker'
     pipeline_stages:
       - docker: {}
+      # Redact credentials that upstream services embed in request URLs.
+      # Telegraf logs the full URL when an HTTP input errors (Tautulli requires
+      # its API key as a query parameter, so it cannot move to a header) and
+      # Sonarr does the same. Without this the keys reach Loki in cleartext and
+      # sit there for the whole retention window. Only the captured secret is
+      # rewritten, the surrounding log line is preserved.
+      - replace:
+          expression: '(?i)apikey=([^&\s"\]]+)'
+          replace: 'REDACTED'
+      - replace:
+          expression: '(?i)api_key=([^&\s"\]]+)'
+          replace: 'REDACTED'
 
   # Credential scrubber audit log
   - job_name: scrub-transcripts
