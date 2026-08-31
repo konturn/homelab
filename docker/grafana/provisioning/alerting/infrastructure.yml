@@ -26,7 +26,7 @@ groups:
                   |> filter(fn: (r) => r._value > 0)
                   |> group(columns: ["container_name"])
                   |> last()
-                  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+                  |> keep(columns: ["_time", "_value", "container_name"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -61,6 +61,8 @@ groups:
                   |> difference(nonNegative: true)
                   |> group(columns: ["container_name"])
                   |> sum()
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "container_name"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -93,7 +95,8 @@ groups:
                   |> filter(fn: (r) => r._field == "oomkilled")
                   |> last()
                   |> filter(fn: (r) => r._value == true)
-                  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+                  |> map(fn: (r) => ({r with _value: 1}))
+                  |> keep(columns: ["_time", "_value", "container_name"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -127,7 +130,7 @@ groups:
                   |> filter(fn: (r) => r.container_name =~ /grafana|homeassistant|nginx|gitlab|influxdb|plex|bitwarden|vault|loki|promtail/)
                   |> last()
                   |> filter(fn: (r) => r._value != 0)
-                  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+                  |> keep(columns: ["_time", "_value", "container_name"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -162,7 +165,10 @@ groups:
                   |> range(start: -5m)
                   |> filter(fn: (r) => r._measurement == "mem")
                   |> filter(fn: (r) => r._field == "used_percent")
+                  |> group(columns: ["host"])
                   |> mean()
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "host"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -194,7 +200,10 @@ groups:
                   |> filter(fn: (r) => r._measurement == "ipmi_sensor")
                   |> filter(fn: (r) => r._field == "value")
                   |> filter(fn: (r) => r.name == "cpu1_temp" or r.name == "cpu2_temp")
+                  |> group(columns: ["host", "name"])
                   |> mean()
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "host", "name"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -229,6 +238,8 @@ groups:
                   |> filter(fn: (r) => r.path !~ /^\/snap/)
                   |> group(columns: ["device", "path", "host"])
                   |> mean()
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "device", "path", "host"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -263,6 +274,8 @@ groups:
                   |> filter(fn: (r) => r.path !~ /^\/snap/)
                   |> group(columns: ["device", "path", "host"])
                   |> mean()
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "device", "path", "host"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -295,6 +308,8 @@ groups:
                   |> filter(fn: (r) => r._field == "health_ok")
                   |> last()
                   |> filter(fn: (r) => r._value == false)
+                  |> map(fn: (r) => ({r with _value: 1}))
+                  |> keep(columns: ["_time", "_value", "host", "device"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -336,6 +351,8 @@ groups:
                   |> filter(fn: (r) => r._value != 0)
                   |> group(columns: ["url"])
                   |> count()
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "url"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -367,7 +384,10 @@ groups:
                   |> filter(fn: (r) => r._measurement == "dns_query")
                   |> filter(fn: (r) => r._field == "result_code")
                   |> filter(fn: (r) => r._value != 0)
+                  |> group(columns: ["server", "domain"])
                   |> count()
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "server", "domain"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
