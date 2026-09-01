@@ -198,13 +198,13 @@ services:
       - external
     ports:
       - "8181/tcp"
-    # Tautulli uses ~87MB peak; 512M limit gives ample headroom
+    # Memory (2026-09-01, 30d max): 99M. 256M gives 2.6x headroom.
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 256M
         reservations:
-          memory: 128M
+          memory: 64M
     environment:
       - PUID=1000
       - PGID=1000
@@ -424,10 +424,11 @@ services:
     networks:
       - external
       - internal
+    # Memory (2026-09-01, 30d max): 662M of 768M = 86.2%. 1G gives 1.5x headroom.
     deploy:
       resources:
         limits:
-          memory: 768M
+          memory: 1G
     environment:
       - PUID=1000
       - PGID=1000
@@ -576,11 +577,11 @@ services:
     networks:
     - internal
     # 308K history records — Sonarr benefits from memory headroom for DB operations.
-    # Added reservation to prevent OOM kills during heavy queries.
+    # Memory (2026-09-01, 30d max): 1889M of 2048M = 92.2%. 3G gives 1.6x headroom.
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 3G
         reservations:
           memory: 512M
     environment:
@@ -659,12 +660,12 @@ services:
         ipv4_address: {{ influxdb_iot_ip }}
     image: influxdb:2.8.0@sha256:8e911da5f7b482230e61fe4bad9af0697d97a75e087f19f5f0ddfee62c2bd686
     restart: unless-stopped
-    # Memory right-sized: 7-day peak 1.6GB, avg 607MB. 16G was 10x peak.
-    # 4G gives 2.5x headroom over peak.
+    # Memory (2026-09-01, 30d max): 2719M of 4096M = 66.4%; OOM-killed 2026-07-13
+    # at 4.15G anon-rss during a compaction spike. 6G covers the spike.
     deploy:
       resources:
         limits:
-          memory: 4G
+          memory: 6G
         reservations:
           memory: 1G
     volumes:
@@ -749,10 +750,11 @@ services:
     networks:
       loki-backend:
     restart: unless-stopped
+    # Memory (2026-09-01, 30d max): 791M. 1536M gives 1.9x headroom.
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 1536M
     volumes:
       - {{ docker_persistent_data_path }}/loki/data:/loki
       - {{ docker_persistent_data_path }}/loki/local-config.yaml:/etc/loki/local-config.yaml:ro
@@ -1056,20 +1058,15 @@ services:
     networks:
       internal:
         ipv4_address: {{ deluge_ip }}
-    # Memory right-sized (March 2026): 7-day avg 2.0-2.7GB, P95 3.8GB, peak 4092MB
-    # (99.9% of previous 4G limit). libtorrent disk cache reduced to 128 pieces
-    # via core.conf but memory still climbs under heavy torrent loads.
-    # 6G gives ~1.6x headroom over P95.
-    # Memory right-sized (March 2026 audit): 7-day peak 6139MB hitting 99.9% of
-    # previous 6G limit. libtorrent disk cache already reduced to 128 pieces.
-    # 8G gives ~1.3x headroom over observed peak. Monitor for continued growth
-    # which may indicate a libtorrent memory leak.
+    # Memory (2026-09-01, 30d max): 8192M of 8192M = 100.0% -- capped, OOM risk.
+    # Growth pattern 4G->6G->8G->12G indicates a libtorrent leak; tracked in #122.
+    # 12G is headroom, not a fix.
     deploy:
       resources:
         limits:
-          memory: 8G
+          memory: 12G
         reservations:
-          memory: 2G
+          memory: 3G
     volumes:
       - '{{ docker_persistent_data_path }}/deluge:/config'
       - '/mpool/samba_share/nfs:/downloads'
@@ -1125,10 +1122,11 @@ services:
     networks:
       - external
       - wordpress_internal
+    # Memory (2026-09-01, 30d max): 125M. 384M gives 3.1x headroom.
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 384M
     environment:
       WORDPRESS_DB_HOST: wordpress_db
       WORDPRESS_DB_USER: wordpress
@@ -2054,10 +2052,11 @@ services:
       - "www.nkontur.com:172.30.0.10"
     ports:
       - "18789:18789"
+    # Memory (2026-09-01, 30d max): 2313M of 3072M = 75.3%. 5G gives 2.2x headroom.
     deploy:
       resources:
         limits:
-          memory: 3G
+          memory: 5G
         reservations:
           memory: 1G
     healthcheck:
@@ -2480,12 +2479,13 @@ services:
         condition: service_healthy
       pelias-config-init:
         condition: service_completed_successfully
+    # Memory (2026-09-01, 30d max): 101M. 384M gives 3.8x headroom.
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 384M
         reservations:
-          memory: 128M
+          memory: 64M
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:4000/v1/search?text=test || exit 1"]
       interval: 30s
