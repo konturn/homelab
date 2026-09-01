@@ -869,9 +869,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 192M
+          memory: 384M
         reservations:
-          memory: 48M
+          memory: 96M
     volumes:
       - {{ docker_persistent_data_path }}/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
     depends_on:
