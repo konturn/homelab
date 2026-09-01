@@ -1223,13 +1223,39 @@ services:
     volumes:
       - "{{ docker_persistent_data_path }}/homeassistant:/config"
       - /etc/localtime:/etc/localtime:ro
-    command: ["/bin/bash", "-c", "ip route del default; ip route add default via 10.3.0.1 dev eth1; /init"]
+    command:
+      - /bin/bash
+      - -c
+      - |
+        # Pin HA's default route to the internal VLAN gateway (10.3.0.1).
+        #
+        # This replaces `ip route del default; ip route add default via 10.3.0.1 dev eth1`,
+        # which had two failure modes:
+        #   1. `dev eth1` assumed Docker attached the `internal` network as eth1. HA is on
+        #      three macvlan networks (internal/iot/external) and interface ordering is NOT
+        #      guaranteed across container recreates, so the add failed with
+        #      "RTNETLINK answers: Network unreachable" whenever eth1 was not the 10.3 leg.
+        #   2. The unconditional `del` had already run, so a failed add left the container
+        #      with NO default route at all -- silently, for days.
+        #
+        # `ip route replace` is atomic (never leaves a gap) and resolves the outbound
+        # device from the on-link subnet route, so it does not care what the leg is named.
+        for _ in 1 2 3; do
+          ip route replace default via 10.3.0.1 && break
+          sleep 2
+        done
+        if ip route show default | grep -q "via 10.3.0.1"; then
+          echo "[net] default route via 10.3.0.1 OK"
+        else
+          echo "[net] ERROR: could not set default route via 10.3.0.1 -- outbound internet, DNS and cloud integrations (Home Connect, HACS) will fail" >&2
+        fi
+        exec /init
     cap_drop:
       - ALL
     cap_add:
-      # Required: the entrypoint command runs `ip route del default; ip route add default via 10.3.0.1 dev eth1`
-      # to override the default route so HA traffic goes through the internal VLAN (10.3.x.x) instead of
-      # whatever Docker assigns. Without NET_ADMIN, the ip route commands fail and HA gets wrong default gateway.
+      # Required: the entrypoint runs `ip route replace default via 10.3.0.1` to force HA
+      # traffic onto the internal VLAN (10.3.x.x) instead of whatever Docker assigns.
+      # Without NET_ADMIN the route change fails and HA falls back to the wrong gateway.
       - NET_ADMIN
     security_opt:
       - no-new-privileges=true
