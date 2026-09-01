@@ -13,10 +13,11 @@ Complete guide to recovering the homelab from bare metal. Target audience: Noah 
 3. [Phase 2: Network Bootstrap](#phase-2-network-bootstrap-manual-15-min)
 4. [Phase 3: Disk Setup](#phase-3-disk-setup-30-min)
 5. [Phase 4: Run Ansible](#phase-4-run-ansible-20-min)
-6. [Phase 5: Data Restore](#phase-5-data-restore-1-4-hours)
-7. [Phase 6: Verification](#phase-6-verification-15-min)
-8. [Appendix A: Secrets Reference](#appendix-a-secrets-reference)
-9. [Appendix B: Known Gaps](#appendix-b-known-gaps--future-improvements)
+6. [Phase 4.5: Vault & JIT Recovery](#phase-45-vault--jit-recovery-20-min)
+7. [Phase 5: Data Restore](#phase-5-data-restore-1-4-hours)
+8. [Phase 6: Verification](#phase-6-verification-15-min)
+9. [Appendix A: Secrets Reference](#appendix-a-secrets-reference)
+10. [Appendix B: Known Gaps](#appendix-b-known-gaps--future-improvements)
 
 ---
 
@@ -260,6 +261,10 @@ export CLOUDFLARE_API_KEY="<from secure storage>"
 export CLOUDFLARE_ZONE_ID="<from secure storage>"
 export NAMESILO_API_KEY="<from secure storage>"
 
+# Vault (needed in Phase 4.5 — Vault stays sealed without these)
+export VAULT_UNSEAL_KEYS="<3 of the 5 keys, one per line>"
+export VAULT_TOKEN="<vault root token>"
+
 # Optional services
 export GRAFANA_TOKEN="<from secure storage>"
 export TAILSCALE_API_TOKEN="<from secure storage>"
@@ -303,6 +308,183 @@ docker ps
 # Should see containers starting up
 # Some will fail until data is restored (Phase 5)
 ```
+
+---
+
+## Phase 4.5: Vault & JIT Recovery (~20 min)
+
+**Do this before Phase 5.** Vault is the credential broker for the whole lab: the
+JIT approval service, the `openclaw` agent, and CI deploys all authenticate
+through it. Until Vault is unsealed, none of them can start doing useful work,
+and `fetch-vault-secrets` falls back to CI environment variables for everything.
+
+### 4.5.1 The playbook that does this
+
+Phase 4.5 runs `ansible/bootstrap.yml`, **not** `router.yml`. It is a separate
+playbook that brings up the core service layer (vault, pihole, nginx, lab_nginx,
+iot_nginx, gitlab) and then initialises and unseals Vault:
+
+```bash
+cd /root/homelab
+export CI_PROJECT_DIR=/root/homelab   # bootstrap.yml templates from this path
+
+ansible-playbook -i ansible/inventory.yml ansible/bootstrap.yml \
+  --connection=local
+```
+
+Run just the Vault phase with `--tags vault` if the rest is already up.
+
+### 4.5.2 Which case are you in?
+
+Vault uses the **file** storage backend (`storage "file" { path = "/vault/file" }`),
+bind-mounted from `/persistent_data/application/vault`. So:
+
+| Did `/persistent_data/application/vault/file` survive? | Case |
+|---|---|
+| Yes (ZFS pool imported intact, or restored from restic first) | **A — unseal** |
+| No (fresh pool, or Vault data lost) | **B — re-initialise** |
+
+```bash
+# Check before running anything
+ls -la /persistent_data/application/vault/file/
+```
+
+If you are in Case B but the data exists in a restic snapshot, it is far less
+work to restore `/persistent_data/application/vault` from Phase 5 **first** and
+then come back here as Case A. Case B loses every secret in Vault.
+
+### 4.5.3 Case A — Vault data survived (unseal only)
+
+Vault is initialised; it just needs 3 of its 5 unseal keys.
+
+```bash
+export VAULT_UNSEAL_KEYS="$(cat <<'EOF'
+<key1>
+<key2>
+<key3>
+EOF
+)"
+```
+
+`bootstrap.yml` writes these to
+`/persistent_data/application/vault/unseal/unseal-keys` (dir `0700`, file
+`0600`, root only) and then unseals over the API. The
+`auto-unseal.sh` entrypoint reads the same file on every subsequent container
+start, so once the file is in place restarts need no intervention.
+
+If the keys file is missing or wrong, Vault still starts — it just stays sealed.
+That is deliberate. Unseal by hand with:
+
+```bash
+docker exec vault vault operator unseal <key1>
+docker exec vault vault operator unseal <key2>
+docker exec vault vault operator unseal <key3>
+```
+
+Verify:
+
+```bash
+curl -sk https://vault.lab.nkontur.com:8200/v1/sys/seal-status | jq '{sealed, initialized}'
+# want: {"sealed": false, "initialized": true}
+```
+
+Stop here if sealed=false. Everything below is Case B.
+
+### 4.5.4 Case B — Vault data lost (re-initialise)
+
+`bootstrap.yml` initialises automatically when it finds an uninitialised Vault
+(`secret_shares: 5`, `secret_threshold: 3`) and writes the result to:
+
+```
+/persistent_data/application/vault/init-output.json   (mode 0600)
+```
+
+> ⚠️ **Back that file up off-box immediately.** It contains the five new unseal
+> keys and the new root token. It is the only copy. If you lose it you are
+> rebuilding Vault from scratch a second time.
+
+Then paste the new keys into the `VAULT_UNSEAL_KEYS` CI/CD variable (protected)
+and the root token into `VAULT_TOKEN`, or every future pipeline re-seals on
+restart.
+
+Everything in Vault is now gone, so it has to be rebuilt in this order:
+
+**1. Policies, auth methods and roles — `terraform/vault/`**
+
+```bash
+export VAULT_TOKEN="<new root token from init-output.json>"
+export VAULT_ADDR="https://vault.lab.nkontur.com:8200"
+```
+
+Normally the `vault:configure` CI job applies this (runs on `main` when
+`terraform/vault/**` changes). Its Terraform state lives in **GitLab**
+(`/api/v4/projects/<id>/terraform/state/vault`), so if GitLab was also lost and
+restored from restic, the state comes back with it. If the state is gone,
+Terraform will plan to create everything from nothing — which is correct here,
+but read the plan before applying.
+
+This creates the JWT backend (`ci-deploy` role) and the AppRole backend with
+roles `openclaw`, `jit-approval-svc`, `vault-admin` and `vault-read`.
+
+**2. Re-issue AppRole secret_ids**
+
+`role_id` is stable per role; `secret_id` is not and is not stored anywhere
+recoverable. Run the manual **`vault:rotate-approles`** pipeline job, which
+generates fresh secret_ids, verifies a login with each before adopting it, and
+writes `VAULT_APPROLE_ROLE_ID` / `VAULT_APPROLE_SECRET_ID` back into the GitLab
+CI variables. It needs `APPROLE_ROTATION_PAT` set, or the rotation succeeds in
+Vault and silently fails to update CI.
+
+**3. Repopulate KV**
+
+`bootstrap.yml` enables KV v2 at `secret/`, but only the mount — not the data.
+Service credentials under `homelab/data/*` (API keys for radarr/sonarr/plex/
+ombi/nzbget/deluge/paperless/prowlarr, the `openclaw` tokens, the JIT API key,
+the Telegram bot token) must be written back from your off-box copy or
+regenerated at each service.
+
+### 4.5.5 JIT approval service
+
+`jit-approval-svc` has `depends_on: vault: condition: service_healthy`, so it
+will not start until Vault is up — expect it to sit waiting, not to fail. Its
+entire environment (`VAULT_ROLE_ID`, `VAULT_SECRET_ID`, `TELEGRAM_BOT_TOKEN`,
+`TELEGRAM_WEBHOOK_SECRET`, `JIT_API_KEY`, `GITLAB_ADMIN_TOKEN`) is templated by
+Ansible from Vault, so it must be redeployed **after** 4.5.4 step 3, not before:
+
+```bash
+docker compose -f /persistent_data/application/ansible_state/docker-compose.yml \
+  -p docker up -d jit-approval-svc
+```
+
+The Telegram webhook **re-registers itself** on startup — `main.go` calls
+`setWebhook` whenever `TELEGRAM_WEBHOOK_URL` is set. There is no manual
+registration step. What it needs is for `https://jit-webhook.nkontur.com` to
+resolve and terminate publicly again, so if approvals are not arriving, check
+DNS and the ingress path before suspecting the service.
+
+```bash
+docker logs jit-approval-svc | grep -E 'webhook_registered|webhook_register_failed'
+curl -s http://<jit_ip>:8080/health
+```
+
+### 4.5.6 Verification
+
+```bash
+# Vault unsealed
+curl -sk https://vault.lab.nkontur.com:8200/v1/sys/seal-status | jq '.sealed'   # false
+
+# AppRole login works end to end
+curl -sk -X POST -d "{\"role_id\":\"$ROLE_ID\",\"secret_id\":\"$SECRET_ID\"}" \
+  https://vault.lab.nkontur.com:8200/v1/auth/approle/login | jq -e '.auth.client_token' >/dev/null \
+  && echo "AppRole OK"
+
+# JIT healthy and reachable
+docker inspect --format '{{.State.Health.Status}}' jit-approval-svc   # healthy
+```
+
+Then request one low-tier credential end to end and confirm the Telegram
+approval prompt arrives. That single test exercises Vault auth, the AppRole, the
+JIT service and the webhook path in one go.
 
 ---
 
@@ -441,6 +623,9 @@ restic backup --dry-run /persistent_data/application
 | `CLOUDFLARE_API_KEY` | DDNS updates | Ansible (cron job) |
 | `CLOUDFLARE_ZONE_ID` | DNS zone identifier | Ansible (cron job) |
 | `NAMESILO_API_KEY` | SSL cert renewal | Ansible (cron job) |
+| `VAULT_UNSEAL_KEYS` | Unseal Vault (3 of 5, one per line) | Phase 4.5 (`bootstrap.yml`) |
+| `VAULT_TOKEN` | Vault root token — enable KV v2, apply Terraform | Phase 4.5, `vault:configure` |
+| `APPROLE_ROTATION_PAT` | Write rotated secret_ids back to CI variables | `vault:rotate-approles` |
 
 ### Optional Secrets
 
@@ -454,6 +639,12 @@ restic backup --dry-run /persistent_data/application
 ⚠️ **All secrets currently live in GitLab CI variables only.**
 
 This is a chicken-and-egg problem: if the router dies, GitLab is gone, and so are the secrets needed to restore it.
+
+Vault does not solve this — it makes it sharper. Vault's own unseal keys are a
+GitLab CI variable (`VAULT_UNSEAL_KEYS`), and Vault runs on the router being
+recovered. Losing the router loses GitLab, which loses the keys, which loses
+every secret Vault held. `VAULT_UNSEAL_KEYS` and the root token must be part of
+whichever off-box mitigation below you adopt, or Phase 4.5 has no Case A.
 
 **Recommended**: See Appendix B for mitigation strategies.
 
@@ -532,9 +723,11 @@ DISASTER RECOVERY QUICK REFERENCE
 5. Clone repo: git clone <homelab repo>
 6. Export secrets as env vars
 7. Run: ansible-playbook -i ansible/inventory.yml ansible/router.yml --connection=local
-8. Restore data: restic restore latest --target / --include <path>
-9. Restart: docker compose down && docker compose up -d
-10. Verify: docker ps, DNS, DHCP, external access
+8. Unseal Vault: ansible-playbook -i ansible/inventory.yml ansible/bootstrap.yml
+   --connection=local --tags vault   (needs VAULT_UNSEAL_KEYS)
+9. Restore data: restic restore latest --target / --include <path>
+10. Restart: docker compose down && docker compose up -d
+11. Verify: docker ps, DNS, DHCP, external access, Vault sealed=false
 
 Secrets location: ___________________________
 Emergency contact: ___________________________
@@ -548,3 +741,4 @@ Last tested: ___________________________
 | Date | Author | Changes |
 |------|--------|---------|
 | 2025-02-01 | Moltbot | Initial version based on DR tracing session |
+| 2026-09-01 | Moltbot | Added Phase 4.5 (Vault & JIT recovery); documented `ansible/bootstrap.yml`; added Vault secrets to Appendix A |
