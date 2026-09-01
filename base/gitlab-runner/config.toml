@@ -14,5 +14,14 @@ check_interval = 0
     image = "ubuntu:20.04"
     network_mode = "host"
     privileged = false
+    # Resource caps: CI build containers are the only containers on the router
+    # without limits (every service in docker-compose.yml has one). The router
+    # peaks at ~90% memory used, so an unbounded job can OOM production
+    # services sharing the host. Observed peak across 207 build containers in
+    # the last 30 days is 117 MB; 2g leaves ~17x headroom and caps the worst
+    # case at concurrent(4) x 2g = 8g.
+    # memory_swap = memory disables swap escape past the limit.
+    memory = "2g"
+    memory_swap = "2g"
     volumes = ["/cache/gitlab-runner:/cache", "/persistent_data/application/docker-proxy-tls/ca.pem:/certs/ca.pem:ro", "/persistent_data/application/docker-proxy-tls/cert.pem:/certs/cert.pem:ro", "/persistent_data/application/docker-proxy-tls/key.pem:/certs/key.pem:ro"]
     environment = ["DOCKER_HOST=tcp://lab.nkontur.com:2376", "DOCKER_TLS_VERIFY=1", "DOCKER_CERT_PATH=/certs"]
