@@ -293,6 +293,11 @@ groups:
         labels:
           severity: critical
 
+      # NOTE: this rule reads smart_device.health_ok. That field is only
+      # written when smartctl actually succeeds. When collection is broken the
+      # field is absent entirely, the query returns no series, and noDataState
+      # OK means the rule reports healthy for disks it has never read. The
+      # smart-collection-failed rule below covers that case. See issue #129.
       - uid: smart-disk-error
         title: SMART Disk Error
         condition: C
@@ -326,6 +331,48 @@ groups:
           summary: "SMART reports disk health issue on {{ $labels.device }} ({{ $labels.model }})"
         labels:
           severity: critical
+
+      # Collection health, not disk health. telegraf's smart input reports a
+      # per-device smartctl exit_status; anything non-zero means SMART was
+      # never read for that drive, so smart-disk-error above cannot fire for
+      # it. As of 2026-09-01 every device on router reports exit_status 2
+      # (device open failed) and smart_attribute has zero samples, so the
+      # entire array is unmonitored. Root cause tracked in issue #129.
+      - uid: smart-collection-failed
+        title: SMART Collection Failed
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 3600, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -1h)
+                  |> filter(fn: (r) => r._measurement == "smart_device")
+                  |> filter(fn: (r) => r._field == "exit_status")
+                  |> last()
+                  |> filter(fn: (r) => r._value != 0)
+                  |> group(columns: ["host"])
+                  |> count()
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "host"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 30m
+        annotations:
+          summary: "smartctl is failing on one or more disks on {{ $labels.host }} — SMART failure prediction is blind for those drives (see issue #129)"
+        labels:
+          severity: warning
 
   # =========================================================================
   # Network Alerts
