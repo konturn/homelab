@@ -1782,14 +1782,21 @@ services:
     hostname: nkontur.com
     ports:
       - "443:80"
-    # Memory right-sized 2026-07-02: 8-day peak (since 2026-06-24 3G re-size)
-    # 148 MB, avg 86 MB. 30-day peak (mixed pre/post) 164 MB. Historic pre-right-size
-    # peak was 1.2 GB. 1.5G keeps 25% headroom over the historic peak and 10x over
-    # observed post-right-size peaks — meaningful reduction without risking OOM.
+    # Memory (2026-09-01): reverted to 3G after the 2026-07-02 right-size to 1536M
+    # was proven wrong in production. The 1536M limit first took effect when the
+    # container was recreated on 2026-08-30 00:00 UTC; at 2026-09-01 03:48:36 UTC
+    # nextcloud hit the cap and the kernel memcg OOM-killer killed an apache2 child
+    # (memcg /docker/4a33dea8..., UID 33). Telegraf recorded usage 1260M = 82.1% of
+    # limit with memcg fail_count=1 in that window.
+    # The "148 MB peak" the old comment sized against was measured entirely inside a
+    # quiet period; the real workload spikes to ~1.2-1.5G on an infrequent cycle, so
+    # a short observation window never sees it. Under the previous 3G limit the
+    # container ran from 2026-06-24 to 2026-08-30 with zero OOM kills and zero
+    # fail_count, so 3G is the value with actual evidence behind it.
     deploy:
       resources:
         limits:
-          memory: 1536M
+          memory: 3G
         reservations:
           memory: 256M
     volumes:
