@@ -12,4 +12,4 @@ CPUQuota={{ 25 * ansible_processor_vcpus }}%
 
 EnvironmentFile=/root/.restic_env
 
-ExecStart={{ restic_path }} check --read-data-subset={{ restic_check_read_data_subset }}
+ExecStart={{ restic_path }} check --read-data-subset={{ restic_check_read_data_subset }} --retry-lock {{ restic_check_retry_lock }}

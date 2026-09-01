@@ -210,7 +210,8 @@ The homelab runs containerized services with data stored on ZFS (mpool) with aut
 ### Automated Backups (Restic)
 
 **Backend:** Backblaze B2 (`s3:s3.us-east-005.backblazeb2.com/nkontur-homelab`)
-**Schedule:** Configured via Ansible cron jobs
+**Schedule:** `restic-backup.timer`, daily at 03:00 local. Runs commonly take 2-4 hours.
+**Deep check:** `restic-check.timer`, Sundays at 09:00 local (`restic check --read-data-subset=5%`), deliberately outside the backup window because the repository takes a single lock.
 **Retention:** 30 daily, 12 monthly, 5 yearly
 
 **Backed up paths:**

@@ -22,8 +22,12 @@ restic_forget: true
 restic_forget_keep_within: 30d
 restic_prune: true
 restic_check: true
-restic_check_timer_on_calendar: "Sun *-*-* 04:00:00"
+restic_check_timer_on_calendar: "Sun *-*-* 09:00:00"
 restic_check_read_data_subset: "5%"
+# How long `restic check` waits for the repository lock before giving up.
+# The daily backup holds the lock for hours, so with the restic default of
+# 0s an overlapping check fails immediately instead of waiting its turn.
+restic_check_retry_lock: "2h"
 
 restic_ssh_enabled: true
 restic_ssh_host: backup
