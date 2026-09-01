@@ -137,7 +137,7 @@ To remove CI variable fallback (after Vault is proven stable):
 | `IPMI_USER` | `infrastructure/ipmi` | `user` | moltbot-gateway |
 | `IPMI_PASSWORD` | `infrastructure/ipmi` | `password` | moltbot-gateway |
 | `GMAIL_EMAIL` | `email/gmail` | `email` | moltbot-gateway |
-| `GMAIL_APP_PASSWORD` | `email/gmail` | `app_password` | moltbot-gateway |
+| `GMAIL_APP_PASSWORD` | `email/gmail` | `app_password` | moltbot-gateway, msmtp on router (`/etc/msmtprc`) |
 | `ROUTER_PRIVATE_KEY_BASE64` | `infrastructure/router` | `private_key_base64` | GitLab CI pipeline |
 | `SNMP_PASSWORD` | `infrastructure/snmp` | `password` | Telegraf |
 | `LUKS_PASSWORD_BASE64` | `infrastructure/luks` | `password_base64` | configure-base role |
