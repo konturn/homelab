@@ -222,7 +222,7 @@ groups:
           severity: warning
 
       - uid: disk-space-warning
-        title: Disk Space Warning (80%+)
+        title: Disk Space Warning (80-90%)
         condition: C
         data:
           - refId: A
@@ -248,12 +248,15 @@ groups:
           - refId: C
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__
-            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [80]}}]}
+            # within_range, not gt: above 90% the disk-space-critical rule
+            # below owns the alert. A plain gt 80 leaves both rules firing on
+            # the same filesystem forever, which is two mails for one fact.
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: within_range, params: [80, 90]}}]}
         noDataState: OK
         execErrState: Error
         for: 10m
         annotations:
-          summary: "Disk usage above 80% on {{ $labels.device }} ({{ $labels.path }})"
+          summary: "Disk usage between 80% and 90% on {{ $labels.device }} ({{ $labels.path }})"
         labels:
           severity: warning
 
