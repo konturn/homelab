@@ -282,7 +282,12 @@ services:
       - "-s"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pgrep iperf3 > /dev/null || exit 1"]
+      # networkstatic/iperf3 ships no procps, so `pgrep` exits 127 and this
+      # container has never once reported healthy (failing_streak reached
+      # 180045 before it was recreated on 2026-08-30). Probe the listening
+      # socket instead: 5201 == 0x1451 in the hex local_address column of
+      # /proc/net/tcp. Same probe as promtail, which reports healthy.
+      test: ["CMD-SHELL", "grep -q ':1451' /proc/net/tcp6 2>/dev/null || grep -q ':1451' /proc/net/tcp"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -634,7 +639,11 @@ services:
       - /mpool/audioserve/data:/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000"]
+      # izderadicka/audioserve ships no wget, so the HTTP probe exits 127 and
+      # this container has never once reported healthy. Probe the listening
+      # socket instead: 3000 == 0x0BB8 in the hex local_address column of
+      # /proc/net/tcp. Same probe as promtail, which reports healthy.
+      test: ["CMD-SHELL", "grep -q ':0BB8' /proc/net/tcp6 2>/dev/null || grep -q ':0BB8' /proc/net/tcp"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -2545,7 +2554,13 @@ services:
         reservations:
           memory: 2G
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:4400/parse?address=test || exit 1"]
+      # pelias/libpostal-service ships no wget, so this probe exits 127 and the
+      # container has never once reported healthy (failing_streak reached
+      # 180025 before recreation on 2026-08-30) even though pelias-api -- which
+      # depends on it for parsing -- is healthy and answering queries. Probe the
+      # listening socket instead: 4400 == 0x1130 in the hex local_address
+      # column of /proc/net/tcp. Same probe as promtail, which reports healthy.
+      test: ["CMD-SHELL", "grep -q ':1130' /proc/net/tcp6 2>/dev/null || grep -q ':1130' /proc/net/tcp"]
       interval: 30s
       timeout: 10s
       retries: 3
