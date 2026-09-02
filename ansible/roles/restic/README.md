@@ -27,6 +27,38 @@ Each folder has a `path` and an `exclude` property (which defaults to nothing). 
 
 `restic_default_folders` and `restic_folders` are combined to form the final list of backuped folders.
 
+- `restic_global_excludes`: a list of `--exclude` patterns appended to *every* folder backup
+
+Entries without a slash match a file or directory name at any depth, so
+`*.db-wal` excludes SQLite write-ahead-log sidecars everywhere. Two things live
+here for different reasons: paths that must never leave the host (the Vault
+unseal keys), and paths that churn fast enough that restic scans them and then
+finds them gone. The second kind matters more than it looks -- see the note on
+`SuccessExitStatus` below.
+
+### Partial reads and the ExecStart sequence
+
+`restic-backup.service` is `Type=oneshot` with one `ExecStart` line per folder,
+one per database dump, and `forget`/`prune` as `ExecStartPost`. systemd runs
+those in order and **stops at the first failure**, skipping everything after it,
+including `ExecStartPost`.
+
+restic exits `3` when it wrote the snapshot but could not read at least one
+source file. Left alone that turns a warning about one vanished temp file into a
+silently truncated backup run. The unit therefore sets `SuccessExitStatus=3` so
+the sequence continues. It stays visible through the `restic-backup-incomplete`
+Grafana alert (`docker/grafana/provisioning/alerting/infrastructure.yml`), which
+matches restic's warning text in the journal.
+
+When that alert fires, find the paths with:
+
+```bash
+journalctl -u restic-backup.service --since '24 hours ago' | grep -E '^error:'
+```
+
+A path that recurs belongs in `restic_global_excludes`, not in the alert's
+noise floor.
+
 - `restic_databases`: a list of databases to dump
 
 Each database has a `name` property which will be the name of the restic snapshot (`{{ database.name }}.sql`). They also have a `dump_command` property which is the command to dump the database to stdout (like `mysqldump dbname`).

@@ -673,6 +673,41 @@ groups:
         labels:
           severity: critical
 
+      # restic exits 3 ("at least one source file could not be read") when the
+      # snapshot was still written but something vanished mid-run. The unit now
+      # sets SuccessExitStatus=3 so that a single vanished temp file no longer
+      # aborts the remaining folders, the database dumps and forget/prune -- see
+      # ansible/roles/restic/templates/restic-backup.service.j2. That means the
+      # unit no longer goes to failed state for this case, so restic-unit-failed
+      # will not catch it and restic-backup-error's regex does not match the
+      # wording. This rule is what keeps a partial backup visible.
+      - uid: restic-backup-incomplete
+        title: Restic Backup Incomplete (unreadable source files)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 86400, to: 0}
+            datasourceUid: loki
+            model:
+              expr: 'count_over_time({unit="restic-backup.service"} |= "could not be read" [24h])'
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: replaceNN, replaceWithValue: 0}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Restic wrote an incomplete snapshot - some source files could not be read"
+          description: "The snapshot exists but is missing files. Find which: journalctl -u restic-backup.service --since '24 hours ago' | grep -E '^error:'. If a path recurs, add it to restic_global_excludes in ansible/roles/restic/defaults/main.yml."
+        labels:
+          severity: warning
+
       # Both alerts above read restic's *log text*, which cannot see a run that
       # dies without printing an error. On 2026-08-31 restic-backup.service was
       # killed part-way through /mpool/plex/config: four folders had already
