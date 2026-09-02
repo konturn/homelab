@@ -94,6 +94,18 @@ The timer is configurable as follows:
 - `restic_systemd_timer_on_calender`: defines the `OnCalendar` directive (`*-*-* 03:00:00`)
 - `restic_systemd_timer_randomized_delay_sec`: Delay the timer by a random amount of time between 0 and the specified time value. (`0`)
 
+When `restic_check` is true a second pair of units, `restic-check.service` and
+`restic-check.timer`, runs a periodic deep integrity check:
+
+- `restic_check_timer_on_calendar`: `OnCalendar` for the deep check (`Sun *-*-* 09:00:00`)
+- `restic_check_read_data_subset`: fraction of pack files to re-read and verify (`5%`)
+- `restic_check_retry_lock`: how long `check` waits for the repository lock before failing (`2h`)
+
+Keep the check window clear of `restic_systemd_timer_on_calender`. A restic
+repository takes a single lock, so a check that starts while the backup is
+still running cannot proceed; `restic_check_retry_lock` is the safety net for
+a backup that overruns, not a substitute for non-overlapping schedules.
+
 See the [systemd.timer](https://www.freedesktop.org/software/systemd/man/systemd.timer.html) documentation for more information.
 
 You can see the logs of the backup with `journalctl`. (`journalctl -xefu restic-backup`).
