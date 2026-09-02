@@ -8,6 +8,17 @@ User={{ restic_user }}
 
 CPUQuota={{ 25 * ansible_processor_vcpus }}%
 
+# restic exits 3 when the snapshot was written but at least one source file
+# could not be read -- almost always a temp file that vanished between scan and
+# read. systemd otherwise treats that as a hard failure, and because this is a
+# Type=oneshot unit with a *sequence* of ExecStart lines, the remaining folders,
+# every database dump, and both ExecStartPost lines (forget + prune) are then
+# skipped silently. Losing four of eight backup paths and the retention policy
+# over one vanished lock file is far worse than the warning itself.
+# Visibility is preserved by the restic-backup-incomplete Grafana alert, which
+# matches restic's warning text in the journal.
+SuccessExitStatus=3
+
 EnvironmentFile=/root/.restic_env
 
 {% if restic_check %}
@@ -15,7 +26,7 @@ ExecStartPre={{ restic_path }} check
 {% endif -%}
 
 {% for folder in restic_folders_combined %}
-ExecStart={{ restic_path }} backup --verbose {{ folder.path }} {% for excl in restic_global_excludes %}--exclude {{ excl }} {% endfor %}{% if folder.exclude is defined %}--exclude {{ folder.exclude }}{% endif %}
+ExecStart={{ restic_path }} backup --verbose {{ folder.path }} {% for excl in restic_global_excludes %}--exclude "{{ excl }}" {% endfor %}{% if folder.exclude is defined %}--exclude {{ folder.exclude }}{% endif %}
 
 {% endfor -%}
 

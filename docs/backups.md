@@ -406,12 +406,21 @@ docker exec homeassistant python -m homeassistant --script check_config
 ### Backup Success Monitoring
 
 - **Restic logs** via systemd journal (`syslog_identifier=restic`), visible in Loki
-- **Grafana provisioned alerts** for stale backups and restic errors
+- **Grafana provisioned alerts** for stale backups, restic errors, failed restic
+  units, unscheduled timers, and incomplete snapshots
 - **Email alerts** on backup failures (via Grafana contact points)
 - **Morning digest** includes restic backup status summary
 
 > **Note:** Backup credentials are managed via Vault (`homelab/data/restic`).
 > JIT T2 approval is required for credential access.
+
+#### Incomplete snapshots
+
+`restic-backup.service` backs up each path as a separate `ExecStart` line, so a
+hard failure part-way through drops every path after it plus `forget`/`prune`.
+restic exit code `3` (snapshot written, some source file unreadable) is treated
+as success by the unit for that reason; the `Restic Backup Incomplete` alert is
+what surfaces it. Details and remediation: `ansible/roles/restic/README.md`.
 
 ### Storage Monitoring
 

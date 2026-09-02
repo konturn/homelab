@@ -14,6 +14,17 @@ restic_default_folders:
 # Vault unseal keys on disk + offsite backup = defeat the purpose of seal/unseal.
 restic_global_excludes:
   - "/persistent_data/application/vault/unseal"
+  # SQLite write-ahead-log sidecars. They are created and removed constantly
+  # under live services (radarr, sonarr, homeassistant, ...), so restic scans
+  # them and then finds them gone -> "could not be read" -> exit 3. They are
+  # also worthless in a file-level backup: a *-wal captured a moment after its
+  # .db does not match it, and SQLite would rather see no WAL (and read the
+  # database as of the last checkpoint) than a skewed one.
+  - "*.db-shm"
+  - "*.db-wal"
+  - "*.db-journal"
+  - "*.sqlite-shm"
+  - "*.sqlite-wal"
 
 restic_folders: []
 restic_databases: []
