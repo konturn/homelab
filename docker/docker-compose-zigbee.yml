@@ -6,7 +6,7 @@ services:
       - no-new-privileges=true
     cap_drop:
       - ALL
-    image: koenkk/zigbee2mqtt:2.9.1@sha256:574b2bd0dcbb59fae6edbbb81a35b5563291d3825da0225f0078aa5575dac37f
+    image: koenkk/zigbee2mqtt:2.14.0@sha256:c13d177dd7f7f396574ab00926188ad542cfb68c6a5d5f84021bebd9adf6ede9
     volumes:
       - {{ docker_persistent_data_path }}/zigbee2mqtt:/app/data
       - /run/udev:/run/udev:ro

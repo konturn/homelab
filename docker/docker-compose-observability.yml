@@ -40,7 +40,7 @@ services:
       start_period: 30s
 
   telegraf:
-    image: telegraf:1.34@sha256:2173764352db5591bebe02d3f965cc64cdd357ff8439f57e45b6a1885eb50333
+    image: telegraf:1.39.3@sha256:ac66e6482c0644765c12904ce2f42ce3f3702f72e905b1894120b51b12ae30c9
     container_name: telegraf
     restart: unless-stopped
     # Run telegraf directly as root — the default entrypoint uses setpriv to
