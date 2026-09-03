@@ -104,7 +104,7 @@ services:
       - no-new-privileges=true
     cap_drop:
       - ALL
-    image: tecnativa/docker-socket-proxy:0.3.0@sha256:9e4b9e7517a6b660f2cc903a19b257b1852d5b3344794e3ea334ff00ae677ac2
+    image: tecnativa/docker-socket-proxy:v0.5.0@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459
     restart: unless-stopped
     networks:
       proxy-internal:
@@ -293,7 +293,7 @@ services:
       retries: 3
       start_period: 10s
   nginx: 
-    image: nginx:1.31.1-alpine3.23-perl@sha256:b4f40fc790074a4af0d6fc81923a30459910d6f01efc048246ef288b14654354
+    image: nginx:1.31.2-alpine3.23-perl@sha256:b3b337e1ef5b1bc8253dec68bc4522d9027920666a428bf51a022ceb7e3396bc
     container_name: nginx
     security_opt:
       - no-new-privileges=true
@@ -334,7 +334,7 @@ services:
       - /var/log/nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   lab_nginx: 
-    image: nginx:1.31.1-alpine3.23-perl@sha256:b4f40fc790074a4af0d6fc81923a30459910d6f01efc048246ef288b14654354
+    image: nginx:1.31.2-alpine3.23-perl@sha256:b3b337e1ef5b1bc8253dec68bc4522d9027920666a428bf51a022ceb7e3396bc
     container_name: lab_nginx
     security_opt:
       - no-new-privileges=true
@@ -377,7 +377,7 @@ services:
       - {{ docker_persistent_data_path }}/certs:/data/certs
       - {{ docker_persistent_data_path }}/docker-proxy-tls:/data/docker-proxy-tls:ro
   iot_nginx: 
-    image: nginx:1.31.1-alpine3.23-perl@sha256:b4f40fc790074a4af0d6fc81923a30459910d6f01efc048246ef288b14654354
+    image: nginx:1.31.2-alpine3.23-perl@sha256:b3b337e1ef5b1bc8253dec68bc4522d9027920666a428bf51a022ceb7e3396bc
     container_name: iot_nginx
     security_opt:
       - no-new-privileges=true
@@ -489,7 +489,7 @@ services:
       retries: 3
       start_period: 30s
   radarr:
-    image: linuxserver/radarr:6.0.4.10291-ls292@sha256:f08dda38e7d12e5a722d9a5cb6e54acaf63c8598fefeefec88effe0c0d0038dd
+    image: linuxserver/radarr:6.3.0.10514-ls314@sha256:119aaa4a4f7349bcd2a136c5373a0d7925b5479915c7dfe0c0ad352db2a6d438
     container_name: radarr
     security_opt:
       - no-new-privileges=true
@@ -533,7 +533,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.2492@sha256:8caff79adf8105c7fb63c996dae38ce50ea390de460713b80aad0301d5c862f3
+    image: linuxserver/jackett:0.24.2520@sha256:d9536db7cc9f0e31bf7c1bb4bdfc477842a124bae4091046dd040b02fe5ce378
     container_name: jackett
     security_opt:
       - no-new-privileges=true
@@ -566,7 +566,7 @@ services:
       retries: 3
       start_period: 30s
   sonarr:
-    image: linuxserver/sonarr:4.0.16.2944-ls303@sha256:37be832b78548e3f55f69c45b50e3b14d18df1b6def2a4994258217e67efb1a1
+    image: linuxserver/sonarr:4.0.19.2979-ls322@sha256:c19aa4ecdf03d73e1d5c901da33744cb7eb4d921f89bafed1ca264601d7fa224
     container_name: sonarr
     security_opt:
       - no-new-privileges=true
@@ -700,7 +700,7 @@ services:
       - no-new-privileges=true
     cap_drop:
       - ALL
-    image: grafana/grafana:12.4.0-ubuntu@sha256:9a14379bd5a91671e196f148a6e965b9db78fc70ed4f2f1716d70c240cd9161f
+    image: grafana/grafana:12.4.10-ubuntu@sha256:5d45861c3c7609c39be168e68eee120adcb3235e5760f5946108526259e7ea33
     ports:
       - "443:3000"
     networks:
@@ -832,7 +832,7 @@ services:
   # =============================================================================
   tempo:
     container_name: tempo
-    image: grafana/tempo:3.0.0@sha256:78439f7f7cf3c97122846c13a832e060c6c7ef67dcc814dccf0a5f3f78393a93
+    image: grafana/tempo:3.0.3@sha256:0296560ac66f8a3600d7fb3014a52c189d4d9c3549ad6ff441bf2409855d68d5
     security_opt:
       - no-new-privileges=true
     cap_drop:
@@ -868,7 +868,7 @@ services:
   # =============================================================================
   otel-collector:
     container_name: otel-collector
-    image: otel/opentelemetry-collector-contrib:0.120.0@sha256:85ac41c2db88d0df9bd6145e608a3cb023f5d8443868adbfbbf66efb51087917
+    image: otel/opentelemetry-collector-contrib:0.160.0@sha256:799dc6cf12c96192af37b5bdba804da8c10b3bc563b43cb90c3f3c58d9572ad6
     security_opt:
       - no-new-privileges=true
     cap_drop:
@@ -1152,7 +1152,7 @@ services:
       retries: 3
       start_period: 60s
   wordpress_db:
-    image: mysql:9.7.0-oraclelinux9@sha256:f0ef1d92fa650fcfa5b85f1d82bb1a56a6dd579bf256b8f8f2a5a0b1b61c8b0b
+    image: mysql:9.7.2-oraclelinux9@sha256:257388edf9c84dbc04c763625446d5f3fa6ed60d1b0873bc552c614ba0a7ab4e
     container_name: wordpress_db
     security_opt:
       - no-new-privileges=true
@@ -1195,7 +1195,7 @@ services:
       - "443:8080"
     networks:
       internal:
-    image: jgraph/drawio:31.4.1@sha256:84966aa6b98203485a49b64d60c869a3da61250757756aad9862c8eb6bb788fd
+    image: jgraph/drawio:31.4.2@sha256:19d71d91d092e65132ea22b2e1cfcddf9716402a01386fbaae7190cf689adeb0
     restart: unless-stopped
     # Memory right-sized (March 2026 audit): 7-day peak 158MB, avg 140MB.
     # 768M was 5x peak. 384M gives 2.4x headroom over peak.
@@ -1220,7 +1220,7 @@ services:
     devices: 
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_ETDRb11A920-if00-port0:/dev/ttyUSB0"
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0:/dev/ttyUSB1"
-    image: "homeassistant/home-assistant:2026.6.1@sha256:59aa8824955c9db491b75d2eebe42bd68494f80c2ec69ec0d66d9dae37d37514"
+    image: "homeassistant/home-assistant:2026.9.0@sha256:372d991e58882a1d8c68c07e9aa3f3b509276e695355f73ccdb03baa70407293"
     deploy:
       resources:
         limits:
@@ -1639,7 +1639,7 @@ services:
     cap_drop:
       - ALL
     restart: unless-stopped
-    image: koenkk/zigbee2mqtt:2.13.0@sha256:4fb4db4d49a217bed6d0204f454ce809febc565bbe051b85c556ee2bcef73d8c
+    image: koenkk/zigbee2mqtt:2.14.0@sha256:c13d177dd7f7f396574ab00926188ad542cfb68c6a5d5f84021bebd9adf6ede9
     depends_on:
       mosquitto:
         condition: service_healthy
@@ -1735,7 +1735,7 @@ services:
     # crashes on this host with "Fatal glibc error: CPU does not support
     # x86-64-v3". Stay on the Debian-based default variant. Do not switch to
     # any -ubi*/-ubi10* tag.
-    image: mariadb:12.3.2@sha256:b1c7bf836e64ed9406a8984af29509f40089d55cea14b32f12c4726a1f17104b
+    image: mariadb:12.3.3@sha256:dd9b303aed4f4890ed09f766d8ca9ddfd176c0c6f6267feff53b3192ec65a979
     container_name: nextcloud_database
     security_opt:
       - no-new-privileges=true
@@ -1773,7 +1773,7 @@ services:
       retries: 3
       start_period: 60s
   nextcloud:
-    image: nextcloud:33.0.5-apache@sha256:56bdc45109067500fd0832fa64832b7c77a167d9394cbf5f0f4b59740b94194d
+    image: nextcloud:33.0.8-apache@sha256:9ed3924f92f651aab622b23557b3f3dbcf04f7678567f50a41dbace2463c0a52
     container_name: nextcloud
     security_opt:
       - no-new-privileges=true
