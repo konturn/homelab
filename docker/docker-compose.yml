@@ -1067,15 +1067,18 @@ services:
     networks:
       internal:
         ipv4_address: {{ deluge_ip }}
-    # Memory (2026-09-01, 30d max): 8192M of 8192M = 100.0% -- capped, OOM risk.
-    # Growth pattern 4G->6G->8G->12G indicates a libtorrent leak; tracked in #122.
-    # 12G is headroom, not a fix.
+    # Memory (2026-09-03): NOT a leak. cgroup "usage" counts page cache, and
+    # deluge's torrent I/O fills whatever cache the limit allows before the
+    # kernel reclaims it -- hence the "always at 100%" sawtooth.
+    # Actual anonymous memory (active_anon + inactive_anon) is flat at
+    # 470-660M across 30d, with no growth trend and zero OOM kills.
+    # 3G = ~660M anon + ~2.3G reclaimable cache for seeding reads.
     deploy:
       resources:
         limits:
-          memory: 12G
-        reservations:
           memory: 3G
+        reservations:
+          memory: 1G
     volumes:
       - '{{ docker_persistent_data_path }}/deluge:/config'
       - '/mpool/samba_share/nfs:/downloads'
