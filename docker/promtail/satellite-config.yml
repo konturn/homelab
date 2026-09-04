@@ -6,7 +6,10 @@ positions:
   filename: /tmp/positions/positions.yaml
 
 clients:
-  - url: https://loki.lab.nkontur.com/loki/api/v1/push
+  # Satellites are on the IoT VLAN, which cannot route to the internal VLAN.
+  # loki.iot.lab.nkontur.com resolves to iot_nginx (pihole wildcard) and proxies
+  # the push path to loki:3100 over the loki-backend network.
+  - url: https://loki.iot.lab.nkontur.com/loki/api/v1/push
     basic_auth:
       username: promtail
       password: "{{ vault_loki_push_password }}"
