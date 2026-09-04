@@ -44,17 +44,33 @@ groups:
         labels:
           severity: critical
 
+      # A crash-looping container is DOWN most of the time, so telegraf's docker
+      # input barely gets to sample it: over one hour a healthy container yields
+      # ~360 restart_count points, while snapclient_kitchen yields 1 and
+      # amcrest2mqtt yields ~1. difference() needs two points in the window to
+      # emit anything, so the original 15m window produced a null for exactly the
+      # containers that were on fire, reduce(dropNN) discarded it, and the rule
+      # sat Normal through 8,400 restarts/day (issues #120, #123, #132).
+      #
+      # The window is therefore 6h, not 15m: long enough that even a container
+      # sampled once an hour accumulates the two points difference() needs.
+      # nonNegative:true still drops the reset-to-zero when a container is
+      # recreated, so a redeploy does not read as a restart storm.
+      #
+      # Trade-off: the 6h accumulation means the alert stays firing for up to 6h
+      # after a crash loop is actually fixed. That is the right way to be wrong
+      # for a rule whose entire failure mode was staying silent.
       - uid: container-restart-loop
         title: Container Restart Loop
         condition: C
         data:
           - refId: A
-            relativeTimeRange: {from: 900, to: 0}
+            relativeTimeRange: {from: 21600, to: 0}
             datasourceUid: influxdb
             model:
               query: |
                 from(bucket: "metrics")
-                  |> range(start: -15m)
+                  |> range(start: -6h)
                   |> filter(fn: (r) => r._measurement == "docker_container_status")
                   |> filter(fn: (r) => r._field == "restart_count")
                   |> difference(nonNegative: true)
@@ -70,12 +86,12 @@ groups:
           - refId: C
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__
-            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [3]}}]}
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [5]}}]}
         noDataState: OK
         execErrState: Error
         for: 5m
         annotations:
-          summary: "Container restarting repeatedly (>3 restarts in 15min)"
+          summary: "Container {{ $labels.container_name }} restarting repeatedly (>5 restarts in 6h)"
         labels:
           severity: critical
 
