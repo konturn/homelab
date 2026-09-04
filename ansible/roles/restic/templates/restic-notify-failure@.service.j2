@@ -3,4 +3,30 @@ Description=Send failure notification for %i
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash -c 'printf "Subject: [ALERT] Restic failure: %i\nFrom: restic@{{ inventory_hostname }}\nTo: konoahko@gmail.com\n\nRestic unit %i failed on {{ inventory_hostname }} at $(date).\n\nRecent logs:\n$(journalctl -u %i --no-pager -n 30 2>&1)" | /usr/sbin/sendmail konoahko@gmail.com'
+
+# journalctl output must never be passed through printf as a format string.
+# Restic output is dense with percent signs ("100.00% done", "25% cpu") and
+# each one was consumed as a conversion specifier, so the body arrived mangled
+# and NUL-injected: "100.00% done, 25% cpu" was delivered as
+# "100.00 0one, 25<NUL>pu". The one mail that matters was corrupted precisely
+# because it reported on a percentage-heavy backup run.
+#
+# Log lines are now streamed straight into the pipe instead, so no amount of
+# restic output can reinterpret them. Note that % is also a systemd specifier,
+# so a literal percent in ExecStart must be written %% -- %%s below reaches
+# bash as printf's string conversion, while a bare %s would have been expanded
+# by systemd into the user's shell before bash ever saw it.
+#
+# The journal line is emitted first and unconditionally. Mail goes out through
+# msmtp, which is the fragile half of this path; the journal is not, and
+# promtail ships it to Loki where Grafana can alert on it. A failure
+# notification whose only channel is SMTP stops existing the moment SMTP does.
+ExecStart=/bin/bash -c '\
+  logger -t restic-notify -p daemon.err "restic unit %i failed on {{ inventory_hostname }}"; \
+  { printf "Subject: [ALERT] Restic failure: %i\n"; \
+    printf "From: restic@{{ inventory_hostname }}\n"; \
+    printf "To: konoahko@gmail.com\n\n"; \
+    printf "Restic unit %i failed on {{ inventory_hostname }} at %%s.\n\n" "$(date)"; \
+    printf "Recent logs:\n"; \
+    journalctl -u %i --no-pager -n 30 2>&1; \
+  } | /usr/sbin/sendmail konoahko@gmail.com'
