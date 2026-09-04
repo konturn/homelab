@@ -398,6 +398,11 @@ services:
     networks:
       iot:
         ipv4_address: {{ iot_nginx_ip }}
+      # Satellites live on the IoT VLAN and cannot reach loki.lab.nkontur.com on
+      # the internal VLAN, so their promtail shipped nothing. Join loki-backend
+      # so iot_nginx can proxy a push endpoint for them, mirroring how influxdb
+      # is dual-homed for satellite telegraf.
+      loki-backend:
     restart: unless-stopped
     # Memory right-sized 2026-07-01: 30-day peak 29 MB, avg 22 MB. 128M gives 4.4x headroom.
     deploy:

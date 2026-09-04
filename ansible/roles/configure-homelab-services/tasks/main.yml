@@ -167,17 +167,25 @@
 - name: Write Loki htpasswd file
   ansible.builtin.copy:
     content: "{{ loki_htpasswd_content.stdout }}"
-    dest: "{{ docker_persistent_data_path }}/lab_nginx/conf/loki.htpasswd"
+    dest: "{{ docker_persistent_data_path }}/{{ item }}/conf/loki.htpasswd"
     owner: root
     group: systemd-journal
     mode: '0640'
+  # iot_nginx serves the push endpoint for satellite promtail, so it needs the
+  # same credentials file as lab_nginx.
+  loop:
+    - lab_nginx
+    - iot_nginx
   no_log: true
 
 - name: Ensure nginx conf directory is traversable by workers
   ansible.builtin.file:
-    path: "{{ docker_persistent_data_path }}/lab_nginx/conf"
+    path: "{{ docker_persistent_data_path }}/{{ item }}/conf"
     state: directory
     mode: '0711'
+  loop:
+    - lab_nginx
+    - iot_nginx
 
 - name: initialize nginx conf file dicts
   set_fact: 
