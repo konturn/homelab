@@ -730,6 +730,25 @@ groups:
       # matched "fatal|unable to create lock", so restic-backup-error stayed
       # green too. The unit sat in failed state with no alert. The systemd_units
       # metric was added for exactly this case but nothing consumed it yet.
+      #
+      # Scope (2026-09-07): the unit list is restic-backup.service and
+      # restic-check.service, not /^restic-/. The broader regex also matched the
+      # restic-notify-failure@<unit>.service instances, and those are OnFailure=
+      # handlers: Type=oneshot units that run once, exit, and then keep whatever
+      # state that run ended in until something invokes them again. Nothing ever
+      # does. restic-notify-failure@restic-check.service.service failed once
+      # (msmtp exits 69/UNAVAILABLE, per the description below) and has reported
+      # active_code=3 on every one of the 60,462 samples in the last 7 days, so
+      # this rule had been firing continuously since 2026-08-31T13:56Z.
+      #
+      # That is the failure mode this rule exists to prevent. A critical alert
+      # that is always red carries no signal: restic-backup.service really did
+      # fail from 2026-09-02T07:24Z to 2026-09-03T07:00Z (the vanished-temp-file
+      # bug fixed in 98df99d) and the alert could not change state to say so,
+      # because a dead notifier was already holding it firing.
+      #
+      # The notifier is still worth watching, just not as a backup-failure
+      # signal at critical severity -- restic-notifier-failed below covers it.
       - uid: restic-unit-failed
         title: Restic Unit Failed
         condition: C
@@ -743,7 +762,7 @@ groups:
                   |> range(start: -15m)
                   |> filter(fn: (r) => r._measurement == "systemd_units")
                   |> filter(fn: (r) => r._field == "active_code")
-                  |> filter(fn: (r) => r.name =~ /^restic-/)
+                  |> filter(fn: (r) => r.name =~ /^restic-(backup|check)\.service$/)
                   |> group(columns: ["name"])
                   |> last()
                   |> keep(columns: ["_time", "_value", "name"])
@@ -771,6 +790,52 @@ groups:
           description: "A restic unit failed. The OnFailure email path is unreliable (msmtp has exited 69/UNAVAILABLE), so this alert is the primary signal. Check: systemctl status {{ $labels.name }} && journalctl -u {{ $labels.name }} --since '24 hours ago'"
         labels:
           severity: critical
+
+      # The OnFailure= notifier for the restic units. Split out of
+      # restic-unit-failed so a broken notifier can no longer masquerade as a
+      # broken backup (see the scope note above).
+      #
+      # This one is expected to stay firing until someone acts: the units are
+      # Type=oneshot, so a failed run latches active_code=3 until the unit is
+      # invoked again or reset. Clearing it needs both halves -- fix the send
+      # path, then `systemctl reset-failed` -- otherwise the state persists even
+      # once msmtp works. That is a standing defect, not a flapping signal, so
+      # it sits at warning and stays out of the backup-failure path.
+      - uid: restic-notifier-failed
+        title: Restic Failure Notifier Broken
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -15m)
+                  |> filter(fn: (r) => r._measurement == "systemd_units")
+                  |> filter(fn: (r) => r._field == "active_code")
+                  |> filter(fn: (r) => r.name =~ /^restic-notify-failure@/)
+                  |> group(columns: ["name"])
+                  |> last()
+                  |> keep(columns: ["_time", "_value", "name"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B, settings: {mode: dropNN}}
+          # Same telegraf active_code mapping as restic-unit-failed: 3 == failed.
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: within_range, params: [2.5, 3.5]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        annotations:
+          summary: "Restic failure notifier {{ $labels.name }} is in failed state"
+          description: "The OnFailure= handler for a restic unit cannot deliver. Backups themselves are unaffected, and the Restic Unit Failed / Backup Stale / Backup Error alerts still cover them. Check: systemctl status {{ $labels.name }} && journalctl -u {{ $labels.name }} -n 50. After fixing the send path, clear the latched state with: systemctl reset-failed {{ $labels.name }}"
+        labels:
+          severity: warning
 
       # A timer that stops being scheduled produces no failure event at all —
       # backups just quietly stop. Timers should always be active (0).
