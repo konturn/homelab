@@ -489,7 +489,7 @@ services:
       retries: 3
       start_period: 30s
   radarr:
-    image: linuxserver/radarr:6.3.0.10514-ls314@sha256:119aaa4a4f7349bcd2a136c5373a0d7925b5479915c7dfe0c0ad352db2a6d438
+    image: linuxserver/radarr:6.3.0.10514-ls315@sha256:95ba0801df4d9d1d79d0d9a3849f656542497dab061d91b87ad4f53a71aff3ef
     container_name: radarr
     security_opt:
       - no-new-privileges=true
@@ -1195,7 +1195,7 @@ services:
       - "443:8080"
     networks:
       internal:
-    image: jgraph/drawio:31.4.2@sha256:19d71d91d092e65132ea22b2e1cfcddf9716402a01386fbaae7190cf689adeb0
+    image: jgraph/drawio:31.4.4@sha256:4c956b9a87160f16fac3fd8419a2625a91f39c359e98c981005eea6511d5ea9f
     restart: unless-stopped
     # Memory right-sized (March 2026 audit): 7-day peak 158MB, avg 140MB.
     # 768M was 5x peak. 384M gives 2.4x headroom over peak.
