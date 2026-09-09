@@ -353,9 +353,58 @@ groups:
       # Collection health, not disk health. telegraf's smart input reports a
       # per-device smartctl exit_status; anything non-zero means SMART was
       # never read for that drive, so smart-disk-error above cannot fire for
-      # it. As of 2026-09-01 every device on router reports exit_status 2
-      # (device open failed) and smart_attribute has zero samples, so the
-      # entire array is unmonitored. Root cause tracked in issue #129.
+      # it. Issue #129 (device open failed, exit_status 2 on the whole array)
+      # was closed 2026-09-07; all 26 devices on router now report
+      # exit_status 0. This rule stays as the tripwire for a regression.
+      # health_ok is smartctl's overall-health self-assessment, which most
+      # drives keep reporting PASSED until they are essentially dead. The
+      # sector counters move first: pending sectors are blocks the drive
+      # failed to read and has not been able to remap, and reallocated /
+      # uncorrectable counts are damage it already gave up on. Watching only
+      # health_ok above means a drive can rot for weeks in silence -- router
+      # sdk has been sitting at 16 pending sectors since 2026-09-03 with
+      # health_ok still true, which is what prompted this rule.
+      #
+      # Fleet is otherwise clean (2 of 26 devices non-zero as of 2026-09-09),
+      # so a >0 threshold is signal rather than noise. Warning, not critical:
+      # this means "plan a replacement", while smart-disk-error means "the
+      # drive is going now".
+      - uid: smart-prefail-sectors
+        title: SMART Pre-Failure Sectors
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 3600, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -1h)
+                  |> filter(fn: (r) => r._measurement == "smart_device")
+                  |> filter(fn: (r) => r._field == "pending_sector_count" or r._field == "uncorrectable_sector_count" or r._field == "reallocated_sectors_count")
+                  |> last()
+                  |> group(columns: ["host", "device", "model"])
+                  |> max()
+                  |> filter(fn: (r) => r._value > 0)
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "host", "device", "model"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 1h
+        annotations:
+          summary: "Disk {{ $labels.device }} on {{ $labels.host }} ({{ $labels.model }}) reports pending/reallocated/uncorrectable sectors — SMART still says healthy, but plan a replacement"
+        labels:
+          severity: warning
+
       - uid: smart-collection-failed
         title: SMART Collection Failed
         condition: C
