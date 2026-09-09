@@ -6,6 +6,14 @@
     group: root
     mode: '0600'
 
+- name: Deploy msmtp alias map
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/msmtp/aliases' }}"
+    dest: /etc/aliases
+    owner: root
+    group: root
+    mode: '0644'
+
 - name: Set msmtp as default MTA
   ansible.builtin.file:
     src: /usr/bin/msmtp

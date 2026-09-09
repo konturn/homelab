@@ -1,0 +1,11 @@
+# msmtp alias map (referenced by `aliases` in /etc/msmtprc).
+#
+# System daemons mail their local superuser account by name, not by address:
+# smartd defaults to `-m root`, and cron mails MAILTO/root. msmtp hands the
+# recipient to Gmail verbatim, and Gmail rejects a bare local part with
+# 553 5.1.3 "not a valid RFC 5321 address" — so those notifications were
+# being dropped at the SMTP layer.
+#
+# `default` catches any other local recipient a package might introduce.
+root: konoahko@gmail.com
+default: konoahko@gmail.com
