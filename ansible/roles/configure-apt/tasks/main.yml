@@ -1,0 +1,66 @@
+---
+# =============================================================================
+# apt sanity for end-of-life Debian suites
+# =============================================================================
+# Debian 11 "bullseye" reached LTS end-of-life on 2026-08-31. The final
+# bullseye-security InRelease was published that day with a 7-day Valid-Until,
+# which lapsed at 2026-09-07 21:13 UTC. apt treats an expired Release file as a
+# hard error, not a warning, so from that moment every `apt update` on a
+# bullseye host fails with:
+#
+#   E:Release file for http://security.debian.org/debian-security/dists/
+#   bullseye-security/InRelease is expired (invalid since ...)
+#
+# That is what broke zwave:deploy and satellite-2:deploy in pipeline #3407.
+# It is deterministic and does not self-heal, so retrying the pipeline is
+# pointless.
+#
+# The preferred fix -- repoint the suite at archive.debian.org -- is NOT
+# available yet. As verified on 2026-09-09,
+# archive.debian.org/debian-security/dists/ still ends at buster, and
+# bullseye-security 404s there. security.debian.org continues to serve the
+# bullseye-security packages; only the metadata has stopped being refreshed.
+#
+# So we skip the freshness check on the affected hosts. To be explicit about
+# what that does and does not mean:
+#
+#   - It does NOT reduce the patches these hosts receive. bullseye stopped
+#     getting new security updates on 2026-08-31 regardless of this change.
+#   - It does NOT disable signature verification. InRelease is still GPG
+#     verified; only the Valid-Until expiry check is skipped.
+#   - It DOES drop replay/staleness protection for every repo on the host, not
+#     only bullseye-security. apt has no supported per-repo form of this option
+#     in apt.conf. The per-repo form ([check-valid-until=no]) lives in
+#     sources.list, and sources.list on these hosts is not managed from this
+#     repo, so editing it blind is a worse trade than the wider setting here.
+#
+# This is a stopgap that buys back the deploy path. The real remediation is
+# upgrading zwave and satellite-2 off bullseye. The tasks below are scoped to
+# bullseye and remove the drop-in again once a host has been upgraded.
+# =============================================================================
+
+- name: Allow expired Release metadata on EOL bullseye hosts
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/99-eol-suite-expired
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      // Managed by the Ansible role configure-apt. Do not edit by hand.
+      //
+      // Debian 11 bullseye went EOL on 2026-08-31. Its security suite's
+      // Release file expired on 2026-09-07 and is no longer refreshed, and
+      // apt fails hard on an expired Release file. Without this, every
+      // apt update on this host is a hard error.
+      //
+      // Signature verification is unaffected. Delete this file once the
+      // host has been upgraded to bookworm; the configure-apt role removes
+      // it automatically on any host that is no longer bullseye.
+      Acquire::Check-Valid-Until "false";
+  when: ansible_distribution_release == 'bullseye'
+
+- name: Re-enable Release expiry checking once a host is off bullseye
+  ansible.builtin.file:
+    path: /etc/apt/apt.conf.d/99-eol-suite-expired
+    state: absent
+  when: ansible_distribution_release != 'bullseye'

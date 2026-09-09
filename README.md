@@ -132,6 +132,20 @@ docker ps
 docker logs <container_name>
 ```
 
+### Host OS lifecycle
+
+`zwave` and `satellite-2` still run Debian 11 "bullseye", which reached LTS
+end-of-life on **2026-08-31**. They receive no further security updates.
+
+Because bullseye's security suite stopped being refreshed, its `Release` file
+expired on 2026-09-07 and apt now treats that as a hard error. The
+`configure-apt` role sets `Acquire::Check-Valid-Until "false"` on bullseye
+hosts so `apt update` keeps working; see the header comment in
+`ansible/roles/configure-apt/tasks/main.yml` for exactly what that does and
+does not weaken. The role removes the setting again once a host is upgraded.
+
+That is a stopgap, not a fix. Both hosts need an upgrade to bookworm.
+
 ## Contributing
 
 This is a personal homelab, but the patterns here may be useful for others.

@@ -1,5 +1,8 @@
 - hosts: satellite-2.lab.nkontur.com
   roles:
+    # Must run before any apt task: bullseye is EOL and its expired security
+    # Release file makes `apt update` a hard error until this role lands.
+    - configure-apt
     - role: fetch-vault-secrets
       vars:
         fetch_ssh_ca_key: true

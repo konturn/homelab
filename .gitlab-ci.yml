@@ -76,6 +76,7 @@ variables:
       changes:
         - ansible/zwave.yml
         - ansible/inventory.yml
+        - ansible/roles/configure-apt/**/*
         - ansible/roles/configure-zwave/**/*
         - ansible/roles/configure-snapclient/**/*
         - ansible/roles/deploy-compose/**/*
@@ -94,7 +95,8 @@ variables:
       changes:
         - ansible/satellite-2.yml
         - ansible/inventory.yml
-        - ansible/roles/configure-satellite/**/*
+        - ansible/roles/configure-apt/**/*
+        - ansible/roles/configure-scanner/**/*
         - ansible/roles/deploy-compose/**/*
         - docker/docker-compose-observability.yml
         - docker/docker-compose-satellite.yml
