@@ -560,6 +560,49 @@ groups:
         labels:
           severity: critical
 
+      # Reachability through the reverse proxy, from [[inputs.http_response]].
+      # Keyed on result_code rather than http_response_code: result_code is 0
+      # whenever any HTTP response came back, so a 401 from an authenticated
+      # endpoint is treated as up (nginx and TLS both worked). Non-zero is
+      # connection_failed / timeout / dns_error — the container can be perfectly
+      # healthy and still be unreachable, which no other rule here detects.
+      - uid: http-endpoint-unreachable
+        title: HTTP Endpoint Unreachable
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -10m)
+                  |> filter(fn: (r) => r._measurement == "http_response")
+                  |> filter(fn: (r) => r._field == "result_code")
+                  |> filter(fn: (r) => r._value != 0)
+                  |> group(columns: ["server"])
+                  |> count()
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "server"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [3]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "{{ $labels.server }} is not answering over HTTP — container may be healthy but unreachable"
+          description: "More than 3 failed probes in 10m (connection refused, timeout, or DNS failure). Check the nginx vhost, proxy_pass target, and TLS chain for this host."
+        labels:
+          severity: critical
+
+
   # =========================================================================
   # Certificate Alerts
   # =========================================================================
