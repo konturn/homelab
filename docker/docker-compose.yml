@@ -857,7 +857,8 @@ services:
         max-file: "3"
     healthcheck:
       # Tempo 2.10.2 uses a distroless image without wget/curl/busybox.
-      # Health is monitored externally via Grafana alerting.
+      # Health is monitored externally by the "Critical Service Down" Grafana
+      # rule in docker/grafana/provisioning/alerting/infrastructure.yml.
       disable: true
 
   # =============================================================================
@@ -895,8 +896,8 @@ services:
         max-file: "3"
     healthcheck:
       # Scratch-based image has no shell or HTTP utilities (curl/wget).
-      # Health is monitored externally via Grafana alerting on the
-      # health_check extension (port 13133).
+      # Health is monitored externally by the "Critical Service Down" Grafana
+      # rule in docker/grafana/provisioning/alerting/infrastructure.yml.
       disable: true
 
   gitlab:

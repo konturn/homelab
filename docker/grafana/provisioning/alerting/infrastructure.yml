@@ -142,7 +142,7 @@ groups:
                   |> range(start: -5m)
                   |> filter(fn: (r) => r._measurement == "docker_container_status")
                   |> filter(fn: (r) => r._field == "exitcode")
-                  |> filter(fn: (r) => r.container_name =~ /grafana|homeassistant|nginx|gitlab|influxdb|plex|bitwarden|vault|loki|promtail/)
+                  |> filter(fn: (r) => r.container_name =~ /grafana|homeassistant|nginx|gitlab|influxdb|plex|bitwarden|vault|loki|promtail|tempo|otel-collector/)
                   |> last()
                   |> filter(fn: (r) => r._value != 0)
                   |> keep(columns: ["_time", "_value", "container_name"])
