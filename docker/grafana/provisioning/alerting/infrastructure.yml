@@ -939,7 +939,12 @@ groups:
             relativeTimeRange: {from: 900, to: 0}
             datasourceUid: loki
             model:
-              expr: 'count_over_time({unit="ssh.service"} |= "Failed password" [15m])'
+              # PasswordAuthentication is "no" everywhere (ansible/roles/claude-user),
+              # so sshd never logs "Failed password" and matching only that string
+              # made this rule dead. Match the signatures key-only sshd actually
+              # emits for a rejected attempt, and keep "Failed password" for any
+              # host that ever re-enables password auth.
+              expr: 'count_over_time({unit="ssh.service"} |~ `Failed password|Invalid user|Connection (closed|reset) by authenticating user|maximum authentication attempts` [15m])'
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -948,11 +953,16 @@ groups:
           - refId: C
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__
-            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [5]}}]}
+            # Threshold is 100, not 5. Constant internet scanning is the baseline on a
+            # host with sshd exposed: measured over 7d of real logs, a 15m bucket runs
+            # p50=8, p90=19, p99=42, max=48. Alerting at 5 would fire nearly always and
+            # train everyone to ignore it. 100 is ~2x the observed 7d peak, so it stays
+            # quiet under background noise and fires on a genuine burst.
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [100]}}]}
         noDataState: OK
         execErrState: Error
         for: 0s
         annotations:
-          summary: "Multiple failed SSH login attempts (>5 in 15min)"
+          summary: "SSH login attempt burst (>100 rejected attempts in 15min)"
         labels:
           severity: warning
