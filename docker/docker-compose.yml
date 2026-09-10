@@ -415,7 +415,7 @@ services:
       - /var/log/iot_nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   ombi:
-    image: linuxserver/ombi:4.53.10@sha256:db3642d3fd492c399e1c879fe38fe77b59db6ca2e966b0d3df2aad7d376489da
+    image: linuxserver/ombi:4.53.10@sha256:a6f76ac521ba01eee2e9f0c23a3fed22e56630d97a04d5eeaeaa36c1e681640d
     container_name: ombi
     security_opt:
       - no-new-privileges=true
@@ -533,7 +533,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.2544@sha256:acfe6c0d20f52da3b88b9efdc241ad80b843b3bead526ddd82f20f5621b84064
+    image: linuxserver/jackett:0.24.2551@sha256:fe3facd48302190c2e4144f0c0ea752e775ba0147813629255608a6a899c3a43
     container_name: jackett
     security_opt:
       - no-new-privileges=true
@@ -667,7 +667,7 @@ services:
         ipv4_address: {{ influxdb_ip }}
       iot:
         ipv4_address: {{ influxdb_iot_ip }}
-    image: influxdb:2.8.0@sha256:8e911da5f7b482230e61fe4bad9af0697d97a75e087f19f5f0ddfee62c2bd686
+    image: influxdb:2.8.0@sha256:571eb4514977b89bc09909f583b7b8ab473965011a75681ff8b6ca050e020c85
     restart: unless-stopped
     # Memory (2026-09-01, 30d max): 2719M of 4096M = 66.4%; OOM-killed 2026-07-13
     # at 4.15G anon-rss during a compaction spike. 6G covers the spike.
@@ -1112,7 +1112,7 @@ services:
       retries: 3
       start_period: 30s
   blog:
-    image: wordpress:7.1.0-php8.3-apache@sha256:8801a1239d7ba9fb340a5fc5ba0bf7f8d3652adbd64893e3fba7992ba618108e
+    image: wordpress:7.1.0-php8.3-apache@sha256:5a93c470ae8220fddf71f6ebe3bc94e615ddc2ae4d9810f795b830fb11c41a17
     container_name: wordpress
     security_opt:
       - no-new-privileges=true
@@ -1152,7 +1152,7 @@ services:
       retries: 3
       start_period: 60s
   wordpress_db:
-    image: mysql:9.7.2-oraclelinux9@sha256:257388edf9c84dbc04c763625446d5f3fa6ed60d1b0873bc552c614ba0a7ab4e
+    image: mysql:9.7.2-oraclelinux9@sha256:b2cf29815e62fea06b7de22b8b8e57dfe0eb32706e38ce951930bde6faef4ab6
     container_name: wordpress_db
     security_opt:
       - no-new-privileges=true
@@ -1549,7 +1549,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-    image: eclipse-mosquitto:2.1.2-alpine@sha256:9cfdd46ad59f3e3e5f592f6baf57ab23e1ad00605509d0f5c1e9b179c5314d87
+    image: eclipse-mosquitto:2.1.2-alpine@sha256:6f8d8a947c506f8a2290ec65cd4bd2bc7cb4d43fb5f6271f861cb013e2ef9797
     restart: unless-stopped
     networks:
       iot:
@@ -1735,7 +1735,7 @@ services:
     # crashes on this host with "Fatal glibc error: CPU does not support
     # x86-64-v3". Stay on the Debian-based default variant. Do not switch to
     # any -ubi*/-ubi10* tag.
-    image: mariadb:12.3.3@sha256:dd9b303aed4f4890ed09f766d8ca9ddfd176c0c6f6267feff53b3192ec65a979
+    image: mariadb:12.3.3@sha256:ab1c3dd381940233af12512b97d47b508fd3a0f17fbe3ba388739b7bc17cbc0b
     container_name: nextcloud_database
     security_opt:
       - no-new-privileges=true
