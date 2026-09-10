@@ -249,6 +249,27 @@ jit-approval-svc:test:
       changes:
         - docker/jit-approval-svc/**/*
 
+nginx:validate:
+  extends: .interruptible
+  stage: validate
+  image: nginx:1.31.1-alpine3.23-perl@sha256:b4f40fc790074a4af0d6fc81923a30459910d6f01efc048246ef288b14654354
+  needs: []
+  before_script:
+    - apk add --no-cache openssl
+  script:
+    - ./scripts/validate-nginx-config.sh
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - docker/nginx/**/*
+        - scripts/validate-nginx-config.sh
+        - .gitlab-ci.yml
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - docker/nginx/**/*
+        - scripts/validate-nginx-config.sh
+        - .gitlab-ci.yml
+
 # =============================================================================
 # Build Stage - Container images (GitLab Registry)
 # =============================================================================
