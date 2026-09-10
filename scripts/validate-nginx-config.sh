@@ -25,8 +25,14 @@ mkdir -p "$CERT_DIR" /data/certs/nkontur.com/certificates /data/log /data/webroo
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=validate.invalid \
   -keyout "$CERT_DIR/privkey.pem" -out "$CERT_DIR/fullchain.pem" 2>/dev/null
 cp "$CERT_DIR/fullchain.pem" "$CERT_DIR/chain.pem"
-# 1024-bit is fine here: nginx only parses the file, it never negotiates with it.
-openssl dhparam -out /data/certs/nkontur.com/certificates/dhparams.pem 1024 2>/dev/null
+# Must be >=2048-bit: nginx loads this into an SSL_CTX at config-test time and
+# OpenSSL 3.x rejects anything smaller ("dh key too small"). Use the named
+# ffdhe2048 group — instant and deterministic, where `openssl dhparam 2048`
+# burns random CI time generating fresh parameters nobody will negotiate with.
+DH=/data/certs/nkontur.com/certificates/dhparams.pem
+if ! openssl genpkey -genparam -algorithm DH -pkeyopt group:ffdhe2048 -out "$DH" 2>/dev/null; then
+  openssl dhparam -out "$DH" 2048 2>/dev/null
+fi
 
 # A proxy_pass with a literal hostname is resolved when the config loads, so the
 # container names must exist in /etc/hosts or every check dies on "host not found
