@@ -146,7 +146,7 @@ services:
       - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
     ports:
       - "32400/tcp"
-    image: plexinc/pms-docker:1.43.3.10896-cb3ebc72d@sha256:83a425ae9e133b1cb2cc3b809556e01c61cd8ff65c582e41b4374bc2210bac9e
+    image: plexinc/pms-docker:1.43.4.10903-e5521bd8c@sha256:e0ab27395614a8e1a4fdf84c6bc60ac664915cfdde70c52d030c7728a1c48e14
     networks:
       - external
       - internal
@@ -533,7 +533,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.2551@sha256:fe3facd48302190c2e4144f0c0ea752e775ba0147813629255608a6a899c3a43
+    image: linuxserver/jackett:0.24.2554@sha256:159b72d532753aa48ccf89df06a694d9b92402bf54e6fb5cf9e03852a87beabb
     container_name: jackett
     security_opt:
       - no-new-privileges=true
@@ -923,7 +923,7 @@ services:
       - "443:80"
     networks:
       - internal
-    image: 'gitlab/gitlab-ee:19.3.1-ee.0@sha256:b5167605564d64acf896be614791092d1409ac3f78214a9e4394ebb24a0be1b5'
+    image: 'gitlab/gitlab-ee:19.3.2-ee.0@sha256:9b329d307564a53be647a1f17e9a2f1d126c04fa9170d9d2c1edef75b172a9e3'
     restart: unless-stopped
     ulimits:
       nofile:
