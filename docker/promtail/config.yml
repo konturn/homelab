@@ -87,6 +87,22 @@ scrape_configs:
         replacement: 'docker'
     pipeline_stages:
       - docker: {}
+      # GitLab omnibus tails ~20 log files at once with `tail -F`, which prints a
+      # "==> /var/log/gitlab/<file> <==" banner plus a blank line every time it
+      # switches files. Measured 2026-09-11: 11,522 banners + 11,393 blank lines
+      # per hour, all from this one container, against 123,758 lines/hr of total
+      # Loki ingest -- 18.5% of everything we store, carrying no information.
+      # Dropped before the redact stages below so those regexes never run on
+      # lines that are about to be discarded.
+      - match:
+          selector: '{container="gitlab"}'
+          stages:
+            - drop:
+                expression: '^==> .* <==$'
+                drop_counter_reason: gitlab_tail_banner
+            - drop:
+                expression: '^\s*$'
+                drop_counter_reason: gitlab_blank_line
       # Redact credentials that upstream services embed in request URLs.
       # Telegraf logs the full URL when an HTTP input errors (Tautulli requires
       # its API key as a query parameter, so it cannot move to a header) and
