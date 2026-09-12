@@ -146,7 +146,7 @@ router:bootstrap:
 # Base ansible job with caching
 # =============================================================================
 .ansible:
-  image: willhallonline/ansible:latest
+  image: willhallonline/ansible:2.21.4-alpine-3.22@sha256:6bf175ba6d000691b017a099277ac6cebe6254d99a49670a321e1c6742fd551e
   before_script:
     - mkdir -p /cache/pip /cache/ansible-roles
     - pip3 install -q --cache-dir /cache/pip -r requirements.txt
