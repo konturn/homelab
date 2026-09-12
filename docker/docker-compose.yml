@@ -669,12 +669,20 @@ services:
         ipv4_address: {{ influxdb_iot_ip }}
     image: influxdb:2.8.0@sha256:8e911da5f7b482230e61fe4bad9af0697d97a75e087f19f5f0ddfee62c2bd686
     restart: unless-stopped
-    # Memory (2026-09-01, 30d max): 2719M of 4096M = 66.4%; OOM-killed 2026-07-13
-    # at 4.15G anon-rss during a compaction spike. 6G covers the spike.
+    # OOM-killed again 2026-09-12 08:06 UTC at 6.24G anon-rss (kernel: "Memory
+    # cgroup out of memory: Killed process ... (influxd) ... anon-rss:6245896kB"),
+    # after 191h uptime. Second kill in two months: 2026-07-13 peaked at 4.15G and
+    # 4G -> 6G was meant to cover it. Baseline is only 600-800M; the kills come
+    # from analytical Flux queries over the whole bucket (the monthly infra audit
+    # sweeps 7-30d of docker_container_mem), which spiked to 2.7G/4.0G/3.7G on
+    # 09-06/09-07/09-11 before today's kill. Each spike is bigger than the last,
+    # so 6G is no longer enough headroom. Router has 53G available of 135G.
+    # Follow-up: bound per-query memory (INFLUXD_QUERY_MEMORY_BYTES) so a single
+    # runaway Flux query aborts instead of taking the whole database down.
     deploy:
       resources:
         limits:
-          memory: 6G
+          memory: 8G
         reservations:
           memory: 1G
     volumes:

@@ -95,37 +95,46 @@ groups:
         labels:
           severity: critical
 
+      # Detect OOM kills from the kernel journal, not docker_container_status.
+      #
+      # The previous version of this rule polled the `oomkilled` boolean and
+      # required it true for `for: 5m`. That can never fire. When a container is
+      # OOM-killed Docker restarts it, and the replacement container reports
+      # OOMKilled=false, so the flag is only true inside a window far shorter
+      # than telegraf's scrape interval -- and even a lucky scrape could not hold
+      # it true for five continuous minutes. Verified 2026-09-12: influxdb was
+      # OOM-killed at 08:06:14 UTC (uptime reset 191.5h -> 0), and across the
+      # surrounding 3h the `oomkilled` field recorded zero `true` samples and
+      # this rule never left Normal. The homelab has been blind to OOM kills.
+      #
+      # The kernel line is durable and lands in Loki, so match on that instead.
+      # Both strings come from the same memcg kill and either alone is enough;
+      # "Memory cgroup out of memory" carries the process name and anon-rss,
+      # which is what the description points at.
       - uid: container-oom-kill
         title: Container OOM Kill
         condition: C
         data:
           - refId: A
-            relativeTimeRange: {from: 300, to: 0}
-            datasourceUid: influxdb
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: loki
             model:
-              query: |
-                from(bucket: "metrics")
-                  |> range(start: -5m)
-                  |> filter(fn: (r) => r._measurement == "docker_container_status")
-                  |> filter(fn: (r) => r._field == "oomkilled")
-                  |> last()
-                  |> filter(fn: (r) => r._value == true)
-                  |> map(fn: (r) => ({r with _value: 1}))
-                  |> keep(columns: ["_time", "_value", "container_name"])
+              expr: 'sum(count_over_time({job="systemd-journal"} |= "Memory cgroup out of memory" [15m]))'
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__
-            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: replaceNN, replaceWithValue: 0}}
           - refId: C
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
         noDataState: OK
         execErrState: Error
-        for: 5m
+        for: 0s
         annotations:
-          summary: "Container killed by OOM"
+          summary: "A container was killed by the kernel OOM killer"
+          description: "Which container and how much it was using: journalctl -k --since '15 minutes ago' | grep -A1 'Memory cgroup out of memory'. Then raise that container's deploy.resources.limits.memory in docker/docker-compose.yml."
         labels:
           severity: critical
 
