@@ -149,7 +149,7 @@ router:bootstrap:
   image: willhallonline/ansible:2.21.4-alpine-3.22@sha256:6bf175ba6d000691b017a099277ac6cebe6254d99a49670a321e1c6742fd551e
   before_script:
     - mkdir -p /cache/pip /cache/ansible-roles
-    - pip3 install -q --cache-dir /cache/pip -r requirements.txt
+    - pip3 install -q --break-system-packages --cache-dir /cache/pip -r requirements.txt
     # Clean corrupted role directories (ansible-galaxy --force doesn't handle this)
     - |
       for d in /cache/ansible-roles/*/; do
