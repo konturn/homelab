@@ -1170,8 +1170,13 @@ services:
       - SYS_NICE         # MySQL IO thread scheduling priority
     deploy:
       resources:
+        # Measured 2026-09-13 over 14d: anonymous memory peaked at 678M against
+        # this 768M ceiling -- 88.3% -- with a 417M mean. InnoDB grows its buffer
+        # pool and per-connection buffers toward whatever it is given and does not
+        # give the pages back, so sitting this close to the limit means the next
+        # slow query plan is what kills the database rather than what runs slowly.
         limits:
-          memory: 768M
+          memory: 1G
     environment:
       MYSQL_DATABASE: wordpress
       MYSQL_USER: wordpress
@@ -2031,8 +2036,15 @@ services:
         ipv4_address: "{{ chromium_browser_ip }}"
     deploy:
       resources:
+        # Measured 2026-09-13 over 14d of docker_container_mem: anonymous memory
+        # (active_anon + inactive_anon, the figure the OOM killer acts on) peaked
+        # at 1900M against this 2G ceiling -- 92.8%. The 5m-averaged peak was
+        # 1405M and the mean 476M, so the container idles low and spikes hard,
+        # which is exactly the shape that gets OOM-killed on a bad tab. 3G keeps
+        # ~58% headroom over the observed peak. The router has 126G and is at
+        # 63% used, so the extra gigabyte costs nothing.
         limits:
-          memory: 2G
+          memory: 3G
     volumes:
       - "{{ docker_persistent_data_path }}/chromium-browser/profile:/data/chrome-profile"
       - "{{ docker_persistent_data_path }}/chromium-browser/uploads:/uploads:ro"
