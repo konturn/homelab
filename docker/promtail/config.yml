@@ -51,6 +51,22 @@ scrape_configs:
       - source_labels: ['__journal_priority_keyword']
         target_label: 'level'
     pipeline_stages:
+      # The i801 SMBus driver logs "SMBus is busy, can't use it!" once for every
+      # address libsensors probes, and the BMC holds that bus so every probe
+      # fails. Measured 2026-09-14: 126 lines every 10s, dead constant, for the
+      # entire 30d retention window -- 1,088,640 lines/day, 42.7% of all Loki
+      # ingest, from a single unchanging string. Telegraf's poll interval is
+      # dropping to 60s in this same change, which cuts it 6x; this drops the
+      # remainder, because a line that has said the same thing 32 million times
+      # is a constant, not a signal. Scoped to the exact string, so a genuinely
+      # different SMBus error still reaches Loki, and drop_counter_reason keeps
+      # the discarded volume visible in promtail's metrics.
+      - match:
+          selector: '{syslog_identifier="kernel"}'
+          stages:
+            - drop:
+                expression: "SMBus is busy, can't use it!"
+                drop_counter_reason: i801_smbus_busy
       # Redact credentials that upstream services embed in request URLs.
       # Telegraf logs the full URL when an HTTP input errors (Tautulli requires
       # its API key as a query parameter, so it cannot move to a header) and
