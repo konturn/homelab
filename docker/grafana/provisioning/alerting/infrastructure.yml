@@ -129,6 +129,82 @@ groups:
         labels:
           severity: critical
 
+      # Container OOM Kill above only fires *after* the kernel has already killed
+      # the container. For anything that other services depend on, that is too
+      # late: influxdb dying takes every alert in this file down with it, because
+      # they all query it.
+      #
+      # This rule is the early warning. It measures *anon* memory
+      # (active_anon + inactive_anon), not docker's `usage`, because only anon
+      # pages are unreclaimable. `usage` includes page cache, which the kernel
+      # drops on pressure -- deluge sits at ~99% of its 12G `usage` limit
+      # permanently and is nowhere near an OOM, so a usage_percent rule would be
+      # pure noise. active+inactive anon is what the OOM killer actually weighs.
+      #
+      # `max` over a 10m window rather than `last`: the spikes this is meant to
+      # catch are short. Every influxdb spike over the last 30d lasted between
+      # 20 seconds and 4 minutes, so a `last`-based rule sampling every minute
+      # would miss most of them entirely. Taking the window max also means a
+      # 20-second spike stays visible for a full 10m, which is what lets
+      # `for: 5m` latch on it instead of flapping.
+      #
+      # limit == 0 means telegraf could not read the cgroup (satellite/zwave
+      # hosts report this for some containers); those are dropped rather than
+      # divided by zero. GitLab runner containers are excluded -- they are
+      # ephemeral and inherit the host limit, so they always read ~0%.
+      - uid: container-memory-near-limit
+        title: Container Memory Near Limit (85%+)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                base = from(bucket: "metrics")
+                  |> range(start: -10m)
+                  |> filter(fn: (r) => r._measurement == "docker_container_mem")
+                  |> filter(fn: (r) => not r.container_name =~ /^runner-/)
+
+                anon = base
+                  |> filter(fn: (r) => r._field == "active_anon" or r._field == "inactive_anon")
+                  |> group(columns: ["container_name", "_field"])
+                  |> max()
+                  |> group(columns: ["container_name"])
+                  |> sum()
+
+                lim = base
+                  |> filter(fn: (r) => r._field == "limit")
+                  |> group(columns: ["container_name"])
+                  |> max()
+                  |> group(columns: ["container_name"])
+                  |> sum()
+
+                join(tables: {a: anon, l: lim}, on: ["container_name"])
+                  |> filter(fn: (r) => r._value_l > 0)
+                  |> map(fn: (r) => ({
+                      _time: now(),
+                      container_name: r.container_name,
+                      _value: float(v: r._value_a) * 100.0 / float(v: r._value_l)}))
+                  |> keep(columns: ["_time", "_value", "container_name"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [85]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "Container {{ $labels.container_name }} anon memory above 85% of its limit"
+          description: "Unreclaimable (anon) memory is within 15% of the container's hard limit; the next allocation spike may trigger an OOM kill. Check the configured limit in docker/docker-compose.yml against actual use: sudo docker stats --no-stream {{ $labels.container_name }}. Either raise deploy.resources.limits.memory or find what is driving the allocation."
+        labels:
+          severity: warning
+
       - uid: critical-service-down
         title: Critical Service Down
         condition: B
