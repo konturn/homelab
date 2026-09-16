@@ -606,6 +606,14 @@ groups:
   # =========================================================================
   # UPS / Hardware Alerts
   # =========================================================================
+  #
+  # NOTE ON PROVISIONING: Grafana's file provisioner is an upsert, not a sync.
+  # Commenting a rule out of this file does NOT remove it from Grafana -- the
+  # rule stays in the Grafana DB with provenance=file and keeps evaluating.
+  # Between 2026-02-18 and 2026-09-16 this group was `rules: []` with the two
+  # UPS rules commented out, and both were still live and evaluating the whole
+  # time. To actually delete a provisioned rule, list its uid under a
+  # `deleteRules:` block; do not just comment it out.
   - orgId: 1
     name: hardware-alerts
     folder: General Alerting
@@ -656,6 +664,43 @@ groups:
         labels:
           severity: critical
 
+      # The old "snmp measurement not available" comment was stale. UPS SNMP
+      # polling (telegraf [[inputs.snmp]] against 10.4.128.8) does report:
+      # percent_charge, load, voltage, temperature, minutes, batterySeconds.
+      #
+      # Battery ladder is 80% warn -> 50% critical -> 30% critical. On a real
+      # outage all three fire in sequence; that escalation is intentional.
+      - uid: ups-battery-warning-80
+        title: UPS Battery Below 80%
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "snmp")
+                  |> filter(fn: (r) => r._field == "percent_charge")
+                  |> last()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: min, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [80]}}]}
+        noDataState: NoData
+        execErrState: Alerting
+        for: 2m
+        annotations:
+          summary: "UPS battery charge dropped below 80% — may be on battery power"
+        labels:
+          severity: warning
+
       - uid: ups-battery-low
         title: UPS Battery Low
         condition: C
@@ -684,6 +729,37 @@ groups:
         for: 2m
         annotations:
           summary: "UPS battery charge below 50%"
+        labels:
+          severity: critical
+
+      - uid: ups-battery-critical-30
+        title: UPS Battery Critical (<30%)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "snmp")
+                  |> filter(fn: (r) => r._field == "percent_charge")
+                  |> last()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: min, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [30]}}]}
+        noDataState: NoData
+        execErrState: Alerting
+        for: 1m
+        annotations:
+          summary: "UPS battery critically low — below 30%. Imminent power loss risk."
         labels:
           severity: critical
 
@@ -1009,3 +1085,40 @@ groups:
           summary: "SSH login attempt burst (>100 rejected attempts in 15min)"
         labels:
           severity: warning
+
+      # Created through the API on an earlier ad-hoc run and never committed, so
+      # it lived only in Grafana's DB. The uid is the Grafana-generated one on
+      # purpose: provisioning with a fresh uid would leave the API-created copy
+      # in place and evaluate the rule twice.
+      - uid: efeju4cob1ipsb
+        title: Vault Unavailable or Sealed
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "vault_health" and r._field == "sealed")
+                  |> last()
+                  |> map(fn: (r) => ({r with _value: if r._value == false then 0.0 else 1.0}))
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B}
+          - refId: C
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: Alerting
+        execErrState: Error
+        for: 2m
+        annotations:
+          summary: "Vault is either unreachable, sealed, or uninitialized. All secret-dependent operations will fail."
+          description: "Vault health check failed. Check if the Vault container is running and unsealed at 10.3.32.6:8200."
+        labels:
+          service: vault
+          severity: critical
