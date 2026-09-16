@@ -533,7 +533,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.2586@sha256:0e70d257f4825701f6588e4026e4a070b50b106e52a80074c1c6075aef139836
+    image: linuxserver/jackett:0.24.2601@sha256:9f9946008fa7c3ad471bbdcdc24c282e5093d51e2bdbadd3f4b3405025883bc1
     container_name: jackett
     security_opt:
       - no-new-privileges=true
@@ -700,7 +700,7 @@ services:
       - no-new-privileges=true
     cap_drop:
       - ALL
-    image: grafana/grafana:12.4.10-ubuntu@sha256:5d45861c3c7609c39be168e68eee120adcb3235e5760f5946108526259e7ea33
+    image: grafana/grafana:12.4.11-ubuntu@sha256:23f2328b859c7677c7065c81b479600706ef9cc9004977af5bbd68b159b8ea60
     ports:
       - "443:3000"
     networks:
@@ -868,7 +868,7 @@ services:
   # =============================================================================
   otel-collector:
     container_name: otel-collector
-    image: otel/opentelemetry-collector-contrib:0.160.0@sha256:799dc6cf12c96192af37b5bdba804da8c10b3bc563b43cb90c3f3c58d9572ad6
+    image: otel/opentelemetry-collector-contrib:0.161.0@sha256:fd328de2552466ad78385e1b1289c3f2402b1c45f265b252aab1955b42845ac1
     security_opt:
       - no-new-privileges=true
     cap_drop:
