@@ -146,10 +146,20 @@ router:bootstrap:
 # Base ansible job with caching
 # =============================================================================
 .ansible:
-  image: willhallonline/ansible:latest
+  # Pinned by digest. This was willhallonline/ansible:latest until 2026-09-18,
+  # when the upstream image rebased onto an Alpine that enforces PEP 668 and
+  # every validate job started failing in before_script with
+  # "error: externally-managed-environment" -- nothing in this repo changed.
+  # A floating tag on the CI base means an upstream rebuild can turn the whole
+  # pipeline red with no commit to point at, which is exactly what happened.
+  # Digest below is the same image the pipeline was already running.
+  image: willhallonline/ansible:latest@sha256:0020f4cee052e337a703a6706177972309bcfaea760ec1199ddc230c24334caf
   before_script:
     - mkdir -p /cache/pip /cache/ansible-roles
-    - pip3 install -q --cache-dir /cache/pip -r requirements.txt
+    # --break-system-packages is the documented PEP 668 escape hatch. The risk
+    # it guards against (clobbering an apk-managed python) does not apply to a
+    # disposable CI container that is discarded after the job.
+    - pip3 install -q --break-system-packages --cache-dir /cache/pip -r requirements.txt
     # Clean corrupted role directories (ansible-galaxy --force doesn't handle this)
     - |
       for d in /cache/ansible-roles/*/; do
