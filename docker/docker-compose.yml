@@ -669,14 +669,22 @@ services:
         ipv4_address: {{ influxdb_iot_ip }}
     image: influxdb:2.8.0@sha256:8e911da5f7b482230e61fe4bad9af0697d97a75e087f19f5f0ddfee62c2bd686
     restart: unless-stopped
-    # Memory (2026-09-01, 30d max): 2719M of 4096M = 66.4%; OOM-killed 2026-07-13
-    # at 4.15G anon-rss during a compaction spike. 6G covers the spike.
+    # Memory (2026-09-18, 14d max): 5662M anon of a 6144M limit = 92.2%.
+    #
+    # 6G no longer covers the compaction spike. The 2026-07-13 OOM kill happened
+    # at 4.15G anon-rss; the current peak is 1.5G past that and within 480M of
+    # the ceiling. Unlike deluge above, this is real anon memory, not page cache
+    # (file-backed pages are only ~409M), so it is genuinely OOM-exposed.
+    # influxdb also logged one restart in the 7d window ending 2026-09-18.
+    #
+    # 8G gives ~1.4x the observed anon peak; reservation raised to 2G so the
+    # compaction working set is not squeezed out under host memory pressure.
     deploy:
       resources:
         limits:
-          memory: 6G
+          memory: 8G
         reservations:
-          memory: 1G
+          memory: 2G
     volumes:
         - influxdb-storage:/var/lib/influxdb2
         - {{ docker_persistent_data_path }}/influxdb/config:/etc/influxdb2
@@ -1067,15 +1075,24 @@ services:
     networks:
       internal:
         ipv4_address: {{ deluge_ip }}
-    # Memory (2026-09-01, 30d max): 8192M of 8192M = 100.0% -- capped, OOM risk.
-    # Growth pattern 4G->6G->8G->12G indicates a libtorrent leak; tracked in #122.
-    # 12G is headroom, not a fix.
+    # Memory (2026-09-18, 14d max): 335M anon of a 12G limit = 2.7%.
+    #
+    # The 4G->6G->8G->12G escalation chased docker_container_mem.usage, which
+    # counts the cgroup page cache. Deluge streams torrent data through the page
+    # cache, so active_file+inactive_file grows to fill whatever limit is set and
+    # then stops -- that is the kernel caching, not deluge allocating. Splitting
+    # the same metric by field: anon (active_anon+inactive_anon, the only part
+    # that can OOM a cgroup) peaks at 335M, while file-backed cache sits at
+    # ~11.7G. Usage reads ~100% at 4G, at 12G, and would at 24G. Zero oomkilled
+    # events in the metric history. There is no leak; see #122.
+    #
+    # 2G is ~6x the observed anon peak and still leaves ~1.7G for page cache.
     deploy:
       resources:
         limits:
-          memory: 12G
+          memory: 2G
         reservations:
-          memory: 3G
+          memory: 256M
     volumes:
       - '{{ docker_persistent_data_path }}/deluge:/config'
       - '/mpool/samba_share/nfs:/downloads'
