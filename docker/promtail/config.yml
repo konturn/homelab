@@ -103,6 +103,23 @@ scrape_configs:
             - drop:
                 expression: '^\s*$'
                 drop_counter_reason: gitlab_blank_line
+      # Tempo 3.0 starts the backend scheduler/worker even when it runs as a
+      # single binary against local storage, where there is never any distributed
+      # compaction work to hand out. The worker polls the scheduler, gets an empty
+      # result, and logs it at level=error; the server side logs a matching gRPC
+      # warn. Both carry "no jobs found". Measured 2026-09-19: 4,108 lines/24h,
+      # which is 100% of the lines this container emits matching
+      # /error|fatal|panic|exception/ -- so an error-rate signal on tempo is
+      # entirely false positives until these are dropped. (Volume itself is not
+      # the problem: 4.1k/24h is 0.3% of docker ingest. Signal quality is.)
+      # Scoped to the exact empty-result string so genuine scheduler failures,
+      # which carry a different err=, still reach Loki.
+      - match:
+          selector: '{container="tempo"}'
+          stages:
+            - drop:
+                expression: 'no jobs found'
+                drop_counter_reason: tempo_scheduler_no_jobs
       # Redact credentials that upstream services embed in request URLs.
       # Telegraf logs the full URL when an HTTP input errors (Tautulli requires
       # its API key as a query parameter, so it cannot move to a header) and
