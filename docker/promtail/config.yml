@@ -103,6 +103,33 @@ scrape_configs:
             - drop:
                 expression: '^\s*$'
                 drop_counter_reason: gitlab_blank_line
+      # Loki indexes its own housekeeping chatter. The compactor logs a
+      # "compacting table"/"finished compacting table" pair and a "listed files"
+      # line for every index table on every compaction cycle, and index_set.go
+      # logs an upload/finished-upload/cleanup triple on every shipper flush.
+      # Measured 2026-09-20 over a 24h window: 160,114 lines from
+      # tables_manager.go + index_set.go, 32,807 "listed files", 5,760
+      # recalculate-owned-streams -- 198,681 lines/day, which is 94.6% of
+      # everything the loki container emits and 7.9% of total Loki ingest
+      # (2,520,059 lines/day). None of it is actionable; it restates that
+      # periodic maintenance ran on schedule.
+      #
+      # Every drop below is anchored on `level=info`, so any warn/error from the
+      # same callers still ships. Over that same 24h window those three callers
+      # emitted zero non-info lines, so today this drops only the success path --
+      # the day one of them starts failing, the failure is what survives.
+      - match:
+          selector: '{container="loki"}'
+          stages:
+            - drop:
+                expression: 'level=info .*caller=(index_set|tables_manager)\.go:'
+                drop_counter_reason: loki_compaction_chatter
+            - drop:
+                expression: 'level=info .*caller=table\.go:.*msg="listed files"'
+                drop_counter_reason: loki_listed_files
+            - drop:
+                expression: 'level=info .*recalculate owned streams'
+                drop_counter_reason: loki_owned_streams
       # Redact credentials that upstream services embed in request URLs.
       # Telegraf logs the full URL when an HTTP input errors (Tautulli requires
       # its API key as a query parameter, so it cannot move to a header) and
