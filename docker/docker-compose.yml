@@ -489,7 +489,7 @@ services:
       retries: 3
       start_period: 30s
   radarr:
-    image: linuxserver/radarr:6.4.4.10685-ls317@sha256:c960f2b52ec6542dbe6707c5a21e696a7c74fd8b17997454f4d10a55dacee133
+    image: linuxserver/radarr:6.4.4.10685-ls318@sha256:adb6c09d6b729ea5e642c99cea35af72702ef476bf4763f153299ac5db9f0b4f
     container_name: radarr
     security_opt:
       - no-new-privileges=true
@@ -533,7 +533,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.2627@sha256:7b19f4f6ac33d855ca9226600ecbd096ee678f66da28b13a7c09980b035ff583
+    image: linuxserver/jackett:0.24.2631@sha256:09625ac4c0dab70c9cfcb876109db3529dc6a670af17be0cc8240d894d6c6d90
     container_name: jackett
     security_opt:
       - no-new-privileges=true
