@@ -679,6 +679,8 @@ services:
     #
     # 8G gives ~1.4x the observed anon peak; reservation raised to 2G so the
     # compaction working set is not squeezed out under host memory pressure.
+    # 8G is the backstop, not the fix -- the spikes are Flux queries from the
+    # nightly infrastructure audit and are bounded by INFLUXD_QUERY_* below.
     deploy:
       resources:
         limits:
@@ -696,6 +698,36 @@ services:
       - DOCKER_INFLUXDB_INIT_BUCKET=metrics
       - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN={{ vault_influxdb_admin_token | default(lookup('env', 'INFLUXDB_ADMIN_TOKEN')) | trim | replace("$", "$$") }}
       - INFLUXD_PPROF_DISABLED=true
+      # Bound Flux query memory so one runaway query aborts instead of taking
+      # the database down. The 2026-09-12 kill was a single query: the kernel
+      # logged "Memory cgroup out of memory: Killed process 650901 (influxd)
+      # ... anon-rss:6245896kB" at 08:06:14 UTC, i.e. 5.96G in one process
+      # against a 6G limit.
+      #
+      # The load is self-inflicted and it is ours. Bucketing 16d of influxdb
+      # container memory by hour-of-day (UTC) puts every one of the top four
+      # peaks -- 5920M, 4604M, 4329M, 3455M -- in the 08:00-09:00 window, where
+      # the mean is 2056M against ~1050M for all 23 other hours and the max is
+      # ~1600M. The only cron job in that slot is the 04:00 America/New_York
+      # infrastructure audit, which sweeps 7-30d of docker_container_mem.
+      # Raising the ceiling alone just moves the next kill: 4G -> 6G was already
+      # meant to cover the 2026-07-13 kill at 4.15G, and the next spike was 6.2G.
+      #
+      # 2G per query is ~12x what a well-formed audit query needs -- today's
+      # 30d aggregateWindow sweeps moved the whole process from 800M to 973M,
+      # so ~170M of query memory -- and far above any dashboard or alert rule
+      # (alert rules read 15m windows). 3G total keeps the query ceiling plus
+      # the ~1.5G routine working set under the 8G limit above.
+      #
+      # INITIAL must be set explicitly: it defaults to query-memory-bytes, so
+      # setting only MEMORY_BYTES would have every query reserve 2G up front.
+      #
+      # This bounds the Flux allocator, which does not account for every
+      # storage-layer read, so it reduces the OOM risk rather than removing it.
+      # The 8G limit above stays as the backstop.
+      - INFLUXD_QUERY_INITIAL_MEMORY_BYTES=10485760
+      - INFLUXD_QUERY_MEMORY_BYTES=2147483648
+      - INFLUXD_QUERY_MAX_MEMORY_BYTES=3221225472
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
       interval: 30s
