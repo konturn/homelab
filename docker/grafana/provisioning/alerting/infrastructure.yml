@@ -610,70 +610,113 @@ groups:
     name: hardware-alerts
     folder: General Alerting
     interval: 1m
-    rules: []
-      # DISABLED: snmp measurement not available - enable when UPS SNMP monitoring is configured
-      # - uid: ups-battery-low
-      #   title: UPS Battery Low
-      #   condition: C
-      #   data:
-      #     - refId: A
-      #       relativeTimeRange: {from: 300, to: 0}
-      #       datasourceUid: influxdb
-      #       model:
-      #         query: |
-      #           from(bucket: "metrics")
-      #             |> range(start: -5m)
-      #             |> filter(fn: (r) => r._measurement == "snmp")
-      #             |> filter(fn: (r) => r._field == "percent_charge")
-      #             |> last()
-      #         refId: A
-      #     - refId: B
-      #       relativeTimeRange: {from: 0, to: 0}
-      #       datasourceUid: __expr__
-      #       model: {type: reduce, expression: A, reducer: min, refId: B, settings: {mode: dropNN}}
-      #     - refId: C
-      #       relativeTimeRange: {from: 0, to: 0}
-      #       datasourceUid: __expr__
-      #       model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [50]}}]}
-      #   noDataState: OK
-      #   execErrState: Error
-      #   for: 2m
-      #   annotations:
-      #     summary: "UPS battery charge below 50%"
-      #   labels:
-      #     severity: critical
+    rules:
+      # The UPS is monitored over SNMP by telegraf ([[inputs.snmp]], UPS-MIB via
+      # CyberPower) and lands in the "snmp" measurement. These rules were left
+      # commented out with "snmp measurement not available"; that reason is no
+      # longer true — the input has been collecting percent_charge, load,
+      # batterySeconds and minutes on a 30s interval. Nothing else writes to the
+      # "snmp" measurement (the Aruba switch inputs use name= overrides), so no
+      # source filter is needed.
 
-      # DISABLED: snmp measurement not available - enable when UPS SNMP monitoring is configured
-      # - uid: ups-high-load
-      #   title: UPS High Load
-      #   condition: C
-      #   data:
-      #     - refId: A
-      #       relativeTimeRange: {from: 300, to: 0}
-      #       datasourceUid: influxdb
-      #       model:
-      #         query: |
-      #           from(bucket: "metrics")
-      #             |> range(start: -5m)
-      #             |> filter(fn: (r) => r._measurement == "snmp")
-      #             |> filter(fn: (r) => r._field == "load")
-      #             |> last()
-      #         refId: A
-      #     - refId: B
-      #       relativeTimeRange: {from: 0, to: 0}
-      #       datasourceUid: __expr__
-      #       model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
-      #     - refId: C
-      #       relativeTimeRange: {from: 0, to: 0}
-      #       datasourceUid: __expr__
-      #       model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [80]}}]}
-      #   noDataState: OK
-      #   execErrState: Error
-      #   for: 5m
-      #   annotations:
-      #     summary: "UPS load above 80%"
-      #   labels:
-      #     severity: warning
+      # upsSecondsOnBattery is 0 on utility power and counts up the moment the
+      # UPS switches to battery. This is the alert that catches a power cut:
+      # charge stays near 100% and load is unchanged for the first several
+      # minutes, so the charge/load rules below would stay silent through an
+      # outage that is quietly burning the runtime budget.
+      - uid: ups-on-battery
+        title: UPS On Battery (utility power lost)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "snmp")
+                  |> filter(fn: (r) => r._field == "batterySeconds")
+                  |> last()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: "UPS is running on battery — utility power lost"
+          description: "Check `minutes` (upsEstimatedMinutesRemaining) for the remaining runtime budget before a hard shutdown."
+        labels:
+          severity: critical
+
+      - uid: ups-battery-low
+        title: UPS Battery Low
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "snmp")
+                  |> filter(fn: (r) => r._field == "percent_charge")
+                  |> last()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: min, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [50]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 2m
+        annotations:
+          summary: "UPS battery charge below 50%"
+        labels:
+          severity: critical
+
+      - uid: ups-high-load
+        title: UPS High Load
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "snmp")
+                  |> filter(fn: (r) => r._field == "load")
+                  |> last()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [80]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "UPS load above 80%"
+        labels:
+          severity: warning
 
   # =========================================================================
   # Backup Alerts
