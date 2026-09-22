@@ -33,8 +33,16 @@
 
 # === TELEGRAF ===
 # Exec plugins run arbitrary scripts on the host as telegraf user
-# (which has sudo access to smartctl). Protect scripts and config.
-/base/telegraf/                          @root
+# (which has sudo access to smartctl, granted in
+# /etc/sudoers.d/telegraf-smartctl). Protect scripts and config.
+#
+# The path is /docker/telegraf/. This rule read /base/telegraf/ until
+# 2026-09-22 and that directory has never existed, so the rule matched
+# nothing: telegraf.conf (3 [[inputs.exec]] blocks) and scripts/ were
+# self-mergeable by moltbot the whole time. The files are templated to
+# /etc/telegraf/ on the router by the docker_config entries in
+# ansible/inventory.yml, so a change here runs on the host.
+/docker/telegraf/                        @root
 
 # === DOCKER COMPOSE ===
 # Could mount host paths, add privileged containers, modify any service
