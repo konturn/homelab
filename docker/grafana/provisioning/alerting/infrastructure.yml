@@ -167,6 +167,65 @@ groups:
     folder: General Alerting
     interval: 1m
     rules:
+      # A host that stops reporting is invisible to every other rule in this
+      # file. high-memory-usage, high-cpu-temps, disk-space-*, smart-* and
+      # critical-service-down all read the *last* sample for a host or
+      # container; when the host dies there is no last sample, the series
+      # simply stops existing, and each of those rules resolves to Normal.
+      # The only trace left was a warning-severity "IoT Device Unreachable"
+      # ping alert, which cannot tell a flat camera battery apart from an
+      # Ansible-managed Docker host going away.
+      #
+      # This rule measures staleness directly: minutes since each host last
+      # wrote mem.used_percent. Telegraf writes every 10s, so 20 minutes is
+      # 120 consecutive missed samples — generous enough not to flap on a
+      # reboot or a brief network blip.
+      #
+      # The 7d lookback is deliberate. A 5m or 24h window would only contain
+      # hosts that are *currently* healthy, so a host already dead when the
+      # rule is installed would never appear in the query at all and would
+      # never fire. 7d means a host stays flagged for a week after it dies,
+      # which is the behaviour you want for a machine you have not fixed yet,
+      # and means a genuinely decommissioned host ages out on its own.
+      - uid: host-metrics-stale
+        title: Host Metrics Stale (host not reporting)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 604800, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -7d)
+                  |> filter(fn: (r) => r._measurement == "mem")
+                  |> filter(fn: (r) => r._field == "used_percent")
+                  |> group(columns: ["host"])
+                  |> last()
+                  |> map(fn: (r) => ({
+                      host: r.host,
+                      _time: now(),
+                      _value: float(v: int(v: now()) - int(v: r._time)) / 60000000000.0,
+                    }))
+                  |> keep(columns: ["_time", "_value", "host"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [20]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        annotations:
+          summary: "Host {{ $labels.host }} has not reported metrics in {{ $values.B }} minutes"
+          description: "Telegraf writes mem.used_percent every 10s. Check the host is powered on and reachable, then: systemctl status telegraf"
+        labels:
+          severity: critical
+
       - uid: high-memory-usage
         title: High Memory Usage (90%+)
         condition: C
