@@ -533,7 +533,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.2631@sha256:09625ac4c0dab70c9cfcb876109db3529dc6a670af17be0cc8240d894d6c6d90
+    image: linuxserver/jackett:0.24.2651@sha256:621c778388a44df6b4c17d0069f7ffc1325433e067c5649bb6d9dca7045c910e
     container_name: jackett
     security_opt:
       - no-new-privileges=true
@@ -1112,7 +1112,7 @@ services:
       retries: 3
       start_period: 30s
   blog:
-    image: wordpress:7.1.1-php8.3-apache@sha256:eb039176b52f169c169b04d788a997646698432d69f7ef5252d9de96465b82d4
+    image: wordpress:7.1.2-php8.3-apache@sha256:bb209c8ab111746f22f578b870d866eb3f3da6028998a608202b706675450ecd
     container_name: wordpress
     security_opt:
       - no-new-privileges=true
