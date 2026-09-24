@@ -2078,10 +2078,19 @@ services:
     networks:
       internal:
         ipv4_address: "{{ chromium_browser_ip }}"
+    # Memory: the daily job-scout run drives this browser via CDP and peaks at
+    # ~950-1050M (09-21 1000M, 09-22 1052M, 09-23 943M) against the old 2G cap.
+    # On 2026-09-24 that run needed more and the cgroup OOM-killer took a renderer:
+    #   Memory cgroup out of memory: Killed process 3513936 (chromium)
+    #   total-vm:1518665552kB, anon-rss:1634796kB, ... oom_score_adj:300
+    # constraint=CONSTRAINT_MEMCG, so this was the container's own 2G limit, not
+    # host pressure (router had 54G free). The observed 2045M peak is censored at
+    # the limit, so true demand is unknown -- 4G is ~4x the routine peak and >=2x
+    # the censored one. No reservation: the failure was the ceiling, not scheduling.
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 4G
     volumes:
       - "{{ docker_persistent_data_path }}/chromium-browser/profile:/data/chrome-profile"
       - "{{ docker_persistent_data_path }}/chromium-browser/uploads:/uploads:ro"
