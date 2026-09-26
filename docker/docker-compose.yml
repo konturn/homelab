@@ -453,7 +453,7 @@ services:
   # Path overrides (MainDir=/remote, DestDir/TempDir/etc under /remote) were
   # applied manually to /persistent_data/application/nzbget/nzbget.conf.
   nzbget:
-    image: linuxserver/nzbget:26.3.20260918@sha256:3b92679543623c8710fec557de7dd525d55bb5dfc8c59526f054123eaae0f995
+    image: linuxserver/nzbget:26.3.20260925@sha256:ac88c1293bec960e287bdaaca174020fab4c0f179f739e26f500d3def8015ed7
     container_name: nzbget
     security_opt:
       - no-new-privileges=true
@@ -533,7 +533,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.2663@sha256:139a0819074ef16556399a66ee3c492f0d202ec20467cf9300d7126b8a31f2b5
+    image: linuxserver/jackett:0.24.2668@sha256:6a6afce83a02373d5ca87dd2115136fc08f4a52cc2897880c0d2c28563bf62ce
     container_name: jackett
     security_opt:
       - no-new-privileges=true
@@ -566,7 +566,7 @@ services:
       retries: 3
       start_period: 30s
   sonarr:
-    image: linuxserver/sonarr:4.0.20.3014-ls325@sha256:a5c1a5fecbef946927ab90ad68df319ac5fe644057e5fc18cd993f01ac07b2b2
+    image: linuxserver/sonarr:4.0.20.3014-ls326@sha256:f247545d23ba8b233d6604575347e48a623fe6ad75dda02348bf81917f3b5c06
     container_name: sonarr
     security_opt:
       - no-new-privileges=true
