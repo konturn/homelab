@@ -1009,3 +1009,77 @@ groups:
           summary: "SSH login attempt burst (>100 rejected attempts in 15min)"
         labels:
           severity: warning
+
+  - orgId: 1
+    name: log-volume-alerts
+    folder: General Alerting
+    interval: 15m
+    rules:
+      # A single container can go from a handful of lines an hour to five figures
+      # without anything crashing, restarting or OOMing -- so none of the existing
+      # container rules see it. Every log flood in this lab so far was found by a
+      # human or agent eyeballing Loki volume long after the fact:
+      #
+      #   !716  SMBus probe flood        42.7% of all Loki ingest
+      #   !715  GitLab DEBUG lines       150k/day, 26.5% of GitLab volume
+      #   !722  Loki compaction chatter  7.9% of all Loki ingest
+      #   !721  Tempo scheduler noise
+      #
+      # This rule is the detector those four were missing.
+      #
+      # Why the expression looks the way it does -- each clause is load-bearing and
+      # was tuned against 48h of real log data, not guessed:
+      #
+      #   > 3000 (absolute floor)
+      #     Without it, a container idling at 2 lines/h that briefly reaches 40
+      #     trips a 20x ratio and pages for nothing. 3000/h is above every benign
+      #     burst measured in 48h -- nzbget's post-download cleanup chatter peaks
+      #     at 1339/h -- and well under the flood this was written for (15000/h).
+      #
+      #   ratio > 10 vs the SAME container 24h earlier
+      #     A single absolute threshold cannot work here. GitLab steadily writes
+      #     ~21000 lines/h while healthy, so any absolute limit that catches
+      #     radarr's 15000/h flood would page on GitLab continuously. Comparing a
+      #     container to its own recent past is what separates "loud" from
+      #     "newly loud". Offset 24h rather than a longer window so a flood that
+      #     has been running for days still reads as elevated for at least a day.
+      #
+      #   + 60 on the denominator
+      #     Guards against divide-by-near-zero. A container that logs 1 line/h
+      #     baseline would otherwise show a 15000x ratio from any activity at all.
+      #
+      # Verified against live Loki over the 48h to 2026-09-26T09:00Z: fires on
+      # radarr for exactly the 5 hours of the real flood (05:00-09:00Z) and on
+      # nothing else in that window. for: 1h additionally drops single-hour bursts.
+      - uid: container-log-flood
+        title: Container Log Flood (rate 10x its own 24h baseline)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 90000, to: 0}
+            datasourceUid: loki
+            model:
+              expr: '(sum by (container) (count_over_time({job="docker"}[1h])) > 3000) and (sum by (container) (count_over_time({job="docker"}[1h])) / (sum by (container) (count_over_time({job="docker"}[1h] offset 24h)) + 60) > 10)'
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B, settings: {mode: replaceNN, replaceWithValue: 0}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 1h
+        annotations:
+          summary: "{{ $labels.container }} log rate is 10x its own 24h baseline (>3000 lines/hour)"
+          description: >-
+            A container is flooding Loki. This is usually a stuck retry loop, not a
+            crash -- the container stays healthy and keeps failing the same operation.
+            Find the repeated line first, and read it before trusting what it says:
+            the 2026-09-26 radarr flood printed "make sure ffprobe is available" while
+            ffprobe was present and working fine.
+            Check: logcli query '{container="<name>"}' --limit=50 --since=15m
+        labels:
+          severity: warning
