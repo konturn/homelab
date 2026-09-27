@@ -251,6 +251,14 @@ groups:
                   |> filter(fn: (r) => r._field == "used_percent")
                   |> filter(fn: (r) => r.device !~ /^loop/)
                   |> filter(fn: (r) => r.path !~ /^\/snap/)
+                  // ZFS datasets are not independent filesystems -- every
+                  // dataset in a pool reports the SAME free space (the pool's),
+                  // while used_percent is computed against its own
+                  // used+available. So the percentage measures the dataset's
+                  // share of the pool, not how close anything is to being
+                  // full. Keeping only the pool root (device has no "/") gives
+                  // one honest number per pool and covers every dataset in it.
+                  |> filter(fn: (r) => not (r.fstype == "zfs" and r.device =~ /\//))
                   |> group(columns: ["device", "path", "host"])
                   |> mean()
                   |> map(fn: (r) => ({r with _time: now()}))
@@ -290,6 +298,14 @@ groups:
                   |> filter(fn: (r) => r._field == "used_percent")
                   |> filter(fn: (r) => r.device !~ /^loop/)
                   |> filter(fn: (r) => r.path !~ /^\/snap/)
+                  // ZFS datasets are not independent filesystems -- every
+                  // dataset in a pool reports the SAME free space (the pool's),
+                  // while used_percent is computed against its own
+                  // used+available. So the percentage measures the dataset's
+                  // share of the pool, not how close anything is to being
+                  // full. Keeping only the pool root (device has no "/") gives
+                  // one honest number per pool and covers every dataset in it.
+                  |> filter(fn: (r) => not (r.fstype == "zfs" and r.device =~ /\//))
                   |> group(columns: ["device", "path", "host"])
                   |> mean()
                   |> map(fn: (r) => ({r with _time: now()}))
