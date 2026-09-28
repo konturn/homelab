@@ -533,7 +533,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.2670@sha256:cf98e630224a3d8788926fd31e8a97c6c1a6f138b15cd7a3c795867d0fc954d4
+    image: linuxserver/jackett:0.24.2685@sha256:db88a0d72753c75a21156ae422af16a75963788bcd1763ea12e75cf9413ba2f0
     container_name: jackett
     security_opt:
       - no-new-privileges=true
@@ -1220,7 +1220,7 @@ services:
     devices: 
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_ETDRb11A920-if00-port0:/dev/ttyUSB0"
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0:/dev/ttyUSB1"
-    image: "homeassistant/home-assistant:2026.9.3@sha256:d8922685169707fd91e8b9729902d975f06157d005e422874d201e0261dda196"
+    image: "homeassistant/home-assistant:2026.9.4@sha256:3e6710a7ab2a61311d9d899b719f6c3657791c63e8f4942cec4ebc42401d6b76"
     deploy:
       resources:
         limits:
