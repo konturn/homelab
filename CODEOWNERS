@@ -31,6 +31,19 @@
 # Could run arbitrary commands during CI, exfiltrate secrets
 /.gitlab-ci.yml                          @root
 
+# The runner config is a superset of the .gitlab-ci.yml gate above: it decides
+# what every CI container is allowed to be, so it can grant anything that file
+# could ask for. It is templated to /etc/gitlab-runner/config.toml on the router
+# as root (ansible/roles/configure-base/tasks/main.yml, "Gitlab runner config
+# file"), and today it sets privileged, network_mode = "host", the host volume
+# mounts (incl. the docker-proxy TLS client certs) and the environment applied to
+# every job. Flipping privileged to true, mounting / or the vault data dir, or
+# adding an env var reaches the host without ever touching a gated path.
+# Ungated until 2026-09-29 while /.gitlab-ci.yml, /base/systemd/ and /ansible/
+# all were gated, which made the CI gate bypassable from an unreviewed file.
+# It also carries the memory/memory_swap blast-radius ceiling for build jobs.
+/base/gitlab-runner/                     @root
+
 # === TELEGRAF ===
 # Exec plugins run arbitrary scripts on the host as telegraf user
 # (which has sudo access to smartctl, granted in
