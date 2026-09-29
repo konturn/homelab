@@ -95,22 +95,44 @@ groups:
         labels:
           severity: critical
 
+      # oomkilled is a per-container flag that Docker clears when the container
+      # is recreated, so within any window it reads true for a while and then
+      # false again. The original query ran last() BEFORE filtering for true,
+      # so it sampled whatever the flag happened to be at the end of the window
+      # -- almost always false, because the container has restarted by then --
+      # and the true-filter then dropped that row. The result was zero rows,
+      # which noDataState: OK turns into Normal. Measured 2026-09-29: over
+      # 07:56-08:01Z the window held 24 consecutive oomkilled=true samples for
+      # chromium-browser and the rule still returned 0 rows. Four real OOM
+      # episodes (09-24, 09-26, 09-28, 09-29) never alerted.
+      #
+      # Fix is the ordering that "Container Health Check Failed" above already
+      # uses: filter for the condition FIRST, then aggregate. max() over the
+      # window means any OOM anywhere in it fires, rather than only one still
+      # visible at the final sample.
+      #
+      # Window widened 5m -> 15m so a short episode cannot fall between two
+      # evaluations, and _time is rewritten to now() for the same reason the
+      # restart-loop rule does it: max() carries the sample's original
+      # timestamp, which Grafana would otherwise treat as stale.
       - uid: container-oom-kill
         title: Container OOM Kill
         condition: C
         data:
           - refId: A
-            relativeTimeRange: {from: 300, to: 0}
+            relativeTimeRange: {from: 900, to: 0}
             datasourceUid: influxdb
             model:
               query: |
                 from(bucket: "metrics")
-                  |> range(start: -5m)
+                  |> range(start: -15m)
                   |> filter(fn: (r) => r._measurement == "docker_container_status")
                   |> filter(fn: (r) => r._field == "oomkilled")
-                  |> last()
                   |> filter(fn: (r) => r._value == true)
                   |> map(fn: (r) => ({r with _value: 1}))
+                  |> group(columns: ["container_name"])
+                  |> max()
+                  |> map(fn: (r) => ({r with _time: now()}))
                   |> keep(columns: ["_time", "_value", "container_name"])
               refId: A
           - refId: B
@@ -125,7 +147,7 @@ groups:
         execErrState: Error
         for: 5m
         annotations:
-          summary: "Container killed by OOM"
+          summary: "Container {{ $labels.container_name }} killed by OOM"
         labels:
           severity: critical
 
