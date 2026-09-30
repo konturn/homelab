@@ -151,6 +151,65 @@ groups:
         labels:
           severity: critical
 
+      # The rule above reads a per-container metric, which means it cannot see
+      # the one OOM kill that matters most: InfluxDB's own. telegraf writes
+      # docker_container_status *into* InfluxDB, so when InfluxDB is the process
+      # the kernel kills, the sample recording that fact has nowhere to go. Any
+      # container whose death takes the metrics pipeline down with it is
+      # structurally invisible to container-oom-kill.
+      #
+      # Measured 2026-09-30, and this is the whole argument for keeping both
+      # rules: over 30 days InfluxDB has *zero* oomkilled=true samples, while
+      # its own uptime_ns shows it restarting with <30 s of uptime on 09-02,
+      # 09-05 and 09-13. Same window, chromium-browser has 3,268 true samples
+      # and nextcloud 13,635. The metric is not broken -- it simply cannot
+      # report the collector's own death.
+      #
+      # The kernel's memcg line survives that, because it goes to the journal
+      # and promtail ships it to Loki, a different store on a different path.
+      # Verified present: 7 "Memory cgroup out of memory" lines in the last 7
+      # days, each naming the killed process and its anon-rss.
+      #
+      # This rule is the journal half of !712, kept alongside the metric half
+      # rather than replacing it. !712 proposed swapping container-oom-kill over
+      # to this query outright, on the evidence of the InfluxDB kill above. That
+      # evidence is real but does not generalise: swapping would trade away the
+      # container_name label (the journal line carries a *process* name, so
+      # "chromium" rather than "chromium-browser") and would inherit Loki's
+      # delivery gaps -- per !698 the satellite hosts currently ship zero logs,
+      # while they do still report telegraf metrics. Two cheap rules, two
+      # independent failure paths.
+      - uid: kernel-oom-kill
+        title: Kernel OOM Kill (catches the collector's own death)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({job="systemd-journal"} |= "Memory cgroup out of memory" [15m]))'
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: replaceNN, replaceWithValue: 0}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        # for: 0s, unlike container-oom-kill's 5m. A journal line is a single
+        # instant, not a state that persists to be re-sampled; requiring it to
+        # hold for five minutes is the mistake that made the original metric
+        # rule unfireable.
+        for: 0s
+        annotations:
+          summary: "A container was killed by the kernel OOM killer"
+          description: "If Container OOM Kill did not also fire, the victim was probably the metrics collector itself. Which process and how much it held: journalctl -k --since '15 minutes ago' | grep 'Memory cgroup out of memory'. Then raise that container's deploy.resources.limits.memory in docker/docker-compose.yml."
+        labels:
+          severity: critical
+
       - uid: critical-service-down
         title: Critical Service Down
         condition: B
