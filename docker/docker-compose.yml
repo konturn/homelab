@@ -533,7 +533,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.2685@sha256:db88a0d72753c75a21156ae422af16a75963788bcd1763ea12e75cf9413ba2f0
+    image: linuxserver/jackett:0.24.2738@sha256:1ae127808334af460d8aa39cdd15f8ddc6b22e931eb0e908a924741d8cbe1ef6
     container_name: jackett
     security_opt:
       - no-new-privileges=true
@@ -700,7 +700,7 @@ services:
       - no-new-privileges=true
     cap_drop:
       - ALL
-    image: grafana/grafana:12.4.11-ubuntu@sha256:23f2328b859c7677c7065c81b479600706ef9cc9004977af5bbd68b159b8ea60
+    image: grafana/grafana:12.4.12-ubuntu@sha256:9d71f26403380c2150fd9365cf85f14b68c0ab54c91fdfdccbfb023f03bde54b
     ports:
       - "443:3000"
     networks:
@@ -832,7 +832,7 @@ services:
   # =============================================================================
   tempo:
     container_name: tempo
-    image: grafana/tempo:3.0.3@sha256:0296560ac66f8a3600d7fb3014a52c189d4d9c3549ad6ff441bf2409855d68d5
+    image: grafana/tempo:3.1.0@sha256:3076b8dcdfb32fd6bc5ccef85e7b7313e6199b9cb84366257fc17ecb696db5fd
     security_opt:
       - no-new-privileges=true
     cap_drop:
@@ -1195,7 +1195,7 @@ services:
       - "443:8080"
     networks:
       internal:
-    image: jgraph/drawio:31.4.6@sha256:4bd19d4bc36b65cabf1ae9c5d234597e564416b6c67f7d4db296c2df758fcb52
+    image: jgraph/drawio:31.5.3@sha256:03df6174f15aaad2df7f8465720860e3930a658a8790bdb0d131606dc6acb32a
     restart: unless-stopped
     # Memory right-sized (March 2026 audit): 7-day peak 158MB, avg 140MB.
     # 768M was 5x peak. 384M gives 2.4x headroom over peak.
