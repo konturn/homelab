@@ -22,6 +22,13 @@ distributor:
 storage:
   trace:
     backend: local
+    # Pin the write format. Tempo 3.1.0 makes vParquet5 the default; blocks it
+    # writes cannot be read by 3.0.x, so taking the default would make the
+    # image pin a one-way door -- a rollback would silently drop every trace
+    # written since the upgrade. Reading vParquet5 is unaffected either way.
+    # Drop this `block:` stanza as a separate, deliberate change to adopt vParquet5.
+    block:
+      version: vParquet4
     local:
       path: /var/tempo/traces
     wal:
