@@ -1195,7 +1195,7 @@ services:
       - "443:8080"
     networks:
       internal:
-    image: jgraph/drawio:31.5.3@sha256:03df6174f15aaad2df7f8465720860e3930a658a8790bdb0d131606dc6acb32a
+    image: jgraph/drawio:31.6.1@sha256:54a3a3e6e8f9ff9bf5ee3a722d8ebe3f497da3addbcf14ef62938d07854b2561
     restart: unless-stopped
     # Memory right-sized (March 2026 audit): 7-day peak 158MB, avg 140MB.
     # 768M was 5x peak. 384M gives 2.4x headroom over peak.
@@ -1639,7 +1639,7 @@ services:
     cap_drop:
       - ALL
     restart: unless-stopped
-    image: koenkk/zigbee2mqtt:2.14.1@sha256:fef0de769dcd04c27b3a6d277b61046eb96284bdd4198dcb1687c3a01b3020f3
+    image: koenkk/zigbee2mqtt:2.14.2@sha256:addbfb08fcef2e4477de1535636118241e10d13e898fbe4d9faba8a4d7396311
     depends_on:
       mosquitto:
         condition: service_healthy
