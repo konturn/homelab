@@ -453,7 +453,7 @@ services:
   # Path overrides (MainDir=/remote, DestDir/TempDir/etc under /remote) were
   # applied manually to /persistent_data/application/nzbget/nzbget.conf.
   nzbget:
-    image: linuxserver/nzbget:26.3.20260925@sha256:ac88c1293bec960e287bdaaca174020fab4c0f179f739e26f500d3def8015ed7
+    image: linuxserver/nzbget:26.3.20261002@sha256:f9fcc04ca26aa113a2b97aeeb90f1f8c4370234e0b620604422e19c209270ffd
     container_name: nzbget
     security_opt:
       - no-new-privileges=true
@@ -533,7 +533,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.2748@sha256:099e895abbeb4564f8c5cb5f2def66462d73dffa39728a1a106af79ff1b04e65
+    image: linuxserver/jackett:0.24.2756@sha256:3226a597c6a69b072e9d6b5af74a9fa425a5f979c74afe3e545d9890ab0406a1
     container_name: jackett
     security_opt:
       - no-new-privileges=true
