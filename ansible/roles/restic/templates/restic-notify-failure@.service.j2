@@ -3,4 +3,23 @@ Description=Send failure notification for %i
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash -c 'printf "Subject: [ALERT] Restic failure: %i\nFrom: restic@{{ inventory_hostname }}\nTo: konoahko@gmail.com\n\nRestic unit %i failed on {{ inventory_hostname }} at $(date).\n\nRecent logs:\n$(journalctl -u %i --no-pager -n 30 2>&1)" | /usr/sbin/sendmail konoahko@gmail.com'
+# The journal text is passed as a printf *argument*, not interpolated into the
+# format string. It used to be part of the format, and restic's own output is
+# full of percent signs -- 12 of the 36 restic-check.service journal lines in
+# the last 30 days contain one ("[12:03] 100.00%  4327 / 4327 packs", "read
+# 5.0% of data packs"). bash printf aborts on the first percent it cannot
+# parse as a conversion:
+#
+#   $ printf "logs:\n[0:15] 25.00%  12 / 48\n"
+#   logs:
+#   bash: printf: ` ': invalid format character
+#
+# so the mail was truncated at the first percent sign, discarding every log
+# line after it. It still *sent*: printf's nonzero exit is thrown away because
+# sendmail is the last stage of the pipeline. The alert therefore arrived
+# looking normal and gutted of the only thing it exists to carry.
+#
+# The doubled percent in "%%s" is deliberate -- systemd collapses %% to a
+# literal %, so bash receives "%s\n". A bare %s would be expanded by systemd
+# first, as the user-shell specifier.
+ExecStart=/bin/bash -c 'printf "%%s\n" "Subject: [ALERT] Restic failure: %i" "From: restic@{{ inventory_hostname }}" "To: konoahko@gmail.com" "" "Restic unit %i failed on {{ inventory_hostname }} at $(date)." "" "Recent logs:" "$(journalctl -u %i --no-pager -n 30 2>&1)" | /usr/sbin/sendmail konoahko@gmail.com'
