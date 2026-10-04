@@ -533,7 +533,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.2756@sha256:3226a597c6a69b072e9d6b5af74a9fa425a5f979c74afe3e545d9890ab0406a1
+    image: linuxserver/jackett:0.24.2780@sha256:f65be29dc13f9e7665ba178235f5e00ca0e147a9bf7de7715c0249237bf685d2
     container_name: jackett
     security_opt:
       - no-new-privileges=true
@@ -1195,7 +1195,7 @@ services:
       - "443:8080"
     networks:
       internal:
-    image: jgraph/drawio:31.6.1@sha256:54a3a3e6e8f9ff9bf5ee3a722d8ebe3f497da3addbcf14ef62938d07854b2561
+    image: jgraph/drawio:31.7.0@sha256:43f5a9142fb9963cb64eca332b722a0b109975dc84c0880765911e3c0e0ba0fa
     restart: unless-stopped
     # Memory right-sized (March 2026 audit): 7-day peak 158MB, avg 140MB.
     # 768M was 5x peak. 384M gives 2.4x headroom over peak.
