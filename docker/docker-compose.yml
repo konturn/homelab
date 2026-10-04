@@ -669,8 +669,24 @@ services:
         ipv4_address: {{ influxdb_iot_ip }}
     image: influxdb:2.8.0@sha256:8e911da5f7b482230e61fe4bad9af0697d97a75e087f19f5f0ddfee62c2bd686
     restart: unless-stopped
-    # Memory (2026-09-01, 30d max): 2719M of 4096M = 66.4%; OOM-killed 2026-07-13
-    # at 4.15G anon-rss during a compaction spike. 6G covers the spike.
+    # Memory (2026-10-04, 45d): baseline RSS is 810-880M. Every excursion above
+    # 3G in those 45 days -- all 53 samples, on 6 separate days -- lands inside
+    # 08:03-08:37 UTC, which is the first half hour of the 04:00 America/New_York
+    # infrastructure-audit cron. Nothing else runs in that window. On 2026-09-12
+    # the audit's Flux drove RSS to 5920M (96.4% of the 6G limit) and influxdb
+    # died at ~08:06:15 (next uptime_ns sample: 7s). docker_container_status
+    # .oomkilled never recorded it, and cannot: influxdb is the sink those samples
+    # are written to, so the kill takes the evidence with it.
+    #
+    # So the 2026-07-13 "compaction spike" reading was wrong, and raising 4G -> 6G
+    # to "cover the spike" lost the race -- an unbounded query will take whatever
+    # the limit is. The limit is not the control; query admission is. The three
+    # query-* caps below make a greedy query fail with "memory allocation limit
+    # reached" instead of taking the whole metrics database (and therefore every
+    # alert that reads it) down with it.
+    #
+    # Sizing: 1.5G per query x 3G aggregate + ~2G engine working set (observed
+    # non-query max 2030M) = ~5G worst case, inside the 6G limit with headroom.
     deploy:
       resources:
         limits:
@@ -688,6 +704,15 @@ services:
       - DOCKER_INFLUXDB_INIT_BUCKET=metrics
       - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN={{ vault_influxdb_admin_token | default(lookup('env', 'INFLUXDB_ADMIN_TOKEN')) | trim | replace("$", "$$") }}
       - INFLUXD_PPROF_DISABLED=true
+      # Query admission control -- see the memory note above. Defaults are
+      # unlimited per-query, unlimited total, unlimited concurrency, so one
+      # query can consume the container's entire memory limit.
+      # query-max-memory-bytes defaults to concurrency x memory-bytes; it is set
+      # explicitly here so the aggregate cap (3G) binds first, not 16 x 1.5G.
+      - INFLUXD_QUERY_CONCURRENCY=16
+      - INFLUXD_QUERY_MEMORY_BYTES=1610612736
+      - INFLUXD_QUERY_MAX_MEMORY_BYTES=3221225472
+      - INFLUXD_QUERY_QUEUE_SIZE=64
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
       interval: 30s
