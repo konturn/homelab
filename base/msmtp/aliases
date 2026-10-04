@@ -1,0 +1,18 @@
+# msmtp aliases — maps local (unqualified) recipients to a real address.
+#
+# Gmail rejects bare local recipients outright:
+#   553 5.1.3 The recipient address <root> is not a valid RFC 5321 address
+#   -> msmtp "could not send mail", sendmail exit 65
+#
+# smartmontools hit this on every single run for at least 29 days (the full
+# Loki retention window), so disk pre-failure mail has never been delivered
+# while sdb and sdk sit flagged for pre-failure sectors (#136).
+#
+# Only recipients with no '@' are rewritten, so anything already addressed to
+# a real mailbox (restic's notifier, for example) is untouched.
+root: konoahko@gmail.com
+
+# Catch-all for any other local sender — cron, mdadm, apt, logwatch. Without
+# a default, an unmatched local address is passed through unchanged and is
+# rejected the same way root was.
+default: konoahko@gmail.com

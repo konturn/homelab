@@ -1,3 +1,16 @@
+- name: Deploy msmtp aliases file
+  # /etc/msmtprc points at this with `aliases`. Without it msmtp passes local
+  # recipients through verbatim and Gmail 553s them -- see the file's header.
+  # Deployed BEFORE msmtprc: msmtprc is the file that names this path, so if
+  # the order were reversed there would be a window where msmtp is configured
+  # to read an aliases file that does not exist yet.
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/msmtp/aliases' }}"
+    dest: /etc/msmtp-aliases
+    owner: root
+    group: root
+    mode: '0644'
+
 - name: Deploy msmtp configuration
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/msmtp/msmtprc' }}"
