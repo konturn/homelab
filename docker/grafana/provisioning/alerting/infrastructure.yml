@@ -441,6 +441,86 @@ groups:
         labels:
           severity: warning
 
+      # -----------------------------------------------------------------
+      # Counts systemd unit FAILURE EVENTS from the journal instead of
+      # sampling unit state, because state is the wrong instrument class for
+      # this and we had the data to prove it. Measured 2026-10-05 over the
+      # full 29-day Loki retention window, four units failed on router:
+      #
+      #   snap.certbot.renew.service   2/day, every single day
+      #   logrotate.service            1/day, every single day
+      #   mullvad-failover.service     1 event in 7d
+      #   rpc-svcgssd.service          1 event in 7d
+      #
+      # inputs.systemd_units reported none of them, for two different reasons:
+      #
+      #  1. Coverage. telegraf.conf:378 is an allow-list
+      #     ("docker* ssh* telegraf* nginx* restic* mullvad-failover*"), so
+      #     certbot, logrotate and rpc-svcgssd are not collected at all. 11
+      #     units, one host.
+      #  2. Instrument class, and this is the half a wider pattern would not
+      #     fix. mullvad-failover.service IS in that pattern and still never
+      #     alerted. active_code + last() only reports a failure that is still
+      #     the unit's most recent outcome at sample time; a unit that fails
+      #     and is later re-run successfully reads inactive (2), not failed
+      #     (3). With for: 15m on the active_code rules, an intermittent
+      #     failure of a frequently-run unit cannot alert, ever.
+      #
+      # Which is why the only systemd instance that has ever fired is
+      # restic-notify-failure@restic-check.service.service -- it is LATCHED,
+      # the one case a state sampler can see. That single red instance has
+      # been reading as "systemd coverage works". It does not.
+      #
+      # This rule starts out firing on certbot and logrotate. That is the
+      # finding, not a defect: both have failed daily for at least 29 days
+      # with no notification. The always-red objection that shaped the restic
+      # rules (see "Restic Unit Failed" below) does not apply here, because
+      # failed_unit is a label -- a new unit failing is a NEW alert instance,
+      # distinguishable from the known-chronic ones rather than absorbed by
+      # them.
+      #
+      # Neither chronic failure logs a reason; systemd's wrapper lines are all
+      # the journal has ("Main process exited, code=exited, status=1/FAILURE").
+      # certbot -q is quiet by design and logrotate emits nothing. Diagnosis
+      # needs journalctl -u on the router. Note certbot here is a dead second
+      # renewal path -- real renewal is networking/ssl/renew.sh via root cron,
+      # and all 44 monitored certs are valid with 69+ days to expiry.
+      #
+      # Only router ships job="systemd-journal" today, so despite the host
+      # label this is single-host coverage until promtail's journal scrape is
+      # extended to the satellites.
+      - uid: systemd-unit-failed-event
+        title: Systemd Unit Failure
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: loki
+            model:
+              # The unit name is in the message body, not in a label: these
+              # lines come from PID 1, so the stream carries init.scope rather
+              # than the unit that failed. Hence the regexp extraction.
+              expr: 'sum by (failed_unit, host) (count_over_time({job="systemd-journal"} |= "Failed with result" | regexp "(?P<failed_unit>[^ ]+): Failed with result" [15m]))'
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: replaceNN, replaceWithValue: 0}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        # Event-counting, not state-sampling: a for: window would re-introduce
+        # exactly the blindness to transient failures this rule exists to fix.
+        for: 0s
+        annotations:
+          summary: "systemd unit {{ $labels.failed_unit }} failed on {{ $labels.host }}"
+          description: "The unit exited non-zero at least once in the last 15 minutes. Check: journalctl -u {{ $labels.failed_unit }} -n 50 --no-pager"
+        labels:
+          severity: warning
+
   # =========================================================================
   # Network Alerts
   # =========================================================================
