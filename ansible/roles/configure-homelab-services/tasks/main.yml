@@ -655,6 +655,45 @@
     job: >-
       /usr/local/bin/scrub-transcripts.sh {{ docker_persistent_data_path }}/openclaw/data/agents/main/sessions 2>&1 | logger -t scrub-transcripts
 
+# ansible.builtin.cron identifies an entry by the `#Ansible: <name>` marker it
+# writes above it. Renaming `name:` therefore does not edit the entry -- it adds
+# a second one and abandons the first, with no drift for --check to report,
+# because the orphan is no longer described by any task.
+#
+# That happened to this very task: the moltbot -> openclaw rename changed the
+# name and the path in one commit, so the pre-rename entry is STILL in root's
+# crontab. Measured against the live router 2026-10-06, both run 144x/day:
+#   .../moltbot/data/agents/main/sessions   144 scrub_started lines/day
+#   .../openclaw/data/agents/main/sessions  144 scrub_started lines/day
+# The legacy directory provably still exists, because scrub-transcripts.sh
+# checks `[[ ! -d $TRANSCRIPT_DIR ]]` and exits BEFORE it logs scrub_started.
+#
+# Removing the orphan forfeits no coverage that exists today -- 0 of 2016 lines
+# in 7d are scrub_complete, the scan never runs (see !733) -- but it would
+# forfeit coverage once !733 lands. So the legacy directory is picked up as a
+# managed entry below rather than left to an unmanaged accident that a host
+# rebuild would silently drop.
+- name: Remove orphaned pre-rename transcript scrub cron entry
+  ansible.builtin.cron:
+    name: "Scrub credentials from moltbot transcripts"
+    state: absent
+
+# Static, frozen store of pre-rename session transcripts: nothing writes to it.
+# It is scrubbed on the same schedule only because it may still contain
+# credentials from before the rename, and a one-time pass plus archival needs a
+# decision that is not this MR's to make. The `[ -d ]` guard makes the entry
+# self-retiring: once the directory is archived or deleted, this becomes a
+# no-op instead of an error every 10 minutes (`|| exit 0`, not `&& cmd`, so the
+# absent case exits 0 rather than returning the test's 1 to cron forever).
+# Delete this task at that point.
+- name: Set up legacy transcript scrub cron job (every 10 minutes)
+  ansible.builtin.cron:
+    name: "Scrub credentials from legacy moltbot transcript archive"
+    minute: "*/10"
+    job: >-
+      [ -d {{ docker_persistent_data_path }}/moltbot/data/agents/main/sessions ] || exit 0;
+      /usr/local/bin/scrub-transcripts.sh {{ docker_persistent_data_path }}/moltbot/data/agents/main/sessions 2>&1 | logger -t scrub-transcripts
+
 - name: Daily chromium-browser restart (clear tabs and free memory)
   ansible.builtin.cron:
     name: "Restart chromium-browser daily"

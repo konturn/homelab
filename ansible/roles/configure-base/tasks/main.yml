@@ -212,9 +212,17 @@
     weekday: "0"
     job: "docker exec -u www-data nextcloud php occ files:scan --all"
 
+# `minute:` was omitted, and ansible.builtin.cron defaults it to "*" -- so
+# `hour: 0` means every minute of the midnight hour, not midnight. Confirmed
+# against the live router 2026-10-06: exactly 60 CMD lines for this job in 24h.
+# Each one is a recursive chown over /mpool/plex, which holds 484,764 inodes
+# (215 TB, 93.6% full), i.e. ~29 million needless stat/chown syscalls a night
+# against a nearly-full ZFS pool. It is the only cron task in the repo missing
+# a `minute:`.
 - name: Sets up perodic plex chown
   ansible.builtin.cron:
     name: "Plex dir chown"
+    minute: "0"
     hour: 0
     job: "chown -R konoahko:konoahko /mpool/plex"
 
