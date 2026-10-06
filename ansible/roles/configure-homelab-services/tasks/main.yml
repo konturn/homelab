@@ -662,19 +662,80 @@
     hour: "4"
     job: "docker restart chromium-browser 2>&1 | logger -t chromium-restart"
 
+# The sync credential lives ONLY here, in a 0600 file, and is read fresh on
+# every run via git's credential store. It is deliberately NOT embedded in the
+# repo's remote URL: a URL-embedded token is a snapshot taken at clone time, so
+# rotating the token in Vault silently invalidates it. That is exactly what
+# happened -- the checkout carried a revoked glpat- token in .git/config and
+# every fetch 401'd for ~6 months without a single log line.
+- name: Template homelab repo sync git credentials
+  ansible.builtin.copy:
+    dest: /root/.git-credentials-homelab
+    content: |
+      https://moltbot:{{ vault_openclaw_gitlab_token }}@gitlab.lab.nkontur.com
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+
 - name: Template homelab repo sync script
   ansible.builtin.copy:
     dest: /usr/local/bin/homelab-repo-sync.sh
     content: |
       #!/bin/bash
+      # Keep the agent's checkout of this repo on origin/main.
+      #
+      # Every command used to end in `--quiet 2>/dev/null` with no exit-status
+      # check, so the `| logger -t homelab-sync` in the crontab could never
+      # receive a byte: ~2000 runs a week produced zero log lines whether the
+      # sync worked or not. Measured 2026-10-06 -- the checkout was 193 days
+      # stale (pinned at a 2026-03-27 commit) and nothing had ever reported it.
+      #
+      # Rules now:
+      #   - any failure prints to stderr and exits non-zero (-> journal, -> alert)
+      #   - success is logged ONLY when HEAD actually moved, so a working sync
+      #     stays quiet instead of writing 288 identical lines a day
+      set -uo pipefail
+
       REPO={{ docker_persistent_data_path }}/openclaw/workspace/homelab
-      cd "$REPO" || exit 1
-      git fetch origin main --quiet 2>/dev/null
-      git reset --hard origin/main --quiet 2>/dev/null
-      git clean -fd --quiet 2>/dev/null
+      CREDS=/root/.git-credentials-homelab
+
+      fail() { echo "ERROR: homelab-sync: $*" >&2; exit 1; }
+
+      cd "$REPO" || fail "repo directory missing: $REPO"
+
+      BEFORE=$(git rev-parse HEAD 2>/dev/null) || fail "not a git repo: $REPO"
+
+      # Explicit refspec: `git fetch origin main` only guarantees FETCH_HEAD,
+      # it does not necessarily move refs/remotes/origin/main.
+      # First -c resets the helper list so a global/system helper cannot
+      # silently satisfy (or block) the prompt instead of this file.
+      FETCH_ERR=$(git -c credential.helper= \
+                      -c credential.helper="store --file=$CREDS" \
+                      fetch --prune origin \
+                      "+refs/heads/main:refs/remotes/origin/main" 2>&1) \
+        || fail "git fetch failed: ${FETCH_ERR}"
+
+      git reset --hard origin/main --quiet || fail "git reset --hard origin/main failed"
+      git clean -fdq || fail "git clean failed"
+
+      AFTER=$(git rev-parse HEAD)
+      if [ "$BEFORE" != "$AFTER" ]; then
+        echo "homelab-sync: ${BEFORE:0:8} -> ${AFTER:0:8}"
+      fi
     owner: root
     group: root
     mode: '0755'
+
+# Strip any credential baked into the existing checkout's remote URL. Without
+# this the 0600 credential store above is dead weight -- git prefers the URL.
+- name: Remove embedded credentials from homelab repo remote URL
+  ansible.builtin.command:
+    cmd: >-
+      git -C {{ docker_persistent_data_path }}/openclaw/workspace/homelab
+      remote set-url origin https://gitlab.lab.nkontur.com/root/homelab.git
+  changed_when: false
+  failed_when: false
 
 - name: Mark homelab repo as safe directory for git
   ansible.builtin.command:
