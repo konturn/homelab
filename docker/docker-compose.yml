@@ -533,7 +533,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.2788@sha256:3b1231402555facf27a030a246d90cdb97c6b46ef38c7566c2c041039b71797f
+    image: linuxserver/jackett:0.24.2793@sha256:701368d37067d25ac8b75ac5c0e879d586cc0a48b967686d2f461f28dbe5fc0e
     container_name: jackett
     security_opt:
       - no-new-privileges=true
@@ -868,7 +868,7 @@ services:
   # =============================================================================
   otel-collector:
     container_name: otel-collector
-    image: otel/opentelemetry-collector-contrib:0.161.0@sha256:fd328de2552466ad78385e1b1289c3f2402b1c45f265b252aab1955b42845ac1
+    image: otel/opentelemetry-collector-contrib:0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6
     security_opt:
       - no-new-privileges=true
     cap_drop:
@@ -1093,7 +1093,7 @@ services:
       - ALL
     ports:
       - "443:80"
-    image: 'vaultwarden/server:1.37.3-alpine@sha256:9a905c5cf5df61bb827da3805e160170741c0b53b0c63bb07e1afd3d2e21b1c8'
+    image: 'vaultwarden/server:1.37.4-alpine@sha256:19ea2b669945d842dadc3d500f2d6a795866a003330f59a47b9634658bae98bb'
     restart: unless-stopped
     networks:
       - external
