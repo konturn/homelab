@@ -441,6 +441,50 @@ groups:
         labels:
           severity: warning
 
+      # The agent's checkout of this repo is refreshed every 5 minutes by
+      # homelab-repo-sync.sh. Until 2026-10-06 that script suppressed every
+      # error (`--quiet 2>/dev/null`, no exit-status check), so its crontab
+      # `| logger -t homelab-sync` received nothing whether it worked or not --
+      # ~2000 runs a week, zero log lines, and a checkout 193 days out of date
+      # because the token baked into its remote URL had been revoked.
+      #
+      # WHAT THIS RULE DOES NOT COVER, stated so it is not mistaken for
+      # complete: it fires on a *present* ERROR line, i.e. the sync ran and
+      # failed. The fixed script is silent on an uneventful success, so an
+      # absence of lines is ambiguous -- it means either "nothing to do" or
+      # "the cron entry is gone". A liveness rule keyed on this stream cannot
+      # tell those apart, and one keyed on HEAD-move lines would false-fire on
+      # any day main does not advance. Catching a vanished cron entry needs an
+      # instrument that measures the checkout's staleness directly (e.g. a
+      # telegraf exec reporting commit age), which is not in this MR.
+      # The same gap applies to every other `| logger -t` cron job on router.
+      - uid: homelab-sync-failing
+        title: Homelab Repo Sync Failing
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 3600, to: 0}
+            datasourceUid: loki
+            model:
+              expr: 'count_over_time({syslog_identifier="homelab-sync"} |= "ERROR: homelab-sync" [1h])'
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: replaceNN, replaceWithValue: 0}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "homelab-repo-sync is failing — the agent is reading a stale copy of the infra repo"
+          description: "Check: journalctl -t homelab-sync --since '1 hour ago'. Most likely the GitLab token in /root/.git-credentials-homelab is revoked or expired; it is templated from Vault openclaw/tokens:gitlab_token."
+        labels:
+          severity: warning
+
   # =========================================================================
   # Network Alerts
   # =========================================================================
