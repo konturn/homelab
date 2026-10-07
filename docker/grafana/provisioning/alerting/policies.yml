@@ -8,6 +8,27 @@ policies:
     group_interval: 5m
     repeat_interval: 4h
     routes:
+      # Agent notification. MUST be first and MUST stay a child route.
+      #
+      # The root `receiver:` above is Alertmanager's *fallback* -- it notifies only
+      # alerts that match no child route. `continue: true` continues to sibling
+      # routes, never to the parent. Every one of the 27 rules carries
+      # severity=critical|warning, so all 27 matched the email route below and the
+      # root receiver was never used: openclaw-webhook's lastNotifyAttempt was
+      # 0001-01-01T00:00:00Z (never) while the email receiver was attempting
+      # normally. The agent path had never delivered a real alert since it was
+      # wired in 2026-02 (cf3194a).
+      #
+      # severity =~ ".*" matches every alert, including any rule that forgets the
+      # label (an absent label matches the empty string), so this route cannot be
+      # bypassed the way the root receiver was.
+      - receiver: openclaw-webhook
+        matchers:
+          - severity =~ ".*"
+        group_wait: 30s
+        group_interval: 10m
+        repeat_interval: 24h
+        continue: true
       - receiver: homelab-email-alerts
         matchers:
           - severity =~ "critical|warning"
