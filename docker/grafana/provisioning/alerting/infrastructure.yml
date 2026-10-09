@@ -95,26 +95,59 @@ groups:
         labels:
           severity: critical
 
-      # oomkilled is a per-container flag that Docker clears when the container
-      # is recreated, so within any window it reads true for a while and then
-      # false again. The original query ran last() BEFORE filtering for true,
-      # so it sampled whatever the flag happened to be at the end of the window
-      # -- almost always false, because the container has restarted by then --
-      # and the true-filter then dropped that row. The result was zero rows,
-      # which noDataState: OK turns into Normal. Measured 2026-09-29: over
-      # 07:56-08:01Z the window held 24 consecutive oomkilled=true samples for
-      # chromium-browser and the rule still returned 0 rows. Four real OOM
-      # episodes (09-24, 09-26, 09-28, 09-29) never alerted.
+      # docker_container_status.oomkilled is Docker's State.OOMKilled flag. It is
+      # STATE, not an event: Docker sets it when the cgroup OOM fires and clears
+      # it only when the container is *recreated*. Alerting on its value
+      # therefore reports "this container has been OOM-killed at some point in
+      # its current life", which is not the same question as "a container was
+      # just OOM-killed".
       #
-      # Fix is the ordering that "Container Health Check Failed" above already
-      # uses: filter for the condition FIRST, then aggregate. max() over the
-      # window means any OOM anywhere in it fires, rather than only one still
-      # visible at the final sample.
+      # That distinction is the live defect this rule replaces, and it has two
+      # halves. Both were measured against Grafana's own state history
+      # (/api/v1/rules/history?ruleUID=container-oom-kill) on 2026-10-09, which
+      # is the only instrument that answers "did this rule fire?" -- re-running
+      # the query by hand answers a different question.
       #
-      # Window widened 5m -> 15m so a short episode cannot fall between two
-      # evaluations, and _time is rewritten to now() for the same reason the
-      # restart-loop rule does it: max() carries the sample's original
-      # timestamp, which Grafana would otherwise treat as stale.
+      # 1. The previous revision of this MR claimed the last()-before-filter
+      #    ordering meant the rule never fired, citing four missed chromium
+      #    episodes. THAT WAS WRONG. The history shows container-oom-kill went
+      #    Normal -> Pending -> Alerting for container_name=chromium-browser on
+      #    09-24 06:20, 09-26 06:15, 09-28 06:20, 09-29 06:13 and 09-30 06:14,
+      #    resolving at 08:01 each time. The transitions are at 06:07-06:15 and
+      #    the flag clears at 08:00:02, so last() saw true for ~105 minutes per
+      #    episode. The "0 rows" measurement behind that claim was taken over
+      #    07:56-08:01Z -- the one 5-minute window straddling the clear, i.e.
+      #    exactly when the rule was correctly resolving. The MR was opened at
+      #    08:11, ten minutes after that morning's alert went back to Normal.
+      #    Detection was never the problem here; acting on it was (!719 is the
+      #    chromium fix and is still unmerged).
+      #
+      # 2. The real defect is that a value-based rule cannot resolve. A
+      #    container whose MAIN process survives the cgroup OOM never gets
+      #    recreated, so the flag stays true for the container's lifetime.
+      #    nextcloud OOMed once at 2026-10-08T05:16:11Z (six PHP workers killed,
+      #    #145); at the time of writing it has restart_count=0 and 35 days of
+      #    uptime, oomkilled has read true for 27 hours straight (2,160 samples
+      #    per 6h, unbroken), and this alert has been Alerting since 05:22 on
+      #    10-08 with no path back to Normal short of recreating the container.
+      #    A permanently-firing critical is the #143 latch pathology, and
+      #    filtering before max() over a 15m window does not fix it -- the
+      #    source data is true in every window from now on.
+      #
+      # So: alert on the TRANSITION. difference() over the window yields +1 only
+      # where the flag went false -> true inside it, which is the OOM event
+      # itself. Verified both directions on 2026-10-09: a window containing
+      # 05:16:11 returns nextcloud=1, and a -15m window 27h later returns zero
+      # rows, so the alert clears on its own. It still catches the restarting
+      # case -- the same query over 09-24 and 09-26 returns chromium-browser=1.
+      # Recreation produces a -1, which nonNegative drops, so a container coming
+      # back does not alert.
+      #
+      # for: 0s rather than 5m. An edge cannot flap, so there is nothing to
+      # dampen, and dampening would eat half of the window the alert is visible
+      # in. The rule fires at the first evaluation after the OOM and self-clears
+      # once the transition ages out of the 15m range -- the same event-in-a-
+      # window shape restic-backup-incomplete below already uses.
       - uid: container-oom-kill
         title: Container OOM Kill
         condition: C
@@ -128,10 +161,13 @@ groups:
                   |> range(start: -15m)
                   |> filter(fn: (r) => r._measurement == "docker_container_status")
                   |> filter(fn: (r) => r._field == "oomkilled")
-                  |> filter(fn: (r) => r._value == true)
-                  |> map(fn: (r) => ({r with _value: 1}))
+                  |> map(fn: (r) => ({r with _value: if r._value then 1 else 0}))
+                  |> group(columns: ["container_name"])
+                  |> sort(columns: ["_time"])
+                  |> difference(nonNegative: true)
                   |> group(columns: ["container_name"])
                   |> max()
+                  |> filter(fn: (r) => r._value > 0)
                   |> map(fn: (r) => ({r with _time: now()}))
                   |> keep(columns: ["_time", "_value", "container_name"])
               refId: A
@@ -145,9 +181,10 @@ groups:
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
         noDataState: OK
         execErrState: Error
-        for: 5m
+        for: 0s
         annotations:
           summary: "Container {{ $labels.container_name }} killed by OOM"
+          description: "The cgroup OOM killer fired inside this container within the last 15 minutes. Note the container may still be running: Docker sets State.OOMKilled when any process in the cgroup is killed, so check whether the main process survived (docker inspect -f '{{ .RestartCount }} {{ .State.StartedAt }}' {{ $labels.container_name }}) before assuming a restart. Kernel detail, including which process and its anon-rss: journalctl -k | grep -A3 'Memory cgroup out of memory'."
         labels:
           severity: critical
 
