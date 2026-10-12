@@ -94,7 +94,8 @@ RUN npm install -g playwright \
     && agent-browser install --skip-download
 
 # Install Claude CLI for the openclaw claude-cli backend (auth via CLAUDE_CODE_OAUTH_TOKEN env)
-RUN npm install -g @anthropic-ai/claude-code
+# Pinned: Opus 5.5 (claude-opus-5-5) needs >= 2.1.296; older CLIs reject the model ID
+RUN npm install -g @anthropic-ai/claude-code@2.1.296
 
 # Ensure node user can access installed tools
 RUN chmod -R a+rx /usr/local/bin
