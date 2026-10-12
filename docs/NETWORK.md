@@ -490,6 +490,21 @@ Primary DNS for VLAN 4 (mgmt) and VLAN 6 (iot):
 
 All services use `*.lab.nkontur.com` for internal DNS.
 
+### Split-horizon caveat (macOS hosts)
+
+Public DNS answers `*.lab.nkontur.com` with the WAN IP (75.89.46.11); only
+PiHole returns the internal address. Linux hosts query PiHole first and stop
+there, but macOS `mDNSResponder` queries every configured resolver in parallel
+and takes the first answer, so the 1.1.1.1 fallback regularly wins and
+`getaddrinfo` returns the WAN IP. `dig` looks correct because it talks to
+nameserver[0] directly, which makes this easy to misdiagnose.
+
+Consequence: on the Mac Mini, connections to internal services by hostname hit
+the WAN IP and fail immediately with `ECONNREFUSED` (errno 61 on macOS) rather
+than timing out. Ansible plays targeting `macmini` should address internal
+services by IP. `vault_addr` is pinned to `https://{{ vault_ip }}:8200` in
+`ansible/inventory.yml` for exactly this reason.
+
 ---
 
 ## DHCP Configuration

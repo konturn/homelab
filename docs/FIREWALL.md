@@ -2,7 +2,7 @@
 
 This document describes the iptables firewall configuration for the homelab infrastructure.
 
-**Last Audit:** January 2025  
+**Last Audit:** June 2026  
 **Rules File:** `networking/iptables/rules.v4`
 
 ---
@@ -49,10 +49,11 @@ This document describes the iptables firewall configuration for the homelab infr
 
 | Interface | Purpose |
 |-----------|---------|
-| `wg0`     | Primary WireGuard VPN (port 51871) |
-| `wg1`     | Secondary WireGuard VPN (port 51872) |
 | `{{ mullvad_interface_name }}` | Mullvad VPN tunnel (privacy routing) |
 | `vlanX-shim` | Docker macvlan shim interfaces |
+
+> WireGuard interfaces `wg0` / `wg1` (ports 51871 / 51872) were removed January 2025 —
+> see `networking/iptables/rules.v4` comments.
 
 ---
 
@@ -62,11 +63,11 @@ This document describes the iptables firewall configuration for the homelab infr
 
 | Port | Protocol | Destination | Service |
 |------|----------|-------------|---------|
+| 22   | TCP      | router      | SSH (rate-limited: max 4 new conns / 60s per source IP) |
 | 443  | TCP      | nginx       | HTTPS (reverse proxy) |
 | 32400| TCP      | nginx       | Plex Media Server |
 | 25564| TCP      | nginx       | Minecraft (Bedrock/secondary) |
 | 25565| TCP      | nginx       | Minecraft (Java) |
-| 51871| UDP      | router      | WireGuard VPN |
 | 62941| TCP      | deluge (via Mullvad) | BitTorrent |
 
 ### Outbound (Internal → Internet)
@@ -149,6 +150,26 @@ Infrastructure services:
 | Service | Container | Purpose |
 |---------|-----------|---------|
 | Registry | `registry` | Docker container registry |
+
+---
+
+## Docker and iptables
+
+Docker's iptables management is **disabled** on the router (`"iptables": false` in `daemon.json`).
+
+**Why:** The router manages its own iptables rules via `netfilter-persistent`. When Docker has
+`iptables: true`, it inserts its own chains (`DOCKER-USER`, `DOCKER-FORWARD`, `DOCKER-CT`,
+`DOCKER-INTERNAL`, `DOCKER-BRIDGE`) at the top of the FORWARD chain on every restart. This
+clobbers custom forwarding rules and can break non-Docker traffic (e.g., guest WiFi on VLAN 5).
+
+**Why it's safe:** All containers in this homelab use macvlan networks — they're placed directly
+on the appropriate VLAN interface. Docker's iptables rules (bridge NAT, port mapping, inter-container
+isolation) are only relevant for bridge-mode networking, which we don't use. The existing custom
+iptables rules already handle all necessary forwarding.
+
+**If Docker networking breaks after a change**, check that the custom iptables rules in
+`networking/iptables/rules.v4` cover any new forwarding needs — don't re-enable Docker iptables
+management, as it will conflict with the existing ruleset.
 
 ---
 
@@ -245,3 +266,4 @@ iptables -A FORWARD -j LOG --log-prefix "FWD-DROPPED: "
 |------|--------|
 | 2022-07-03 | Original rules generated |
 | 2025-01 | Audit and documentation added |
+| 2026-03 | Document Docker iptables disabled on router |

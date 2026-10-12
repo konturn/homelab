@@ -22,11 +22,10 @@ groups:
                   |> range(start: -5m)
                   |> filter(fn: (r) => r._measurement == "docker_container_health")
                   |> filter(fn: (r) => r._field == "failing_streak")
-                  |> filter(fn: (r) => r.container_name != "audioserve" and r.container_name != "nextcloud")
                   |> filter(fn: (r) => r._value > 0)
                   |> group(columns: ["container_name"])
                   |> last()
-                  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+                  |> keep(columns: ["_time", "_value", "container_name"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -45,22 +44,40 @@ groups:
         labels:
           severity: critical
 
+      # A crash-looping container is DOWN most of the time, so telegraf's docker
+      # input barely gets to sample it: over one hour a healthy container yields
+      # ~360 restart_count points, while snapclient_kitchen yields 1 and
+      # amcrest2mqtt yields ~1. difference() needs two points in the window to
+      # emit anything, so the original 15m window produced a null for exactly the
+      # containers that were on fire, reduce(dropNN) discarded it, and the rule
+      # sat Normal through 8,400 restarts/day (issues #120, #123, #132).
+      #
+      # The window is therefore 6h, not 15m: long enough that even a container
+      # sampled once an hour accumulates the two points difference() needs.
+      # nonNegative:true still drops the reset-to-zero when a container is
+      # recreated, so a redeploy does not read as a restart storm.
+      #
+      # Trade-off: the 6h accumulation means the alert stays firing for up to 6h
+      # after a crash loop is actually fixed. That is the right way to be wrong
+      # for a rule whose entire failure mode was staying silent.
       - uid: container-restart-loop
         title: Container Restart Loop
         condition: C
         data:
           - refId: A
-            relativeTimeRange: {from: 900, to: 0}
+            relativeTimeRange: {from: 21600, to: 0}
             datasourceUid: influxdb
             model:
               query: |
                 from(bucket: "metrics")
-                  |> range(start: -15m)
+                  |> range(start: -6h)
                   |> filter(fn: (r) => r._measurement == "docker_container_status")
                   |> filter(fn: (r) => r._field == "restart_count")
                   |> difference(nonNegative: true)
                   |> group(columns: ["container_name"])
                   |> sum()
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "container_name"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -69,12 +86,12 @@ groups:
           - refId: C
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__
-            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [3]}}]}
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [5]}}]}
         noDataState: OK
         execErrState: Error
         for: 5m
         annotations:
-          summary: "Container restarting repeatedly (>3 restarts in 15min)"
+          summary: "Container {{ $labels.container_name }} restarting repeatedly (>5 restarts in 6h)"
         labels:
           severity: critical
 
@@ -93,7 +110,8 @@ groups:
                   |> filter(fn: (r) => r._field == "oomkilled")
                   |> last()
                   |> filter(fn: (r) => r._value == true)
-                  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+                  |> map(fn: (r) => ({r with _value: 1}))
+                  |> keep(columns: ["_time", "_value", "container_name"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -127,7 +145,7 @@ groups:
                   |> filter(fn: (r) => r.container_name =~ /grafana|homeassistant|nginx|gitlab|influxdb|plex|bitwarden|vault|loki|promtail/)
                   |> last()
                   |> filter(fn: (r) => r._value != 0)
-                  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+                  |> keep(columns: ["_time", "_value", "container_name"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -162,7 +180,10 @@ groups:
                   |> range(start: -5m)
                   |> filter(fn: (r) => r._measurement == "mem")
                   |> filter(fn: (r) => r._field == "used_percent")
+                  |> group(columns: ["host"])
                   |> mean()
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "host"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -194,7 +215,10 @@ groups:
                   |> filter(fn: (r) => r._measurement == "ipmi_sensor")
                   |> filter(fn: (r) => r._field == "value")
                   |> filter(fn: (r) => r.name == "cpu1_temp" or r.name == "cpu2_temp")
+                  |> group(columns: ["host", "name"])
                   |> mean()
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "host", "name"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -213,7 +237,7 @@ groups:
           severity: warning
 
       - uid: disk-space-warning
-        title: Disk Space Warning (80%+)
+        title: Disk Space Warning (80-90%)
         condition: C
         data:
           - refId: A
@@ -229,6 +253,8 @@ groups:
                   |> filter(fn: (r) => r.path !~ /^\/snap/)
                   |> group(columns: ["device", "path", "host"])
                   |> mean()
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "device", "path", "host"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -237,12 +263,15 @@ groups:
           - refId: C
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__
-            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [80]}}]}
+            # within_range, not gt: above 90% the disk-space-critical rule
+            # below owns the alert. A plain gt 80 leaves both rules firing on
+            # the same filesystem forever, which is two mails for one fact.
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: within_range, params: [80, 90]}}]}
         noDataState: OK
         execErrState: Error
         for: 10m
         annotations:
-          summary: "Disk usage above 80% on {{ $labels.device }} ({{ $labels.path }})"
+          summary: "Disk usage between 80% and 90% on {{ $labels.device }} ({{ $labels.path }})"
         labels:
           severity: warning
 
@@ -263,6 +292,8 @@ groups:
                   |> filter(fn: (r) => r.path !~ /^\/snap/)
                   |> group(columns: ["device", "path", "host"])
                   |> mean()
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "device", "path", "host"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -280,6 +311,11 @@ groups:
         labels:
           severity: critical
 
+      # NOTE: this rule reads smart_device.health_ok. That field is only
+      # written when smartctl actually succeeds. When collection is broken the
+      # field is absent entirely, the query returns no series, and noDataState
+      # OK means the rule reports healthy for disks it has never read. The
+      # smart-collection-failed rule below covers that case. See issue #129.
       - uid: smart-disk-error
         title: SMART Disk Error
         condition: C
@@ -295,6 +331,8 @@ groups:
                   |> filter(fn: (r) => r._field == "health_ok")
                   |> last()
                   |> filter(fn: (r) => r._value == false)
+                  |> map(fn: (r) => ({r with _value: 1}))
+                  |> keep(columns: ["_time", "_value", "host", "device"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -311,6 +349,97 @@ groups:
           summary: "SMART reports disk health issue on {{ $labels.device }} ({{ $labels.model }})"
         labels:
           severity: critical
+
+      # Collection health, not disk health. telegraf's smart input reports a
+      # per-device smartctl exit_status; anything non-zero means SMART was
+      # never read for that drive, so smart-disk-error above cannot fire for
+      # it. Issue #129 (device open failed, exit_status 2 on the whole array)
+      # was closed 2026-09-07; all 26 devices on router now report
+      # exit_status 0. This rule stays as the tripwire for a regression.
+      # health_ok is smartctl's overall-health self-assessment, which most
+      # drives keep reporting PASSED until they are essentially dead. The
+      # sector counters move first: pending sectors are blocks the drive
+      # failed to read and has not been able to remap, and reallocated /
+      # uncorrectable counts are damage it already gave up on. Watching only
+      # health_ok above means a drive can rot for weeks in silence -- router
+      # sdk has been sitting at 16 pending sectors since 2026-09-03 with
+      # health_ok still true, which is what prompted this rule.
+      #
+      # Fleet is otherwise clean (2 of 26 devices non-zero as of 2026-09-09),
+      # so a >0 threshold is signal rather than noise. Warning, not critical:
+      # this means "plan a replacement", while smart-disk-error means "the
+      # drive is going now".
+      - uid: smart-prefail-sectors
+        title: SMART Pre-Failure Sectors
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 3600, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -1h)
+                  |> filter(fn: (r) => r._measurement == "smart_device")
+                  |> filter(fn: (r) => r._field == "pending_sector_count" or r._field == "uncorrectable_sector_count" or r._field == "reallocated_sectors_count")
+                  |> last()
+                  |> group(columns: ["host", "device", "model"])
+                  |> max()
+                  |> filter(fn: (r) => r._value > 0)
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "host", "device", "model"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 1h
+        annotations:
+          summary: "Disk {{ $labels.device }} on {{ $labels.host }} ({{ $labels.model }}) reports pending/reallocated/uncorrectable sectors — SMART still says healthy, but plan a replacement"
+        labels:
+          severity: warning
+
+      - uid: smart-collection-failed
+        title: SMART Collection Failed
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 3600, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -1h)
+                  |> filter(fn: (r) => r._measurement == "smart_device")
+                  |> filter(fn: (r) => r._field == "exit_status")
+                  |> last()
+                  |> filter(fn: (r) => r._value != 0)
+                  |> group(columns: ["host"])
+                  |> count()
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "host"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 30m
+        annotations:
+          summary: "smartctl is failing on one or more disks on {{ $labels.host }} — SMART failure prediction is blind for those drives (see issue #129)"
+        labels:
+          severity: warning
 
   # =========================================================================
   # Network Alerts
@@ -333,9 +462,12 @@ groups:
                   |> range(start: -5m)
                   |> filter(fn: (r) => r._measurement == "ping")
                   |> filter(fn: (r) => r._field == "result_code")
+                  |> filter(fn: (r) => not exists r.probe or r.probe == "internet")
                   |> filter(fn: (r) => r._value != 0)
                   |> group(columns: ["url"])
                   |> count()
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "url"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -353,6 +485,46 @@ groups:
         labels:
           severity: critical
 
+      # Device probes are tagged probe="device" by telegraf and excluded from
+      # the rule above, which is scoped to the three internet/gateway targets.
+      # Threshold is 4 of the last 15 one-minute samples so a single dropped
+      # reply does not page; "for: 15m" then requires it to stay bad.
+      - uid: iot-device-unreachable
+        title: IoT Device Unreachable
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -15m)
+                  |> filter(fn: (r) => r._measurement == "ping")
+                  |> filter(fn: (r) => r._field == "result_code")
+                  |> filter(fn: (r) => r.probe == "device")
+                  |> filter(fn: (r) => r._value != 0)
+                  |> group(columns: ["url"])
+                  |> count()
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "url"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [3]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 15m
+        annotations:
+          summary: "IoT device {{ $labels.url }} unreachable — dependent container will crash-loop or stop reporting"
+        labels:
+          severity: warning
+
       - uid: dns-resolution-failure
         title: DNS Resolution Failure
         condition: C
@@ -367,7 +539,10 @@ groups:
                   |> filter(fn: (r) => r._measurement == "dns_query")
                   |> filter(fn: (r) => r._field == "result_code")
                   |> filter(fn: (r) => r._value != 0)
+                  |> group(columns: ["server", "domain"])
                   |> count()
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "server", "domain"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -384,6 +559,49 @@ groups:
           summary: "DNS resolution failing"
         labels:
           severity: critical
+
+      # Reachability through the reverse proxy, from [[inputs.http_response]].
+      # Keyed on result_code rather than http_response_code: result_code is 0
+      # whenever any HTTP response came back, so a 401 from an authenticated
+      # endpoint is treated as up (nginx and TLS both worked). Non-zero is
+      # connection_failed / timeout / dns_error — the container can be perfectly
+      # healthy and still be unreachable, which no other rule here detects.
+      - uid: http-endpoint-unreachable
+        title: HTTP Endpoint Unreachable
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -10m)
+                  |> filter(fn: (r) => r._measurement == "http_response")
+                  |> filter(fn: (r) => r._field == "result_code")
+                  |> filter(fn: (r) => r._value != 0)
+                  |> group(columns: ["server"])
+                  |> count()
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "server"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [3]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "{{ $labels.server }} is not answering over HTTP — container may be healthy but unreachable"
+          description: "More than 3 failed probes in 10m (connection refused, timeout, or DNS failure). Check the nginx vhost, proxy_pass target, and TLS chain for this host."
+        labels:
+          severity: critical
+
 
   # =========================================================================
   # Certificate Alerts
@@ -435,70 +653,113 @@ groups:
     name: hardware-alerts
     folder: General Alerting
     interval: 1m
-    rules: []
-      # DISABLED: snmp measurement not available - enable when UPS SNMP monitoring is configured
-      # - uid: ups-battery-low
-      #   title: UPS Battery Low
-      #   condition: C
-      #   data:
-      #     - refId: A
-      #       relativeTimeRange: {from: 300, to: 0}
-      #       datasourceUid: influxdb
-      #       model:
-      #         query: |
-      #           from(bucket: "metrics")
-      #             |> range(start: -5m)
-      #             |> filter(fn: (r) => r._measurement == "snmp")
-      #             |> filter(fn: (r) => r._field == "percent_charge")
-      #             |> last()
-      #         refId: A
-      #     - refId: B
-      #       relativeTimeRange: {from: 0, to: 0}
-      #       datasourceUid: __expr__
-      #       model: {type: reduce, expression: A, reducer: min, refId: B, settings: {mode: dropNN}}
-      #     - refId: C
-      #       relativeTimeRange: {from: 0, to: 0}
-      #       datasourceUid: __expr__
-      #       model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [50]}}]}
-      #   noDataState: OK
-      #   execErrState: Error
-      #   for: 2m
-      #   annotations:
-      #     summary: "UPS battery charge below 50%"
-      #   labels:
-      #     severity: critical
+    rules:
+      # The UPS is monitored over SNMP by telegraf ([[inputs.snmp]], UPS-MIB via
+      # CyberPower) and lands in the "snmp" measurement. These rules were left
+      # commented out with "snmp measurement not available"; that reason is no
+      # longer true — the input has been collecting percent_charge, load,
+      # batterySeconds and minutes on a 30s interval. Nothing else writes to the
+      # "snmp" measurement (the Aruba switch inputs use name= overrides), so no
+      # source filter is needed.
 
-      # DISABLED: snmp measurement not available - enable when UPS SNMP monitoring is configured
-      # - uid: ups-high-load
-      #   title: UPS High Load
-      #   condition: C
-      #   data:
-      #     - refId: A
-      #       relativeTimeRange: {from: 300, to: 0}
-      #       datasourceUid: influxdb
-      #       model:
-      #         query: |
-      #           from(bucket: "metrics")
-      #             |> range(start: -5m)
-      #             |> filter(fn: (r) => r._measurement == "snmp")
-      #             |> filter(fn: (r) => r._field == "load")
-      #             |> last()
-      #         refId: A
-      #     - refId: B
-      #       relativeTimeRange: {from: 0, to: 0}
-      #       datasourceUid: __expr__
-      #       model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
-      #     - refId: C
-      #       relativeTimeRange: {from: 0, to: 0}
-      #       datasourceUid: __expr__
-      #       model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [80]}}]}
-      #   noDataState: OK
-      #   execErrState: Error
-      #   for: 5m
-      #   annotations:
-      #     summary: "UPS load above 80%"
-      #   labels:
-      #     severity: warning
+      # upsSecondsOnBattery is 0 on utility power and counts up the moment the
+      # UPS switches to battery. This is the alert that catches a power cut:
+      # charge stays near 100% and load is unchanged for the first several
+      # minutes, so the charge/load rules below would stay silent through an
+      # outage that is quietly burning the runtime budget.
+      - uid: ups-on-battery
+        title: UPS On Battery (utility power lost)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "snmp")
+                  |> filter(fn: (r) => r._field == "batterySeconds")
+                  |> last()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: "UPS is running on battery — utility power lost"
+          description: "Check `minutes` (upsEstimatedMinutesRemaining) for the remaining runtime budget before a hard shutdown."
+        labels:
+          severity: critical
+
+      - uid: ups-battery-low
+        title: UPS Battery Low
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "snmp")
+                  |> filter(fn: (r) => r._field == "percent_charge")
+                  |> last()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: min, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [50]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 2m
+        annotations:
+          summary: "UPS battery charge below 50%"
+        labels:
+          severity: critical
+
+      - uid: ups-high-load
+        title: UPS High Load
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "snmp")
+                  |> filter(fn: (r) => r._field == "load")
+                  |> last()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [80]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "UPS load above 80%"
+        labels:
+          severity: warning
 
   # =========================================================================
   # Backup Alerts
@@ -562,6 +823,192 @@ groups:
         labels:
           severity: critical
 
+      # restic exits 3 ("at least one source file could not be read") when the
+      # snapshot was still written but something vanished mid-run. The unit now
+      # sets SuccessExitStatus=3 so that a single vanished temp file no longer
+      # aborts the remaining folders, the database dumps and forget/prune -- see
+      # ansible/roles/restic/templates/restic-backup.service.j2. That means the
+      # unit no longer goes to failed state for this case, so restic-unit-failed
+      # will not catch it and restic-backup-error's regex does not match the
+      # wording. This rule is what keeps a partial backup visible.
+      - uid: restic-backup-incomplete
+        title: Restic Backup Incomplete (unreadable source files)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 86400, to: 0}
+            datasourceUid: loki
+            model:
+              expr: 'count_over_time({unit="restic-backup.service"} |= "could not be read" [24h])'
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: replaceNN, replaceWithValue: 0}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Restic wrote an incomplete snapshot - some source files could not be read"
+          description: "The snapshot exists but is missing files. Find which: journalctl -u restic-backup.service --since '24 hours ago' | grep -E '^error:'. If a path recurs, add it to restic_global_excludes in ansible/roles/restic/defaults/main.yml."
+        labels:
+          severity: warning
+
+      # Both alerts above read restic's *log text*, which cannot see a run that
+      # dies without printing an error. On 2026-08-31 restic-backup.service was
+      # killed part-way through /mpool/plex/config: four folders had already
+      # produced snapshots, so restic-backup-stale stayed green, and nothing
+      # matched "fatal|unable to create lock", so restic-backup-error stayed
+      # green too. The unit sat in failed state with no alert. The systemd_units
+      # metric was added for exactly this case but nothing consumed it yet.
+      #
+      # Scope (2026-09-07): the unit list is restic-backup.service and
+      # restic-check.service, not /^restic-/. The broader regex also matched the
+      # restic-notify-failure@<unit>.service instances, and those are OnFailure=
+      # handlers: Type=oneshot units that run once, exit, and then keep whatever
+      # state that run ended in until something invokes them again. Nothing ever
+      # does. restic-notify-failure@restic-check.service.service failed once
+      # (msmtp exits 69/UNAVAILABLE, per the description below) and has reported
+      # active_code=3 on every one of the 60,462 samples in the last 7 days, so
+      # this rule had been firing continuously since 2026-08-31T13:56Z.
+      #
+      # That is the failure mode this rule exists to prevent. A critical alert
+      # that is always red carries no signal: restic-backup.service really did
+      # fail from 2026-09-02T07:24Z to 2026-09-03T07:00Z (the vanished-temp-file
+      # bug fixed in 98df99d) and the alert could not change state to say so,
+      # because a dead notifier was already holding it firing.
+      #
+      # The notifier is still worth watching, just not as a backup-failure
+      # signal at critical severity -- restic-notifier-failed below covers it.
+      - uid: restic-unit-failed
+        title: Restic Unit Failed
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -15m)
+                  |> filter(fn: (r) => r._measurement == "systemd_units")
+                  |> filter(fn: (r) => r._field == "active_code")
+                  |> filter(fn: (r) => r.name =~ /^restic-(backup|check)\.service$/)
+                  |> group(columns: ["name"])
+                  |> last()
+                  |> keep(columns: ["_time", "_value", "name"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B, settings: {mode: dropNN}}
+          # telegraf active_code, verified against live data 2026-08-31:
+          #   0=active  2=inactive  3=failed  4=activating
+          # (An earlier revision of this rule assumed 3=inactive / 4=failed and
+          # used "gt 3". That never fires on a failed unit and does fire on any
+          # unit that is merely activating. Confirmed wrong while
+          # restic-check.service sat at active_code=3 / active="failed" with the
+          # alert silent.) Match failed exactly rather than using a threshold.
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: within_range, params: [2.5, 3.5]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        annotations:
+          summary: "Restic unit {{ $labels.name }} is in failed state"
+          description: "A restic unit failed. The OnFailure email path is unreliable (msmtp has exited 69/UNAVAILABLE), so this alert is the primary signal. Check: systemctl status {{ $labels.name }} && journalctl -u {{ $labels.name }} --since '24 hours ago'"
+        labels:
+          severity: critical
+
+      # The OnFailure= notifier for the restic units. Split out of
+      # restic-unit-failed so a broken notifier can no longer masquerade as a
+      # broken backup (see the scope note above).
+      #
+      # This one is expected to stay firing until someone acts: the units are
+      # Type=oneshot, so a failed run latches active_code=3 until the unit is
+      # invoked again or reset. Clearing it needs both halves -- fix the send
+      # path, then `systemctl reset-failed` -- otherwise the state persists even
+      # once msmtp works. That is a standing defect, not a flapping signal, so
+      # it sits at warning and stays out of the backup-failure path.
+      - uid: restic-notifier-failed
+        title: Restic Failure Notifier Broken
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -15m)
+                  |> filter(fn: (r) => r._measurement == "systemd_units")
+                  |> filter(fn: (r) => r._field == "active_code")
+                  |> filter(fn: (r) => r.name =~ /^restic-notify-failure@/)
+                  |> group(columns: ["name"])
+                  |> last()
+                  |> keep(columns: ["_time", "_value", "name"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B, settings: {mode: dropNN}}
+          # Same telegraf active_code mapping as restic-unit-failed: 3 == failed.
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: within_range, params: [2.5, 3.5]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        annotations:
+          summary: "Restic failure notifier {{ $labels.name }} is in failed state"
+          description: "The OnFailure= handler for a restic unit cannot deliver. Backups themselves are unaffected, and the Restic Unit Failed / Backup Stale / Backup Error alerts still cover them. Check: systemctl status {{ $labels.name }} && journalctl -u {{ $labels.name }} -n 50. After fixing the send path, clear the latched state with: systemctl reset-failed {{ $labels.name }}"
+        labels:
+          severity: warning
+
+      # A timer that stops being scheduled produces no failure event at all —
+      # backups just quietly stop. Timers should always be active (0).
+      - uid: restic-timer-inactive
+        title: Restic Timer Not Scheduled
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -15m)
+                  |> filter(fn: (r) => r._measurement == "systemd_units")
+                  |> filter(fn: (r) => r._field == "active_code")
+                  |> filter(fn: (r) => r.name =~ /^restic-.*\.timer$/)
+                  |> group(columns: ["name"])
+                  |> last()
+                  |> keep(columns: ["_time", "_value", "name"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 15m
+        annotations:
+          summary: "Restic timer {{ $labels.name }} is not active"
+          description: "A restic timer is not scheduled (disabled, masked, or lost in a rebuild); backups will silently stop. Check: systemctl status {{ $labels.name }}"
+        labels:
+          severity: critical
+
   # =========================================================================
   # Security Alerts
   # =========================================================================
@@ -578,7 +1025,12 @@ groups:
             relativeTimeRange: {from: 900, to: 0}
             datasourceUid: loki
             model:
-              expr: 'count_over_time({unit="ssh.service"} |= "Failed password" [15m])'
+              # PasswordAuthentication is "no" everywhere (ansible/roles/claude-user),
+              # so sshd never logs "Failed password" and matching only that string
+              # made this rule dead. Match the signatures key-only sshd actually
+              # emits for a rejected attempt, and keep "Failed password" for any
+              # host that ever re-enables password auth.
+              expr: 'count_over_time({unit="ssh.service"} |~ `Failed password|Invalid user|Connection (closed|reset) by authenticating user|maximum authentication attempts` [15m])'
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -587,11 +1039,16 @@ groups:
           - refId: C
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__
-            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [5]}}]}
+            # Threshold is 100, not 5. Constant internet scanning is the baseline on a
+            # host with sshd exposed: measured over 7d of real logs, a 15m bucket runs
+            # p50=8, p90=19, p99=42, max=48. Alerting at 5 would fire nearly always and
+            # train everyone to ignore it. 100 is ~2x the observed 7d peak, so it stays
+            # quiet under background noise and fires on a genuine burst.
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [100]}}]}
         noDataState: OK
         execErrState: Error
         for: 0s
         annotations:
-          summary: "Multiple failed SSH login attempts (>5 in 15min)"
+          summary: "SSH login attempt burst (>100 rejected attempts in 15min)"
         labels:
           severity: warning

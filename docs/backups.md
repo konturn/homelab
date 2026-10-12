@@ -210,7 +210,8 @@ The homelab runs containerized services with data stored on ZFS (mpool) with aut
 ### Automated Backups (Restic)
 
 **Backend:** Backblaze B2 (`s3:s3.us-east-005.backblazeb2.com/nkontur-homelab`)
-**Schedule:** Configured via Ansible cron jobs
+**Schedule:** `restic-backup.timer`, daily at 03:00 local. Runs commonly take 2-4 hours.
+**Deep check:** `restic-check.timer`, Sundays at 09:00 local (`restic check --read-data-subset=5%`), deliberately outside the backup window because the repository takes a single lock.
 **Retention:** 30 daily, 12 monthly, 5 yearly
 
 **Backed up paths:**
@@ -406,12 +407,21 @@ docker exec homeassistant python -m homeassistant --script check_config
 ### Backup Success Monitoring
 
 - **Restic logs** via systemd journal (`syslog_identifier=restic`), visible in Loki
-- **Grafana provisioned alerts** for stale backups and restic errors
+- **Grafana provisioned alerts** for stale backups, restic errors, failed restic
+  units, unscheduled timers, and incomplete snapshots
 - **Email alerts** on backup failures (via Grafana contact points)
 - **Morning digest** includes restic backup status summary
 
 > **Note:** Backup credentials are managed via Vault (`homelab/data/restic`).
 > JIT T2 approval is required for credential access.
+
+#### Incomplete snapshots
+
+`restic-backup.service` backs up each path as a separate `ExecStart` line, so a
+hard failure part-way through drops every path after it plus `forget`/`prune`.
+restic exit code `3` (snapshot written, some source file unreadable) is treated
+as success by the unit for that reason; the `Restic Backup Incomplete` alert is
+what surfaces it. Details and remediation: `ansible/roles/restic/README.md`.
 
 ### Storage Monitoring
 

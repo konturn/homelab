@@ -58,6 +58,7 @@ variables:
         - ansible/roles/configure-docker/**/*
         - ansible/roles/configure-router-network/**/*
         - ansible/roles/configure-wireguard/**/*
+        - ansible/roles/configure-mullvad-failover/**/*
         - ansible/roles/configure-notifications/**/*
         - ansible/roles/fetch-vault-secrets/**/*
         - ansible/roles/restic/**/*

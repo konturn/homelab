@@ -82,6 +82,21 @@
     cache_valid_time: 3600
   when: "'router' in inventory_hostname"
 
+- name: Grant Telegraf passwordless sudo for SMART collection
+  # The telegraf user cannot open block devices, so [[inputs.smart]] returns
+  # exit_status=2 on every disk and writes no smart_attribute points. Scope the
+  # grant to the two binaries the smart plugin shells out to.
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/telegraf-smartctl
+    content: |
+      telegraf ALL=(root) NOPASSWD: /usr/sbin/smartctl
+      telegraf ALL=(root) NOPASSWD: /usr/sbin/nvme
+    owner: root
+    group: root
+    mode: '0440'
+    validate: 'visudo -cf %s'
+  when: "'router' in inventory_hostname"
+
 - name: Create Telegraf scripts directory
   ansible.builtin.file:
     path: /etc/telegraf/scripts

@@ -14,6 +14,17 @@ restic_default_folders:
 # Vault unseal keys on disk + offsite backup = defeat the purpose of seal/unseal.
 restic_global_excludes:
   - "/persistent_data/application/vault/unseal"
+  # SQLite write-ahead-log sidecars. They are created and removed constantly
+  # under live services (radarr, sonarr, homeassistant, ...), so restic scans
+  # them and then finds them gone -> "could not be read" -> exit 3. They are
+  # also worthless in a file-level backup: a *-wal captured a moment after its
+  # .db does not match it, and SQLite would rather see no WAL (and read the
+  # database as of the last checkpoint) than a skewed one.
+  - "*.db-shm"
+  - "*.db-wal"
+  - "*.db-journal"
+  - "*.sqlite-shm"
+  - "*.sqlite-wal"
 
 restic_folders: []
 restic_databases: []
@@ -22,8 +33,12 @@ restic_forget: true
 restic_forget_keep_within: 30d
 restic_prune: true
 restic_check: true
-restic_check_timer_on_calendar: "Sun *-*-* 04:00:00"
+restic_check_timer_on_calendar: "Sun *-*-* 09:00:00"
 restic_check_read_data_subset: "5%"
+# How long `restic check` waits for the repository lock before giving up.
+# The daily backup holds the lock for hours, so with the restic default of
+# 0s an overlapping check fails immediately instead of waiting its turn.
+restic_check_retry_lock: "2h"
 
 restic_ssh_enabled: true
 restic_ssh_host: backup

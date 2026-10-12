@@ -101,7 +101,7 @@ services:
   docker-socket-proxy:
     container_name: docker-socket-proxy
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: tecnativa/docker-socket-proxy:0.3.0@sha256:9e4b9e7517a6b660f2cc903a19b257b1852d5b3344794e3ea334ff00ae677ac2
@@ -136,7 +136,7 @@ services:
   plex:
     container_name: plex
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -146,7 +146,7 @@ services:
       - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
     ports:
       - "32400/tcp"
-    image: plexinc/pms-docker:1.43.0.10492-121068a07@sha256:1131c4cd21fa22f8196f749f1dbb69af306776c3c83c7f5b061e51dc49bcff7f
+    image: plexinc/pms-docker:1.43.3.10896-cb3ebc72d@sha256:83a425ae9e133b1cb2cc3b809556e01c61cd8ff65c582e41b4374bc2210bac9e
     networks:
       - external
       - internal
@@ -184,7 +184,7 @@ services:
   tautulli:
     container_name: tautulli
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -198,13 +198,13 @@ services:
       - external
     ports:
       - "8181/tcp"
-    # Tautulli uses ~87MB peak; 512M limit gives ample headroom
+    # Memory (2026-09-01, 30d max): 99M. 256M gives 2.6x headroom.
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 256M
         reservations:
-          memory: 128M
+          memory: 64M
     environment:
       - PUID=1000
       - PGID=1000
@@ -224,7 +224,7 @@ services:
   pihole:
     container_name: pihole
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -236,7 +236,7 @@ services:
       - NET_RAW          # DHCP raw socket access
       - SETGID           # drop to pihole group
       - SETUID           # drop to pihole user
-    image: pihole/pihole:2026.02.0@sha256:ee348529cea9601df86ad94d62a39cad26117e1eac9e82d8876aa0ec7fe1ba27
+    image: pihole/pihole:2026.07.2@sha256:f7d1be836e3bc608b56d82fc9904f5a831cdfbc0dc9c6d58f94e4c985c70038b
     ports:
       - "443:80"
     networks:
@@ -245,7 +245,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 192M
     environment:
       TZ: America/New_York
       WEBPASSWORD: {{ vault_pihole_password | default(lookup('env', 'PIHOLE_PASSWORD')) | trim | replace("$", "$$") }}
@@ -263,7 +263,7 @@ services:
   iperf3:
     container_name: iperf3
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     read_only: true
@@ -281,11 +281,22 @@ services:
     command:
       - "-s"
     restart: unless-stopped
+    healthcheck:
+      # networkstatic/iperf3 ships no procps, so `pgrep` exits 127 and this
+      # container has never once reported healthy (failing_streak reached
+      # 180045 before it was recreated on 2026-08-30). Probe the listening
+      # socket instead: 5201 == 0x1451 in the hex local_address column of
+      # /proc/net/tcp. Same probe as promtail, which reports healthy.
+      test: ["CMD-SHELL", "grep -q ':1451' /proc/net/tcp6 2>/dev/null || grep -q ':1451' /proc/net/tcp"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
   nginx: 
-    image: nginx:1.29.7-alpine3.23-perl@sha256:e2e7b6b54ad96a1ce8611a821ffe544995ce2324a07119a16e2cf8d2db1d211d
+    image: nginx:1.31.1-alpine3.23-perl@sha256:b4f40fc790074a4af0d6fc81923a30459910d6f01efc048246ef288b14654354
     container_name: nginx
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # nginx master runs as root, workers drop to nginx user; binds to port 80
@@ -323,10 +334,10 @@ services:
       - /var/log/nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   lab_nginx: 
-    image: nginx:1.29.7-alpine3.23-perl@sha256:e2e7b6b54ad96a1ce8611a821ffe544995ce2324a07119a16e2cf8d2db1d211d
+    image: nginx:1.31.1-alpine3.23-perl@sha256:b4f40fc790074a4af0d6fc81923a30459910d6f01efc048246ef288b14654354
     container_name: lab_nginx
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Same as nginx above
@@ -366,10 +377,10 @@ services:
       - {{ docker_persistent_data_path }}/certs:/data/certs
       - {{ docker_persistent_data_path }}/docker-proxy-tls:/data/docker-proxy-tls:ro
   iot_nginx: 
-    image: nginx:1.29.7-alpine3.23-perl@sha256:e2e7b6b54ad96a1ce8611a821ffe544995ce2324a07119a16e2cf8d2db1d211d
+    image: nginx:1.31.1-alpine3.23-perl@sha256:b4f40fc790074a4af0d6fc81923a30459910d6f01efc048246ef288b14654354
     container_name: iot_nginx
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Same as nginx above
@@ -388,10 +399,11 @@ services:
       iot:
         ipv4_address: {{ iot_nginx_ip }}
     restart: unless-stopped
+    # Memory right-sized 2026-07-01: 30-day peak 29 MB, avg 22 MB. 128M gives 4.4x headroom.
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 128M
     healthcheck:
       test: ["CMD-SHELL", "pgrep nginx > /dev/null || exit 1"]
       interval: 30s
@@ -403,10 +415,10 @@ services:
       - /var/log/iot_nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   ombi:
-    image: linuxserver/ombi:4.53.4@sha256:fcad7b900ab2bc910f8271435953d99fd8dd4a1d877d09e478c9183bd4591193
+    image: linuxserver/ombi:4.53.10@sha256:db3642d3fd492c399e1c879fe38fe77b59db6ca2e966b0d3df2aad7d376489da
     container_name: ombi
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -417,10 +429,11 @@ services:
     networks:
       - external
       - internal
+    # Memory (2026-09-01, 30d max): 662M of 768M = 86.2%. 1G gives 1.5x headroom.
     deploy:
       resources:
         limits:
-          memory: 768M
+          memory: 1G
     environment:
       - PUID=1000
       - PGID=1000
@@ -440,10 +453,10 @@ services:
   # Path overrides (MainDir=/remote, DestDir/TempDir/etc under /remote) were
   # applied manually to /persistent_data/application/nzbget/nzbget.conf.
   nzbget:
-    image: linuxserver/nzbget:26.0.20260327@sha256:25075e7d96f06f448ad1e9cb5c2b6e7d254eec5c12b074e9c0c5bc6c4acece4f
+    image: linuxserver/nzbget:26.3.20260827@sha256:5f3d3fa71029004156eff2cbf4ef4455ce4ce59517cf13fa7d1d7c8a4cd2c8a4
     container_name: nzbget
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -479,7 +492,7 @@ services:
     image: linuxserver/radarr:6.0.4.10291-ls292@sha256:f08dda38e7d12e5a722d9a5cb6e54acaf63c8598fefeefec88effe0c0d0038dd
     container_name: radarr
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -503,6 +516,11 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=America/New_York
+      # LinuxServer.io mod: install ffmpeg/ffprobe at startup so Radarr's
+      # sample-detection / media-analysis steps work (the base image ships
+      # without them).
+      - DOCKER_MODS=linuxserver/mods:universal-package-install
+      - INSTALL_PACKAGES=ffmpeg
     volumes:
       - {{ docker_persistent_data_path }}/radarr:/config
       - /mpool/plex/Movies:/movies
@@ -515,10 +533,10 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.1489@sha256:2deef29d80b88537566daa6e7478a4ae4154623b444d9a9ca4aeb6ac4f9df008
+    image: linuxserver/jackett:0.24.2492@sha256:8caff79adf8105c7fb63c996dae38ce50ea390de460713b80aad0301d5c862f3
     container_name: jackett
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -551,7 +569,7 @@ services:
     image: linuxserver/sonarr:4.0.16.2944-ls303@sha256:37be832b78548e3f55f69c45b50e3b14d18df1b6def2a4994258217e67efb1a1
     container_name: sonarr
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -564,17 +582,22 @@ services:
     networks:
     - internal
     # 308K history records — Sonarr benefits from memory headroom for DB operations.
-    # Added reservation to prevent OOM kills during heavy queries.
+    # Memory (2026-09-01, 30d max): 1889M of 2048M = 92.2%. 3G gives 1.6x headroom.
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 3G
         reservations:
           memory: 512M
     environment:
       - PUID=1000
       - PGID=1000
       - TZ=America/New_York
+      # LinuxServer.io mod: install ffmpeg/ffprobe at startup so Sonarr's
+      # sample-detection / media-analysis steps work (the base image ships
+      # without them).
+      - DOCKER_MODS=linuxserver/mods:universal-package-install
+      - INSTALL_PACKAGES=ffmpeg
     volumes:
       - {{ docker_persistent_data_path }}/sonarr:/config
       - /mpool/plex/TV:/tv
@@ -587,10 +610,10 @@ services:
       retries: 3
       start_period: 60s
   booksonic:
-    image: izderadicka/audioserve:latest@sha256:c3609321701765671cae121fc0f61db122e8c124643c04770fbc9326c74b18e3
+    image: izderadicka/audioserve:latest@sha256:aac13420d5ef2cf322fdffecd49108708b82096d6a04b1db88ec7e7e9fc39fb3
     container_name: audioserve
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     ports:
@@ -616,7 +639,11 @@ services:
       - /mpool/audioserve/data:/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000"]
+      # izderadicka/audioserve ships no wget, so the HTTP probe exits 127 and
+      # this container has never once reported healthy. Probe the listening
+      # socket instead: 3000 == 0x0BB8 in the hex local_address column of
+      # /proc/net/tcp. Same probe as promtail, which reports healthy.
+      test: ["CMD-SHELL", "grep -q ':0BB8' /proc/net/tcp6 2>/dev/null || grep -q ':0BB8' /proc/net/tcp"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -624,7 +651,7 @@ services:
   influxdb:
     container_name: influxdb
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Entrypoint chowns data dirs and switches to influxdb user
@@ -642,12 +669,12 @@ services:
         ipv4_address: {{ influxdb_iot_ip }}
     image: influxdb:2.8.0@sha256:8e911da5f7b482230e61fe4bad9af0697d97a75e087f19f5f0ddfee62c2bd686
     restart: unless-stopped
-    # Memory right-sized: 7-day peak 1.6GB, avg 607MB. 16G was 10x peak.
-    # 4G gives 2.5x headroom over peak.
+    # Memory (2026-09-01, 30d max): 2719M of 4096M = 66.4%; OOM-killed 2026-07-13
+    # at 4.15G anon-rss during a compaction spike. 6G covers the spike.
     deploy:
       resources:
         limits:
-          memory: 4G
+          memory: 6G
         reservations:
           memory: 1G
     volumes:
@@ -670,7 +697,7 @@ services:
   grafana:
     container_name: grafana
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: grafana/grafana:12.4.0-ubuntu@sha256:9a14379bd5a91671e196f148a6e965b9db78fc70ed4f2f1716d70c240cd9161f
@@ -680,14 +707,14 @@ services:
       - internal
       - loki-backend
     restart: unless-stopped
-    # Memory right-sized: 7-day peak 281MB, avg 179MB.
-    # Previous 4G limit was 14x peak usage. 1G gives 3.5x headroom over peak.
+    # Memory right-sized: 7-day peak 146MB (14.3%), 30d peak 158 MiB, avg 125MB.
+    # 384M gives ~50% headroom above 30-day peak.
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 384M
         reservations:
-          memory: 256M
+          memory: 96M
     volumes:
       - grafana-storage:/var/lib/grafana
       - {{ docker_persistent_data_path }}/grafana/provisioning:/etc/grafana/provisioning
@@ -709,6 +736,13 @@ services:
       - GF_TRACING_OPENTELEMETRY_OTLP_ADDRESS=otel-collector:4317
       - GF_TRACING_OPENTELEMETRY_SAMPLER_TYPE=const
       - GF_TRACING_OPENTELEMETRY_SAMPLER_PARAM=1
+      # Alert state history -> Loki. The default SQLite "annotations" backend
+      # fails every minute with "too many SQL variables" because multi-series
+      # rules (e.g. container-health-failure) batch-insert more bind params
+      # than SQLite allows, silently dropping all alert state history. Grafana
+      # already shares the loki-backend network with the loki container.
+      - GF_UNIFIED_ALERTING_STATE_HISTORY_BACKEND=loki
+      - GF_UNIFIED_ALERTING_STATE_HISTORY_LOKI_REMOTE_URL=http://loki:3100
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s
@@ -718,17 +752,18 @@ services:
   loki:
     container_name: loki
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
-    image: grafana/loki:3.7.1@sha256:73e905b51a7f917f7a1075e4be68759df30226e03dcb3cd2213b989cc0dc8eb4
+    image: grafana/loki:3.7.7@sha256:d70e4659623f3e109af669cae76fe2a5dd5be54e2298fe8aed380d982fbc2500
     networks:
       loki-backend:
     restart: unless-stopped
+    # Memory (2026-09-01, 30d max): 791M. 1536M gives 1.9x headroom.
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 1536M
     volumes:
       - {{ docker_persistent_data_path }}/loki/data:/loki
       - {{ docker_persistent_data_path }}/loki/local-config.yaml:/etc/loki/local-config.yaml:ro
@@ -746,10 +781,10 @@ services:
       retries: 3
       start_period: 30s
   promtail:
-    image: grafana/promtail:3.5.8
+    image: grafana/promtail:3.5.8@sha256:2a7c5469d687377de5cb7c8356cf96090c0069814d90ef35f9874db445999609
     container_name: promtail
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -771,12 +806,12 @@ services:
     networks:
       internal:
         ipv4_address: {{ promtail_ip }}
-    # Promtail is a lightweight log shipper; 256M and half a CPU core is plenty.
-    # Peak usage: ~87MB (7-day max).
+    # Promtail is a lightweight log shipper; ~85MB typical, spikes to ~245MB during
+    # log bursts (observed 2026-06-01). 384M leaves ~36% headroom on the spike peak.
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
           cpus: '0.5'
     # Use json-file logging to avoid circular dependency (same as Loki)
     logging:
@@ -797,9 +832,9 @@ services:
   # =============================================================================
   tempo:
     container_name: tempo
-    image: grafana/tempo:2.10.3@sha256:cac9de2ac9f6da8efca5b64b690a7cb8c786a0c49cac7b4517dd1b0089a6c703
+    image: grafana/tempo:3.0.0@sha256:78439f7f7cf3c97122846c13a832e060c6c7ef67dcc814dccf0a5f3f78393a93
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     restart: unless-stopped
@@ -835,7 +870,7 @@ services:
     container_name: otel-collector
     image: otel/opentelemetry-collector-contrib:0.120.0@sha256:85ac41c2db88d0df9bd6145e608a3cb023f5d8443868adbfbbf66efb51087917
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     restart: unless-stopped
@@ -845,9 +880,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 384M
         reservations:
-          memory: 128M
+          memory: 96M
     volumes:
       - {{ docker_persistent_data_path }}/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
     depends_on:
@@ -867,7 +902,7 @@ services:
   gitlab:
     container_name: gitlab
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Omnibus GitLab runs ~10 internal services (postgres, redis, nginx, puma, etc.)
@@ -888,7 +923,7 @@ services:
       - "443:80"
     networks:
       - internal
-    image: 'gitlab/gitlab-ee:18.10.1-ee.0@sha256:1d4f55209efda97f6303ce0cb3044410b092a9babfb86c4818a49c3e5be11451'
+    image: 'gitlab/gitlab-ee:19.3.1-ee.0@sha256:b5167605564d64acf896be614791092d1409ac3f78214a9e4394ebb24a0be1b5'
     restart: unless-stopped
     ulimits:
       nofile:
@@ -929,7 +964,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 768M
+          memory: 256M
     cap_drop:
       - ALL
     cap_add:
@@ -940,7 +975,7 @@ services:
       - SETUID      # Process UID changes
       - SETGID      # Process GID changes
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     volumes:
       - vault_data:/vault/file
       - '{{ docker_persistent_data_path }}/vault/config:/vault/config:ro'
@@ -973,7 +1008,7 @@ services:
     container_name: jit-approval-svc
     restart: unless-stopped
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     read_only: true
     cap_drop:
       - ALL
@@ -1017,7 +1052,7 @@ services:
   deluge:
     container_name: deluge
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -1032,20 +1067,15 @@ services:
     networks:
       internal:
         ipv4_address: {{ deluge_ip }}
-    # Memory right-sized (March 2026): 7-day avg 2.0-2.7GB, P95 3.8GB, peak 4092MB
-    # (99.9% of previous 4G limit). libtorrent disk cache reduced to 128 pieces
-    # via core.conf but memory still climbs under heavy torrent loads.
-    # 6G gives ~1.6x headroom over P95.
-    # Memory right-sized (March 2026 audit): 7-day peak 6139MB hitting 99.9% of
-    # previous 6G limit. libtorrent disk cache already reduced to 128 pieces.
-    # 8G gives ~1.3x headroom over observed peak. Monitor for continued growth
-    # which may indicate a libtorrent memory leak.
+    # Memory (2026-09-01, 30d max): 8192M of 8192M = 100.0% -- capped, OOM risk.
+    # Growth pattern 4G->6G->8G->12G indicates a libtorrent leak; tracked in #122.
+    # 12G is headroom, not a fix.
     deploy:
       resources:
         limits:
-          memory: 8G
+          memory: 12G
         reservations:
-          memory: 2G
+          memory: 3G
     volumes:
       - '{{ docker_persistent_data_path }}/deluge:/config'
       - '/mpool/samba_share/nfs:/downloads'
@@ -1058,12 +1088,12 @@ services:
   bitwarden:
     container_name: bitwarden
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     ports:
       - "443:80"
-    image: 'vaultwarden/server:1.35.4-alpine@sha256:34b4e91ed4c2a4d2191245325608b2a84bedbeb9c9dd561e3c0924b98ef7126c'
+    image: 'vaultwarden/server:1.37.2-alpine@sha256:d16a304c2476fd787634ddde2c00be8fdfa1a72539438c626ece3686b5b88ab4'
     restart: unless-stopped
     networks:
       - external
@@ -1082,10 +1112,10 @@ services:
       retries: 3
       start_period: 30s
   blog:
-    image: wordpress:6.9.2-php8.3-apache@sha256:ba1996f128e96e06613cffd9efa17e619d077a427c2d135204b1bc3bc9fa0510
+    image: wordpress:7.1.0-php8.3-apache@sha256:8801a1239d7ba9fb340a5fc5ba0bf7f8d3652adbd64893e3fba7992ba618108e
     container_name: wordpress
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Apache master binds to port 80 and forks workers as www-data;
@@ -1101,10 +1131,11 @@ services:
     networks:
       - external
       - wordpress_internal
+    # Memory (2026-09-01, 30d max): 125M. 384M gives 3.1x headroom.
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 384M
     environment:
       WORDPRESS_DB_HOST: wordpress_db
       WORDPRESS_DB_USER: wordpress
@@ -1121,10 +1152,10 @@ services:
       retries: 3
       start_period: 60s
   wordpress_db:
-    image: mysql:9.6.0-oraclelinux9@sha256:db32c8ec843c042a728efb0ac7aa814d6f010eaac8923e20ae0a849d09c5baf8
+    image: mysql:9.7.0-oraclelinux9@sha256:f0ef1d92fa650fcfa5b85f1d82bb1a56a6dd579bf256b8f8f2a5a0b1b61c8b0b
     container_name: wordpress_db
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     networks:
@@ -1157,14 +1188,14 @@ services:
   diagram:
     container_name: diagram
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     ports:
       - "443:8080"
     networks:
       internal:
-    image: jgraph/drawio:29.6.6@sha256:04ac62e1cf7c4a35df9c32550d34754777e3b5b843079c48fe93a48a6c68e0eb
+    image: jgraph/drawio:31.4.1@sha256:84966aa6b98203485a49b64d60c869a3da61250757756aad9862c8eb6bb788fd
     restart: unless-stopped
     # Memory right-sized (March 2026 audit): 7-day peak 158MB, avg 140MB.
     # 768M was 5x peak. 384M gives 2.4x headroom over peak.
@@ -1189,7 +1220,7 @@ services:
     devices: 
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_ETDRb11A920-if00-port0:/dev/ttyUSB0"
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0:/dev/ttyUSB1"
-    image: "homeassistant/home-assistant:2026.3.4@sha256:916682086154a7390114a9788782b8efb199852d4f7d47066722c2bc5d1829e6"
+    image: "homeassistant/home-assistant:2026.6.1@sha256:59aa8824955c9db491b75d2eebe42bd68494f80c2ec69ec0d66d9dae37d37514"
     deploy:
       resources:
         limits:
@@ -1199,16 +1230,42 @@ services:
     volumes:
       - "{{ docker_persistent_data_path }}/homeassistant:/config"
       - /etc/localtime:/etc/localtime:ro
-    command: ["/bin/bash", "-c", "ip route del default; ip route add default via 10.3.0.1 dev eth1; /init"]
+    command:
+      - /bin/bash
+      - -c
+      - |
+        # Pin HA's default route to the internal VLAN gateway (10.3.0.1).
+        #
+        # This replaces `ip route del default; ip route add default via 10.3.0.1 dev eth1`,
+        # which had two failure modes:
+        #   1. `dev eth1` assumed Docker attached the `internal` network as eth1. HA is on
+        #      three macvlan networks (internal/iot/external) and interface ordering is NOT
+        #      guaranteed across container recreates, so the add failed with
+        #      "RTNETLINK answers: Network unreachable" whenever eth1 was not the 10.3 leg.
+        #   2. The unconditional `del` had already run, so a failed add left the container
+        #      with NO default route at all -- silently, for days.
+        #
+        # `ip route replace` is atomic (never leaves a gap) and resolves the outbound
+        # device from the on-link subnet route, so it does not care what the leg is named.
+        for _ in 1 2 3; do
+          ip route replace default via 10.3.0.1 && break
+          sleep 2
+        done
+        if ip route show default | grep -q "via 10.3.0.1"; then
+          echo "[net] default route via 10.3.0.1 OK"
+        else
+          echo "[net] ERROR: could not set default route via 10.3.0.1 -- outbound internet, DNS and cloud integrations (Home Connect, HACS) will fail" >&2
+        fi
+        exec /init
     cap_drop:
       - ALL
     cap_add:
-      # Required: the entrypoint command runs `ip route del default; ip route add default via 10.3.0.1 dev eth1`
-      # to override the default route so HA traffic goes through the internal VLAN (10.3.x.x) instead of
-      # whatever Docker assigns. Without NET_ADMIN, the ip route commands fail and HA gets wrong default gateway.
+      # Required: the entrypoint runs `ip route replace default via 10.3.0.1` to force HA
+      # traffic onto the internal VLAN (10.3.x.x) instead of whatever Docker assigns.
+      # Without NET_ADMIN the route change fails and HA falls back to the wrong gateway.
       - NET_ADMIN
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:8123/"]
@@ -1219,7 +1276,7 @@ services:
   snapserver:
     container_name: snapserver
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     hostname: snapserver
@@ -1248,7 +1305,7 @@ services:
   snapclient_office:
     container_name: snapclient_office
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Audio clients need user switching and real-time scheduling for playback
@@ -1267,12 +1324,11 @@ services:
     devices:
       - "/dev/snd"
     command:
-      - "-h"
-      - {{ snapserver_address }}
       - "-s"
       - "plughw:CARD=Office,DEV=0"
       - "--hostID"
       - "office"
+      - "tcp://{{ snapserver_address }}"
     healthcheck:
       test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
@@ -1282,7 +1338,7 @@ services:
   snapclient_global:
     container_name: snapclient_global
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -1300,12 +1356,11 @@ services:
     devices:
       - "/dev/snd"
     command:
-      - "-h"
-      - {{ snapserver_address }}
       - "-s"
       - "plughw:CARD=Global,DEV=0"
       - "--hostID"
       - "global"
+      - "tcp://{{ snapserver_address }}"
     healthcheck:
       test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
@@ -1315,7 +1370,7 @@ services:
   snapclient_kitchen:
     container_name: snapclient_kitchen
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Same as snapclient_office
@@ -1334,12 +1389,11 @@ services:
     devices:
       - "/dev/snd"
     command:
-      - "-h"
-      - {{ snapserver_address }}
       - "-s"
       - "plughw:CARD=Kitchen,DEV=0"
       - "--hostID"
       - "kitchen"
+      - "tcp://{{ snapserver_address }}"
     healthcheck:
       test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
@@ -1349,7 +1403,7 @@ services:
   snapclient_main_bedroom:
     container_name: snapclient_main_bedroom
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Same as snapclient_office
@@ -1368,12 +1422,11 @@ services:
     devices:
       - "/dev/snd"
     command:
-      - "-h"
-      - {{ snapserver_address }}
       - "-s"
       - "plughw:CARD=Main_Bedroom,DEV=0"
       - "--hostID"
       - "main_bedroom"
+      - "tcp://{{ snapserver_address }}"
     healthcheck:
       test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
@@ -1383,7 +1436,7 @@ services:
   snapclient_main_bathroom:
     container_name: snapclient_main_bathroom
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Same as snapclient_office
@@ -1402,12 +1455,11 @@ services:
     devices:
       - "/dev/snd"
     command:
-      - "-h"
-      - {{ snapserver_address }}
       - "-s"
       - "plughw:CARD=Main_Bathroom,DEV=0"
       - "--hostID"
       - "main_bathroom"
+      - "tcp://{{ snapserver_address }}"
     healthcheck:
       test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
@@ -1417,7 +1469,7 @@ services:
   snapclient_guest_bathroom:
     container_name: snapclient_guest_bathroom
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Same as snapclient_office
@@ -1436,12 +1488,11 @@ services:
     devices:
       - "/dev/snd"
     command:
-      - "-h"
-      - {{ snapserver_address }}
       - "-s"
       - "plughw:CARD=Guest_Bathroom,DEV=0"
       - "--hostID"
       - "guest_bathroom"
+      - "tcp://{{ snapserver_address }}"
     healthcheck:
       test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
@@ -1451,7 +1502,7 @@ services:
   snapclient_guest_bedroom:
     container_name: snapclient_guest_bedroom
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Same as snapclient_office
@@ -1470,12 +1521,11 @@ services:
     devices:
       - "/dev/snd"
     command:
-      - "-h"
-      - {{ snapserver_address }}
       - "-s"
       - "plughw:CARD=Guest_Bedroom,DEV=0"
       - "--hostID"
       - "guest_bedroom"
+      - "tcp://{{ snapserver_address }}"
     healthcheck:
       test: ["CMD-SHELL", "test -f /proc/1/status && head -1 /proc/1/status | grep -q snapclient"]
       interval: 30s
@@ -1487,7 +1537,7 @@ services:
   mosquitto:
     container_name: mosquitto
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # Entrypoint chowns data/config and drops to mosquitto user
@@ -1513,7 +1563,7 @@ services:
       - mosquitto:/mosquitto/data
       - "{{ docker_persistent_data_path }}/certs:/mosquitto/certs:ro"
     healthcheck:
-      test: ["CMD-SHELL", "echo | nc -w1 127.0.0.1 1883 || exit 1"]
+      test: ["CMD-SHELL", "nc -z -w 3 127.0.0.1 1883 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -1521,7 +1571,7 @@ services:
   amcrest2mqtt:
     container_name: amcrest2mqtt
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/amcrest2mqtt:latest"
@@ -1558,7 +1608,7 @@ services:
     restart: unless-stopped
     container_name: ambientweather
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     networks:
@@ -1585,11 +1635,11 @@ services:
   zigbee2mqtt:
     container_name: zigbee2mqtt
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     restart: unless-stopped
-    image: koenkk/zigbee2mqtt:2.9.1@sha256:574b2bd0dcbb59fae6edbbb81a35b5563291d3825da0225f0078aa5575dac37f
+    image: koenkk/zigbee2mqtt:2.13.0@sha256:4fb4db4d49a217bed6d0204f454ce809febc565bbe051b85c556ee2bcef73d8c
     depends_on:
       mosquitto:
         condition: service_healthy
@@ -1597,10 +1647,13 @@ services:
       iot:
     ports:
       - 8081:8080
+    # Memory bumped 256M -> 512M on 2026-08-06: usage climbed linearly from
+    # ~80MB (Jul 14) to 236MB (Aug 6) — 15MB/day growth, hitting 87.9% of
+    # the 256M limit. Symptomatic of a leak; this buys runway to investigate.
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 512M
     volumes:
       - "{{ docker_persistent_data_path }}/zigbee2mqtt:/app/data"
     environment:
@@ -1615,7 +1668,7 @@ services:
     image: lscr.io/linuxserver/paperless-ngx:1.8.0@sha256:4016f13609923d1ef926c3d3532cf77f3650dc0b886258947cdf311c5ddc9829
     container_name: paperless-ngx
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -1648,7 +1701,7 @@ services:
     image: wernight/mopidy:latest@sha256:e3156f3da69d3e88b191c852d1fa60907c91e36668bca1f5afb5b57b74a8407d
     container_name: mopidy
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     networks:
@@ -1657,7 +1710,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 128M
     environment:
       - TZ=America/New_York
     volumes:
@@ -1678,10 +1731,14 @@ services:
       retries: 3
       start_period: 30s
   nextcloud_db:
-    image: mariadb:12.2.2@sha256:b1cb255a9939d28a1856815f0de6046c20c28c21b92a9f2696bc782b247a47ee
+    # 12.3.2-ubi10 (Red Hat UBI 10 variant) is built requiring x86-64-v3 and
+    # crashes on this host with "Fatal glibc error: CPU does not support
+    # x86-64-v3". Stay on the Debian-based default variant. Do not switch to
+    # any -ubi*/-ubi10* tag.
+    image: mariadb:12.3.2@sha256:b1c7bf836e64ed9406a8984af29509f40089d55cea14b32f12c4726a1f17104b
     container_name: nextcloud_database
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     # MariaDB entrypoint chowns data dir and drops to mysql user
@@ -1716,10 +1773,10 @@ services:
       retries: 3
       start_period: 60s
   nextcloud:
-    image: nextcloud:33.0.1-apache@sha256:0b14848e05d19aa25e8a189eb9cfef4215489e0cbf5eb999e8784bf03027c226
+    image: nextcloud:33.0.5-apache@sha256:56bdc45109067500fd0832fa64832b7c77a167d9394cbf5f0f4b59740b94194d
     container_name: nextcloud
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -1734,14 +1791,23 @@ services:
     hostname: nkontur.com
     ports:
       - "443:80"
-    # Memory right-sized: 7-day peak 1.2GB, avg 627MB. 8G was 6.7x peak.
-    # 3G gives 2.5x headroom over peak.
+    # Memory (2026-09-01): reverted to 3G after the 2026-07-02 right-size to 1536M
+    # was proven wrong in production. The 1536M limit first took effect when the
+    # container was recreated on 2026-08-30 00:00 UTC; at 2026-09-01 03:48:36 UTC
+    # nextcloud hit the cap and the kernel memcg OOM-killer killed an apache2 child
+    # (memcg /docker/4a33dea8..., UID 33). Telegraf recorded usage 1260M = 82.1% of
+    # limit with memcg fail_count=1 in that window.
+    # The "148 MB peak" the old comment sized against was measured entirely inside a
+    # quiet period; the real workload spikes to ~1.2-1.5G on an infrequent cycle, so
+    # a short observation window never sees it. Under the previous 3G limit the
+    # container ran from 2026-06-24 to 2026-08-30 with zero OOM kills and zero
+    # fail_count, so 3G is the value with actual evidence behind it.
     deploy:
       resources:
         limits:
           memory: 3G
         reservations:
-          memory: 512M
+          memory: 256M
     volumes:
       - nextcloud:/data
       - {{ docker_persistent_data_path }}/nextcloud/custom.config.php:/var/www/html/config/custom.config.php
@@ -1755,10 +1821,10 @@ services:
       start_period: 120s
 
   prowlarr:
-    image: lscr.io/linuxserver/prowlarr:latest@sha256:9ef5d8bf832edcacb6082f9262cb36087854e78eb7b1c3e1d4375056055b2d82
+    image: lscr.io/linuxserver/prowlarr:latest@sha256:2489c6dbaf11e3a6d71aeb2e6980d04193d4af611aa7064a974851222fd41722
     container_name: prowlarr
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -1788,21 +1854,22 @@ services:
       retries: 3
       start_period: 60s
   navidrome:
-    image: deluan/navidrome:0.60.3@sha256:a5dce8f33304714dd138e870cca0dcab3d937ca236be1a9f2b97da009d1a0048
+    image: deluan/navidrome:0.63.2@sha256:9012939114fbb1bb641b81cf96dec5ded15f0aafefe8d47a511d7cb919658e40
     container_name: navidrome
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     networks:
       - internal
     restart: unless-stopped
+    # Memory right-sized 2026-07-02: 30-day peak 37 MB, avg 17 MB. 192M gives 5.2x headroom.
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 192M
         reservations:
-          memory: 128M
+          memory: 64M
     environment:
       - ND_SCANSCHEDULE=1h
       - ND_LOGLEVEL=info
@@ -1821,7 +1888,7 @@ services:
     image: lscr.io/linuxserver/lidarr:0.8.0.1896-ls5@sha256:37a3df74f4c2a6f10eead66f4d8034362ebf2866f935026b4a71dd888b9e7f08
     container_name: lidarr
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -1862,7 +1929,7 @@ services:
     container_name: novnc-dev1
     restart: unless-stopped
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     networks:
@@ -1873,10 +1940,11 @@ services:
       - VNCPORT=5900
     ports:
       - "6081:6080"
+    # Memory right-sized 2026-07-01: 30-day peak 42 MB, avg 17 MB. 128M gives 3.0x headroom.
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 128M
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:6080/')\" || exit 1"]
       interval: 30s
@@ -1891,7 +1959,7 @@ services:
     container_name: novnc-dev2
     restart: unless-stopped
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     networks:
@@ -1902,10 +1970,11 @@ services:
       - VNCPORT=5900
     ports:
       - "6082:6080"
+    # Memory right-sized 2026-07-01: 30-day peak 38 MB, avg 13 MB. 128M gives 3.4x headroom.
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 128M
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:6080/')\" || exit 1"]
       interval: 30s
@@ -1920,7 +1989,7 @@ services:
     container_name: novnc-dev3
     restart: unless-stopped
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     networks:
@@ -1931,10 +2000,11 @@ services:
       - VNCPORT=5900
     ports:
       - "6083:6080"
+    # Memory right-sized 2026-07-01: 30-day peak 38 MB, avg 17 MB. 128M gives 3.4x headroom.
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 128M
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:6080/')\" || exit 1"]
       interval: 30s
@@ -1943,12 +2013,10 @@ services:
       start_period: 15s
 
   chromium-browser:
-    build:
-      context: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/chromium-browser' }}"
     image: gitlab-registry.lab.nkontur.com:443/root/homelab/chromium-browser:latest
     container_name: chromium-browser
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -1977,13 +2045,13 @@ services:
       start_period: 30s
     environment:
       - TZ=America/New_York
-      - VNC_PASSWORD={{ vault_chromium_vnc_password | default('changeme') | replace("$", "$$") }}
+      - VNC_PASSWORD={{ vault_chromium_vnc_password | default(lookup('env', 'CHROMIUM_VNC_PASSWORD')) | trim | replace("$", "$$") }}
   openclaw-gateway:
     image: gitlab-registry.lab.nkontur.com:443/root/homelab/openclaw:{{ openclaw_image_tag | default('latest') }}
     container_name: openclaw-gateway
     init: true
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     restart: unless-stopped
@@ -2000,10 +2068,11 @@ services:
       - "www.nkontur.com:172.30.0.10"
     ports:
       - "18789:18789"
+    # Memory (2026-09-01, 30d max): 2313M of 3072M = 75.3%. 5G gives 2.2x headroom.
     deploy:
       resources:
         limits:
-          memory: 3G
+          memory: 5G
         reservations:
           memory: 1G
     healthcheck:
@@ -2032,9 +2101,9 @@ services:
       # See: https://docs.openclaw.ai/logging#export-to-opentelemetry
       # Claude subscription auth for the claude-cli backend (see openclaw.json.j2)
       - CLAUDE_CODE_OAUTH_TOKEN={{ vault_openclaw_claude_oauth_token | default(lookup('env', 'OPENCLAW_CLAUDE_OAUTH_TOKEN')) | trim | replace("$", "$$") }}
-      # OpenClaw scrubs auth env vars (backend clearEnv) when spawning CLI
-      # backends; without this exemption the claude CLI sees no token and
-      # fails with "Not logged in"
+      # OpenClaw >=2026.7 scrubs auth env vars (backend clearEnv) before spawning
+      # CLI backends; without this exemption the claude CLI sees no token and
+      # every turn fails with "Not logged in · Please run /login"
       - OPENCLAW_LIVE_CLI_BACKEND_PRESERVE_ENV=CLAUDE_CODE_OAUTH_TOKEN
     volumes:
       - {{ docker_persistent_data_path }}/openclaw/data:/home/node/.openclaw
@@ -2056,9 +2125,9 @@ services:
   # Subsequent starts are fast — tiles are cached in the data volume.
   valhalla:
     container_name: valhalla
-    image: ghcr.io/valhalla/valhalla-scripted:3.6.3@sha256:27edb9e58564e0bf082c21e8c8460a0968dfa2b3892a9db3b1199afc3bee5937
+    image: ghcr.io/valhalla/valhalla-scripted:3.8.3@sha256:24ef7955899dececb94e26c6dfb89d64fabfae875f980432694b0261eb6c251b
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -2109,25 +2178,25 @@ services:
   # Place .mbtiles files in {{ docker_persistent_data_path }}/tileserver/
   tileserver:
     container_name: tileserver
-    image: maptiler/tileserver-gl:latest@sha256:0472aa881c9965bcd578cbaaeeaf5ab86d5d92e10c64c48c6856a6b1b7beb13f
+    image: maptiler/tileserver-gl:latest@sha256:3a9ccdb24820b6814c8119bcc8a4376c39867cb0ffe69d62919ef898b90c2427
     # Run as UID 1000 to match tileserver-gl's expected user.
     # The deploy-compose role pre-creates the data dir with 1000:1000 ownership.
     user: "1000:1000"
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     networks:
       - internal
     restart: unless-stopped
-    # Memory right-sized: 7-day peak 105MB, avg 76MB. 2G was 19x peak.
-    # 512M gives 5x headroom over peak.
+    # Memory right-sized: 7-day peak 92MB (17.9%), 30d peak 97 MiB, avg 58MB.
+    # 192M gives ~50% headroom above 30-day peak.
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 192M
         reservations:
-          memory: 128M
+          memory: 48M
     volumes:
       - {{ docker_persistent_data_path }}/tileserver:/data
     healthcheck:
@@ -2156,7 +2225,7 @@ services:
   headway-frontend-init:
     container_name: headway-frontend-init
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: ghcr.io/headwaymaps/headway-init:0.4.0@sha256:d8ee45cd7d36dd4aa363e5ac6267c304aedb59838788f668d14ba03d57c18f1c
@@ -2180,9 +2249,17 @@ services:
   headway-frontend:
     container_name: headway-frontend
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
+    # Stock nginx entrypoint chowns /var/cache/nginx/* and forks workers as the
+    # nginx user. Without these caps the container crash-loops on every restart
+    # with: chown("/var/cache/nginx/client_temp", 101) failed (Operation not permitted).
+    cap_add:
+      - CHOWN          # chown cache dirs at startup
+      - DAC_OVERRIDE   # cross-user file access during init
+      - SETGID         # worker processes drop to nginx group
+      - SETUID         # worker processes drop to nginx user
     image: ghcr.io/headwaymaps/headway:0.4.0@sha256:91f30093899cbc2590284e0c63fd99a6b75d776bd2d5293be4382107b50ee023
     restart: unless-stopped
     environment:
@@ -2209,12 +2286,13 @@ services:
         condition: service_started
       valhalla:
         condition: service_healthy
+    # Memory right-sized 2026-07-02: 30-day peak 20 MB, avg 8 MB. 192M gives 9.5x headroom.
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 192M
         reservations:
-          memory: 128M
+          memory: 64M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/"]
       interval: 30s
@@ -2226,7 +2304,7 @@ services:
   headway-travelmux-init:
     container_name: headway-travelmux-init
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: ghcr.io/headwaymaps/travelmux-init:latest@sha256:4f9028d9911c5e867f0eec493bf6dd8cffe2c480cd1beed15baaa5950da971f4
@@ -2249,7 +2327,7 @@ services:
   travelmux:
     container_name: travelmux
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: ghcr.io/headwaymaps/travelmux:latest@sha256:a555aff6759c752e762b3c43a23da1a6dbf79cc8d6b837a2cfcbe30b3c414c46
@@ -2285,7 +2363,7 @@ services:
   pelias-config-init:
     container_name: pelias-config-init
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: ghcr.io/headwaymaps/pelias-init:0.4.0@sha256:67d27152719deaf83b8e1c09679704784a73ab153946d4885246a4d229c57c39
@@ -2309,7 +2387,7 @@ services:
   pelias-elasticsearch-init:
     container_name: pelias-elasticsearch-init
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: ghcr.io/headwaymaps/pelias-init:0.4.0@sha256:67d27152719deaf83b8e1c09679704784a73ab153946d4885246a4d229c57c39
@@ -2333,7 +2411,7 @@ services:
   pelias-placeholder-init:
     container_name: pelias-placeholder-init
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: ghcr.io/headwaymaps/pelias-init:0.4.0@sha256:67d27152719deaf83b8e1c09679704784a73ab153946d4885246a4d229c57c39
@@ -2357,7 +2435,7 @@ services:
   pelias-elasticsearch:
     container_name: pelias-elasticsearch
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     cap_add:
@@ -2400,7 +2478,7 @@ services:
   pelias-api:
     container_name: pelias-api
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: pelias/api:master@sha256:0b8d9287fec447b7495e43e177f4c4257e9ea06283358b320b511c693c39a9af
@@ -2417,12 +2495,13 @@ services:
         condition: service_healthy
       pelias-config-init:
         condition: service_completed_successfully
+    # Memory (2026-09-01, 30d max): 101M. 384M gives 3.8x headroom.
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 384M
         reservations:
-          memory: 128M
+          memory: 64M
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:4000/v1/search?text=test || exit 1"]
       interval: 30s
@@ -2433,7 +2512,7 @@ services:
   pelias-placeholder:
     container_name: pelias-placeholder
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: pelias/placeholder:master@sha256:50806f93581ad5ae2cc8ae6dd310d2531878af08819b16e463b8e034ccc1e921
@@ -2468,7 +2547,7 @@ services:
   pelias-libpostal:
     container_name: pelias-libpostal
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     cap_drop:
       - ALL
     image: pelias/libpostal-service:latest@sha256:af8a5c9b1e6eb366aa2c8c0a7530ea578029d5132cc8ceb9026a128653a9264a
@@ -2482,7 +2561,13 @@ services:
         reservations:
           memory: 2G
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:4400/parse?address=test || exit 1"]
+      # pelias/libpostal-service ships no wget, so this probe exits 127 and the
+      # container has never once reported healthy (failing_streak reached
+      # 180025 before recreation on 2026-08-30) even though pelias-api -- which
+      # depends on it for parsing -- is healthy and answering queries. Probe the
+      # listening socket instead: 4400 == 0x1130 in the hex local_address
+      # column of /proc/net/tcp. Same probe as promtail, which reports healthy.
+      test: ["CMD-SHELL", "grep -q ':1130' /proc/net/tcp6 2>/dev/null || grep -q ':1130' /proc/net/tcp"]
       interval: 30s
       timeout: 10s
       retries: 3

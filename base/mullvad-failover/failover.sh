@@ -34,7 +34,11 @@ FALLBACK_SERVERS=(
 
 log() {
     logger -t mullvad-failover "$1"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+    # Echo to stderr — get_server_list() and find_best_server() return data
+    # via stdout captured by $(...). Writing log lines to stdout contaminated
+    # those captures, causing test_server() to feed log strings into dig and
+    # fail with "label too long" errors, breaking the failover loop.
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >&2
 }
 
 # Fetch Chicago WireGuard servers from Mullvad API

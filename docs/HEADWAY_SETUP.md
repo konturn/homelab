@@ -40,6 +40,36 @@ bin/build builds/us --local-pbf ./us-latest.osm.pbf
 # The build outputs data artifacts to data/us/
 ```
 
+### After the build: remove the Dagger engine
+
+`bin/build` starts a long-lived `dagger-engine-vX.Y.Z` container and leaves it running when
+the build exits. Dagger creates it outside Compose, so it is invisible to this repo: there is
+no service definition for it, CODEOWNERS does not cover it, and because every memory cap in
+`docker-compose.yml` is declared per-service, it inherits **no memory limit at all**.
+
+Measured on `router` 2026-09-23: `dagger-engine-v0.19.11` had been up since at least
+2026-09-17, idling at 28 MB with `docker_container_mem.limit` reporting 125.9 GB — the host's
+entire RAM. It was the only container on `router` without a cap. An unbounded container on a
+host that already OOM-kills services under memory pressure is not something to leave running
+after a one-time build.
+
+Tear it down once the artifacts have been copied off the build machine:
+
+```bash
+# Stop and remove the engine
+docker rm -f $(docker ps -aq --filter 'name=dagger-engine-')
+
+# The build cache lives in a named volume and is NOT removed with the container.
+# Check its size before deleting — the full US build can leave tens of GB behind.
+docker volume ls --filter 'name=dagger-engine-'
+docker system df -v | grep dagger-engine-
+
+docker volume rm $(docker volume ls -q --filter 'name=dagger-engine-')
+```
+
+The "build machine" above is meant to be a separate host. If you built on `router` instead —
+which is what happened for the current US dataset — run the teardown there.
+
 ### Deploy artifacts to server
 
 Copy the built data to the server:

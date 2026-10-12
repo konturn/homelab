@@ -59,6 +59,15 @@ process_iso() {
             return 0
         fi
 
+        # Skip if a previous run marked this ISO as failed and the ISO hasn't been
+        # updated since. Stops makemkvcon from re-spamming thousands of error lines
+        # per cron run for known-bad discs. To retry: rm -f "${iso}.failed".
+        local failed_marker="${iso}.failed"
+        if [[ -f "$failed_marker" && "$failed_marker" -nt "$iso" ]]; then
+            echo "[$(date +%H:%M:%S)] [PID:$$]   $iso has prior failure marker → skipping (rm ${failed_marker} to retry)."
+            return 0
+        fi
+
         echo "[$(date +%H:%M:%S)] [PID:$$]   Running MakeMKV on title 0…"
 
         # Rip title #0 from the ISO into the same directory
@@ -79,6 +88,8 @@ process_iso() {
                 echo "[$(date +%H:%M:%S)] [PID:$$]   ERROR: makemkvcon failed (exit code: $exit_code) on:"
                 echo "[$(date +%H:%M:%S)] [PID:$$]     $iso"
             fi
+            touch -- "$failed_marker"
+            echo "[$(date +%H:%M:%S)] [PID:$$]   Marked $failed_marker — will not retry until ISO is updated."
         fi
 
         # Find newest MKV created in this dir and rename it to match the ISO basename
@@ -89,6 +100,8 @@ process_iso() {
                 echo "[$(date +%H:%M:%S)] [PID:$$]   No MKV file created (conversion failed or timed out)."
             else
                 echo "[$(date +%H:%M:%S)] [PID:$$]   ERROR: No MKV file appeared in $dir after ripping."
+                touch -- "$failed_marker"
+                echo "[$(date +%H:%M:%S)] [PID:$$]   Marked $failed_marker — will not retry until ISO is updated."
             fi
             return 0  # Continue processing other ISOs
         fi
