@@ -149,7 +149,9 @@ router:bootstrap:
   image: willhallonline/ansible:latest
   before_script:
     - mkdir -p /cache/pip /cache/ansible-roles
-    - pip3 install -q --cache-dir /cache/pip -r requirements.txt
+    # willhallonline/ansible:latest now ships an externally-managed (PEP 668) python;
+    # the job container is throwaway, so installing into system site-packages is fine
+    - pip3 install -q --break-system-packages --cache-dir /cache/pip -r requirements.txt
     # Clean corrupted role directories (ansible-galaxy --force doesn't handle this)
     - |
       for d in /cache/ansible-roles/*/; do

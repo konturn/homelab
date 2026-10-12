@@ -1465,8 +1465,8 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "claude-cli/claude-opus-5",
-        "fallbacks": ["claude-cli/opus", "claude-cli/claude-opus-4-8"]
+        "primary": "claude-cli/claude-opus-5-5",
+        "fallbacks": ["claude-cli/claude-opus-5", "claude-cli/opus"]
       },
       "cliBackends": {
         "claude-cli": {
@@ -1474,8 +1474,11 @@
         }
       },
       "models": {
-        "claude-cli/claude-opus-5": {
+        "claude-cli/claude-opus-5-5": {
           "alias": "opus"
+        },
+        "claude-cli/claude-opus-5": {
+          "alias": "opus-5"
         },
         "claude-cli/opus": {
           "alias": "opus-latest"
@@ -1727,21 +1730,6 @@
       },
       "browser": {
         "enabled": true
-      }
-    },
-    "installs": {
-      "clawrouter": {
-        "source": "npm",
-        "spec": "@blockrun/clawrouter",
-        "installPath": "/home/node/.openclaw/extensions/clawrouter",
-        "version": "0.10.5",
-        "resolvedName": "@blockrun/clawrouter",
-        "resolvedVersion": "0.10.5",
-        "resolvedSpec": "@blockrun/clawrouter@0.10.5",
-        "integrity": "sha512-2Kt5ZsMsB7OCvT7pZTUOlYFg5XKC3/gTDeK3yan9dXlBYxI043obPww8YnXwybZzbXwwc11vaV2tw3zlvouNPA==",
-        "shasum": "6a2a60ab1842aa50b6841882a872c8752b474b34",
-        "resolvedAt": "2026-02-23T16:51:09.704Z",
-        "installedAt": "2026-02-23T16:51:25.919Z"
       }
     }
   }
