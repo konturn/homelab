@@ -180,6 +180,16 @@
     enabled: yes
   when: networkd.changed
 
+# The systemd-networkd [Ethtool] EnergyEfficientEthernet=false directive in
+# 10-wan-usb-ethernet.link only applies at device-setup time; the r8152 USB
+# driver re-enables EEE on link renegotiation, which causes WAN carrier
+# flapping. Re-assert EEE-off every minute as a belt-and-braces fix.
+- name: Sets up cronjob to keep EEE disabled on WAN interface
+  ansible.builtin.cron:
+    name: "Disable EEE on WAN interface (r8152 renegotiation workaround)"
+    minute: "*"
+    job: "[ -d /sys/class/net/enx6c1ff76b2ec9 ] && /usr/sbin/ethtool --set-eee enx6c1ff76b2ec9 eee off >/dev/null 2>&1 || true"
+
 - name: Populate dnsmasq conf file
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/dns/dnsmasq.conf' }}"
