@@ -142,12 +142,16 @@
     minute: "0"
     hour: "4"
     weekday: "1"
-    job: >-
-      {{ ("bash -c 'set -o pipefail; /bin/bash /root/cron/renew.sh "
-      + ((vault_namesilo_api_key | default(lookup('env', 'NAMESILO_API_KEY'))) | trim)
-      + " 2>&1 | logger -t ssl-renew-cron'")
-      | regex_replace('[\r\n]', '') }}
-  no_log: true
+    # renew.sh takes no arguments. The Namesilo API key used to be interpolated
+    # here, from the pre-Cloudflare era of this script; renew.sh has used
+    # [certbot dns-cloudflare] with /root/cloudflare.ini for some time and never
+    # reads $1. `no_log: true` hid it from ansible output, but cron logs the full
+    # command line on every invocation, so the key was published in cleartext to
+    # the journal -- and from there to Loki, for the whole retention window --
+    # once a week. The promtail redaction stages only cover `apikey=`/`api_key=`
+    # query parameters, not a bare positional argument, so nothing caught it.
+    # Removing the argument removes the leak at the source.
+    job: "bash -c 'set -o pipefail; /bin/bash /root/cron/renew.sh 2>&1 | logger -t ssl-renew-cron'"
 
 - name: Template out cron script for ISO conversion
   ansible.builtin.template:
