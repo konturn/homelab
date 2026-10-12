@@ -489,7 +489,7 @@ services:
       retries: 3
       start_period: 30s
   radarr:
-    image: linuxserver/radarr:6.4.4.10685-ls319@sha256:7dfd049e79c00b16fbc29c3f5d96a9e7b9e73a23930b4c5b3c4541d60b366814
+    image: linuxserver/radarr:6.4.4.10685-ls320@sha256:cfbc4fa09dc9d78f7cedc898f4ec48c6277cacedc523c4e159db6ff1c741959c
     container_name: radarr
     security_opt:
       - no-new-privileges=true
@@ -533,7 +533,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.2813@sha256:8b332695cf822bef3ad6aef1f20f211756289aef95010c74ee2bf3a186a1ec5b
+    image: linuxserver/jackett:0.24.2826@sha256:a11f4f0be8834bccc6601f713efdfdafca351318fd7f8c80405e7c2af71dc3a2
     container_name: jackett
     security_opt:
       - no-new-privileges=true
@@ -923,7 +923,7 @@ services:
       - "443:80"
     networks:
       - internal
-    image: 'gitlab/gitlab-ee:19.4.1-ee.0@sha256:803e5887cd561ed49ce84c92756838d39e9bcef5c061d4399f2e1057a335cae2'
+    image: 'gitlab/gitlab-ee:19.4.2-ee.0@sha256:28235a4da8491e4059999d31febc0434715f4a2021e338da2034998818dd1198'
     restart: unless-stopped
     ulimits:
       nofile:
