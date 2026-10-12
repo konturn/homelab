@@ -19,6 +19,26 @@
       once Vault is reachable.
   when: _msmtp_password | length == 0
 
+# Deployed BEFORE msmtprc on purpose: msmtprc is the file that names this
+# path, so the reverse order leaves a window where msmtp is configured to read
+# an aliases file that does not exist yet.
+#
+# The path is deliberately /etc/msmtp-aliases and NOT /etc/aliases.
+# configure-base installs mailutils, bsd-mailx and msmtp-mta on this host, so
+# /etc/aliases is shared ground with other mail tooling that expects sendmail
+# aliases format — and msmtp's `default:` catch-all is msmtp-specific syntax
+# that is not valid there. A private path removes the collision entirely.
+#
+# Left ungated by _msmtp_password: the alias map carries no secret, and an
+# aliases file with no msmtprc referencing it is inert.
+- name: Deploy msmtp alias map
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/msmtp/aliases' }}"
+    dest: /etc/msmtp-aliases
+    owner: root
+    group: root
+    mode: '0644'
+
 - name: Deploy msmtp configuration
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/msmtp/msmtprc' }}"
@@ -27,14 +47,6 @@
     group: root
     mode: '0600'
   when: _msmtp_password | length > 0
-
-- name: Deploy msmtp alias map
-  ansible.builtin.copy:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/msmtp/aliases' }}"
-    dest: /etc/aliases
-    owner: root
-    group: root
-    mode: '0644'
 
 - name: Set msmtp as default MTA
   ansible.builtin.file:
