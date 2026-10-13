@@ -163,12 +163,17 @@
     repo: "deb [signed-by=/etc/apt/keyrings/runner_gitlab-runner-archive-keyring.asc] https://packages.gitlab.com/runner/gitlab-runner/ubuntu/ {{ ansible_distribution_release }} main"
     state: present
 
+# state: present, not latest. This play runs ON the gitlab-runner it would
+# upgrade: apt's postinst restarts gitlab-runner.service, which aborts every
+# in-flight job (this deploy included) as runner_interrupted. Pipeline 3503
+# lost router:deploy and satellite-2:deploy that way (19.3.2 -> 19.4.1).
+# Upgrade the runner deliberately, outside a pipeline.
 - name: Install gitlab-runner and glab
   apt:
     name:
       - gitlab-runner
       - glab
-    state: latest
+    state: present
     update_cache: yes
 
 - name: Add gitlab-runner user to docker group
