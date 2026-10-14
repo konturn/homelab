@@ -533,7 +533,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.2826@sha256:a11f4f0be8834bccc6601f713efdfdafca351318fd7f8c80405e7c2af71dc3a2
+    image: linuxserver/jackett:0.24.2830@sha256:0e6a81ff643e0e28c33136b94891be14855208af1aba14867c818e7cffac1ed7
     container_name: jackett
     security_opt:
       - no-new-privileges=true
@@ -700,7 +700,7 @@ services:
       - no-new-privileges=true
     cap_drop:
       - ALL
-    image: grafana/grafana:12.4.12-ubuntu@sha256:9d71f26403380c2150fd9365cf85f14b68c0ab54c91fdfdccbfb023f03bde54b
+    image: grafana/grafana:12.4.13-ubuntu@sha256:410a16811de69aeecd929269357494cca9b9649e68e74f30482520ecb5718737
     ports:
       - "443:3000"
     networks:
