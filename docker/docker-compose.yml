@@ -489,7 +489,7 @@ services:
       retries: 3
       start_period: 30s
   radarr:
-    image: linuxserver/radarr:6.4.4.10685-ls320@sha256:cfbc4fa09dc9d78f7cedc898f4ec48c6277cacedc523c4e159db6ff1c741959c
+    image: linuxserver/radarr:6.4.4.10685-ls321@sha256:ea6822c956d26db648b237919f41340318f32e5b7dcc4ba702cf256a0f5f3c12
     container_name: radarr
     security_opt:
       - no-new-privileges=true
@@ -566,7 +566,7 @@ services:
       retries: 3
       start_period: 30s
   sonarr:
-    image: linuxserver/sonarr:4.0.20.3014-ls328@sha256:0deb8db6c839ac475e9cd86277712772c40ba7f929a003d7e1de36c4b666bc13
+    image: linuxserver/sonarr:4.0.20.3014-ls329@sha256:44b06045a98bc1f237b9ffefc4b28dab64cb29305e4a2a94875ae93b5224e4cc
     container_name: sonarr
     security_opt:
       - no-new-privileges=true
@@ -1784,7 +1784,7 @@ services:
       retries: 3
       start_period: 60s
   nextcloud:
-    image: nextcloud:33.0.9-apache@sha256:63e74e341d302e94d52a4ee1cf5bdc7ee94c04c3c661823c5e5a5270741310e8
+    image: nextcloud:33.0.10-apache@sha256:9493688f78554945b475d64bf24318aa157202959ff2c663c749304367726c39
     container_name: nextcloud
     security_opt:
       - no-new-privileges=true
