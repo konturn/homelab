@@ -453,7 +453,7 @@ services:
   # Path overrides (MainDir=/remote, DestDir/TempDir/etc under /remote) were
   # applied manually to /persistent_data/application/nzbget/nzbget.conf.
   nzbget:
-    image: linuxserver/nzbget:26.3.20261009@sha256:90f08a0c260f5ba3be401d9b21f7a92975ac0fb2331bb1f456ed9f09f3ca4ddb
+    image: linuxserver/nzbget:26.3.20261016@sha256:ab18af1d16027fdf870fc58a39bbc764043b16e9220e06b9d0413e8b56bd622b
     container_name: nzbget
     security_opt:
       - no-new-privileges=true
@@ -533,7 +533,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.2856@sha256:d97a1e0de3aca41249a0b4deccfe3ab158f1639bacb84ac6f5f28aef08b287a2
+    image: linuxserver/jackett:0.24.2864@sha256:d678a0fa9c40bc0405fc236c62b3ef5c4cdd1815df5ad0ffd1cb578994b771c8
     container_name: jackett
     security_opt:
       - no-new-privileges=true
@@ -868,7 +868,7 @@ services:
   # =============================================================================
   otel-collector:
     container_name: otel-collector
-    image: otel/opentelemetry-collector-contrib:0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6
+    image: otel/opentelemetry-collector-contrib:0.163.1@sha256:1175b03003053962012f5a231f5567f66a3e8fdb960c7835c0e48f7aa1555806
     security_opt:
       - no-new-privileges=true
     cap_drop:
@@ -1231,7 +1231,7 @@ services:
     devices: 
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_ETDRb11A920-if00-port0:/dev/ttyUSB0"
       - "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0:/dev/ttyUSB1"
-    image: "homeassistant/home-assistant:2026.10.1@sha256:130241f28d01fa80dfa3b44f7d89781c188d8642ecab9024f079f19f9f82baa0"
+    image: "homeassistant/home-assistant:2026.10.2@sha256:33afb0659d786213264c2211f8d91c5fe87461c56eba6a3a546eb05fc71e89f4"
     deploy:
       resources:
         limits:
