@@ -212,7 +212,25 @@ The homelab runs containerized services with data stored on ZFS (mpool) with aut
 **Backend:** Backblaze B2 (`s3:s3.us-east-005.backblazeb2.com/nkontur-homelab`)
 **Schedule:** `restic-backup.timer`, daily at 03:00 local. Runs commonly take 2-4 hours.
 **Deep check:** `restic-check.timer`, Sundays at 09:00 local (`restic check --read-data-subset=5%`), deliberately outside the backup window because the repository takes a single lock.
-**Retention:** 30 daily, 12 monthly, 5 yearly
+**Integrity check:** `ExecStartPre=restic check` runs a full metadata check *before every
+backup*, so repository reachability and structural integrity are verified daily, not just weekly.
+**Retention:** `restic forget --keep-within 90d`, then `restic prune` — both as `ExecStartPost` on
+every backup run. That is the **only** retention rule. Every snapshot taken in the last 90 days is
+kept and **nothing older than 90 days survives**; there is no daily/monthly/yearly tier.
+
+> **Corrected 2026-10-10.** This line previously read "30 daily, 12 monthly, 5 yearly". That was
+> never configured. `--keep-within` has been the sole `forget` flag since the role was written
+> (`90e1bca`, 2026-02-05) and the value went `30d` -> `90d` in `059a6be` (2026-02-07); no
+> `--keep-daily/--keep-monthly/--keep-yearly` has ever appeared in
+> `ansible/roles/restic/templates/restic-backup.service.j2`. Confirmed against the router's journal
+> rather than the template alone: `Applying Policy: keep all snapshots within 90d of the newest`,
+> and `forget` reports `keep 90 snapshots: / remove 2 snapshots:` per path on each run.
+>
+> **Consequence to be aware of when planning a restore:** corruption or encryption discovered more
+> than 90 days after it happened has no clean snapshot to go back to, and the "Ransomware: offline
+> backup restoration" scenario below assumes a long tail that does not exist. Adding a
+> `--keep-monthly`/`--keep-yearly` tier is a Backblaze storage-cost decision, so it is left to the
+> repo owner rather than changed here — only the documentation is corrected.
 
 **Backed up paths:**
 - `/mpool/nextcloud` (user files, Paperless docs)
@@ -412,6 +430,20 @@ docker exec homeassistant python -m homeassistant --script check_config
 - **Email alerts** on backup failures (via Grafana contact points)
 - **Morning digest** includes restic backup status summary
 
+> **There is no separate `backup-verify` timer, by design (2026-10-10).** `base/backup-verify/`
+> used to sit in the repo looking like an independent freshness/integrity verifier. Nothing ever
+> deployed it: no Ansible task referenced any of its three files in any commit, its unit pointed
+> `EnvironmentFile=` at `/etc/default/restic-env` while the restic role writes `/root/.restic_env`
+> (so systemd could not have started it even if installed), no `backup-verify.service` value
+> appears in Loki's `unit` label over the longest window Loki will answer (30 days — it rejects
+> anything longer), and its three InfluxDB measurements (`backup_verify`,
+> `backup_stats`, `backup_verify_run`) are absent from `schema.measurements()`, which lists every
+> measurement the bucket has *ever* received. It was added 2026-02-05 and superseded two days later
+> by `059a6be`, which built the same assurance properly out of `restic-check.service` plus the
+> provisioned alerts above. The files have been removed so that the next reader does not count them
+> as coverage; `git show 94eac7a:base/backup-verify/backup-verify.sh` recovers them (full clone; the hash is unreachable in a shallow one) if repository-side
+> verification metrics are ever wanted as a deliberate piece of work. Tracked in #142.
+
 > **Note:** Backup credentials are managed via Vault (`homelab/data/restic`).
 > JIT T2 approval is required for credential access.
 
@@ -497,6 +529,6 @@ what surfaces it. Details and remediation: `ansible/roles/restic/README.md`.
 
 ---
 
-**Last updated:** 2026-02-17  
+**Last updated:** 2026-10-10  
 **Review schedule:** Quarterly  
 **Owner:** Infrastructure Team
