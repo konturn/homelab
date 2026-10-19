@@ -304,10 +304,19 @@
     mode: '0640'
   register: dhcp
 
+- name: Populate isc-dhcp-server defaults (listen interfaces)
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/dhcp/isc-dhcp-server' }}"
+    dest: /etc/default/isc-dhcp-server
+    owner: root
+    group: root
+    mode: '0644'
+  register: dhcp_defaults
+
 - name: Restart isc-dhcp-server when the drop-in files change
   service:
     name: isc-dhcp-server
     state: restarted
     enabled: yes
-  when: dhcp.changed
+  when: dhcp.changed or dhcp_defaults.changed
 
