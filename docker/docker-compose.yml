@@ -146,7 +146,7 @@ services:
       - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
     ports:
       - "32400/tcp"
-    image: plexinc/pms-docker:1.43.3.10896-cb3ebc72d@sha256:83a425ae9e133b1cb2cc3b809556e01c61cd8ff65c582e41b4374bc2210bac9e
+    image: plexinc/pms-docker:1.43.4.10903-e5521bd8c@sha256:e0ab27395614a8e1a4fdf84c6bc60ac664915cfdde70c52d030c7728a1c48e14
     networks:
       - external
       - internal
@@ -236,7 +236,7 @@ services:
       - NET_RAW          # DHCP raw socket access
       - SETGID           # drop to pihole group
       - SETUID           # drop to pihole user
-    image: pihole/pihole:2026.07.2@sha256:f7d1be836e3bc608b56d82fc9904f5a831cdfbc0dc9c6d58f94e4c985c70038b
+    image: pihole/pihole:2026.10.0@sha256:d34134716fc32038b052a8674c7c6879e0ff21f0e6d8af345166fffa2c27c113
     ports:
       - "443:80"
     networks:
@@ -293,7 +293,7 @@ services:
       retries: 3
       start_period: 10s
   nginx: 
-    image: nginx:1.31.1-alpine3.23-perl@sha256:b4f40fc790074a4af0d6fc81923a30459910d6f01efc048246ef288b14654354
+    image: nginx:1.31.2-alpine3.23-perl@sha256:b3b337e1ef5b1bc8253dec68bc4522d9027920666a428bf51a022ceb7e3396bc
     container_name: nginx
     security_opt:
       - no-new-privileges=true
@@ -334,7 +334,7 @@ services:
       - /var/log/nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   lab_nginx: 
-    image: nginx:1.31.1-alpine3.23-perl@sha256:b4f40fc790074a4af0d6fc81923a30459910d6f01efc048246ef288b14654354
+    image: nginx:1.31.2-alpine3.23-perl@sha256:b3b337e1ef5b1bc8253dec68bc4522d9027920666a428bf51a022ceb7e3396bc
     container_name: lab_nginx
     security_opt:
       - no-new-privileges=true
@@ -377,7 +377,7 @@ services:
       - {{ docker_persistent_data_path }}/certs:/data/certs
       - {{ docker_persistent_data_path }}/docker-proxy-tls:/data/docker-proxy-tls:ro
   iot_nginx: 
-    image: nginx:1.31.1-alpine3.23-perl@sha256:b4f40fc790074a4af0d6fc81923a30459910d6f01efc048246ef288b14654354
+    image: nginx:1.31.2-alpine3.23-perl@sha256:b3b337e1ef5b1bc8253dec68bc4522d9027920666a428bf51a022ceb7e3396bc
     container_name: iot_nginx
     security_opt:
       - no-new-privileges=true
@@ -415,7 +415,7 @@ services:
       - /var/log/iot_nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   ombi:
-    image: linuxserver/ombi:4.53.10@sha256:db3642d3fd492c399e1c879fe38fe77b59db6ca2e966b0d3df2aad7d376489da
+    image: linuxserver/ombi:4.53.10@sha256:a6f76ac521ba01eee2e9f0c23a3fed22e56630d97a04d5eeaeaa36c1e681640d
     container_name: ombi
     security_opt:
       - no-new-privileges=true
@@ -453,7 +453,7 @@ services:
   # Path overrides (MainDir=/remote, DestDir/TempDir/etc under /remote) were
   # applied manually to /persistent_data/application/nzbget/nzbget.conf.
   nzbget:
-    image: linuxserver/nzbget:26.3.20260827@sha256:5f3d3fa71029004156eff2cbf4ef4455ce4ce59517cf13fa7d1d7c8a4cd2c8a4
+    image: linuxserver/nzbget:26.3.20261016@sha256:ab18af1d16027fdf870fc58a39bbc764043b16e9220e06b9d0413e8b56bd622b
     container_name: nzbget
     security_opt:
       - no-new-privileges=true
@@ -489,7 +489,7 @@ services:
       retries: 3
       start_period: 30s
   radarr:
-    image: linuxserver/radarr:6.0.4.10291-ls292@sha256:f08dda38e7d12e5a722d9a5cb6e54acaf63c8598fefeefec88effe0c0d0038dd
+    image: linuxserver/radarr:6.4.4.10685-ls322@sha256:ff4430fe2d6159b4dbaac9903acfecee5aa68dec8c929259e2f3114c63f7a09e
     container_name: radarr
     security_opt:
       - no-new-privileges=true
@@ -533,7 +533,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.2492@sha256:8caff79adf8105c7fb63c996dae38ce50ea390de460713b80aad0301d5c862f3
+    image: linuxserver/jackett:0.24.2875@sha256:104a82c2f75892745d36b65a8c1244761e9f66678424ca547b203ff2ed708975
     container_name: jackett
     security_opt:
       - no-new-privileges=true
@@ -566,7 +566,7 @@ services:
       retries: 3
       start_period: 30s
   sonarr:
-    image: linuxserver/sonarr:4.0.16.2944-ls303@sha256:37be832b78548e3f55f69c45b50e3b14d18df1b6def2a4994258217e67efb1a1
+    image: linuxserver/sonarr:4.0.20.3014-ls329@sha256:44b06045a98bc1f237b9ffefc4b28dab64cb29305e4a2a94875ae93b5224e4cc
     container_name: sonarr
     security_opt:
       - no-new-privileges=true
@@ -667,7 +667,7 @@ services:
         ipv4_address: {{ influxdb_ip }}
       iot:
         ipv4_address: {{ influxdb_iot_ip }}
-    image: influxdb:2.8.0@sha256:8e911da5f7b482230e61fe4bad9af0697d97a75e087f19f5f0ddfee62c2bd686
+    image: influxdb:2.8.0@sha256:571eb4514977b89bc09909f583b7b8ab473965011a75681ff8b6ca050e020c85
     restart: unless-stopped
     # Memory (2026-09-01, 30d max): 2719M of 4096M = 66.4%; OOM-killed 2026-07-13
     # at 4.15G anon-rss during a compaction spike. 6G covers the spike.
@@ -713,7 +713,7 @@ services:
       - no-new-privileges=true
     cap_drop:
       - ALL
-    image: grafana/grafana:12.4.0-ubuntu@sha256:9a14379bd5a91671e196f148a6e965b9db78fc70ed4f2f1716d70c240cd9161f
+    image: grafana/grafana:12.4.13-ubuntu@sha256:410a16811de69aeecd929269357494cca9b9649e68e74f30482520ecb5718737
     ports:
       - "443:3000"
     networks:
@@ -768,7 +768,7 @@ services:
       - no-new-privileges=true
     cap_drop:
       - ALL
-    image: grafana/loki:3.7.7@sha256:d70e4659623f3e109af669cae76fe2a5dd5be54e2298fe8aed380d982fbc2500
+    image: grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193
     networks:
       loki-backend:
     restart: unless-stopped
@@ -845,7 +845,7 @@ services:
   # =============================================================================
   tempo:
     container_name: tempo
-    image: grafana/tempo:3.0.0@sha256:78439f7f7cf3c97122846c13a832e060c6c7ef67dcc814dccf0a5f3f78393a93
+    image: grafana/tempo:3.1.0@sha256:3076b8dcdfb32fd6bc5ccef85e7b7313e6199b9cb84366257fc17ecb696db5fd
     security_opt:
       - no-new-privileges=true
     cap_drop:
@@ -936,7 +936,7 @@ services:
       - "443:80"
     networks:
       - internal
-    image: 'gitlab/gitlab-ee:19.3.1-ee.0@sha256:b5167605564d64acf896be614791092d1409ac3f78214a9e4394ebb24a0be1b5'
+    image: 'gitlab/gitlab-ee:19.5.0-ee.0@sha256:f04c71f565601283971d6472dd466609f4679450526f39aab3e3dcd6d23dc0ec'
     restart: unless-stopped
     ulimits:
       nofile:
@@ -1117,7 +1117,7 @@ services:
       - ALL
     ports:
       - "443:80"
-    image: 'vaultwarden/server:1.37.2-alpine@sha256:d16a304c2476fd787634ddde2c00be8fdfa1a72539438c626ece3686b5b88ab4'
+    image: 'vaultwarden/server:1.37.4-alpine@sha256:19ea2b669945d842dadc3d500f2d6a795866a003330f59a47b9634658bae98bb'
     restart: unless-stopped
     networks:
       - external
@@ -1227,7 +1227,7 @@ services:
       - "443:8080"
     networks:
       internal:
-    image: jgraph/drawio:31.4.1@sha256:84966aa6b98203485a49b64d60c869a3da61250757756aad9862c8eb6bb788fd
+    image: jgraph/drawio:31.7.0@sha256:43f5a9142fb9963cb64eca332b722a0b109975dc84c0880765911e3c0e0ba0fa
     restart: unless-stopped
     # Memory right-sized (March 2026 audit): 7-day peak 158MB, avg 140MB.
     # 768M was 5x peak. 384M gives 2.4x headroom over peak.
@@ -1581,7 +1581,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-    image: eclipse-mosquitto:2.1.2-alpine@sha256:9cfdd46ad59f3e3e5f592f6baf57ab23e1ad00605509d0f5c1e9b179c5314d87
+    image: eclipse-mosquitto:2.1.2-alpine@sha256:6f8d8a947c506f8a2290ec65cd4bd2bc7cb4d43fb5f6271f861cb013e2ef9797
     restart: unless-stopped
     networks:
       iot:
@@ -1671,7 +1671,7 @@ services:
     cap_drop:
       - ALL
     restart: unless-stopped
-    image: koenkk/zigbee2mqtt:2.13.0@sha256:4fb4db4d49a217bed6d0204f454ce809febc565bbe051b85c556ee2bcef73d8c
+    image: koenkk/zigbee2mqtt:2.14.2@sha256:addbfb08fcef2e4477de1535636118241e10d13e898fbe4d9faba8a4d7396311
     depends_on:
       mosquitto:
         condition: service_healthy
@@ -1767,7 +1767,7 @@ services:
     # crashes on this host with "Fatal glibc error: CPU does not support
     # x86-64-v3". Stay on the Debian-based default variant. Do not switch to
     # any -ubi*/-ubi10* tag.
-    image: mariadb:12.3.2@sha256:b1c7bf836e64ed9406a8984af29509f40089d55cea14b32f12c4726a1f17104b
+    image: mariadb:12.3.3@sha256:99c125f103f5d081ebbc9ffe064e63daf7f688ac33a5f7f29af2d7260a96debf
     container_name: nextcloud_database
     security_opt:
       - no-new-privileges=true
@@ -1805,7 +1805,7 @@ services:
       retries: 3
       start_period: 60s
   nextcloud:
-    image: nextcloud:33.0.5-apache@sha256:56bdc45109067500fd0832fa64832b7c77a167d9394cbf5f0f4b59740b94194d
+    image: nextcloud:33.0.10-apache@sha256:a353c1bb14d9d70a4cbd677af586a7848d1e96d26130f225db4af75100609371
     container_name: nextcloud
     security_opt:
       - no-new-privileges=true
