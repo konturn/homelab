@@ -38,10 +38,10 @@ interface vlan 5
  name Guest
 !
 interface vlan 6
- name Buster
+ name IoT
 !
 interface vlan 7
- name Iot
+ name Reserved
 !
 interface GigabitEthernet1
  lacp port-priority 128
