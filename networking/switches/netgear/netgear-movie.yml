@@ -15,8 +15,8 @@ vlans:
   1: ""
   4: "Management"
   5: "Guest"
-  6: "Iot"
-  7: "Airgap"
+  6: "IoT"
+  7: "Reserved"
 ports:
   gi1: {pvid: 6, untagged: [6], tagged: [], poe: {enabled: true, priority: low, limit_mw: 30000}}
   gi2: {pvid: 6, untagged: [6], tagged: [], poe: {enabled: true, priority: low, limit_mw: 30000}}
