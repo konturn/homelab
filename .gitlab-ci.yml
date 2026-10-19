@@ -39,6 +39,10 @@
 #   automerge:sweep / automerge:report (scheduled on main, AUTOMERGE_TASK=sweep|report)
 #   router:deploy-service (main, auto-merged commits only; replaces the full deploys)
 #
+#   REPORTS (see ci/reports/README.md)
+#   report:cves / report:app-updates / report:os-patches / report:firmware
+#   (scheduled on main, SCHEDULED_TASK=trivy|app-report|os-report|firmware-report)
+#
 #   BOOTSTRAP (main only, manual)
 #   ┌──────────────┬──────────────┐
 #   router:bootstrap  router:restore
@@ -1179,6 +1183,86 @@ aruba-iap:drift:
     expire_in: 30 days
   rules:
     - if: $CI_COMMIT_BRANCH == "main" && $IAP_TASK == "drift" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+
+# =============================================================================
+# Scheduled read-only reports for the OpenClaw Morning Digest (ci/reports/README.md)
+# =============================================================================
+# SCHEDULED_TASK=trivy | app-report | os-report | firmware-report on a schedule
+# on main (protected runner). Each writes reports/updates/<name>.md on the
+# router; nothing on any host or device is changed.
+
+.scheduled_report:
+  extends: .ansible
+  stage: deploy
+  needs: []
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: https://vault.lab.nkontur.com:8200
+  variables:
+    VAULT_ADDR: "https://vault.lab.nkontur.com:8200"
+    VAULT_SKIP_VERIFY: "true"
+    VAULT_JWT_ROLE: "ci-deploy"
+
+reports:test:
+  extends:
+    - .ansible
+    - .interruptible
+  stage: validate
+  needs: []
+  before_script: []
+  script:
+    - python3 -m unittest discover -s ci/reports -p 'test_*.py' -v
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - ci/reports/**/*
+        - ansible/os-patch-report.yml
+
+# Daily: Trivy scan of the images of running containers (DB cached on the
+# router), then labels matching open image-update MRs `security`.
+report:cves:
+  extends: .scheduled_report
+  resource_group: report-trivy
+  timeout: 3h
+  script:
+    - python3 ci/reports/run_remote.py trivy_scan.py --timeout 10000
+    - python3 ci/reports/trivy_label.py
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "trivy" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+
+# Weekly: versions kept in data volumes (Nextcloud apps, Home Assistant update
+# entities, Grafana plugins, WordPress core/themes/plugins).
+report:app-updates:
+  extends: .scheduled_report
+  script:
+    - python3 ci/reports/run_remote.py app_updates.py --secret ha=docker/homeassistant
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "app-report" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+
+# Weekly: pending OS/security updates, reboot-required, kernel, distro EOL.
+report:os-patches:
+  extends: .scheduled_report
+  variables:
+    REPORT_FACTS_DIR: "$CI_PROJECT_DIR/.reports/os"
+  script:
+    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/os-patch-report.yml
+    - python3 ci/reports/run_remote.py os_patches.py --data "$REPORT_FACTS_DIR"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "os-report" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+
+# Monthly: switch / access point / router BIOS, BMC and drive firmware.
+report:firmware:
+  extends: .scheduled_report
+  resource_group: netgear-switches
+  script:
+    - >-
+      python3 ci/reports/run_remote.py firmware.py
+      --extra networking/switches/netgear/ngswitch.py
+      --secret netgear-movie=network/netgear-movie
+      --secret netgear-office=network/netgear-office
+      --secret aruba-iap=network/aruba-iap
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "firmware-report" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
 
 # =============================================================================
 # Auto-merge for low-risk image updates (see docs/AUTOMERGE.md)

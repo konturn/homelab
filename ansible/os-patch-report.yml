@@ -1,0 +1,42 @@
+---
+# Weekly OS patch report (read-only). Run by the report:os-patches CI job.
+#
+# Collects pending updates, security updates, reboot-required state, running vs
+# newest installed kernel and OS release from every host, saves one JSON file per
+# host on the controller, and ci/reports/os_patches.py renders the summary on the
+# router. Nothing is upgraded, installed, restarted or rebooted. The only
+# state it touches is the package index (apt-get update / brew update).
+- name: Collect OS patch facts (read-only)
+  hosts: all
+  gather_facts: true
+  ignore_unreachable: true
+  vars:
+    report_facts_dir: "{{ lookup('env', 'REPORT_FACTS_DIR') | default(playbook_dir + '/../.reports/os', true) }}"
+  tasks:
+    - name: Prepare the facts directory on the controller
+      ansible.builtin.file:
+        path: "{{ report_facts_dir }}"
+        state: directory
+        mode: "0755"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Run the fact collector
+      ansible.builtin.script:
+        cmd: "{{ playbook_dir }}/../ci/reports/os_facts.py"
+        executable: "{{ ansible_python.executable | default('python3') }}"
+      register: os_facts
+      changed_when: false
+      failed_when: false
+      timeout: 1500
+
+    - name: Save the facts on the controller
+      ansible.builtin.copy:
+        content: >-
+          {{ os_facts.stdout | trim
+             if (os_facts.rc | default(1)) == 0 and (os_facts.stdout | default('') | trim | length) > 0
+             else ({'error': 'unreachable over ssh' if (os_facts.unreachable | default(false))
+                     else ((os_facts.stderr | default('') | trim) or (os_facts.msg | default('collector failed')))[-200:]} | to_json) }}
+        dest: "{{ report_facts_dir }}/{{ inventory_hostname }}.json"
+        mode: "0644"
+      delegate_to: localhost
