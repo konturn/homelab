@@ -23,8 +23,8 @@ from run_remote import SSH, urlopen_retry  # noqa: E402
 API = os.environ.get("CI_API_V4_URL", "https://gitlab.lab.nkontur.com/api/v4").rstrip("/")
 PROJECT = os.environ.get("CI_PROJECT_ID", "4")
 LABEL = "security"
-UPDATE_AUTHORS = {a for a in os.environ.get(
-    "REPORT_UPDATE_AUTHORS", "project_4_bot_af78a2ea227eba9e10006515fbde375e,moltbot").split(",") if a}
+RENOVATE_AUTHOR = os.environ.get("REPORT_RENOVATE_AUTHOR", "project_4_bot_af78a2ea227eba9e10006515fbde375e")
+UPDATE_AUTHORS = {RENOVATE_AUTHOR, "moltbot"}
 REPORT_JSON = os.environ.get(
     "CVE_REPORT_JSON", "/persistent_data/application/openclaw/workspace/reports/updates/cves.json")
 
@@ -41,15 +41,18 @@ def image_keys(repo: str) -> Set[str]:
     return keys
 
 
-def mr_matches(title: str, branch: str, repos: Iterable[str], services: Iterable[str]) -> bool:
+def mr_matches(title: str, branch: str, repos: Iterable[str], services: Iterable[str],
+               by_title: bool = True) -> bool:
+    """Renovate MRs match on title or branch; other authors (moltbot) only on an
+    image-update/<service> branch, because their other MRs mention images in prose."""
     t = title.lower()
     b = branch.lower()
     for repo in repos:
         for k in image_keys(repo.lower()):
-            if re.search(r"(?<![\w./-])" + re.escape(k) + r"(?![\w/.-])", t):
+            if by_title and re.search(r"(?<![\w./-])" + re.escape(k) + r"(?![\w/.-])", t):
                 return True
             san = k.replace("/", "-").replace("@", "")
-            if re.match(r"^renovate/(?:[a-z0-9]+-)?" + re.escape(san) + r"-(?:\d|digest)", b):
+            if by_title and re.match(r"^renovate/(?:[a-z0-9]+-)?" + re.escape(san) + r"-(?:\d|digest|latest)", b):
                 return True
     for s in services:
         if re.match(r"^image-update/(?:major/)?" + re.escape(s.lower()) + r"(?:$|/|-v?\d)", b):
@@ -94,7 +97,8 @@ def main() -> int:
     for m in mrs:
         if LABEL in (m.get("labels") or []):
             continue
-        if mr_matches(m["title"], m["source_branch"], repos, services):
+        if mr_matches(m["title"], m["source_branch"], repos, services,
+                      by_title=m["author"]["username"] == RENOVATE_AUTHOR):
             print(f"  !{m['iid']}: add label {LABEL}{' (dry run)' if dry else ''}")
             if not dry:
                 api("PUT", f"projects/{PROJECT}/merge_requests/{m['iid']}", token, body={"add_labels": LABEL})

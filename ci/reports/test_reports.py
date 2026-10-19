@@ -97,6 +97,15 @@ class LabelTest(unittest.TestCase):
         self.assertTrue(m("t", "image-update/grafana", [], ["grafana"]))
         self.assertTrue(m("t", "image-update/major/grafana", [], ["grafana"]))
         self.assertFalse(m("t", "image-update/grafana-agent", [], ["grafana"]))
+        self.assertTrue(m("t", "renovate/router-influxdb-2.8.0", ["influxdb"], []))
+        self.assertTrue(m("t", "renovate/router-ghcr.io-neilenns-x-latest", ["ghcr.io/neilenns/x"], []))
+
+    def test_non_renovate_title_ignored(self):
+        m = trivy_label.mr_matches
+        self.assertFalse(m("fix(influxdb): cap query memory", "fix/influxdb-memory", ["influxdb"], ["influxdb"],
+                           by_title=False))
+        self.assertTrue(m("chore(image): influxdb 2.8.0 -> 2.8.1", "image-update/influxdb", ["influxdb"],
+                          ["influxdb"], by_title=False))
 
 
 class AppUpdatesTest(unittest.TestCase):
