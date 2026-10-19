@@ -167,6 +167,19 @@ on the appropriate VLAN interface. Docker's iptables rules (bridge NAT, port map
 isolation) are only relevant for bridge-mode networking, which we don't use. The existing custom
 iptables rules already handle all necessary forwarding.
 
+**In practice (Docker 29.x):** dockerd still creates its chains and bridge MASQUERADE rules
+for the few bridge networks (`docker0` for the CI dagger engine, nextcloud/wordpress internals),
+and Tailscale (`ts-*`, CONNMARK in mangle) and libvirt (`LIBVIRT_*`) add theirs too. A plain
+`netfilter-persistent reload` wipes all of them, so the deploy loads `rules.v4` with
+`/usr/local/sbin/fw-apply` (`networking/iptables/fw-apply`) instead: it merges the live
+foreign chains back into the managed ruleset and swaps it in atomically, without restarting
+Docker. Useful by hand:
+
+```bash
+fw-apply 4 /etc/iptables/rules.v4 --diff      # what would change vs. live (scratch netns)
+fw-apply 4 --rollback                         # restore the ruleset saved before the last apply
+```
+
 **If Docker networking breaks after a change**, check that the custom iptables rules in
 `networking/iptables/rules.v4` cover any new forwarding needs — don't re-enable Docker iptables
 management, as it will conflict with the existing ruleset.

@@ -1,3 +1,7 @@
+# state: present, not latest: an upgrade of dnsmasq/isc-dhcp-server/netfilter
+# restarts the service mid-deploy. Upgrades are a deliberate manual step
+# (`apt install --only-upgrade <pkg>`); Ubuntu security updates still arrive
+# via unattended-upgrades.
 - name: Ensure proper packages are installed
   apt:
     name:
@@ -6,7 +10,7 @@
       - wireguard
       - netfilter-persistent
       - iptables-persistent
-    state: latest
+    state: present
     update_cache: yes
 
 - name: Populate route table list
@@ -30,8 +34,15 @@
     owner: root
     group: root
     mode: '0640'
+    # Render the candidate into a scratch root first so a malformed config
+    # never reaches /etc/netplan (and never gets `netplan apply`-ed).
+    validate: >-
+      bash -c 'd=$(mktemp -d) && trap "rm -rf $d" EXIT &&
+      install -D -m 600 %s $d/etc/netplan/config.yaml &&
+      netplan generate --root-dir $d'
   register: netplan
 
+# Only runs when the rendered config actually changed (and passed validation).
 - name: Run Netplan config
   ansible.builtin.command: netplan apply
   become: yes
@@ -44,6 +55,7 @@
     owner: root
     group: root
     mode: '0640'
+    validate: /usr/sbin/iptables-restore --test %s
   register: iptables
 
 - name: Copy the ipset rules file
@@ -64,16 +76,33 @@
     mode: '0755'
   register: netfilter
 
-- name: Restore netfilter rules
-  ansible.builtin.command: netfilter-persistent reload
-  become: yes
+# `netfilter-persistent reload` flushes every table and deletes the chains
+# Docker (DOCKER*), Tailscale (ts-*) and libvirt (LIBVIRT_*) install at
+# runtime; the deploy used to restart Docker afterwards (restarting every
+# container) and Tailscale/libvirt stayed broken. fw-apply loads rules.v4
+# atomically while keeping those chains, so nothing needs a restart.
+# Boot still uses netfilter-persistent (it runs before those daemons start).
+- name: Install fw-apply helper
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/iptables/fw-apply' }}"
+    dest: /usr/local/sbin/fw-apply
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Reload ipsets
+  ansible.builtin.command: /usr/share/netfilter-persistent/plugins.d/10-ipset reload
+  when: ipset.changed or netfilter.changed
+
+- name: Load iptables rules (keeps Docker/Tailscale/libvirt chains)
+  ansible.builtin.command: /usr/local/sbin/fw-apply 4 /etc/iptables/rules.v4
+  register: fw_apply_v4
   when: iptables.changed or ipset.changed or netfilter.changed
 
-- name: Restart Docker to restore iptables chains after netfilter reload
-  ansible.builtin.service:
-    name: docker
-    state: restarted
-  when: iptables.changed or ipset.changed or netfilter.changed
+- name: Show iptables changes
+  ansible.builtin.debug:
+    var: fw_apply_v4.stdout_lines
+  when: fw_apply_v4 is changed
 
 - name: Setup cron script directory
   ansible.builtin.file:
@@ -173,11 +202,17 @@
     - "--chmod=755"
   register: networkd
 
-- name: Restart systemd-networkd when the drop-in files change
+- name: Make sure systemd-networkd is started and enabled
   service:
     name: systemd-networkd
-    state: restarted
+    state: started
     enabled: yes
+
+# `networkctl reload` re-reads .network/.netdev files and reconfigures only
+# the links whose config changed. A full restart reconfigured every link and
+# could drop foreign routing state (Tailscale's ip rules / table 52).
+- name: Reload systemd-networkd when the drop-in files change
+  ansible.builtin.command: networkctl reload
   when: networkd.changed
 
 # The systemd-networkd [Ethtool] EnergyEfficientEthernet=false directive in

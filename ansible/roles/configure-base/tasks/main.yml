@@ -29,14 +29,27 @@
   until: zfs_cache_update is success
   ignore_errors: yes
 
-- name: Install/upgrade ZFS packages
+# present + hold, not latest: a zfs-dkms upgrade rebuilds the module and
+# leaves the loaded module out of sync with userland until a reboot. Upgrade
+# deliberately: apt-mark unhold zfsutils-linux zfs-dkms zfs-zed && apt install
+# --only-upgrade zfsutils-linux zfs-dkms zfs-zed && apt-mark hold ... (reboot).
+- name: Install ZFS packages
   apt:
     name:
       - zfsutils-linux
       - zfs-dkms
       - zfs-zed
-    state: latest
+    state: present
   register: zfs_packages
+
+- name: Hold ZFS packages (upgrades are a manual step)
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - zfsutils-linux
+    - zfs-dkms
+    - zfs-zed
 
 - name: Check if ZFS kernel module needs reload (reboot required)
   ansible.builtin.shell: |
@@ -168,8 +181,17 @@
     name:
       - gitlab-runner
       - glab
-    state: latest
+    # present + hold, not latest: upgrading gitlab-runner restarts the runner
+    # that is executing this very deploy. Upgrade manually between pipelines
+    # (apt-mark unhold gitlab-runner && apt install --only-upgrade
+    # gitlab-runner && apt-mark hold gitlab-runner).
+    state: present
     update_cache: yes
+
+- name: Hold gitlab-runner (upgrades are a manual step)
+  ansible.builtin.dpkg_selections:
+    name: gitlab-runner
+    selection: hold
 
 - name: Add gitlab-runner user to docker group
   user:
@@ -225,14 +247,14 @@
       - mailutils
       - bsd-mailx
       - msmtp-mta
-    state: latest
+    state: present
     update_cache: yes
 
 - name: Install nfs
   apt:
     name:
       - nfs-kernel-server
-    state: latest
+    state: present
     update_cache: yes
 
 - name: Make sure nfs is started and enabled
