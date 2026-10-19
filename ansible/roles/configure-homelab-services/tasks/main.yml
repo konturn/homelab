@@ -624,6 +624,30 @@
       dest: "{{ docker_persistent_data_path }}/openclaw/data/hooks/transforms/grafana.js"
   when: "'router' in inventory_hostname"
 
+### OpenClaw approved lessons
+# Reviewed lessons file, injected into every agent session by the
+# bootstrap-extra-files hook (see openclaw.json.j2). Deployed root-owned so it
+# only changes through the repo. Bootstrap files are read per session, so no
+# restart is needed. Other workspace files are managed by the agent and are
+# not touched here.
+- name: Ensure OpenClaw lessons directory exists
+  ansible.builtin.file:
+    path: "{{ docker_persistent_data_path }}/openclaw/workspace/lessons"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: "'router' in inventory_hostname"
+
+- name: Deploy OpenClaw approved lessons
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/openclaw/workspace/lessons/AGENTS.md"
+    dest: "{{ docker_persistent_data_path }}/openclaw/workspace/lessons/AGENTS.md"
+    owner: root
+    group: root
+    mode: "0644"
+  when: "'router' in inventory_hostname"
+
 ### Transcript credential scrubbing cron
 # Uses gitleaks (~160 rules) to detect and redact secrets from OpenClaw
 # session transcripts. Also purges archived sub-agent transcripts older
