@@ -17,6 +17,8 @@
 #   BUILD (parallel, path-triggered)
 #   ┌──────────────┬──────────────┬──────────────┬──────────────────────┐
 #   openclaw:build  amcrest2mqtt:build  snapcast:build  snapclient:build  jit-approval-svc:build
+#   main: <image>:build builds and pushes :latest and :<sha> (protected runner)
+#   MRs:  <image>:build-check builds with kaniko, no push (unprotected runner)
 #
 #   DEPLOY (main only, parallel)
 #   ┌──────────────────────────┬──────────────┬──────────────┬──────────────────────────┐
@@ -40,6 +42,22 @@
 workflow:
   auto_cancel:
     on_new_commit: interruptible
+  # Runner selection (base/gitlab-runner/config.toml): pipelines on protected
+  # refs (main, incl. schedules) run on the "protected" runner, everything
+  # else (MR and branch pipelines) on the "unprotected" runner. Both runners
+  # have run_untagged=false, and the protected runner is registered with
+  # access_level=ref_protected, so it never picks up jobs from other refs.
+  rules:
+    - if: $CI_COMMIT_REF_PROTECTED == "true"
+      variables:
+        RUNNER_TAG: protected
+    - when: always
+      variables:
+        RUNNER_TAG: unprotected
+
+default:
+  tags:
+    - $RUNNER_TAG
 
 variables:
   GIT_DEPTH: 5
@@ -279,6 +297,8 @@ jit-approval-svc:test:
 # Registry URL: gitlab-registry.lab.nkontur.com:443/root/homelab/<image>
 # CI variables: $CI_REGISTRY, $CI_REGISTRY_USER, $CI_REGISTRY_PASSWORD, $CI_REGISTRY_IMAGE
 
+# main: build on the host daemon (docker-socket-proxy, protected runner only)
+# and push :latest and :$CI_COMMIT_SHORT_SHA.
 .docker_build:
   stage: build
   image: docker:27
@@ -291,151 +311,206 @@ jit-approval-svc:test:
   before_script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   needs: []
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE/$IMAGE_NAME:latest -t $CI_REGISTRY_IMAGE/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA $BUILD_CONTEXT/
+    - docker push $CI_REGISTRY_IMAGE/$IMAGE_NAME:latest
+    - docker push $CI_REGISTRY_IMAGE/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA
+
+# MRs: check that the image builds, with kaniko inside the job container (no
+# Docker daemon, nothing is pushed).
+.kaniko_check:
+  extends: .interruptible
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
+  needs: []
+  script:
+    - >-
+      /kaniko/executor
+      --context "dir://$CI_PROJECT_DIR/$BUILD_CONTEXT"
+      --dockerfile "$CI_PROJECT_DIR/$BUILD_CONTEXT/Dockerfile"
+      --no-push
 
 openclaw:build:
   extends: .docker_build
-  script:
-    - docker build -t $CI_REGISTRY_IMAGE/openclaw:latest -t $CI_REGISTRY_IMAGE/openclaw:$CI_COMMIT_SHORT_SHA docker/openclaw/
-    - docker push $CI_REGISTRY_IMAGE/openclaw:latest
-    - docker push $CI_REGISTRY_IMAGE/openclaw:$CI_COMMIT_SHORT_SHA
+  variables:
+    IMAGE_NAME: openclaw
+    BUILD_CONTEXT: docker/openclaw
   rules:
     - !reference [.automerge_task_skip, rules]
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/openclaw/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
+
+openclaw:build-check:
+  extends: .kaniko_check
+  variables:
+    BUILD_CONTEXT: docker/openclaw
+  rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - docker/openclaw/**/*
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      when: manual
-      allow_failure: true
-    - if: $CI_COMMIT_BRANCH == "main"
       when: manual
       allow_failure: true
 
 amcrest2mqtt:build:
   extends: .docker_build
-  script:
-    - docker build -t $CI_REGISTRY_IMAGE/amcrest2mqtt:latest -t $CI_REGISTRY_IMAGE/amcrest2mqtt:$CI_COMMIT_SHORT_SHA docker/images/amcrest2mqtt/
-    - docker push $CI_REGISTRY_IMAGE/amcrest2mqtt:latest
-    - docker push $CI_REGISTRY_IMAGE/amcrest2mqtt:$CI_COMMIT_SHORT_SHA
+  variables:
+    IMAGE_NAME: amcrest2mqtt
+    BUILD_CONTEXT: docker/images/amcrest2mqtt
   rules:
     - !reference [.automerge_task_skip, rules]
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/images/amcrest2mqtt/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
+
+amcrest2mqtt:build-check:
+  extends: .kaniko_check
+  variables:
+    BUILD_CONTEXT: docker/images/amcrest2mqtt
+  rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - docker/images/amcrest2mqtt/**/*
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      when: manual
-      allow_failure: true
-    - if: $CI_COMMIT_BRANCH == "main"
       when: manual
       allow_failure: true
 
 snapcast:build:
   extends: .docker_build
-  script:
-    - docker build -t $CI_REGISTRY_IMAGE/snapcast:latest -t $CI_REGISTRY_IMAGE/snapcast:$CI_COMMIT_SHORT_SHA docker/images/snapcast/
-    - docker push $CI_REGISTRY_IMAGE/snapcast:latest
-    - docker push $CI_REGISTRY_IMAGE/snapcast:$CI_COMMIT_SHORT_SHA
+  variables:
+    IMAGE_NAME: snapcast
+    BUILD_CONTEXT: docker/images/snapcast
   rules:
     - !reference [.automerge_task_skip, rules]
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/images/snapcast/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
+
+snapcast:build-check:
+  extends: .kaniko_check
+  variables:
+    BUILD_CONTEXT: docker/images/snapcast
+  rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - docker/images/snapcast/**/*
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      when: manual
-      allow_failure: true
-    - if: $CI_COMMIT_BRANCH == "main"
       when: manual
       allow_failure: true
 
 jit-approval-svc:build:
   extends: .docker_build
-  script:
-    - docker build -t $CI_REGISTRY_IMAGE/jit-approval-svc:latest -t $CI_REGISTRY_IMAGE/jit-approval-svc:$CI_COMMIT_SHORT_SHA docker/jit-approval-svc/
-    - docker push $CI_REGISTRY_IMAGE/jit-approval-svc:latest
-    - docker push $CI_REGISTRY_IMAGE/jit-approval-svc:$CI_COMMIT_SHORT_SHA
+  variables:
+    IMAGE_NAME: jit-approval-svc
+    BUILD_CONTEXT: docker/jit-approval-svc
   rules:
     - !reference [.automerge_task_skip, rules]
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/jit-approval-svc/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
+
+jit-approval-svc:build-check:
+  extends: .kaniko_check
+  variables:
+    BUILD_CONTEXT: docker/jit-approval-svc
+  rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - docker/jit-approval-svc/**/*
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      when: manual
-      allow_failure: true
-    - if: $CI_COMMIT_BRANCH == "main"
       when: manual
       allow_failure: true
 
 snapclient:build:
   extends: .docker_build
-  script:
-    - docker build -t $CI_REGISTRY_IMAGE/snapclient:latest -t $CI_REGISTRY_IMAGE/snapclient:$CI_COMMIT_SHORT_SHA docker/images/snapclient/
-    - docker push $CI_REGISTRY_IMAGE/snapclient:latest
-    - docker push $CI_REGISTRY_IMAGE/snapclient:$CI_COMMIT_SHORT_SHA
+  variables:
+    IMAGE_NAME: snapclient
+    BUILD_CONTEXT: docker/images/snapclient
   rules:
     - !reference [.automerge_task_skip, rules]
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/images/snapclient/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
+
+snapclient:build-check:
+  extends: .kaniko_check
+  variables:
+    BUILD_CONTEXT: docker/images/snapclient
+  rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - docker/images/snapclient/**/*
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      when: manual
-      allow_failure: true
-    - if: $CI_COMMIT_BRANCH == "main"
       when: manual
       allow_failure: true
 
 chromium-browser:build:
   extends: .docker_build
-  script:
-    - docker build -t $CI_REGISTRY_IMAGE/chromium-browser:latest -t $CI_REGISTRY_IMAGE/chromium-browser:$CI_COMMIT_SHORT_SHA docker/chromium-browser/
-    - docker push $CI_REGISTRY_IMAGE/chromium-browser:latest
-    - docker push $CI_REGISTRY_IMAGE/chromium-browser:$CI_COMMIT_SHORT_SHA
+  variables:
+    IMAGE_NAME: chromium-browser
+    BUILD_CONTEXT: docker/chromium-browser
   rules:
     - !reference [.automerge_task_skip, rules]
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/chromium-browser/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
+
+chromium-browser:build-check:
+  extends: .kaniko_check
+  variables:
+    BUILD_CONTEXT: docker/chromium-browser
+  rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - docker/chromium-browser/**/*
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      when: manual
-      allow_failure: true
-    - if: $CI_COMMIT_BRANCH == "main"
       when: manual
       allow_failure: true
 
 novnc:build:
   extends: .docker_build
-  script:
-    - docker build -t $CI_REGISTRY_IMAGE/novnc:latest -t $CI_REGISTRY_IMAGE/novnc:$CI_COMMIT_SHORT_SHA docker/novnc/
-    - docker push $CI_REGISTRY_IMAGE/novnc:latest
-    - docker push $CI_REGISTRY_IMAGE/novnc:$CI_COMMIT_SHORT_SHA
+  variables:
+    IMAGE_NAME: novnc
+    BUILD_CONTEXT: docker/novnc
   rules:
     - !reference [.automerge_task_skip, rules]
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/novnc/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
+
+novnc:build-check:
+  extends: .kaniko_check
+  variables:
+    BUILD_CONTEXT: docker/novnc
+  rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - docker/novnc/**/*
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      when: manual
-      allow_failure: true
-    - if: $CI_COMMIT_BRANCH == "main"
       when: manual
       allow_failure: true
 

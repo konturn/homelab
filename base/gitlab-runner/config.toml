@@ -1,15 +1,26 @@
-concurrent = 4
+# Two runners (see workflow:rules in .gitlab-ci.yml):
+#   router-protected   tag "protected", access_level=ref_protected: jobs
+#                      from protected refs (main) only. Deploys and image
+#                      pushes; host network and the docker-socket-proxy
+#                      client certs.
+#   main.nkontur.com   tag "unprotected": MR and branch pipelines.
+# Both have run_untagged=false (set when registering / via the runners API).
+#
+# The protected runner's token is read by Ansible from
+# /etc/gitlab-runner/protected-runner.token on the host (configure-base).
+concurrent = 6
 check_interval = 0
 
 [session_server]
   session_timeout = 1800
 
 [[runners]]
-  name = "main.nkontur.com"
+  name = "router-protected"
   url = "https://gitlab.lab.nkontur.com/"
   tls-ca-file = "/persistent_data/application/certs/nkontur.com/live/iot.lab.nkontur.com-0003/chain.pem"
-  token = "{{ lookup('env', 'GITLAB_RUNNER_TOKEN') }}"
+  token = "{{ gitlab_runner_protected_token }}"
   executor = "docker"
+  limit = 4
   [runners.docker]
     image = "ubuntu:20.04"
     network_mode = "host"
@@ -22,7 +33,7 @@ check_interval = 0
     # Observed peak across 207 build containers in the last 30 days is 117 MB
     # (the *:build jobs push the real work to the remote daemon via
     # DOCKER_HOST, so the build container itself stays small). 4g is ~34x that
-    # and still caps the worst case at concurrent(4) x 4g = 16g of 126g.
+    # and still caps the worst case at concurrent(6) x 4g = 24g of 126g.
     #
     # Deliberately generous rather than tight: this limit applies to the jobs
     # that deploy this file, so a limit low enough to OOM a job would also OOM
@@ -30,6 +41,23 @@ check_interval = 0
     # snug fit.
     #
     # memory_swap = memory disables swap escape past the limit.
+    memory = "4g"
+    memory_swap = "4g"
+    volumes = ["/cache/gitlab-runner:/cache", "/persistent_data/application/docker-proxy-tls/ca.pem:/certs/ca.pem:ro", "/persistent_data/application/docker-proxy-tls/cert.pem:/certs/cert.pem:ro", "/persistent_data/application/docker-proxy-tls/key.pem:/certs/key.pem:ro"]
+    environment = ["DOCKER_HOST=tcp://lab.nkontur.com:2376", "DOCKER_TLS_VERIFY=1", "DOCKER_CERT_PATH=/certs"]
+
+[[runners]]
+  name = "main.nkontur.com"
+  url = "https://gitlab.lab.nkontur.com/"
+  tls-ca-file = "/persistent_data/application/certs/nkontur.com/live/iot.lab.nkontur.com-0003/chain.pem"
+  token = "{{ lookup('env', 'GITLAB_RUNNER_TOKEN') }}"
+  executor = "docker"
+  limit = 2
+  [runners.docker]
+    image = "ubuntu:20.04"
+    network_mode = "host"
+    privileged = false
+    # Resource caps: see router-protected above.
     memory = "4g"
     memory_swap = "4g"
     volumes = ["/cache/gitlab-runner:/cache", "/persistent_data/application/docker-proxy-tls/ca.pem:/certs/ca.pem:ro", "/persistent_data/application/docker-proxy-tls/cert.pem:/certs/cert.pem:ro", "/persistent_data/application/docker-proxy-tls/key.pem:/certs/key.pem:ro"]

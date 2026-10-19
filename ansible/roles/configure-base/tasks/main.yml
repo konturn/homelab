@@ -212,6 +212,26 @@
     - /cache/gitlab-runner
 
 ### Configure gitlab-runner on host
+# The protected runner's authentication token lives only on the host (written
+# when the runner was registered). slurp fails if the file is missing, so a
+# deploy never renders a config without that runner.
+- name: Read protected runner token
+  ansible.builtin.slurp:
+    src: /etc/gitlab-runner/protected-runner.token
+  register: _protected_runner_token
+  no_log: true
+
+- name: Set protected runner token fact
+  ansible.builtin.set_fact:
+    gitlab_runner_protected_token: "{{ _protected_runner_token.content | b64decode | trim }}"
+  no_log: true
+
+- name: Check protected runner token is set
+  ansible.builtin.assert:
+    that: gitlab_runner_protected_token | length > 0
+    quiet: true
+  no_log: true
+
 - name: Gitlab runner config file
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/gitlab-runner/config.toml' }}"
@@ -219,6 +239,8 @@
     owner: root
     group: root
     mode: 0600
+  # contains runner tokens
+  diff: false
 
 - name: Sets up base cronjob for nextcloud
   ansible.builtin.cron:
