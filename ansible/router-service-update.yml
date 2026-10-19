@@ -1,0 +1,161 @@
+# Targeted deploy for auto-merged image updates (see docs/AUTOMERGE.md).
+#
+# Renders the compose file exactly like the full deploy, then pulls and
+# recreates ONLY the services listed in the plan (no dependencies, no orphan
+# removal), and waits for them to become healthy. On any failure it renders the
+# pre-merge compose file, recreates the same services on their previous image,
+# re-checks health, records the outcome and fails.
+#
+# Inputs (environment):
+#   AUTOMERGE_PLAN    JSON plan written by `ci/automerge/automerge.py plan-deploy`
+#   AUTOMERGE_RESULT  path where the outcome JSON is written (on the controller)
+- hosts: router.lab.nkontur.com
+  vars:
+    automerge_plan: "{{ lookup('file', lookup('env', 'AUTOMERGE_PLAN')) | from_json }}"
+    automerge_result_file: "{{ lookup('env', 'AUTOMERGE_RESULT') }}"
+    automerge_services: "{{ automerge_plan.services | map(attribute='service') | list }}"
+    automerge_project: "{{ docker_compose_project_name | default('docker') }}"
+    automerge_compose_file: "{{ docker_compose_dest_path }}/docker-compose.yml"
+    automerge_health_script: "{{ lookup('env', 'CI_PROJECT_DIR') }}/ci/automerge/wait-healthy.sh"
+
+  pre_tasks:
+    - name: Validate deploy plan
+      ansible.builtin.assert:
+        that:
+          - automerge_services | length > 0
+          - automerge_result_file | length > 0
+        fail_msg: "AUTOMERGE_PLAN has no services or AUTOMERGE_RESULT is unset"
+
+    - name: Show deploy plan
+      ansible.builtin.debug:
+        msg: "{{ item.service }}: {{ item.old }} -> {{ item.new }}"
+      loop: "{{ automerge_plan.services }}"
+      loop_control:
+        label: "{{ item.service }}"
+
+  roles:
+    - role: fetch-vault-secrets
+
+  tasks:
+    - name: Deploy target services with health gate
+      block:
+        - name: Render post-merge compose file
+          ansible.builtin.include_role:
+            name: configure-homelab-services
+            tasks_from: render_compose
+
+        - name: Pull and recreate only the target services
+          community.docker.docker_compose_v2:
+            project_name: "{{ automerge_project }}"
+            project_src: "{{ docker_compose_dest_path }}/"
+            files: "{{ docker_compose_file_names }}"
+            services: "{{ automerge_services }}"
+            dependencies: false
+            remove_orphans: false
+            pull: missing
+            state: present
+          timeout: 900
+
+        - name: Wait for target services to become healthy
+          ansible.builtin.script:
+            cmd: >-
+              {{ automerge_health_script }}
+              --project {{ automerge_project | quote }}
+              --file {{ automerge_compose_file | quote }}
+              --service {{ item.service | quote }}
+              --expect-digest {{ item.new_digest | quote }}
+              --timeout {{ item.timeout | int }}
+              {% if item.probe %}--probe {{ item.probe | quote }} --probe-ip {{ lab_nginx_ip | quote }}{% endif %}
+            executable: /bin/bash
+          loop: "{{ automerge_plan.services }}"
+          loop_control:
+            label: "{{ item.service }}"
+          register: automerge_health
+          timeout: 1200
+
+        - name: Health gate output
+          ansible.builtin.debug:
+            msg: "{{ automerge_health.results | map(attribute='stdout_lines') | list }}"
+
+      rescue:
+        - name: Record failure
+          ansible.builtin.set_fact:
+            automerge_failure: >-
+              {{ ansible_failed_task.name | default('unknown task') }}:
+              {{ (ansible_failed_result.results | default([]) | selectattr('failed', 'defined')
+                  | selectattr('failed') | map(attribute='stdout_lines', default=[]) | flatten
+                  | select('search', 'FAILED') | list | join(' / '))
+                 or (ansible_failed_result.msg | default('see job log')) }}
+
+        - name: Health gate output (failure)
+          ansible.builtin.debug:
+            msg: "{{ ansible_failed_result.results | default([]) | map(attribute='stdout_lines', default=[]) | list }}"
+          when: ansible_failed_result.results is defined
+
+        - name: ROLLBACK - render pre-merge compose file
+          ansible.builtin.include_role:
+            name: configure-homelab-services
+            tasks_from: render_compose
+          vars:
+            compose_src_dir: "{{ automerge_plan.prev_compose_dir }}"
+
+        - name: ROLLBACK - recreate target services on their previous image
+          community.docker.docker_compose_v2:
+            project_name: "{{ automerge_project }}"
+            project_src: "{{ docker_compose_dest_path }}/"
+            files: "{{ docker_compose_file_names }}"
+            services: "{{ automerge_services }}"
+            dependencies: false
+            remove_orphans: false
+            pull: missing
+            state: present
+          timeout: 900
+          register: automerge_rollback_up
+          ignore_errors: true
+
+        - name: ROLLBACK - wait for previous image to become healthy
+          ansible.builtin.script:
+            cmd: >-
+              {{ automerge_health_script }}
+              --project {{ automerge_project | quote }}
+              --file {{ automerge_compose_file | quote }}
+              --service {{ item.service | quote }}
+              --expect-digest {{ item.old_digest | quote }}
+              --timeout {{ item.timeout | int }}
+              {% if item.probe %}--probe {{ item.probe | quote }} --probe-ip {{ lab_nginx_ip | quote }}{% endif %}
+            executable: /bin/bash
+          loop: "{{ automerge_plan.services }}"
+          loop_control:
+            label: "{{ item.service }}"
+          register: automerge_rollback_health
+          timeout: 1200
+          ignore_errors: true
+          when: automerge_rollback_up is succeeded
+
+        - name: ROLLBACK - health gate output
+          ansible.builtin.debug:
+            msg: "{{ automerge_rollback_health.results | default([]) | map(attribute='stdout_lines', default=[]) | list }}"
+
+        - name: Write failure result
+          ansible.builtin.copy:
+            content: "{{ {'status': 'failed', 'failure': automerge_failure,
+                          'rollback_healthy': (automerge_rollback_up is succeeded
+                                               and automerge_rollback_health is succeeded)} | to_nice_json }}"
+            dest: "{{ automerge_result_file }}"
+            mode: '0644'
+          delegate_to: localhost
+
+        - name: Fail the deploy
+          ansible.builtin.fail:
+            msg: >-
+              Per-service deploy of {{ automerge_services | join(', ') }} failed ({{ automerge_failure }}).
+              Rolled back to the previous image:
+              {{ 'healthy' if (automerge_rollback_up is succeeded and automerge_rollback_health is succeeded)
+                 else 'STILL UNHEALTHY' }}.
+
+    - name: Write success result
+      ansible.builtin.copy:
+        content: "{{ {'status': 'success'} | to_nice_json }}"
+        dest: "{{ automerge_result_file }}"
+        mode: '0644'
+      delegate_to: localhost

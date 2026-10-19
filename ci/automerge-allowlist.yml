@@ -1,0 +1,72 @@
+# Auto-merge policy configuration. See docs/AUTOMERGE.md.
+#
+# Only MRs that pass every check in ci/automerge/policy.py are merged without
+# review. Anything not listed under `services` always needs a human.
+# This file is CODEOWNERS-protected.
+
+# MR authors whose image-update MRs may be auto-merged.
+authors:
+  - moltbot
+
+target_branch: main
+
+# Files an eligible MR may touch. docker/docker-compose.yml is further limited
+# to in-place edits of service `image:` lines (same image, tag/digest only).
+allowed_files:
+  - docker/docker-compose.yml
+
+# Maximum auto-merges in any rolling 24h window.
+max_per_24h: 3
+
+# MR label that blocks auto-merge for that MR.
+freeze_label: freeze
+
+# Default seconds to wait for a service to become healthy after deploy.
+default_health_timeout: 600
+
+# Compose service name -> options.
+#   probe:   optional URL that must return 2xx/3xx after deploy. Requests are
+#            sent to the internal reverse proxy (lab_nginx_ip) with SNI/Host set
+#            from the URL, so they do not depend on DNS.
+#   timeout: optional override of default_health_timeout.
+# The container's own healthcheck (if it has one) must also report healthy.
+services:
+  # media
+  plex: {}
+  tautulli:
+    probe: https://tautulli.lab.nkontur.com/status
+  radarr:
+    probe: https://radarr.lab.nkontur.com/ping
+  sonarr:
+    probe: https://sonarr.lab.nkontur.com/ping
+  lidarr: {}
+  prowlarr:
+    probe: https://prowlarr.lab.nkontur.com/ping
+  jackett:
+    probe: https://jackett.lab.nkontur.com/UI/Login
+  ombi: {}
+  nzbget: {}
+  deluge:
+    probe: https://deluge.lab.nkontur.com/
+  navidrome: {}
+  booksonic: {}          # audioserve
+  # home automation
+  homeassistant:
+    probe: https://homeassistant.lab.nkontur.com/manifest.json
+  # observability
+  grafana:
+    probe: https://grafana.lab.nkontur.com/api/health
+  loki: {}
+  promtail: {}
+  tempo:
+    probe: https://tempo.lab.nkontur.com/ready
+  otel-collector: {}
+  # reverse proxies
+  nginx: {}
+  lab_nginx:
+    probe: https://grafana.lab.nkontur.com/api/health
+  iot_nginx: {}
+  # Not listed: nextcloud. Its image upgrades run a one-way schema migration
+  # on start, so rolling back the image does not restore the previous state;
+  # those updates go through a normal reviewed merge and full deploy (which
+  # also runs `occ upgrade`).

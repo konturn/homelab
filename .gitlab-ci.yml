@@ -23,6 +23,11 @@
 #   router:deploy [id_tokens]  zwave:deploy [id_tokens]  sat-2:deploy [id_tokens]  vault:configure  vault:rotate [manual]
 #   (router:deploy needs vault:configure)
 #
+#   AUTO-MERGE (see docs/AUTOMERGE.md)
+#   automerge:test + automerge:eligibility (MR, informational)
+#   automerge:sweep / automerge:report (scheduled on main, AUTOMERGE_TASK=sweep|report)
+#   router:deploy-service (main, auto-merged commits only; replaces the full deploys)
+#
 #   BOOTSTRAP (main only, manual)
 #   ┌──────────────┬──────────────┐
 #   router:bootstrap  router:restore
@@ -122,6 +127,21 @@ variables:
 .interruptible:
   interruptible: true
 
+# Auto-merge rule fragments (used via !reference).
+# Scheduled auto-merge pipelines run only the automerge:* jobs.
+.automerge_task_skip:
+  rules:
+    - if: $AUTOMERGE_TASK
+      when: never
+
+# Commits merged by the auto-merge policy get router:deploy-service instead of
+# the full host deploys; those stay available as manual jobs.
+.automerged_commit_manual:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /Automerge-Policy: image-update/'
+      when: manual
+      allow_failure: true
+
 stages:
   - bootstrap
   - validate
@@ -140,6 +160,7 @@ router:bootstrap:
   script:
     - ansible-playbook -i ansible/inventory.yml ansible/bootstrap.yml --connection=local
   rules:
+    - !reference [.automerge_task_skip, rules]
     - if: $CI_COMMIT_BRANCH == "main"
 
 # =============================================================================
@@ -244,6 +265,7 @@ jit-approval-svc:test:
     - cd docker/jit-approval-svc
     - go test -v -count=1 ./...
   rules:
+    - !reference [.automerge_task_skip, rules]
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - docker/jit-approval-svc/**/*
@@ -278,6 +300,7 @@ openclaw:build:
     - docker push $CI_REGISTRY_IMAGE/openclaw:latest
     - docker push $CI_REGISTRY_IMAGE/openclaw:$CI_COMMIT_SHORT_SHA
   rules:
+    - !reference [.automerge_task_skip, rules]
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/openclaw/**/*
@@ -298,6 +321,7 @@ amcrest2mqtt:build:
     - docker push $CI_REGISTRY_IMAGE/amcrest2mqtt:latest
     - docker push $CI_REGISTRY_IMAGE/amcrest2mqtt:$CI_COMMIT_SHORT_SHA
   rules:
+    - !reference [.automerge_task_skip, rules]
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/images/amcrest2mqtt/**/*
@@ -318,6 +342,7 @@ snapcast:build:
     - docker push $CI_REGISTRY_IMAGE/snapcast:latest
     - docker push $CI_REGISTRY_IMAGE/snapcast:$CI_COMMIT_SHORT_SHA
   rules:
+    - !reference [.automerge_task_skip, rules]
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/images/snapcast/**/*
@@ -338,6 +363,7 @@ jit-approval-svc:build:
     - docker push $CI_REGISTRY_IMAGE/jit-approval-svc:latest
     - docker push $CI_REGISTRY_IMAGE/jit-approval-svc:$CI_COMMIT_SHORT_SHA
   rules:
+    - !reference [.automerge_task_skip, rules]
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/jit-approval-svc/**/*
@@ -358,6 +384,7 @@ snapclient:build:
     - docker push $CI_REGISTRY_IMAGE/snapclient:latest
     - docker push $CI_REGISTRY_IMAGE/snapclient:$CI_COMMIT_SHORT_SHA
   rules:
+    - !reference [.automerge_task_skip, rules]
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/images/snapclient/**/*
@@ -378,6 +405,7 @@ chromium-browser:build:
     - docker push $CI_REGISTRY_IMAGE/chromium-browser:latest
     - docker push $CI_REGISTRY_IMAGE/chromium-browser:$CI_COMMIT_SHORT_SHA
   rules:
+    - !reference [.automerge_task_skip, rules]
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/chromium-browser/**/*
@@ -398,6 +426,7 @@ novnc:build:
     - docker push $CI_REGISTRY_IMAGE/novnc:latest
     - docker push $CI_REGISTRY_IMAGE/novnc:$CI_COMMIT_SHORT_SHA
   rules:
+    - !reference [.automerge_task_skip, rules]
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/novnc/**/*
@@ -430,6 +459,8 @@ router:deploy:
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml
   rules:
+    - !reference [.automerge_task_skip, rules]
+    - !reference [.automerged_commit_manual, rules]
     - if: $CI_COMMIT_BRANCH == "main"
 
 zwave:deploy:
@@ -445,6 +476,8 @@ zwave:deploy:
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/zwave.yml
   rules:
+    - !reference [.automerge_task_skip, rules]
+    - !reference [.automerged_commit_manual, rules]
     - if: $CI_COMMIT_BRANCH == "main"
 
 satellite-2:deploy:
@@ -460,6 +493,8 @@ satellite-2:deploy:
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml
   rules:
+    - !reference [.automerge_task_skip, rules]
+    - !reference [.automerged_commit_manual, rules]
     - if: $CI_COMMIT_BRANCH == "main"
 
 macmini:validate:
@@ -492,6 +527,8 @@ macmini:deploy:
   script:
     - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/macmini.yml
   rules:
+    - !reference [.automerge_task_skip, rules]
+    - !reference [.automerged_commit_manual, rules]
     - if: $CI_COMMIT_BRANCH == "main"
 
 # =============================================================================
@@ -526,6 +563,7 @@ vault:configure:
     - terraform plan -var="vault_addr=${VAULT_ADDR}" -var="vault_token=${VAULT_TOKEN}" -out=tfplan
     - terraform apply tfplan
   rules:
+    - !reference [.automerge_task_skip, rules]
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - terraform/vault/**/*
@@ -746,6 +784,7 @@ vault:rotate-approles:
         exit 1
       fi
   rules:
+    - !reference [.automerge_task_skip, rules]
     - if: $CI_COMMIT_BRANCH == "main"
 
 vault:validate:
@@ -800,3 +839,111 @@ vault:validate:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - terraform/vault/**/*
+
+# =============================================================================
+# Auto-merge for low-risk image updates (see docs/AUTOMERGE.md)
+# =============================================================================
+# Jobs that hold AUTOMERGE_TOKEN or deploy credentials run only on main
+# (scheduled or post-merge), so they always execute main's copy of
+# ci/automerge/. MR content is read as data through the API.
+
+automerge:test:
+  extends:
+    - .ansible
+    - .interruptible
+  stage: validate
+  needs: []
+  script:
+    - python3 -m unittest discover -s ci/automerge -p 'test_*.py' -v
+    - ansible-playbook -i ansible/inventory.yml ansible/router-service-update.yml --syntax-check
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - ci/**/*
+        - ansible/router-service-update.yml
+        - ansible/roles/configure-homelab-services/**/*
+        - CODEOWNERS
+        - .gitlab-ci.yml
+
+# Informational: MR-local policy checks (no credentials). The authoritative
+# decision is made by automerge:sweep from main.
+automerge:eligibility:
+  extends:
+    - .ansible
+    - .interruptible
+  stage: validate
+  needs: []
+  allow_failure: true
+  variables:
+    GIT_DEPTH: "50"
+  script:
+    - git fetch -q --depth=50 origin "$CI_MERGE_REQUEST_DIFF_BASE_SHA" || true
+    - >-
+      python3 ci/automerge/automerge.py mr-check
+      --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --head "$CI_COMMIT_SHA"
+      --author "$GITLAB_USER_LOGIN" --target "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+      --labels "$CI_MERGE_REQUEST_LABELS"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - docker/docker-compose.yml
+
+# Scheduled (e.g. every 15 min) with AUTOMERGE_TASK=sweep: labels eligible MRs
+# and merges at most one MR whose pipeline has passed.
+automerge:sweep:
+  extends: .ansible
+  stage: deploy
+  needs: []
+  resource_group: automerge
+  script:
+    - python3 ci/automerge/automerge.py sweep
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $AUTOMERGE_TASK == "sweep" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+
+# Scheduled daily with AUTOMERGE_TASK=report: mails a summary via the router's msmtp.
+automerge:report:
+  extends: .ansible
+  stage: deploy
+  needs: []
+  script:
+    - python3 ci/automerge/automerge.py daily-report
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $AUTOMERGE_TASK == "report" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+
+# Per-service deploy for commits merged by automerge:sweep.
+router:deploy-service:
+  extends: .ansible
+  stage: deploy
+  resource_group: deploy-router
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: https://vault.lab.nkontur.com:8200
+  variables:
+    GIT_DEPTH: "20"
+    AUTOMERGE_PLAN: "$CI_PROJECT_DIR/.automerge/plan.json"
+    AUTOMERGE_RESULT: "$CI_PROJECT_DIR/.automerge/result.json"
+  needs:
+    - job: vault:configure
+      optional: true
+  script:
+    - python3 ci/automerge/automerge.py plan-deploy --out "$AUTOMERGE_PLAN"
+    - |
+      if ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router-service-update.yml; then
+        python3 ci/automerge/automerge.py deploy-report --plan "$AUTOMERGE_PLAN" --result "$AUTOMERGE_RESULT" --status success || true
+      else
+        python3 ci/automerge/automerge.py deploy-report --plan "$AUTOMERGE_PLAN" --result "$AUTOMERGE_RESULT" --status failed || true
+        echo "=================================================================="
+        echo "AUTO-MERGE DEPLOY FAILED - services rolled back (see above);"
+        echo "a rollback issue and revert MR were opened and auto-merge is paused."
+        echo "=================================================================="
+        exit 1
+      fi
+  artifacts:
+    when: always
+    paths:
+      - .automerge/plan.json
+      - .automerge/result.json
+    expire_in: 30 days
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_MESSAGE =~ /Automerge-Policy: image-update/'
