@@ -383,6 +383,176 @@ class TestPayload(unittest.TestCase):
         self.assertIn("<VLANName>A&amp;B</VLANName>", x)
 
 
+def fake_image(version="6.7.0.52", size=4096):
+    """A blob with the NETGEAR image header layout ("NG10" at 0x0c, version at 0x14)."""
+    hdr = bytearray(size)
+    hdr[0x0c:0x10] = b"NG10"
+    v = version.encode()
+    hdr[0x14:0x14 + len(v)] = v
+    return bytes(hdr)
+
+
+FW = {"version": "6.7.0.52", "url": "https://example.invalid/fw/X_V6.7.0.52.zip", "sha256": "a" * 64,
+      "image": "X_V6.7.0.52.bin", "image_sha256": "b" * 64}
+
+
+class TestFirmwareSchema(unittest.TestCase):
+    def test_valid(self):
+        d = desired(lambda d: d.update(firmware=dict(FW)))
+        self.assertEqual(d["firmware"]["version"], "6.7.0.52")
+
+    def test_absent_is_none(self):
+        self.assertIsNone(desired()["firmware"])
+
+    def assertInvalid(self, change, text):
+        def mutate(d):
+            fw = dict(FW)
+            fw.update(change)
+            d["firmware"] = fw
+        with self.assertRaises(ng.NgError) as cm:
+            desired(mutate)
+        self.assertIn(text, str(cm.exception))
+
+    def test_unquoted_version(self):
+        self.assertInvalid({"version": 6.7}, "firmware.version")
+
+    def test_bad_sha(self):
+        self.assertInvalid({"sha256": "XYZ"}, "firmware.sha256")
+
+    def test_http_url_refused(self):
+        self.assertInvalid({"url": "http://example.invalid/x.zip"}, "firmware.url")
+
+    def test_image_must_match_version(self):
+        self.assertInvalid({"image": "X_V6.7.0.42.bin"}, "does not contain firmware.version")
+
+    def test_unknown_key(self):
+        self.assertInvalid({"slot": 2}, "firmware: unknown key 'slot'")
+
+
+class TestFirmwareArtifact(unittest.TestCase):
+    def setUp(self):
+        import hashlib
+        import tempfile
+        import zipfile
+        self.tmp = Path(tempfile.mkdtemp())
+        self.src = self.tmp / "src"
+        self.src.mkdir()
+        self.blob = fake_image()
+        zpath = self.src / "X_V6.7.0.52.zip"
+        with zipfile.ZipFile(zpath, "w") as z:
+            z.writestr("X_V6.7.0.52.bin", self.blob)
+            z.writestr("notes.htm", "<html></html>")
+        self.fw = {"version": "6.7.0.52", "url": zpath.as_uri(),
+                   "sha256": hashlib.sha256(zpath.read_bytes()).hexdigest(),
+                   "image": "X_V6.7.0.52.bin", "image_sha256": hashlib.sha256(self.blob).hexdigest()}
+        self.cache = self.tmp / "cache"
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def test_image_version(self):
+        self.assertEqual(ng.image_version(self.blob), "6.7.0.52")
+        self.assertIsNone(ng.image_version(b"\x00" * 64))
+
+    def test_download_verify_extract_and_cache(self):
+        p = ng.fetch_firmware(self.fw, self.cache, log=lambda m: None)
+        self.assertEqual(p.read_bytes(), self.blob)
+        msgs = []
+        ng.fetch_firmware(self.fw, self.cache, log=msgs.append)
+        self.assertTrue(any("cached" in m for m in msgs))
+
+    def test_zip_hash_mismatch(self):
+        self.fw["sha256"] = "0" * 64
+        with self.assertRaises(ng.NgError) as cm:
+            ng.fetch_firmware(self.fw, self.cache, log=lambda m: None)
+        self.assertIn("zip sha256 mismatch", str(cm.exception))
+        self.assertEqual(list(self.cache.glob("*.part")), [])
+
+    def test_image_hash_mismatch(self):
+        self.fw["image_sha256"] = "0" * 64
+        with self.assertRaises(ng.NgError) as cm:
+            ng.fetch_firmware(self.fw, self.cache, log=lambda m: None)
+        self.assertIn("image sha256 mismatch", str(cm.exception))
+        self.assertFalse((self.cache / self.fw["image"]).exists())
+
+    def test_corrupt_cached_image_is_replaced(self):
+        self.cache.mkdir()
+        (self.cache / self.fw["image"]).write_bytes(b"junk")
+        p = ng.fetch_firmware(self.fw, self.cache, log=lambda m: None)
+        self.assertEqual(p.read_bytes(), self.blob)
+
+    def test_header_version_mismatch(self):
+        import hashlib
+        import zipfile
+        blob = fake_image("6.7.0.42")
+        zpath = self.src / "X_V6.7.0.52.zip"
+        with zipfile.ZipFile(zpath, "w") as z:
+            z.writestr("X_V6.7.0.52.bin", blob)
+        self.fw["sha256"] = hashlib.sha256(zpath.read_bytes()).hexdigest()
+        self.fw["image_sha256"] = hashlib.sha256(blob).hexdigest()
+        with self.assertRaises(ng.NgError) as cm:
+            ng.fetch_firmware(self.fw, self.cache, log=lambda m: None)
+        self.assertIn("image header names version 6.7.0.42", str(cm.exception))
+
+
+IMAGE_XML = """<ImageUnitList><Entry><unitID>1</unitID><image1Version>6.7.0.42</image1Version>
+<image2Version>{v2}</image2Version><currentImage>1</currentImage><nextBootImage>{nb}</nextBootImage>
+<image1Description></image1Description><image2Description></image2Description></Entry></ImageUnitList>"""
+
+
+class TestFirmwareStatus(unittest.TestCase):
+    def img(self, v2="6.7.0.42", nb="1"):
+        import xml.etree.ElementTree as ET
+        return ng.parse_image_status(ET.fromstring(IMAGE_XML.format(v2=v2, nb=nb)))
+
+    def test_parse(self):
+        self.assertEqual(self.img(), {"image1": "6.7.0.42", "image2": "6.7.0.42", "current": 1, "next": 1})
+        self.assertEqual(ng.running_version(self.img()), "6.7.0.42")
+
+    def test_status_line(self):
+        line, behind = ng.firmware_status_line("sw", dict(FW), self.img())
+        self.assertTrue(behind)
+        self.assertIn("BEHIND", line)
+        line, behind = ng.firmware_status_line("sw", dict(FW, version="6.7.0.42"), self.img())
+        self.assertFalse(behind)
+        self.assertFalse(ng.firmware_status_line("sw", None, self.img())[1])
+
+    def test_slot_after_upload_prefers_other_slot(self):
+        self.assertEqual(ng.slot_after_upload(self.img(v2="6.7.0.52", nb="2"), "6.7.0.52"), 2)
+
+    def test_slot_after_upload_missing(self):
+        with self.assertRaises(ng.NgError):
+            ng.slot_after_upload(self.img(), "6.7.0.52")
+
+    def test_next_boot_payload(self):
+        x = ng.next_boot_payload(2, "1", "").decode()
+        self.assertIn('<ImageUnitList action="set"><Entry><nextBootImage>2</nextBootImage><unitID>1</unitID>'
+                      '<currentImage>1</currentImage><image2Description', x)
+        self.assertNotIn("image1Description", x)
+        with self.assertRaises(ng.NgError):
+            ng.next_boot_payload(3, "1", "")
+
+    def test_multipart(self):
+        body, ctype = ng.multipart_body([("a", "1"), ("rlCopyDestinationFileType", "8")], "srcFileName", "f.bin", b"\x00\x01")
+        boundary = ctype.split("boundary=")[1]
+        self.assertTrue(body.startswith(f"--{boundary}\r\n".encode()))
+        self.assertIn(b'name="rlCopyDestinationFileType"\r\n\r\n8\r\n', body)
+        self.assertIn(b'filename="f.bin"\r\nContent-Type: application/octet-stream\r\n\r\n\x00\x01\r\n', body)
+        self.assertTrue(body.endswith(f"--{boundary}--\r\n".encode()))
+
+
+class TestExportFirmwareHeader(unittest.TestCase):
+    def test_version_read(self):
+        self.assertEqual(ng.export_firmware_version(SAMPLE), "6.7.0.42")
+
+    def test_header_ignored_by_unmanaged_diff(self):
+        upgraded = SAMPLE.replace("v6.7.0.42 / TEST", "v6.7.0.52 / TEST")
+        self.assertEqual(ng.unmanaged_diff(SAMPLE, upgraded), "")
+        changed = SAMPLE.replace("scc mode disable", "scc mode enable")
+        self.assertIn("scc mode enable", ng.unmanaged_diff(SAMPLE, changed))
+
+
 class TestCommittedFiles(unittest.TestCase):
     """Every committed desired-state file is valid and consistent with its snapshot."""
 

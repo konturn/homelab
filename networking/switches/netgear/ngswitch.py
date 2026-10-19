@@ -9,6 +9,8 @@ Subcommands
   drift            compare the live switch with the desired state and the committed snapshot
   generate         write a desired-state file from the live switch
   render-snapshot  update the managed lines of a snapshot from the desired state (offline)
+  firmware status  running / stored image versions against the desired firmware
+  firmware upgrade upload the desired firmware, reboot into it, verify, check drift
 
 Managed settings: VLANs (id, name), per-port VLAN membership (untagged/tagged),
 port PVID and per-port PoE (enabled, priority, power limit). Everything else in
@@ -24,6 +26,7 @@ from __future__ import annotations
 import argparse
 import base64
 import difflib
+import hashlib
 import http.cookiejar
 import json
 import os
@@ -35,6 +38,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+import zipfile
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -352,7 +356,7 @@ def validate_desired(data, origin: str = "desired state") -> dict:
 
     if not isinstance(data, dict):
         raise NgError(f"{origin}: top level must be a mapping")
-    allowed_top = {"name", "model", "vault_path", "management", "vlans", "ports", "poe_defaults_offline"}
+    allowed_top = {"name", "model", "vault_path", "management", "vlans", "ports", "poe_defaults_offline", "firmware"}
     for k in data:
         if k not in allowed_top:
             err(f"unknown key '{k}'")
@@ -461,6 +465,7 @@ def validate_desired(data, origin: str = "desired state") -> dict:
     if pdo is not None:
         if not isinstance(pdo, dict) or set(pdo) - {"enabled", "priority", "limit_mw"}:
             err("poe_defaults_offline must be a mapping with enabled, priority, limit_mw")
+    firmware = validate_firmware(data.get("firmware"), err)
     if errs:
         raise NgError("\n".join(errs))
     state = normalize_state({"vlans": vlans, "ports": ports})
@@ -470,8 +475,45 @@ def validate_desired(data, origin: str = "desired state") -> dict:
         "vault_path": data["vault_path"],
         "management": {"vlan": mvlan, "uplink": uplink, "protected_ports": sorted(set(protected), key=port_sort_key)},
         "poe_defaults_offline": pdo,
+        "firmware": firmware,
         "state": state,
     }
+
+
+_FW_VERSION_RE = re.compile(r"^\d+(\.\d+){3}$")
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def validate_firmware(fw, err) -> Optional[dict]:
+    """Schema-check the optional firmware block; report problems through err()."""
+    if fw is None:
+        return None
+    if not isinstance(fw, dict):
+        err("firmware must be a mapping with version, url, sha256, image, image_sha256")
+        return None
+    keys = ("version", "url", "sha256", "image", "image_sha256")
+    for k in fw:
+        if k not in keys:
+            err(f"firmware: unknown key '{k}'")
+    ok = True
+    if not isinstance(fw.get("version"), str) or not _FW_VERSION_RE.match(fw["version"]):
+        err("firmware.version must be a quoted version string like \"6.7.0.52\"")
+        ok = False
+    if not isinstance(fw.get("url"), str) or not fw["url"].startswith("https://") or not fw["url"].endswith(".zip"):
+        err("firmware.url must be an https:// URL of the vendor's .zip")
+        ok = False
+    for k in ("sha256", "image_sha256"):
+        if not isinstance(fw.get(k), str) or not _SHA256_RE.match(fw[k]):
+            err(f"firmware.{k} must be a lowercase hex SHA-256")
+            ok = False
+    img = fw.get("image")
+    if not isinstance(img, str) or "/" in img or not img.endswith(".bin"):
+        err("firmware.image must be the .bin file name inside the zip")
+        ok = False
+    elif isinstance(fw.get("version"), str) and fw["version"] not in img:
+        err("firmware.image name does not contain firmware.version")
+        ok = False
+    return {k: fw[k] for k in keys} if ok else None
 
 
 def load_desired(path: Path) -> dict:
@@ -948,6 +990,94 @@ class Switch:
             raise NgError("configuration download did not return a configuration file")
         return sanitize(text)
 
+    # -- firmware ----------------------------------------------------------------
+    def image_status(self) -> dict:
+        return parse_image_status(self.read("ImageUnitList"))
+
+    def load_status(self) -> Optional[dict]:
+        try:
+            return _children(self.read("LoadStatus"))
+        except NgError:
+            return None
+
+    def clear_load_status(self) -> None:
+        try:
+            self.post(build_xml("LoadStatus", "delete", _el("unitID", 0)))
+        except NgError:
+            pass
+
+    def upload_firmware(self, image: Path, timeout: int = 1200, progress=None) -> None:
+        """HTTP File Download (Maintenance > Download), file type Software, then wait for the flash write."""
+        _, form = self._open(f"{self.base}/{self.cs}/Maintenance/httpconfigprocess.htm")
+        m = re.search(r'id="rlCopyFreeHistoryIndex\$scalar"\s+value="([^"]*)"', form.decode("latin-1"))
+        if not m:
+            raise NgError("upload form did not contain rlCopyFreeHistoryIndex")
+        idx = m.group(1)
+        fields = [("restoreUrl", ""), ("errorCollector", ""), ("rlCopyFreeHistoryIndex$scalar", idx),
+                  ("rlCopyDestinationFileType", FW_FILE_TYPE_SOFTWARE), ("rlCopyFreeHistoryIndex", idx)]
+        body, ctype = multipart_body(fields, "srcFileName", image.name, image.read_bytes())
+        old = self.timeout
+        self.timeout = 600
+        try:
+            self._open(f"{self.base}/{self.cs}/Maintenance/httpconfigprocess.htm", data=body,
+                       headers={"Content-Type": ctype})
+        finally:
+            self.timeout = old
+        deadline = time.time() + timeout
+        last = None
+        while time.time() < deadline:
+            st = self.load_status()
+            code = int(st.get("copyStatusType") or 0) if st else 0
+            if code in (3, 4):
+                msg = st.get("errorMessage") or "transfer failed"
+                self.clear_load_status()
+                raise NgError(f"firmware upload failed on the switch: {msg}")
+            if code == 5:
+                if progress:
+                    progress(f"   transfer done: {st.get('destinationFileName', '?')}, "
+                             f"{st.get('bytesTransfered', '?')} bytes")
+                self.clear_load_status()
+                return
+            if progress and st and st.get("bytesTransfered") != last:
+                last = st.get("bytesTransfered")
+                progress(f"   transfer status {code}, bytes {last}")
+            time.sleep(5)
+        raise NgError(f"firmware upload did not finish within {timeout}s")
+
+    def set_next_boot(self, slot: int) -> None:
+        """Dual Image Configuration: activate image<slot> for the next boot (keeps its description)."""
+        entry = _children(self.read("ImageUnitList").find("Entry"))
+        self.post(next_boot_payload(slot, entry.get("currentImage", ""), entry.get(f"image{slot}Description", "")))
+
+    def reboot(self) -> None:
+        xml = build_xml("Reload", "set", _el("UnitList", None, _el("UnitEntry", None, _el("unitID", 1))))
+        try:
+            self.post(xml)
+        except (NgError, urllib.error.URLError, OSError):
+            pass  # the switch may drop the connection while it goes down
+        self.cs = None  # sessions do not survive the reboot
+
+    def wait_for_return(self, timeout: int, down_timeout: int = 180, log=None) -> float:
+        """Wait for the web UI to go away and come back. Tolerates any network error. Returns seconds."""
+        log = log or self.log
+        t0 = time.time()
+        def up():
+            try:
+                req = urllib.request.Request(self.base + "/", headers={"User-Agent": "Mozilla/5.0 (ngswitch)"})
+                with urllib.request.urlopen(req, timeout=5) as r:
+                    return bool(re.search(r"/cs[0-9a-f]+/", r.geturl()))
+            except Exception:  # noqa: BLE001 - any failure means "not up"
+                return False
+        while time.time() - t0 < down_timeout and up():
+            time.sleep(3)
+        log(f"   switch went down after {time.time() - t0:.0f}s")
+        while time.time() - t0 < timeout:
+            if up():
+                log(f"   web UI answering after {time.time() - t0:.0f}s")
+                return time.time() - t0
+            time.sleep(10)
+        raise NgError(f"switch web UI did not come back within {timeout}s")
+
     # -- state -------------------------------------------------------------------
     def read_state(self) -> Tuple[dict, List[int]]:
         vlans: Dict[int, str] = {}
@@ -1015,6 +1145,33 @@ def build_xml(section: str, action: str, *items: ET.Element) -> bytes:
     return b"<?xml version='1.0' encoding='utf-8'?>" + ET.tostring(root, encoding="unicode").encode()
 
 
+FW_FILE_TYPE_SOFTWARE = "8"   # rlCopyDestinationFileType on the HTTP File Download page
+
+
+def next_boot_payload(slot: int, current: str, description: str) -> bytes:
+    """Same XML as the Dual Image Configuration page with "Activate Image" checked."""
+    if slot not in (1, 2):
+        raise NgError(f"image slot must be 1 or 2, not {slot}")
+    tag = f"image{slot}Description"
+    x = build_xml("ImageUnitList", "set", _el(
+        "Entry", None, _el("nextBootImage", slot), _el("unitID", 1), _el("currentImage", current),
+        _el(tag, description)))
+    # The UI sends an empty element as an open/close pair; do the same.
+    return x.replace(f"<{tag} />".encode(), f"<{tag}></{tag}>".encode())
+
+
+def multipart_body(fields: List[Tuple[str, str]], file_field: str, filename: str, data: bytes) -> Tuple[bytes, str]:
+    boundary = "----ngswitch" + base64.b16encode(os.urandom(12)).decode().lower()
+    out = []
+    for k, v in fields:
+        out.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode())
+    out.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{file_field}"; filename="{filename}"\r\n'
+               f"Content-Type: application/octet-stream\r\n\r\n".encode())
+    out.append(data)
+    out.append(f"\r\n--{boundary}--\r\n".encode())
+    return b"".join(out), f"multipart/form-data; boundary={boundary}"
+
+
 def payload(c: dict, iface_extra: Optional[dict] = None, poe_limit_mode: Optional[str] = "0") -> bytes:
     op = c["op"]
     if op in ("vlan_add", "vlan_rename"):
@@ -1049,6 +1206,110 @@ def payload(c: dict, iface_extra: Optional[dict] = None, poe_limit_mode: Optiona
 
 
 # =============================================================================
+# Firmware artifact (download, verify, extract)
+# =============================================================================
+
+def sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def firmware_cache_dir(arg: Optional[str]) -> Path:
+    if arg:
+        return Path(arg)
+    if os.environ.get("NETGEAR_FIRMWARE_DIR"):
+        return Path(os.environ["NETGEAR_FIRMWARE_DIR"])
+    return Path.home() / ".cache" / "ngswitch-firmware"
+
+
+def image_version(blob: bytes) -> Optional[str]:
+    """Version string from the header of a NETGEAR .bin image ("NG10" magic, version at 0x14)."""
+    if blob[12:16] != b"NG10":
+        return None
+    m = re.match(rb"(\d+\.\d+\.\d+\.\d+)\x00", blob[0x14:0x34])
+    return m.group(1).decode() if m else None
+
+
+def fetch_firmware(fw: dict, cache: Path, log=print) -> Path:
+    """Return the path of the verified .bin image, downloading the zip if needed.
+
+    The zip and the image are both checked against the desired-state hashes;
+    a cached file that does not match is downloaded again.
+    """
+    cache.mkdir(parents=True, exist_ok=True)
+    zpath = cache / fw["url"].rsplit("/", 1)[-1]
+    ipath = cache / fw["image"]
+    if ipath.exists() and sha256_file(ipath) == fw["image_sha256"]:
+        log(f"   firmware image cached: {ipath} (sha256 ok)")
+        return ipath
+    if not (zpath.exists() and sha256_file(zpath) == fw["sha256"]):
+        log(f"   downloading {fw['url']}")
+        tmp = zpath.with_name(zpath.name + ".part")
+        req = urllib.request.Request(fw["url"], headers={"User-Agent": "Mozilla/5.0 (ngswitch)"})
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r, open(tmp, "wb") as out:
+                while True:
+                    chunk = r.read(1 << 20)
+                    if not chunk:
+                        break
+                    out.write(chunk)
+        except (urllib.error.URLError, OSError) as e:
+            raise NgError(f"firmware download failed: {type(e).__name__}: {e}") from None
+        got = sha256_file(tmp)
+        if got != fw["sha256"]:
+            tmp.unlink()
+            raise NgError(f"firmware zip sha256 mismatch: got {got}, desired state says {fw['sha256']}")
+        tmp.replace(zpath)
+    log(f"   firmware zip verified: {zpath}")
+    with zipfile.ZipFile(zpath) as z:
+        if fw["image"] not in z.namelist():
+            raise NgError(f"{fw['image']} is not in {zpath.name} (contents: {', '.join(z.namelist())})")
+        tmp = ipath.with_name(ipath.name + ".part")
+        with z.open(fw["image"]) as src, open(tmp, "wb") as out:
+            while True:
+                chunk = src.read(1 << 20)
+                if not chunk:
+                    break
+                out.write(chunk)
+    got = sha256_file(tmp)
+    if got != fw["image_sha256"]:
+        tmp.unlink()
+        raise NgError(f"firmware image sha256 mismatch: got {got}, desired state says {fw['image_sha256']}")
+    with open(tmp, "rb") as fh:
+        v = image_version(fh.read(256))
+    if v != fw["version"]:
+        tmp.unlink()
+        raise NgError(f"image header names version {v}, desired state says {fw['version']}")
+    tmp.replace(ipath)
+    log(f"   firmware image verified: {ipath} (version {v})")
+    return ipath
+
+
+def parse_image_status(el: ET.Element) -> dict:
+    """ImageUnitList -> {"image1", "image2", "current", "next"} (slots are 1 or 2)."""
+    entry = el.find("Entry")
+    if entry is None:
+        entry = el.find("Unit")
+    d = _children(entry if entry is not None else el)
+    def slot(v):
+        return int(v) if v in ("1", "2") else None
+    return {"image1": d.get("image1Version", ""), "image2": d.get("image2Version", ""),
+            "current": slot(d.get("currentImage")), "next": slot(d.get("nextBootImage"))}
+
+
+def running_version(img: dict) -> Optional[str]:
+    return img.get(f"image{img['current']}") if img.get("current") else None
+
+
+def describe_images(img: dict) -> str:
+    return (f"image1 {img['image1'] or '-'}, image2 {img['image2'] or '-'}, "
+            f"running image{img['current']}, next boot image{img['next']}")
+
+
+# =============================================================================
 # Comparison helpers
 # =============================================================================
 
@@ -1058,12 +1319,32 @@ def state_diff_text(a: dict, b: dict, la: str, lb: str) -> str:
     return "\n".join(difflib.unified_diff(dump(a), dump(b), la, lb, lineterm="", n=2))
 
 
+# Export header line naming the running firmware, e.g. "v6.7.0.42 / RNG510_923_071_017".
+_FW_HEADER_RE = re.compile(r"^v(\d+(?:\.\d+){3})\s*/")
+
+
+def export_firmware_version(text: str) -> Optional[str]:
+    """Firmware version from the header of an export, or None."""
+    for line in text.split("\n")[:10]:
+        m = _FW_HEADER_RE.match(line.strip())
+        if m:
+            return m.group(1)
+    return None
+
+
 def unmanaged_diff(snapshot_text: str, live_text: str) -> str:
-    """Diff of everything outside the managed settings (order-insensitive per context)."""
+    """Diff of everything outside the managed settings (order-insensitive per context).
+
+    The firmware header line is left out: firmware is compared on its own
+    (see the firmware block of the desired state).
+    """
     _, us = parse_running_config(snapshot_text)
     _, ul = parse_running_config(live_text)
-    fa = [f"[{c or 'global'}] {l}" for c, l in sorted(us)]
-    fb = [f"[{c or 'global'}] {l}" for c, l in sorted(ul)]
+
+    def keep(c, l):
+        return not (c == "" and _FW_HEADER_RE.match(l))
+    fa = [f"[{c or 'global'}] {l}" for c, l in sorted(us) if keep(c, l)]
+    fb = [f"[{c or 'global'}] {l}" for c, l in sorted(ul) if keep(c, l)]
     return "\n".join(difflib.unified_diff(fa, fb, "snapshot", "live", lineterm="", n=1))
 
 
@@ -1225,9 +1506,16 @@ def cmd_drift(args) -> int:
         d = load_desired(f)
         name = d["name"]
         snap = snapshot_path(f)
+        fw_line = None
         with Switch(**credentials(d)) as sw:
             current, mgmt = sw.read_state()
             export = sw.export()
+            if d["firmware"] is not None:
+                try:
+                    fw_line, behind = firmware_status_line(name, d["firmware"], sw.image_status())
+                    fw_line = ("   note: " if behind else "   ") + fw_line[3:]
+                except NgError as e:
+                    fw_line = f"   note: firmware status not read: {e}"
         changes, notes = plan(current, d["state"])
         problems: List[str] = []
         if changes:
@@ -1258,10 +1546,135 @@ def cmd_drift(args) -> int:
             report += ["   " + p for p in problems]
         else:
             report.append(f"== {name}: no drift")
+        if fw_line:
+            # Informational only: a firmware behind the desired version does not fail drift.
+            report.append(fw_line)
     print("\n".join(report))
     if args.report:
         Path(args.report).write_text("\n".join(report) + "\n")
     return rc
+
+
+def firmware_status_line(name: str, fw: Optional[dict], img: dict) -> Tuple[str, bool]:
+    """Return (report line, behind) for one switch."""
+    run = running_version(img)
+    if fw is None:
+        return f"== {name}: firmware {run} ({describe_images(img)}); no desired version declared", False
+    if run == fw["version"]:
+        return f"== {name}: firmware {run} = desired ({describe_images(img)})", False
+    return f"== {name}: firmware {run}, desired {fw['version']}: BEHIND ({describe_images(img)})", True
+
+
+def cmd_firmware_status(args) -> int:
+    rc = 0
+    for f in _desired_files(args.files):
+        d = load_desired(f)
+        with Switch(**credentials(d)) as sw:
+            img = sw.image_status()
+        line, behind = firmware_status_line(d["name"], d["firmware"], img)
+        print(line)
+        if behind and args.detailed_exitcode:
+            rc = 2
+    return rc
+
+
+def _stamp(t0: float):
+    def log(msg):
+        print(f"[{time.strftime('%H:%M:%S')} +{time.time() - t0:5.0f}s] {msg}", flush=True)
+    return log
+
+
+def cmd_firmware_upgrade(args) -> int:
+    t0 = time.time()
+    log = _stamp(t0)
+    f = Path(args.file)
+    d = load_desired(f)
+    name, fw = d["name"], d["firmware"]
+    if fw is None:
+        raise NgError(f"{f.name}: no firmware block in the desired state")
+    image = fetch_firmware(fw, firmware_cache_dir(args.cache_dir), log)
+    creds = credentials(d)
+    sw = Switch(**creds, log=log)
+    sw.login()
+    try:
+        img = sw.image_status()
+        run = running_version(img)
+        log(f"{name}: {describe_images(img)}")
+        if run == fw["version"]:
+            raise NgError(f"{name}: already running {run}; refusing to upgrade to the same version")
+        if img["current"] is None:
+            raise NgError(f"{name}: could not tell which image is running")
+        current, mgmt = sw.read_state()
+        changes, _ = plan(current, d["state"])
+        if changes:
+            raise NgError(f"{name}: live switch differs from the desired state ({len(changes)} change(s)); "
+                          "run apply or drift first so a post-upgrade check means something")
+        if d["management"]["vlan"] not in mgmt:
+            raise NgError(f"{name}: management IP interface is not on VLAN {d['management']['vlan']}")
+        backup = Path(args.backup_dir) / f"{name}.pre-{fw['version']}.{time.strftime('%Y%m%dT%H%M%S')}.running-config.txt"
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        backup.write_text(sw.export())
+        log(f"{name}: sanitized pre-upgrade export written to {backup}")
+        if args.dry_run:
+            log(f"{name}: dry run; would upload {image.name}, boot it and verify")
+            return 0
+        sw.clear_load_status()
+        log(f"{name}: uploading {image.name} ({image.stat().st_size} bytes)")
+        sw.upload_firmware(image, timeout=args.upload_timeout, progress=log)
+        img = sw.image_status()
+        log(f"{name}: after upload: {describe_images(img)}")
+        new_slot = slot_after_upload(img, fw["version"])
+        fallback = 2 if new_slot == 1 else 1
+        if not img[f"image{fallback}"] or img[f"image{fallback}"] == fw["version"]:
+            raise NgError(f"{name}: no previous firmware left in image{fallback} to fall back to; not rebooting")
+        old_slot, old_version = fallback, img[f"image{fallback}"]
+        if img["next"] != new_slot:
+            log(f"{name}: setting image{new_slot} as the next boot image")
+            sw.set_next_boot(new_slot)
+            img = sw.image_status()
+            if img["next"] != new_slot:
+                raise NgError(f"{name}: next boot image is still image{img['next']} after setting image{new_slot}")
+        log(f"{name}: rebooting into image{new_slot} ({fw['version']}); previous {old_version} stays in image{old_slot}")
+        sw.reboot()
+    finally:
+        sw.logout()
+    sw.wait_for_return(args.reboot_timeout, log=log)
+    sw2 = Switch(**creds, log=log)
+    deadline = time.time() + 300
+    while True:  # the web UI answers before login works
+        try:
+            sw2.login(attempts=1)
+            break
+        except NgError:
+            if time.time() > deadline:
+                raise
+            time.sleep(15)
+    try:
+        img = sw2.image_status()
+    finally:
+        sw2.logout()
+    run = running_version(img)
+    log(f"{name}: after reboot: {describe_images(img)}")
+    if run != fw["version"]:
+        raise NgError(f"{name}: switch came back running {run}, not {fw['version']}")
+    log(f"{name}: running {run}; checking for drift")
+    drc = cmd_drift(argparse.Namespace(files=[str(f)], report=args.report, export_dir=args.export_dir))
+    if drc != 0:
+        print(f"!! {name}: configuration drift after the upgrade (see above). To fall back to {old_version}:\n"
+              f"   web UI: Maintenance > File Management > Dual Image > Dual Image Configuration,\n"
+              f"   make image{old_slot} the active image, then Maintenance > Reset > Device Reboot.")
+        return 1
+    log(f"{name}: upgraded {old_version} -> {run} in {time.time() - t0:.0f}s; no drift")
+    return 0
+
+
+def slot_after_upload(img: dict, version: str) -> int:
+    """Slot holding the newly uploaded version (prefer the one not running)."""
+    slots = [s for s in (1, 2) if img[f"image{s}"] == version]
+    if not slots:
+        raise NgError(f"neither image slot holds {version} after the upload ({describe_images(img)})")
+    other = [s for s in slots if s != img["current"]]
+    return other[0] if other else slots[0]
 
 
 def cmd_export(args) -> int:
@@ -1351,6 +1764,23 @@ def main(argv: Optional[List[str]] = None) -> int:
     s.add_argument("--report", help="also write the report to this file")
     s.add_argument("--export-dir", help="write the live sanitized export here")
     s.set_defaults(fn=cmd_drift)
+
+    s = sub.add_parser("firmware", help="firmware status / upgrade (upgrade reboots the switch)")
+    fsub = s.add_subparsers(dest="fwcmd", required=True)
+    fs = fsub.add_parser("status", help="running and stored image versions vs the desired version")
+    fs.add_argument("files", nargs="*")
+    fs.add_argument("--detailed-exitcode", action="store_true", help="exit 2 when a switch is behind")
+    fs.set_defaults(fn=cmd_firmware_status)
+    fs = fsub.add_parser("upgrade", help="upload the desired firmware, boot it, verify, check drift")
+    fs.add_argument("file")
+    fs.add_argument("--cache-dir", help="firmware download cache (default $NETGEAR_FIRMWARE_DIR or ~/.cache/ngswitch-firmware)")
+    fs.add_argument("--backup-dir", default="netgear-backup", help="where the pre-upgrade export is written")
+    fs.add_argument("--export-dir", help="write the post-upgrade sanitized export here")
+    fs.add_argument("--report", help="write the post-upgrade drift report here")
+    fs.add_argument("--upload-timeout", type=int, default=1200)
+    fs.add_argument("--reboot-timeout", type=int, default=900)
+    fs.add_argument("--dry-run", action="store_true", help="checks and backup only; no upload or reboot")
+    fs.set_defaults(fn=cmd_firmware_upgrade)
 
     s = sub.add_parser("generate", help="write a desired-state file and snapshot from the live switch")
     s.add_argument("--name", required=True)
