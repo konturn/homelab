@@ -51,3 +51,4 @@ that should shape every session.
 
 ### Networking
 - Never set `arp_ignore=1` on the VLAN shim interfaces (why: host-to-container traffic depends on the shim answering ARP).
+- Test line (why: enforcement check; MR will be closed).
