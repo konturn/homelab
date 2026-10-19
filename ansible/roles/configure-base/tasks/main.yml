@@ -237,7 +237,8 @@
 - name: Sets up perodic plex chown
   ansible.builtin.cron:
     name: "Plex dir chown"
-    hour: 0
+    minute: "0"
+    hour: "0"
     job: "chown -R konoahko:konoahko /mpool/plex"
 
 - name: Install msmtp
