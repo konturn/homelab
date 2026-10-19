@@ -159,7 +159,7 @@ find_best_server() {
         
         log "Testing $server..."
         local latency
-        latency=$(test_server "$server")
+        latency=$(test_server "$server") || true
         log "  $server: ${latency}ms"
         
         if [[ "$latency" -lt "$best_latency" ]]; then
@@ -222,7 +222,10 @@ main() {
     if [[ -n "$current_server" ]]; then
         log "Current server: $current_server"
         local current_latency
-        current_latency=$(test_server "$current_server")
+        # test_server returns 1 when unhealthy. Under set -e a failing $(...)
+        # assignment aborts the script, so without `|| true` an unhealthy
+        # current server exits 1 here and failover never runs.
+        current_latency=$(test_server "$current_server") || true
         
         if [[ "$current_latency" -lt "$MAX_LATENCY_MS" ]]; then
             log "Current server healthy (${current_latency}ms), no action needed"
