@@ -47,6 +47,10 @@ http:
     - {{ lab_nginx_ip }}
     - {{ iot_nginx_ip }}
     - 127.0.0.1
+  # Ban a client IP (the X-Forwarded-For address behind the trusted proxies
+  # above) after 5 failed logins; bans are kept in ip_bans.yaml.
+  ip_ban_enabled: true
+  login_attempts_threshold: 5
 spotcast:
   sp_dc: "{{ vault_spotify_dc | default(lookup('env', 'SPOTIFY_DC')) }}"
   sp_key: "{{ vault_spotify_key | default(lookup('env', 'SPOTIFY_KEY')) }}"
