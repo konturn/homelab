@@ -9,3 +9,4 @@ variable "vault_token" {
   type        = string
   sensitive   = true
 }
+# test MR pipeline check (not for merge)

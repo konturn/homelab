@@ -101,3 +101,4 @@ RUN npm install -g @anthropic-ai/claude-code@2.1.296
 RUN chmod -R a+rx /usr/local/bin
 
 USER node
+# test MR pipeline check (not for merge)

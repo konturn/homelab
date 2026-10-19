@@ -22,3 +22,4 @@ COPY --from=builder /app/jit-approval-svc /usr/local/bin/jit-approval-svc
 EXPOSE 8080
 
 ENTRYPOINT ["jit-approval-svc"]
+# test MR pipeline check (not for merge)

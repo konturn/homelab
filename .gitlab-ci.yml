@@ -1253,3 +1253,4 @@ router:deploy-service:
   rules:
     - !reference [.automerge_task_skip, rules]
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_MESSAGE =~ /Automerge-Policy: image-update/'
+# test MR pipeline check (not for merge)
