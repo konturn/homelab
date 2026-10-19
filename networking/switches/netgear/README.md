@@ -58,6 +58,41 @@ when either of these is true:
 To accept a change made in the web UI, copy the job's `netgear-export/`
 artifact over the snapshot and update `<name>.yml` (`plan` shows the differences).
 
+## Firmware
+
+`firmware` in `<name>.yml` declares the version the switch should run, with the
+vendor download URL, the SHA-256 of the zip and of the `.bin` image inside it.
+NETGEAR does not publish checksums, so the hashes are those of the file
+downloaded from the URL when the version was declared.
+
+- `ngswitch.py firmware status` shows both image slots, the running and
+  next-boot image, and whether a switch is behind the desired version.
+  `netgear:drift` adds the same line to its report as a note; a switch that is
+  behind does not fail the drift job.
+- `ngswitch.py firmware upgrade <name>.yml` upgrades one switch. It reboots the
+  switch, so everything attached to it is down for a few minutes. Steps:
+  1. Download the zip (or use the cache) and check both hashes and the version
+     in the image header.
+  2. Log in. Refuse if the switch already runs the desired version, if the live
+     state differs from `<name>.yml`, or if the management interface is not on
+     the management VLAN.
+  3. Write a sanitized export to `--backup-dir` (not committed).
+  4. Upload the image through Maintenance > Download > HTTP File Download
+     (file type Software) and wait for the flash write.
+  5. Make sure the new image is the next-boot image and the other slot still
+     holds the old version, then reboot.
+  6. Wait for the web UI to go down and come back (network errors are expected
+     while it reboots), log in again and check the running version.
+  7. Run `drift` for the switch. If it reports drift, the command fails and
+     prints how to boot the old image again.
+
+In CI, `netgear:firmware` on `main` is manual only and never runs from a
+schedule. Start it with `NETGEAR_FIRMWARE_TARGET=<name>`, one switch at a time,
+and check what hangs off that switch before starting the next one.
+
+The firmware version is also the header line of the export (`v6.7.0.42 / ...`).
+Drift leaves that line out of the comparison with the snapshot.
+
 ## Local use
 
 ```sh
@@ -67,6 +102,8 @@ python3 ngswitch.py plan --offline                   # all files, against the sn
 python3 ngswitch.py apply --dry-run netgear-movie.yml
 python3 ngswitch.py drift
 python3 ngswitch.py export netgear-movie.yml -o /tmp/movie.txt
+python3 ngswitch.py firmware status
+python3 ngswitch.py firmware upgrade --dry-run netgear-movie.yml   # checks + backup, no upload/reboot
 python3 -m unittest discover -s . -p 'test_*.py'
 ```
 

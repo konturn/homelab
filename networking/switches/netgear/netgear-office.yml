@@ -3,6 +3,15 @@
 name: netgear-office
 model: MS510TXPP
 vault_path: homelab/network/netgear-office
+# Firmware the switch should run (Maintenance > File Management > Dual Image).
+# Upgrades reboot the switch: run the manual netgear:firmware job (see README.md).
+# Hashes from the vendor download (NETGEAR publishes none to compare against).
+firmware:
+  version: "6.7.0.52"
+  url: https://www.downloads.netgear.com/files/GDC/MS510TX/MS510TX_TXPP_V6.7.0.52.zip
+  sha256: e3aa7b4b878dce87bc7ffc8062b5f3f100cf9431d4ba2987a4f485723e2e4592
+  image: MS510TX_TXPP_V6.7.0.52.bin
+  image_sha256: c0d218ec52a452e149c351b3c81ae2a50011b831ee89158f44ebe76346d06ae4
 management:
   vlan: 4
   uplink: te10

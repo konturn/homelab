@@ -28,6 +28,7 @@
 #   NETGEAR SWITCHES (see networking/switches/netgear/README.md)
 #   netgear:test (MR + main, offline) -> netgear:apply (main, on changes)
 #   netgear:drift (scheduled on main, NETGEAR_TASK=drift)
+#   netgear:firmware (main, manual; NETGEAR_FIRMWARE_TARGET=<switch>, reboots it)
 #
 #   ARUBA INSTANT APs (see networking/aruba-iap/README.md)
 #   aruba-iap:test (MR + main, offline) -> aruba-iap:apply (main, on changes)
@@ -1030,6 +1031,38 @@ netgear:drift:
     expire_in: 30 days
   rules:
     - if: $CI_COMMIT_BRANCH == "main" && $NETGEAR_TASK == "drift" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+
+# Firmware upgrade to the version in <name>.yml. Reboots the switch (outage of a
+# few minutes), so it is manual only and never part of a scheduled pipeline.
+# Run it with NETGEAR_FIRMWARE_TARGET set to one switch name, e.g. netgear-movie.
+netgear:firmware:
+  extends: .netgear_vault
+  stage: deploy
+  image: willhallonline/ansible:latest
+  needs: []
+  resource_group: netgear-switches
+  timeout: 45m
+  script:
+    - |
+      if [ -z "$NETGEAR_FIRMWARE_TARGET" ]; then
+        echo "ERROR: set NETGEAR_FIRMWARE_TARGET to one switch name, e.g. netgear-movie"
+        exit 1
+      fi
+    - python3 networking/switches/netgear/ngswitch.py firmware upgrade "networking/switches/netgear/${NETGEAR_FIRMWARE_TARGET}.yml" --cache-dir .netgear-firmware --backup-dir netgear-backup --export-dir netgear-export --report netgear-drift.txt
+  artifacts:
+    when: always
+    paths:
+      - netgear-backup/
+      - netgear-export/
+      - netgear-drift.txt
+    expire_in: 30 days
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_COMMIT_BRANCH == "main" && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web")
+      when: manual
+      allow_failure: true
 
 # =============================================================================
 # Aruba Instant AP cluster (networking/aruba-iap, see README.md there)
