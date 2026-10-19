@@ -12,6 +12,9 @@ all:
     promtail_ip: 10.3.32.7
     jit_approval_svc_ip: 10.3.32.8
     chromium_browser_ip: 10.3.32.9
+    chromium_cdp_ip: 172.30.1.10  # openclaw-browser bridge (CDP)
+    bluebubbles_relay_ip: 172.30.2.10  # openclaw-relay bridge
+    openclaw_gateway_ip: 10.3.32.10
     docker_persistent_data_path: /persistent_data/application
     docker_compose_version: '3.9'
     movie_switch_mac: 8c:3b:ad:6f:0e:d0
@@ -70,7 +73,6 @@ all:
     iot_nginx_ip: 10.6.32.5
     weather_mqtt_bridge_ip: 10.6.32.6
     mopidy_address: 10.6.32.7
-    openclaw_gateway_ip: 10.4.0.50
     # libvirt guest on the router (ansible/roles/configure-excel-vm). Static
     # address: must stay inside 10.3.0.0/18, see the role defaults.
     excel_vm_mac: "52:54:00:3a:48:0a"

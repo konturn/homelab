@@ -132,7 +132,7 @@
   },
   "tools": {},
   "browser": {
-    "cdpUrl": "http://{{ chromium_browser_ip }}:9222",
+    "cdpUrl": "http://{{ chromium_cdp_ip }}:9222",
     "noSandbox": true
   },
   "commands": {
@@ -189,7 +189,8 @@
   "gateway": {
     "port": 18789,
     "mode": "local",
-    "bind": "loopback",
+    "bind": "custom",
+    "customBindHost": "{{ openclaw_gateway_ip }}",
     "controlUi": {
       "allowInsecureAuth": true,
       "allowedOrigins": [

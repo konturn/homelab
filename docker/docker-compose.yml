@@ -88,6 +88,20 @@ networks:
     ipam:
       config:
         - subnet: 172.30.0.0/24
+  # openclaw-gateway <-> chromium-browser (CDP on :9222). Only these two attach.
+  openclaw-browser:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.1.0/24
+  # openclaw-gateway <-> bluebubbles-relay. Only these two attach.
+  openclaw-relay:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.2.0/24
   proxy-internal:
     driver: bridge
     internal: true
@@ -2111,6 +2125,8 @@ services:
     networks:
       internal:
         ipv4_address: "{{ chromium_browser_ip }}"
+      openclaw-browser:
+        ipv4_address: "{{ chromium_cdp_ip }}"
     deploy:
       resources:
         limits:
@@ -2120,7 +2136,7 @@ services:
       - "{{ docker_persistent_data_path }}/chromium-browser/uploads:/uploads:ro"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9222/json/version"]
+      test: ["CMD", "curl", "-f", "http://{{ chromium_cdp_ip }}:9222/json/version"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -2128,6 +2144,58 @@ services:
     environment:
       - TZ=America/New_York
       - VNC_PASSWORD={{ vault_chromium_vnc_password | default(lookup('env', 'CHROMIUM_VNC_PASSWORD')) | trim | replace("$", "$$") }}
+      # CDP is served on the openclaw-browser network only; the internal leg
+      # is for egress and noVNC (:6080).
+      - CDP_LISTEN_ADDR={{ chromium_cdp_ip }}
+      - CDP_ALLOWED_ORIGINS=http://{{ chromium_cdp_ip }}:9222
+  # TCP relay from openclaw-gateway to the BlueBubbles API on the Mac mini
+  # (mgmt VLAN), so the gateway itself needs no mgmt leg. Listens only on
+  # the openclaw-relay network and forwards to a single host:port.
+  bluebubbles-relay:
+    image: nginx:1.31.1-alpine3.23-perl@sha256:b4f40fc790074a4af0d6fc81923a30459910d6f01efc048246ef288b14654354
+    container_name: bluebubbles-relay
+    user: "101:101"
+    security_opt:
+      - no-new-privileges=true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+    networks:
+      mgmt:
+      openclaw-relay:
+        ipv4_address: {{ bluebubbles_relay_ip }}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        cat > /tmp/nginx.conf <<'EOF'
+        worker_processes 1;
+        pid /tmp/nginx.pid;
+        error_log stderr warn;
+        events { worker_connections 64; }
+        stream {
+          server {
+            listen {{ bluebubbles_relay_ip }}:1234;
+            proxy_pass {{ mac_mini_address }}:1234;
+            proxy_connect_timeout 5s;
+          }
+        }
+        EOF
+        exec nginx -c /tmp/nginx.conf -g 'daemon off;'
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z -w 3 {{ bluebubbles_relay_ip }} 1234 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
   openclaw-gateway:
     image: gitlab-registry.lab.nkontur.com:443/root/homelab/openclaw:{{ openclaw_image_tag | default('latest') }}
     container_name: openclaw-gateway
@@ -2141,10 +2209,10 @@ services:
       - {{ pihole_ip | default("10.3.32.2") }}
     networks:
       internal:
-      iot:
-      mgmt:
         ipv4_address: {{ openclaw_gateway_ip }}
       openclaw-nginx-bridge:
+      openclaw-browser:
+      openclaw-relay:
     extra_hosts:
       - "nkontur.com:172.30.0.10"
       - "www.nkontur.com:172.30.0.10"
@@ -2158,7 +2226,7 @@ services:
         reservations:
           memory: 1G
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:18789/health"]
+      test: ["CMD", "curl", "-f", "http://{{ openclaw_gateway_ip }}:18789/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -2166,6 +2234,11 @@ services:
     environment:
       - TZ=America/New_York
       # Core openclaw configuration
+      # The gateway listens on {{ openclaw_gateway_ip }} only (gateway.bind=custom in
+      # openclaw.json), so local CLI/tool clients must use that address instead
+      # of the default ws://127.0.0.1.
+      - OPENCLAW_GATEWAY_URL=ws://{{ openclaw_gateway_ip }}:18789
+      - OPENCLAW_ALLOW_INSECURE_PRIVATE_WS=1
       - OPENAI_API_KEY={{ vault_openai_api_key | default(lookup('env', 'OPENAI_API_KEY')) | trim | replace("$", "$$") }}
       - OPENCLAW_GATEWAY_TOKEN={{ vault_openclaw_gateway_token | default(lookup('env', 'OPENCLAW_GATEWAY_TOKEN')) | trim | replace("$", "$$") }}
       - TELEGRAM_BOT_TOKEN={{ vault_openclaw_telegram_token | default(lookup('env', 'OPENCLAW_TELEGRAM_TOKEN')) | trim | replace("$", "$$") }}
@@ -2196,7 +2269,7 @@ services:
       - {{ docker_persistent_data_path }}/chromium-browser/uploads:/uploads
       - {{ docker_persistent_data_path }}/openclaw/entrypoint-wrapper.sh:/usr/local/bin/entrypoint-wrapper.sh:ro
     entrypoint: ["entrypoint-wrapper.sh"]
-    command: ["node", "/app/dist/index.js", "gateway", "--bind", "lan", "--port", "18789"]
+    command: ["node", "/app/dist/index.js", "gateway", "--port", "18789"]
 
   # =============================================================================
   # OpenStreetMap Stack — self-hosted mapping services
