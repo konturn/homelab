@@ -631,6 +631,7 @@
 - name: Install gitleaks binary
   ansible.builtin.shell: |
     set -euo pipefail
+    # renovate: datasource=docker depName=zricethezav/gitleaks
     GITLEAKS_VERSION="8.30.0"
     DEST="/usr/local/bin/gitleaks"
     if [[ -x "$DEST" ]] && "$DEST" version 2>/dev/null | grep -q "$GITLEAKS_VERSION"; then

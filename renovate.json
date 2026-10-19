@@ -1,0 +1,200 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Self-hosted Renovate (renovate CI job). See docs/RENOVATE.md.",
+  "extends": [
+    ":dependencyDashboard",
+    ":ignoreModulesAndTests",
+    "replacements:all",
+    "workarounds:all"
+  ],
+  "timezone": "America/New_York",
+  "schedule": [
+    "after 1am and before 7am"
+  ],
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "Renovate dependency dashboard",
+  "dependencyDashboardLabels": [
+    "renovate"
+  ],
+  "labels": [
+    "renovate"
+  ],
+  "prConcurrentLimit": 8,
+  "prHourlyLimit": 4,
+  "branchConcurrentLimit": 12,
+  "separateMajorMinor": true,
+  "separateMinorPatch": false,
+  "rebaseWhen": "conflicted",
+  "automerge": false,
+  "platformAutomerge": false,
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": [
+      "renovate",
+      "security"
+    ],
+    "schedule": []
+  },
+  "major": {
+    "dependencyDashboardApproval": true
+  },
+  "enabledManagers": [
+    "docker-compose",
+    "dockerfile",
+    "gitlabci",
+    "pip_requirements",
+    "ansible-galaxy",
+    "terraform",
+    "npm",
+    "custom.regex"
+  ],
+  "docker-compose": {
+    "managerFilePatterns": [
+      "/(^|/)docker-compose-[^/]*\\.ya?ml$/"
+    ]
+  },
+  "terraform": {
+    "managerFilePatterns": [
+      "/^terraform/vault/.+\\.tf$/"
+    ]
+  },
+  "customDatasources": {
+    "virtio-win": {
+      "defaultRegistryUrlTemplate": "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/",
+      "format": "html"
+    }
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "docker/docker-compose.yml is a Jinja template (rendered by ansible), so the docker-compose manager cannot parse it; read its tag@digest image lines directly",
+      "managerFilePatterns": [
+        "/^docker/docker-compose\\.yml$/"
+      ],
+      "matchStrings": [
+        "image:\\s*[\"']?(?<depName>[a-z0-9][^\\s\"'@{}]*?):(?<currentValue>\\w[\\w.-]*)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Global npm installs pinned in Dockerfiles, e.g. npm install -g @anthropic-ai/claude-code@x.y.z",
+      "managerFilePatterns": [
+        "/(^|/)Dockerfile[^/]*$/"
+      ],
+      "matchStrings": [
+        "npm install (?:-g|--global) (?<depName>@?[a-z0-9][a-z0-9._-]*(?:/[a-z0-9._-]+)?)@(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "datasourceTemplate": "npm"
+    },
+    {
+      "customType": "regex",
+      "description": "Annotated pins: a '# renovate: datasource=<ds> depName=<name> [versioning=<v>] [extractVersion=<re>]' comment on the line above 'key: value' or KEY=\"value\"",
+      "managerFilePatterns": [
+        "/^ansible/.+\\.ya?ml$/",
+        "/^ansible/.+\\.j2$/",
+        "/^scripts/.+\\.sh$/",
+        "/(^|/)Dockerfile[^/]*$/"
+      ],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>[\\w.-]+)\\s+depName=(?<depName>\\S+)(?:\\s+versioning=(?<versioning>\\S+))?(?:\\s+extractVersion=(?<extractVersion>\\S+))?\\s*\\n[^\\n]*?[:=]\\s*[\"']?(?<currentValue>v?\\d[\\w.+-]*)[\"']?"
+      ],
+      "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else}}semver-coerced{{/if}}",
+      "extractVersionTemplate": "{{#if extractVersion}}{{{extractVersion}}}{{else}}^v?(?<version>.+)${{/if}}"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Router compose file: its own branches, so an MR there changes one image in one file and the auto-merge policy can evaluate it",
+      "matchFileNames": [
+        "docker/docker-compose.yml"
+      ],
+      "additionalBranchPrefix": "router-",
+      "commitMessageSuffix": "(router)"
+    },
+    {
+      "description": "linuxserver.io build suffixes (-lsNNN) are part of the version, not a flavor",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchCurrentValue": "/^\\d+\\.\\d+\\.\\d+\\.\\d+-ls\\d+$/",
+      "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)\\.(?<build>\\d+)-ls(?<revision>\\d+)$"
+    },
+    {
+      "description": "Plex tags end in a build hash",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "plexinc/pms-docker"
+      ],
+      "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)\\.(?<build>\\d+)-[0-9a-f]+$"
+    },
+    {
+      "description": "Floating-tag digest refreshes: batch them to once a week",
+      "matchUpdateTypes": [
+        "digest"
+      ],
+      "schedule": [
+        "after 1am and before 7am on monday"
+      ]
+    },
+    {
+      "description": "Locally built images (pushed by CI) have no upstream to track",
+      "matchPackageNames": [
+        "gitlab-registry.lab.nkontur.com:443/**"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "promtail >= 3.6 dropped journal support in the published image",
+      "matchPackageNames": [
+        "grafana/promtail"
+      ],
+      "allowedVersions": "<3.6.0"
+    },
+    {
+      "description": "influxdb 3 is a different product (storage engine and query language)",
+      "matchPackageNames": [
+        "influxdb"
+      ],
+      "allowedVersions": "<3"
+    },
+    {
+      "description": "linuxserver/deluge has pre-2.x tags (e.g. 18.04.1) from an old scheme",
+      "matchPackageNames": [
+        "lscr.io/linuxserver/deluge"
+      ],
+      "allowedVersions": "<10"
+    },
+    {
+      "description": "Headway/Pelias images are a matched pair with separately built map data; update them together with a data rebuild",
+      "matchPackageNames": [
+        "ghcr.io/headwaymaps/**",
+        "pelias/**"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "virtio-win: Fedora archive directory names are <version>-<release>",
+      "matchDatasources": [
+        "custom.virtio-win"
+      ],
+      "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-(?<build>\\d+)$",
+      "prBodyNotes": [
+        "Fedora publishes no checksum for this ISO: update `sha256` in the same file by hand (`curl -fsSL <url> | sha256sum`) before merging."
+      ]
+    },
+    {
+      "description": "OpenClaw is moltbot itself: never auto-merged, always reviewed",
+      "matchFileNames": [
+        "docker/openclaw/**"
+      ],
+      "addLabels": [
+        "openclaw"
+      ]
+    }
+  ]
+}

@@ -84,11 +84,14 @@ excel_vm_windows_iso:
   product_key: VK7JG-NPHTM-C97JM-9MPGT-3V66T
 excel_vm_windows_iso_path: "{{ excel_vm_iso_dir }}/{{ excel_vm_windows_iso.filename }}"
 
-# Fedora virtio-win. Fedora publishes no checksum for the ISO itself; this is
-# the SHA256 of the file fetched over HTTPS on 2026-10-18.
+# Fedora virtio-win, as <version>-<release> of the archive directory. Fedora
+# publishes no checksum for the ISO itself; sha256 is that of the file fetched
+# over HTTPS on 2026-10-18 and must be updated together with the version.
+# renovate: datasource=custom.virtio-win depName=virtio-win extractVersion=^virtio-win-(?<version>[0-9.]+-[0-9]+)/?$
+excel_vm_virtio_release: "0.1.302-1"
 excel_vm_virtio_iso:
-  filename: virtio-win-0.1.302.iso
-  url: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.302-1/virtio-win-0.1.302.iso
+  filename: "virtio-win-{{ excel_vm_virtio_release | regex_replace('-[0-9]+$', '') }}.iso"
+  url: "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-{{ excel_vm_virtio_release }}/virtio-win-{{ excel_vm_virtio_release | regex_replace('-[0-9]+$', '') }}.iso"
   sha256: 303f7ae40dad495d6ae474fdc571df58958a4dbc5c37a522d80f9a203867949d
 
 # Guest software, staged on the unattend ISO and verified by checksum.
