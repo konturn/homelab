@@ -23,6 +23,11 @@ parser.add_argument('-z', '--zone_id', type=str, default=None,
                     help='Cloudflare zone ID (prefer CLOUDFLARE_ZONE_ID env var)')
 parser.add_argument('-r', '--rrhost', type=str, nargs='+', required=True,
                     help='Host prefixes to update (use "" for bare domain, "*" for wildcard)')
+parser.add_argument('-p', '--placeholder', type=str, nargs='*', default=[],
+                    help='Host prefixes that must exist as a TXT record (created if '
+                         'missing). A record at e.g. "lab" keeps the "*" wildcard '
+                         'from answering for names below lab.<domain>, which are '
+                         'served by the internal resolver only.')
 parser.add_argument('-v', '--verbose', action='store_true',
                     help='Enable debug logging')
 args = parser.parse_args()
@@ -114,6 +119,26 @@ for host in rrhost:
 
     if not matched:
         log.warning("NO MATCH for host=%r (expected A record: %s)", host, target_fqdn)
+
+PLACEHOLDER_TXT = "internal zone - resolved on the LAN only"
+for host in args.placeholder:
+    fqdn = f"{host}.{domain}"
+    url = f'https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records'
+    resp = requests.get(url, headers=headers, params={'name': fqdn}, timeout=15)
+    if resp.status_code != 200:
+        log.error("FAIL listing %s (HTTP %d): %s", fqdn, resp.status_code, resp.text)
+        errors += 1
+        continue
+    if resp.json()['result']:
+        log.info("SKIP placeholder %s — record exists", fqdn)
+        continue
+    data = {'type': 'TXT', 'name': fqdn, 'content': f'"{PLACEHOLDER_TXT}"', 'ttl': 3600}
+    resp = requests.post(url, headers=headers, json=data, timeout=15)
+    if resp.status_code != 200:
+        log.error("FAIL creating placeholder %s (HTTP %d): %s", fqdn, resp.status_code, resp.text)
+        errors += 1
+    else:
+        log.info("OK placeholder TXT %s created", fqdn)
 
 log.info("Done: %d updated, %d skipped (already current), %d errors", updated, skipped, errors)
 
