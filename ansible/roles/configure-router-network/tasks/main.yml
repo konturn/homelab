@@ -27,6 +27,45 @@
     state: started
     enabled: yes
 
+# Retired WireGuard interfaces: wg0/wg1 (old remote-access tunnels, replaced
+# by Tailscale) and wg-mullvad (target of the removed mullvad-failover timer;
+# the Mullvad tunnel in use is {{ mullvad_interface_name }}).
+- name: Stop and disable retired WireGuard interfaces
+  ansible.builtin.systemd:
+    name: "wg-quick@{{ item }}"
+    state: stopped
+    enabled: no
+  loop: [wg0, wg1, wg-mullvad]
+  failed_when: false
+
+- name: Stop and disable the retired mullvad-failover timer/service
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: no
+  loop: [mullvad-failover.timer, mullvad-failover.service]
+  failed_when: false
+
+- name: Remove retired WireGuard / failover files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/wireguard/wg0.conf
+    - /etc/wireguard/wg1.conf
+    - /etc/wireguard/wg-mullvad.conf
+    - /etc/wireguard/mullvad.conf.template
+    - /etc/systemd/system/mullvad-failover.timer
+    - /etc/systemd/system/mullvad-failover.service
+    - /usr/local/bin/mullvad-failover.sh
+    - /var/lib/mullvad-failover
+  register: retired_files
+
+- name: Reload systemd after removing retired units
+  ansible.builtin.systemd:
+    daemon_reload: yes
+  when: retired_files is changed
+
 - name: Template the netplan config file
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/netplan/config.yaml' }}"

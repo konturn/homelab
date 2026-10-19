@@ -17,8 +17,8 @@
 #   - {{ mullvad_interface_name }} - Mullvad VPN tunnel
 #   - vlanX-shim                  - Docker macvlan shim interfaces
 #
-# Note: WireGuard interfaces wg0/wg1 removed in January 2025
-#       (wg0 was backup server, wg1 was VPS connection - no longer used)
+# Note: WireGuard interfaces wg0/wg1 retired (rules January 2025, interfaces
+#       and configs October 2026); remote access is via Tailscale.
 #
 # See docs/FIREWALL.md for full architecture documentation.
 # =============================================================================
@@ -108,18 +108,9 @@ COMMIT
 # Masquerade all traffic going out WAN interface (standard NAT)
 -A POSTROUTING -o {{ inet_interface_name }} -j MASQUERADE
 
-# Hairpin NAT - Guest network accessing nginx
-# Required so return traffic goes back through router
--A POSTROUTING -s 10.5.0.0/16 -d {{ nginx_ip }}/32 -o {{ local_interface_name }} -p tcp -m tcp -j SNAT --to-source 10.5.0.1
-
-# Hairpin NAT - Internal network accessing nginx
--A POSTROUTING -s 10.3.0.0/16 -d {{ nginx_ip }}/32 -o {{ local_interface_name }} -p tcp -m tcp -j SNAT --to-source 10.3.0.1
-
-# Hairpin NAT - Mgmt network accessing nginx
--A POSTROUTING -s 10.4.0.0/16 -d {{ nginx_ip }}/32 -o {{ local_interface_name }} -p tcp -m tcp -j SNAT --to-source 10.4.0.1
-
-# Hairpin NAT - IoT network accessing nginx
--A POSTROUTING -s 10.6.0.0/16 -d {{ nginx_ip }}/32 -o {{ local_interface_name }} -p tcp -m tcp -j SNAT --to-source 10.6.0.1
+# Hairpin NAT needs no SNAT: the hairpinned clients are on other subnets than
+# nginx, so nginx's replies already return via the router (its gateway) and
+# are un-DNATed there, and nginx keeps seeing the real client address.
 COMMIT
 
 # =============================================================================
