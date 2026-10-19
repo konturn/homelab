@@ -26,6 +26,8 @@ docker_config:
     name: "myservice"
 ```
 
+When a deploy changes any of a container's config files, the container is restarted **once**, however many of its files changed. The nginx containers (`nginx_config` in inventory: `nginx`, `lab_nginx`, `iot_nginx`) are not restarted at all. They get `nginx -t` and then `nginx -s reload`, and a config that fails `nginx -t` fails the deploy while the old config keeps serving. Grafana reaches Loki through `lab_nginx`, so restarting it makes every Loki-backed alert rule's query fail.
+
 ## Docker Image Pinning
 
 All third-party Docker images are pinned to SHA256 digests for reproducible deploys. Format: `image:tag@sha256:xxxx`.
