@@ -1,0 +1,9 @@
+# Defaults for isc-dhcp-server (sourced by /etc/init.d/isc-dhcp-server)
+# Managed by ansible (configure-router-network).
+#
+# Serve DHCP only on the physical VLAN interfaces. The vlanN-shim macvlan
+# interfaces sit on the same L2 segments, so listening on them as well made
+# dhcpd answer every broadcast twice and hand out the shim address
+# (10.N.0.2) as server-identifier. No DHCP subnet is served on VLAN 2.
+INTERFACESv4="{{ local_interface_name }}.3 {{ local_interface_name }}.4 {{ local_interface_name }}.5 {{ local_interface_name }}.6 {{ local_interface_name }}.7"
+INTERFACESv6=""
