@@ -17,6 +17,7 @@
     vars:
       nvidia_container_runtime: true
   - configure-homelab-services
+  - configure-wordpress  # after compose is up; see docker/wordpress/README.md
   - configure-notifications
   - role: configure-excel-vm
     tags: [excel-vm]

@@ -1,0 +1,42 @@
+---
+# Declared site state (core, themes, plugins, mu-plugins) lives in
+# docker/wordpress/site.yml. These are the host-side settings.
+
+wordpress_site_file: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/wordpress/site.yml"
+wordpress_mu_plugins_src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/wordpress/mu-plugins"
+
+wordpress_container: wordpress
+wordpress_db_container: wordpress_db
+wordpress_uid: 33   # www-data in the official image
+wordpress_gid: 33
+
+wordpress_data_path: "{{ docker_persistent_data_path }}/wordpress"
+wordpress_html_path: "{{ wordpress_data_path }}/html"
+wordpress_config_path: "{{ wordpress_data_path }}/config"
+
+# DB dumps taken before core/theme/plugin changes. Under /persistent_data/application,
+# so they are in the restic backup set.
+wordpress_backup_dir: "{{ wordpress_data_path }}/backups"
+wordpress_backup_keep: 5
+
+# Ownership and modes enforced from the host (the container has no FOWNER).
+wordpress_permission_trees:
+  - path: "{{ wordpress_html_path }}"
+    dir_mode: "0755"
+    file_mode: "0644"
+    overrides:
+      wp-config.php: "0640"
+  - path: "{{ wordpress_config_path }}"
+    dir_mode: "0750"
+    file_mode: "0640"
+    overrides: {}
+wordpress_permission_paths:
+  - path: "{{ wordpress_data_path }}"
+    mode: "0755"
+
+# wp-cli, run inside the container as www-data.
+wp_cli_version: "2.12.0"
+wp_cli_url: "https://github.com/wp-cli/wp-cli/releases/download/v{{ wp_cli_version }}/wp-cli-{{ wp_cli_version }}.phar"
+wp_cli_sha512: "be928f6b8ca1e8dfb9d2f4b75a13aa4aee0896f8a9a0a1c45cd5d2c98605e6172e6d014dda2e27f88c98befc16c040cbb2bd1bfa121510ea5cdf5f6a30fe8832"
+wp_cli_host_path: "/usr/local/lib/wp-cli/wp-cli-{{ wp_cli_version }}.phar"
+wp_cli_container_path: /tmp/wp-cli.phar
