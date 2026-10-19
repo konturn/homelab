@@ -322,7 +322,9 @@ jit-approval-svc:test:
     - docker push $CI_REGISTRY_IMAGE/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA
 
 # MRs: check that the image builds, with kaniko inside the job container (no
-# Docker daemon, nothing is pushed).
+# Docker daemon, nothing is pushed). The last three flags keep memory down:
+# with kaniko's defaults openclaw:build-check exceeds the runner's 4g limit
+# (peak ~1.7g with them).
 .kaniko_check:
   extends: .interruptible
   stage: build
@@ -336,6 +338,9 @@ jit-approval-svc:test:
       --context "dir://$CI_PROJECT_DIR/$BUILD_CONTEXT"
       --dockerfile "$CI_PROJECT_DIR/$BUILD_CONTEXT/Dockerfile"
       --no-push
+      --compressed-caching=false
+      --snapshot-mode=redo
+      --use-new-run
 
 openclaw:build:
   extends: .docker_build

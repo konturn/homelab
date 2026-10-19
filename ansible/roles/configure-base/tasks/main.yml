@@ -210,7 +210,16 @@
   loop:
     - /certs/client
     - /cache/gitlab-runner
-    - /cache/gitlab-runner-unprotected
+
+# Mounted as /cache in MR/branch jobs; job images that run as a non-root user
+# (e.g. willhallonline/ansible runs as "ansible") create /cache/pip etc.
+- name: Ensure unprotected runner cache directory exists
+  ansible.builtin.file:
+    path: /cache/gitlab-runner-unprotected
+    state: directory
+    owner: root
+    group: root
+    mode: '1777'
 
 ### Configure gitlab-runner on host
 # The protected runner's authentication token lives only on the host (written
