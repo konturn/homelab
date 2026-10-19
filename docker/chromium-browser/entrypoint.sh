@@ -53,13 +53,20 @@ fi
 echo "Starting noVNC on port 6080..."
 websockify --web /usr/share/novnc 6080 localhost:5900 &
 
-# Start socat proxy: expose CDP on 0.0.0.0:9222, forwarding to chromium on 127.0.0.1:9223
-# Chromium ignores --remote-debugging-address=0.0.0.0 and binds to 127.0.0.1 only
-echo "Starting socat CDP proxy (0.0.0.0:9222 -> 127.0.0.1:9223)..."
-socat TCP-LISTEN:9222,fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:9223 &
+# Start socat proxy: expose CDP on ${CDP_LISTEN_ADDR}:9222, forwarding to chromium on 127.0.0.1:9223
+# Chromium ignores --remote-debugging-address=0.0.0.0 and binds to 127.0.0.1 only.
+# CDP_LISTEN_ADDR: address the proxy listens on (default all interfaces). Set it
+# to the container's address on the network its CDP clients share with it.
+CDP_LISTEN_ADDR="${CDP_LISTEN_ADDR:-0.0.0.0}"
+echo "Starting socat CDP proxy (${CDP_LISTEN_ADDR}:9222 -> 127.0.0.1:9223)..."
+socat TCP-LISTEN:9222,fork,reuseaddr,bind="${CDP_LISTEN_ADDR}" TCP:127.0.0.1:9223 &
 
 # Clean up stale Chromium profile locks from previous container instances
 rm -f /data/chrome-profile/SingletonLock /data/chrome-profile/SingletonSocket /data/chrome-profile/SingletonCookie
+
+# CDP_ALLOWED_ORIGINS: value for --remote-allow-origins (default "*").
+# Clients that send no Origin header (playwright, agent-browser) are unaffected.
+CDP_ALLOWED_ORIGINS="${CDP_ALLOWED_ORIGINS:-*}"
 
 # Start Chromium
 echo "Starting Chromium..."
@@ -70,7 +77,7 @@ exec gosu chrome chromium \
     --enable-features=NetworkService,NetworkServiceInProcess \
     --disable-dev-shm-usage \
     --remote-debugging-port=9223 \
-    --remote-allow-origins=* \
+    --remote-allow-origins="${CDP_ALLOWED_ORIGINS}" \
     --user-data-dir=/data/chrome-profile \
     --window-size="${SCREEN_WIDTH},${SCREEN_HEIGHT}" \
     --start-maximized \
