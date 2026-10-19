@@ -1636,7 +1636,7 @@ services:
       start_period: 30s
 
   ambientweather:
-    image: ghcr.io/neilenns/ambientweather2mqtt:latest@sha256:a9d9899ebf9c2af9378c275e83ead6ced841fe9d051a6aec4e10e25eb5193e21
+    image: ghcr.io/neilenns/ambientweather2mqtt:latest@sha256:cea17f44ba369de77fd47aff46b90bec6498188f969b20927e9c72511902249a
     restart: unless-stopped
     container_name: ambientweather
     security_opt:
