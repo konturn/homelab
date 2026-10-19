@@ -49,6 +49,10 @@
 # === MOLTBOT SELF-MODIFICATION ===
 # Prevent moltbot from expanding its own access
 /docker/openclaw/                         @root
+# Reviewed instructions and lessons loaded into every agent session.
+# Covered by the rule above; listed explicitly so it stays protected if
+# that rule is ever narrowed.
+/docker/openclaw/workspace/               @root
 
 # === VAULT & SECRETS ===
 # Could access or redirect secret storage

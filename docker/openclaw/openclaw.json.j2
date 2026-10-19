@@ -60,6 +60,7 @@
         }
       },
       "workspace": "/home/node/.openclaw/workspace",
+      "bootstrapTotalMaxChars": 100000,
       "memorySearch": {
         "enabled": true,
         "sources": [
@@ -145,6 +146,19 @@
     "path": "/hooks",
     "token": "{{ vault_openclaw_hooks_token }}",
     "transformsDir": "/home/node/.openclaw/hooks/transforms",
+    "internal": {
+      "enabled": true,
+      "entries": {
+        "bootstrap-extra-files": {
+          "enabled": true,
+          "paths": ["lessons/AGENTS.md"]
+        },
+        "boot-md": { "enabled": false },
+        "command-logger": { "enabled": false },
+        "compaction-notifier": { "enabled": false },
+        "session-memory": { "enabled": false }
+      }
+    },
     "mappings": [
       {
         "action": "agent",
