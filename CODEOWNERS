@@ -1,6 +1,7 @@
 # CODEOWNERS — Privilege escalation prevention
 # 
-# moltbot (Prometheus) has Maintainer access and can self-merge MRs.
+# moltbot (Prometheus) has Developer access, which can merge MRs to main
+# (protected branch: Developers + Maintainers may merge).
 # These rules require approval from @root for paths that could be
 # used to escalate privileges, bypass security controls, or break
 # remote access.
@@ -62,6 +63,15 @@
 # that rule is ever narrowed.
 /docker/openclaw/workspace/               @root
 
+# === REVERSE PROXIES, BROWSER, LOG SHIPPING, TERRAFORM ===
+# nginx vhosts decide which services are reachable and from where; the
+# chromium-browser image is the agent's browser; promtail ships logs to Loki;
+# terraform manages infrastructure state.
+/docker/nginx/                           @root
+/docker/chromium-browser/                @root
+/docker/promtail/                        @root
+/terraform/                              @root
+
 # === VAULT & SECRETS ===
 # Could access or redirect secret storage
 /docker/vault/                           @root
@@ -83,7 +93,6 @@
 # === SAFE FOR SELF-MERGE (no CODEOWNERS rule needed) ===
 # /docs/                    — documentation
 # /docker/grafana/          — monitoring dashboards
-# /docker/nginx/            — reverse proxy configs (read-only effect)
 # /docker/pihole/           — DNS configs
 # /docker/loki/             — logging configs
 # /docker/homeassistant/    — HA configs
