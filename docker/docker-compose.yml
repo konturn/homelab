@@ -671,6 +671,12 @@ services:
     restart: unless-stopped
     # Memory (2026-09-01, 30d max): 2719M of 4096M = 66.4%; OOM-killed 2026-07-13
     # at 4.15G anon-rss during a compaction spike. 6G covers the spike.
+    # Memory (2026-10-19, 14d): baseline anon ~0.8G, but single Flux queries push
+    # it far higher -- 3.8-4.8G on four nights around 08:00Z, 6106M of 6144M on
+    # 2026-10-19 03:10Z, and a 7d all-container query was OOM-killed at 6G the
+    # same day. Those are query spikes, not compaction (compactions in the same
+    # windows took <1s). INFLUXD_QUERY_MEMORY_BYTES below bounds them rather than
+    # raising the limit again.
     deploy:
       resources:
         limits:
@@ -688,6 +694,13 @@ services:
       - DOCKER_INFLUXDB_INIT_BUCKET=metrics
       - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN={{ vault_influxdb_admin_token | default(lookup('env', 'INFLUXDB_ADMIN_TOKEN')) | trim | replace("$", "$$") }}
       - INFLUXD_PPROF_DISABLED=true
+      # Per-query Flux memory cap (default: unlimited). A query that exceeds it
+      # fails with "memory allocation limit reached" instead of growing influxd
+      # into the container limit and taking every alert that reads it down too.
+      # Flux accounting undercounts RSS: measured 132M accounted vs +874M anon
+      # for one query (~6.6x), so 512M bounds a runaway query near 3.4G above
+      # baseline. Alert and dashboard queries measured 15-33M accounted.
+      - INFLUXD_QUERY_MEMORY_BYTES=536870912
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
       interval: 30s
