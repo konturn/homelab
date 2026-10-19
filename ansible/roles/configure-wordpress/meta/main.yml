@@ -1,0 +1,4 @@
+---
+# Runs after configure-homelab-services (which brings compose up) in
+# ansible/router.yml.
+dependencies: []

@@ -1,0 +1,124 @@
+---
+# Reconcile blog.nkontur.com against docker/wordpress/site.yml.
+# Runs after compose is up. See docker/wordpress/README.md.
+
+- name: Load declared WordPress state
+  ansible.builtin.include_vars:
+    file: "{{ wordpress_site_file }}"
+    name: wordpress_site
+
+- name: Check that the WordPress container is running
+  ansible.builtin.command:
+    cmd: docker inspect -f '{% raw %}{{.State.Running}}{% endraw %}' {{ wordpress_container }}
+  register: wordpress_running
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Skip reconcile when the WordPress container is not running
+  ansible.builtin.debug:
+    msg: "{{ wordpress_container }} is not running; WordPress reconcile skipped"
+  when: wordpress_running.stdout != 'true'
+
+- name: Reconcile WordPress
+  when: wordpress_running.stdout == 'true'
+  block:
+    # wp-cli is tooling, not site state: fetching it and staging it into the
+    # container (it is lost when the container is recreated) are not reported
+    # as changes, and also run in check mode so the drift report works.
+    - name: Create wp-cli directory
+      ansible.builtin.file:
+        path: "{{ wp_cli_host_path | dirname }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      check_mode: false
+
+    - name: Download pinned wp-cli
+      ansible.builtin.get_url:
+        url: "{{ wp_cli_url }}"
+        dest: "{{ wp_cli_host_path }}"
+        checksum: "sha512:{{ wp_cli_sha512 }}"
+        owner: root
+        group: root
+        mode: "0644"
+      check_mode: false
+
+    - name: Stage wp-cli in the WordPress container
+      ansible.builtin.shell: |
+        set -eu
+        have=$(docker exec {{ wordpress_container }} sha512sum {{ wp_cli_container_path }} 2>/dev/null | cut -d' ' -f1 || true)
+        [ "$have" = "{{ wp_cli_sha512 }}" ] && exit 0
+        docker cp {{ wp_cli_host_path }} {{ wordpress_container }}:{{ wp_cli_container_path }}
+        echo staged
+      register: wp_cli_stage
+      changed_when: false
+      check_mode: false
+
+    - name: Ensure mu-plugins directory
+      ansible.builtin.file:
+        path: "{{ wordpress_html_path }}/wp-content/mu-plugins"
+        state: directory
+        owner: "{{ wordpress_uid }}"
+        group: "{{ wordpress_gid }}"
+        mode: "0755"
+
+    - name: Install declared mu-plugins
+      ansible.builtin.copy:
+        src: "{{ wordpress_mu_plugins_src }}/{{ item }}"
+        dest: "{{ wordpress_html_path }}/wp-content/mu-plugins/{{ item }}"
+        owner: "{{ wordpress_uid }}"
+        group: "{{ wordpress_gid }}"
+        mode: "0644"
+      loop: "{{ wordpress_site.mu_plugins | default([]) }}"
+
+    - name: Find installed mu-plugins
+      ansible.builtin.find:
+        paths: "{{ wordpress_html_path }}/wp-content/mu-plugins"
+        file_type: any
+        hidden: true
+      register: wordpress_mu_found
+      check_mode: false
+
+    - name: Remove mu-plugins that are not declared
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ wordpress_mu_found.files | rejectattr('path', 'in', wordpress_mu_declared) | list }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+      vars:
+        wordpress_mu_declared: >-
+          {{ (wordpress_site.mu_plugins | default([]))
+             | map('regex_replace', '^', wordpress_html_path ~ '/wp-content/mu-plugins/') | list }}
+
+    - name: Reconcile core, themes, plugins and permissions
+      ansible.builtin.script:
+        cmd: >-
+          wp-reconcile.py
+          --config-b64 {{ wordpress_reconcile_config | to_json | b64encode }}
+          {{ '--check' if ansible_check_mode else '' }}
+        executable: python3
+      register: wordpress_reconcile
+      changed_when: (wordpress_reconcile.stdout_lines | last | from_json).changed
+      check_mode: false
+      vars:
+        wordpress_reconcile_config:
+          container: "{{ wordpress_container }}"
+          db_container: "{{ wordpress_db_container }}"
+          uid: "{{ wordpress_uid }}"
+          gid: "{{ wordpress_gid }}"
+          wp_cli: "{{ wp_cli_container_path }}"
+          core_version: "{{ wordpress_site.core_version }}"
+          themes: "{{ wordpress_site.themes }}"
+          active_theme: "{{ wordpress_site.active_theme }}"
+          plugins: "{{ wordpress_site.plugins | default({}) }}"
+          backup_dir: "{{ wordpress_backup_dir }}"
+          backup_keep: "{{ wordpress_backup_keep }}"
+          permission_trees: "{{ wordpress_permission_trees }}"
+          permission_paths: "{{ wordpress_permission_paths }}"
+
+    - name: WordPress reconcile output
+      ansible.builtin.debug:
+        var: wordpress_reconcile.stdout_lines

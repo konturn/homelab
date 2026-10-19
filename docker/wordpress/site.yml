@@ -1,0 +1,29 @@
+# Declared state of blog.nkontur.com (compose service `blog`).
+#
+# Applied on every router deploy by ansible/roles/configure-wordpress, after
+# compose is up. See docker/wordpress/README.md.
+
+# WordPress core. Core files live in the bind-mounted html directory, so the
+# image tag does not change them; this pin does. Keep the `blog` image tag in
+# docker/docker-compose.yml on the same release.
+core_version: "7.1.3"
+
+# Complete theme list: name -> version (wordpress.org slugs). Themes not listed
+# here are deleted.
+themes:
+  astra: "4.14.1"
+  twentytwentyfive: "1.5"
+  twentytwentyfour: "1.6"
+  twentytwentythree: "1.7"
+  twentytwentytwo: "2.2"
+
+active_theme: astra
+
+# Complete plugin list: name -> version (wordpress.org slugs). Listed plugins
+# are installed and activated; any other plugin is deactivated and deleted.
+plugins: {}
+
+# Must-use plugins: files in docker/wordpress/mu-plugins/ copied verbatim to
+# wp-content/mu-plugins/. Files there that are not listed are removed.
+mu_plugins:
+  - mathjax.php
