@@ -19,8 +19,10 @@ import argparse
 import datetime as dt
 import json
 import os
+import socket
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -108,15 +110,24 @@ class GitLab:
             req.add_header("PRIVATE-TOKEN", self.token)
         if data is not None:
             req.add_header("Content-Type", "application/json")
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                payload = resp.read()
-                if raw:
-                    return payload.decode()
-                return json.loads(payload) if payload else None
-        except urllib.error.HTTPError as e:
-            detail = e.read().decode(errors="replace")[:500]
-            raise RuntimeError(f"{method} {path} -> HTTP {e.code}: {detail}") from None
+        # The CI image resolves through several nameservers in parallel (musl),
+        # some of which do not know internal names: retry transient lookup and
+        # connection errors. HTTP errors are real answers and are not retried;
+        # writes are retried only if the request never reached the server.
+        for attempt in range(6):
+            try:
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    payload = resp.read()
+                    if raw:
+                        return payload.decode()
+                    return json.loads(payload) if payload else None
+            except urllib.error.HTTPError as e:
+                detail = e.read().decode(errors="replace")[:500]
+                raise RuntimeError(f"{method} {path} -> HTTP {e.code}: {detail}") from None
+            except (urllib.error.URLError, OSError) as e:
+                if attempt == 5 or (method != "GET" and not _is_lookup_error(e)):
+                    raise
+                time.sleep(1 + attempt)
 
     def get(self, path: str, **params: Any) -> Any:
         return self._req("GET", path, params=params)
@@ -159,6 +170,12 @@ class GitLab:
             if name not in existing:
                 self.write("POST", f"projects/{PROJECT}/labels",
                            {"name": name, "color": color, "description": desc})
+
+
+def _is_lookup_error(e: Exception) -> bool:
+    """True if the request never reached the server (safe to retry a write)."""
+    reason = getattr(e, "reason", e)
+    return isinstance(reason, (socket.gaierror, ConnectionRefusedError))
 
 
 def gitlab_from_env(dry_run: bool) -> GitLab:

@@ -154,11 +154,12 @@ variables:
   interruptible: true
 
 # Auto-merge rule fragments (used via !reference).
-# Scheduled pipelines that set AUTOMERGE_TASK, NETGEAR_TASK or IAP_TASK run
-# only their own jobs (automerge:* / netgear:drift / aruba-iap:drift).
+# Scheduled pipelines that set AUTOMERGE_TASK, NETGEAR_TASK, IAP_TASK or
+# SCHEDULED_TASK run only their own jobs (automerge:* / netgear:drift /
+# aruba-iap:drift / the job whose rule names that SCHEDULED_TASK, e.g. renovate).
 .automerge_task_skip:
   rules:
-    - if: $AUTOMERGE_TASK || $NETGEAR_TASK || $IAP_TASK
+    - if: $AUTOMERGE_TASK || $NETGEAR_TASK || $IAP_TASK || $SCHEDULED_TASK
       when: never
 
 # Commits merged by the auto-merge policy get router:deploy-service instead of
@@ -1286,3 +1287,51 @@ router:deploy-service:
   rules:
     - !reference [.automerge_task_skip, rules]
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_MESSAGE =~ /Automerge-Policy: image-update/'
+
+# =============================================================================
+# Renovate (self-hosted dependency updates, see docs/RENOVATE.md)
+# =============================================================================
+# Scheduled on main with SCHEDULED_TASK=renovate, so it runs on the protected
+# runner and RENOVATE_TOKEN (protected, masked project access token) is only
+# ever available to main's copy of this job. Renovate reads the repository
+# through the API/git; it does not execute repository code.
+.renovate_image: &renovate_image
+  name: renovate/renovate:44.167.7@sha256:756a6b0a12154d076e90f38332f674e87ddc5bbbfeaf9ec796f80c435c5c3de5
+  entrypoint: [""]
+
+renovate:
+  stage: deploy
+  image: *renovate_image
+  needs: []
+  resource_group: renovate
+  timeout: 45m
+  variables:
+    RENOVATE_PLATFORM: gitlab
+    RENOVATE_ENDPOINT: $CI_API_V4_URL
+    RENOVATE_REPOSITORIES: $CI_PROJECT_PATH
+    RENOVATE_ONBOARDING: "false"
+    RENOVATE_REQUIRE_CONFIG: required
+    RENOVATE_BASE_DIR: $CI_PROJECT_DIR/.renovate
+    RENOVATE_REPOSITORY_CACHE: enabled
+    LOG_LEVEL: info
+  script:
+    - renovate
+  cache:
+    key: renovate-v1
+    paths:
+      - .renovate/cache
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "renovate" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+
+# MR check: renovate.json must stay valid (no credentials).
+renovate:validate:
+  extends: .interruptible
+  stage: validate
+  image: *renovate_image
+  needs: []
+  script:
+    - renovate-config-validator renovate.json
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - renovate.json
