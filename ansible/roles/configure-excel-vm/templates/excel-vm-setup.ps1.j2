@@ -126,7 +126,14 @@ Step 'node' {
 Step 'npm-packages' {
     # npm installs PowerShell shims (claude.ps1); the Windows client default
     # policy (Restricted) refuses to run them.
-    Set-ExecutionPolicy RemoteSigned -Scope LocalMachine -Force
+    # This script runs with -ExecutionPolicy Bypass (Process scope), so
+    # Set-ExecutionPolicy applies the LocalMachine value and then throws a
+    # SecurityException saying it is overridden. That is expected here.
+    try {
+        Set-ExecutionPolicy RemoteSigned -Scope LocalMachine -Force
+    } catch [System.Security.SecurityException] {
+        Write-Host "LocalMachine policy: $(Get-ExecutionPolicy -Scope LocalMachine)"
+    }
     Refresh-Path
     $env:Path += ";$env:APPDATA\npm"
     New-Item -ItemType Directory -Force -Path "$env:APPDATA\npm" | Out-Null
