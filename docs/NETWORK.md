@@ -13,8 +13,8 @@ This document describes the homelab network topology, VLAN structure, and traffi
                         │                      │                      │
                         ▼                      ▼                      ▼
               ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-              │   WAN (DHCP)    │    │   Mullvad VPN   │    │   Wireguard     │
-              │ enx6c1ff76b2ec9 │    │ us-chi-wg-201   │    │   wg0/wg1       │
+              │   WAN (DHCP)    │    │   Mullvad VPN   │    │   Tailscale     │
+              │ enx6c1ff76b2ec9 │    │ us-chi-wg-201   │    │   tailscale0    │
               └────────┬────────┘    └────────┬────────┘    └────────┬────────┘
                        │                      │                      │
                        └──────────────────────┼──────────────────────┘
@@ -313,65 +313,10 @@ When IoT devices (VLAN 6) access external services via public DNS:
 
 ---
 
-## Wireguard VPN Setup
+## Remote Access
 
-Two Wireguard interfaces provide remote access:
-
-### wg0 — Primary VPN (10.0.0.0/24)
-
-```
-[Interface]
-Address = 10.0.0.1/24
-ListenPort = 51871
-
-[Peer] # Device 1
-AllowedIPs = 10.0.0.2/32
-
-[Peer] # Device 2
-AllowedIPs = 10.0.0.4/32
-```
-
-**Access:**
-- Can reach internal services (ports 443, 5201, 2049, 2342, 33333)
-- Can reach DNS (port 53)
-- Can access NFS shares
-- Can SSH between VPN peers
-
-### wg1 — Secondary VPN (10.0.1.0/24)
-
-```
-[Interface]
-Address = 10.0.1.1/24
-ListenPort = 51872
-
-[Peer]
-AllowedIPs = 10.0.1.2/32
-```
-
-**Access:** Full routing privileges (trusted device).
-
-### Remote Access Flow
-
-```
-Remote Device
-     │
-     ▼ (UDP 51871 or 51872)
-┌───────────────────┐
-│   WAN Interface   │
-└─────────┬─────────┘
-          │
-          ▼
-┌───────────────────┐
-│   Wireguard       │
-│   wg0 / wg1       │
-└─────────┬─────────┘
-          │
-          ▼ (10.0.0.x or 10.0.1.x)
-┌───────────────────────────────────┐
-│     Internal Services             │
-│  GitLab, Grafana, Home Assistant  │
-└───────────────────────────────────┘
-```
+Remote access is via Tailscale (`tailscale0`, subnet router for 10.2/10.3/10.4/10.6).
+The former WireGuard tunnels `wg0`/`wg1` and the `wg-mullvad` failover interface have been removed.
 
 ---
 
@@ -552,9 +497,9 @@ Raspberry Pi satellites extend the network:
 │  └─────────────────────────────────────────────────────────────────┘    │
 │                                                                          │
 │  ┌─────────────────────────────────────────────────────────────────┐    │
-│  │  Wireguard VPN (wg0, wg1)                                        │    │
-│  │  - Access to internal services                                   │    │
-│  │  - wg1 has full routing                                          │    │
+│  │  Tailscale (tailscale0)                                          │    │
+│  │  - Subnet router for 10.2/10.3/10.4/10.6                         │    │
+│  │  - Tailnet ACLs control access                                   │    │
 │  └─────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────┘
 
@@ -615,8 +560,7 @@ Raspberry Pi satellites extend the network:
 |------|----------|---------|
 | 22 | TCP | SSH |
 | 443 | TCP | HTTPS (nginx) |
-| 51871 | UDP | Wireguard (wg0) |
-| 51872 | UDP | Wireguard (wg1) |
+| 41641 | UDP | Tailscale |
 | 1883 | TCP | MQTT (TLS) |
 | 32400 | TCP | Plex |
 | 8123 | TCP | Home Assistant |

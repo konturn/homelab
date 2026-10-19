@@ -52,8 +52,8 @@ This document describes the iptables firewall configuration for the homelab infr
 | `{{ mullvad_interface_name }}` | Mullvad VPN tunnel (privacy routing) |
 | `vlanX-shim` | Docker macvlan shim interfaces |
 
-> WireGuard interfaces `wg0` / `wg1` (ports 51871 / 51872) were removed January 2025 —
-> see `networking/iptables/rules.v4` comments.
+> WireGuard interfaces `wg0` / `wg1` (ports 51871 / 51872) were retired (rules January 2025,
+> interfaces and configs October 2026). Remote access is via Tailscale.
 
 ---
 
@@ -211,10 +211,6 @@ management, as it will conflict with the existing ruleset.
    - Shield TV and Apple TV have full forward access
    - Consider restricting to specific destination ports/IPs
 
-3. **Audit WireGuard access**
-   - wg1 has full forward access (trusted)
-   - Verify this is intentional and wg1 is properly secured
-
 ---
 
 ## Rule Categories
@@ -228,10 +224,9 @@ Controls traffic TO the router itself:
 | SSH | mgmt, tailscale | 22 |
 | SSH (rate-limited) | WAN | 22 |
 | ICMP | any | - |
-| NFS | mgmt, iot, wg0 | 2049, 111 |
+| NFS | mgmt, iot | 2049, 111 |
 | SMB | mgmt | 139, 445 |
 | TFTP | mgmt | 69 |
-| WireGuard | any | 51871, 51872 |
 | mDNS | !internet | 5353 |
 
 ### FORWARD Chain
@@ -239,7 +234,7 @@ Controls traffic TO the router itself:
 Controls traffic THROUGH the router:
 
 1. **Established/Related** — Always allowed (stateful)
-2. **Trusted networks** — mgmt VLAN, wg1 (full access)
+2. **Trusted networks** — mgmt VLAN (full access)
 3. **Internet-bound** — All VLANs can reach internet
 4. **Inter-VLAN** — Restricted by default
 5. **Inbound from internet** — Specific ports to external VLAN

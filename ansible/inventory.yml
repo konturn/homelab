@@ -88,8 +88,6 @@ all:
     router.lab.nkontur.com:
       ansible_host: 10.4.0.1
       claude_elevated_access: true
-      wireguard_config_path: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/wireguard/wg0.conf' }}"
-      wireguard_interface_name: "wg0"
       local_interface_name: bond0
       dhcp_address: 10.4.0.1
       docker_compose_file_names:
