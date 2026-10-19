@@ -175,7 +175,7 @@
     name: "Update public DNS records"
     minute: "*/5"
     job: >-
-      bash -c 'set -o pipefail; set -a; source /root/cron/.ddns.env; set +a; /usr/bin/python3 /root/cron/ddns.py -d nkontur.com -r @ \* 2>&1 | logger -t ddns-cron'
+      bash -c 'set -o pipefail; set -a; source /root/cron/.ddns.env; set +a; /usr/bin/python3 /root/cron/ddns.py -d nkontur.com -r @ \* -p lab 2>&1 | logger -t ddns-cron'
 
 - name: Template out cron script for SSL renewal
   ansible.builtin.template:
@@ -244,6 +244,31 @@
     name: "Disable EEE on WAN interface (r8152 renegotiation workaround)"
     minute: "*"
     job: "[ -d /sys/class/net/enx6c1ff76b2ec9 ] && /usr/sbin/ethtool --set-eee enx6c1ff76b2ec9 eee off >/dev/null 2>&1 || true"
+
+# Route *.lab.nkontur.com lookups made by systemd-resolved to the global DNS
+# server (Pi-hole) only; the WAN link's DHCP-provided servers keep serving
+# everything else. Equivalent to DNSDefaultRoute=no for these names without
+# reconfiguring the WAN link.
+- name: Ensure resolved drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/resolved.conf.d
+    state: directory
+    mode: '0755'
+
+- name: Route internal names to the internal resolver
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/dns/resolved-internal.conf' }}"
+    dest: /etc/systemd/resolved.conf.d/10-internal-routing.conf
+    owner: root
+    group: root
+    mode: '0644'
+  register: resolved_conf
+
+- name: Restart systemd-resolved when its drop-in changes
+  service:
+    name: systemd-resolved
+    state: restarted
+  when: resolved_conf.changed
 
 - name: Populate dnsmasq conf file
   ansible.builtin.template:
