@@ -855,7 +855,6 @@ automerge:test:
   needs: []
   script:
     - python3 -m unittest discover -s ci/automerge -p 'test_*.py' -v
-    - bash -n ci/automerge/wait-healthy.sh
     - ansible-playbook -i ansible/inventory.yml ansible/router-service-update.yml --syntax-check
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
