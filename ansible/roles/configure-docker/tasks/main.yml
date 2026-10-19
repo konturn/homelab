@@ -125,6 +125,22 @@
     state: restarted
   when: docker_conf.changed and not ansible_check_mode
 
+# Bridge network for the unprotected GitLab runner's job containers
+# (base/gitlab-runner/config.toml). Docker's iptables management is off, so
+# NAT and the egress allowlist for br-ci live in networking/iptables/rules.v4
+# (applied earlier in the play by configure-router-network).
+- name: GitLab CI job network
+  ansible.builtin.shell: |
+    set -e
+    if docker network inspect gitlab-ci >/dev/null 2>&1; then
+      exit 0
+    fi
+    docker network create --driver bridge --subnet 172.28.0.0/24 \
+      -o com.docker.network.bridge.name=br-ci gitlab-ci >/dev/null
+    echo created
+  register: gitlab_ci_network
+  changed_when: "'created' in gitlab_ci_network.stdout"
+
 #- name: ensure required pip-packages are installed on host
 #  pip:
 #    name:

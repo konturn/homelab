@@ -3,7 +3,10 @@
 #                      from protected refs (main) only. Deploys and image
 #                      pushes; host network and the docker-socket-proxy
 #                      client certs.
-#   main.nkontur.com   tag "unprotected": MR and branch pipelines.
+#   main.nkontur.com   tag "unprotected": MR and branch pipelines. Docker
+#                      network "gitlab-ci" (bridge br-ci, egress allowlist
+#                      in networking/iptables/rules.v4), no Docker access,
+#                      separate cache directory.
 # Both have run_untagged=false (set when registering / via the runners API).
 #
 # The protected runner's token is read by Ansible from
@@ -55,10 +58,12 @@ check_interval = 0
   limit = 2
   [runners.docker]
     image = "ubuntu:20.04"
-    network_mode = "host"
+    # Job, helper and service containers all join this network
+    network_mode = "gitlab-ci"
     privileged = false
     # Resource caps: see router-protected above.
     memory = "4g"
     memory_swap = "4g"
-    volumes = ["/cache/gitlab-runner:/cache", "/persistent_data/application/docker-proxy-tls/ca.pem:/certs/ca.pem:ro", "/persistent_data/application/docker-proxy-tls/cert.pem:/certs/cert.pem:ro", "/persistent_data/application/docker-proxy-tls/key.pem:/certs/key.pem:ro"]
-    environment = ["DOCKER_HOST=tcp://lab.nkontur.com:2376", "DOCKER_TLS_VERIFY=1", "DOCKER_CERT_PATH=/certs"]
+    # Own cache directory: nothing written by these jobs is read by the
+    # protected runner's jobs.
+    volumes = ["/cache/gitlab-runner-unprotected:/cache"]
