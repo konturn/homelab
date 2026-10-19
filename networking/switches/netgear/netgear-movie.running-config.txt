@@ -1,0 +1,117 @@
+config-file-header
+
+v6.7.0.42 / RNG510_923_071_017
+CLI v1.0
+@
+vlan database
+vlan 4-7
+exit
+voice vlan oui-table add 0001e3 SIEMENS_________________
+voice vlan oui-table add 00036b CISCO1__________________
+voice vlan oui-table add 00040d AVAYA1__________________
+voice vlan oui-table add 001243 CISCO2__________________
+voice vlan oui-table add 001b4f AVAYA2__________________
+voice vlan oui-table add 0060b9 NITSUKO_________________
+voice vlan oui-table add 00d01e PINTEL__________________
+voice vlan oui-table add 00e075 VERILINK________________
+voice vlan oui-table add 00e0bb 3COM____________________
+ipv6 icmp error-interval 1000 100
+qos advanced ports-trusted
+qos advanced-mode trust cos
+priority-queue out num-of-queues 0
+logging origin-id ip
+snmp-server group default v3 noauth notify Default write Default
+snmp-server group default v3 auth notify Default write Default
+snmp-server group default v3 priv notify Default write Default
+snmp-server user admin default v3
+service cpu-counters
+!
+interface vlan 1
+ no ip address dhcp
+!
+interface vlan 4
+ name Management
+ ip address dhcp
+ ipv6 address autoconfig
+!
+interface vlan 5
+ name Guest
+!
+interface vlan 6
+ name Iot
+!
+interface vlan 7
+ name Airgap
+!
+interface GigabitEthernet1
+ lacp port-priority 128
+ switchport general allowed vlan add 6 untagged
+ switchport general pvid 6
+ lldp optional-tlv port-desc sys-name sys-desc sys-cap 802.3-mac-phy 802.3-lag 802.3-max-frame-size
+ lldp med enable network-policy location inventory
+!
+interface GigabitEthernet2
+ lacp port-priority 128
+ switchport general allowed vlan add 6 untagged
+ switchport general pvid 6
+ lldp optional-tlv port-desc sys-name sys-desc sys-cap 802.3-mac-phy 802.3-lag 802.3-max-frame-size
+ lldp med enable network-policy location inventory
+!
+interface GigabitEthernet3
+ lacp port-priority 128
+ switchport general allowed vlan add 4 untagged
+ switchport general pvid 4
+ lldp optional-tlv port-desc sys-name sys-desc sys-cap 802.3-mac-phy 802.3-lag 802.3-max-frame-size
+ lldp med enable network-policy location inventory
+!
+interface GigabitEthernet4
+ lacp port-priority 128
+ switchport general allowed vlan add 6 untagged
+ switchport general pvid 6
+ lldp optional-tlv port-desc sys-name sys-desc sys-cap 802.3-mac-phy 802.3-lag 802.3-max-frame-size
+ lldp med enable network-policy location inventory
+!
+interface TwoPointFiveGigabitEthernet5
+ lacp port-priority 128
+ switchport general allowed vlan add 6 untagged
+ switchport general pvid 6
+ lldp optional-tlv port-desc sys-name sys-desc sys-cap 802.3-mac-phy 802.3-lag 802.3-max-frame-size
+ lldp med enable network-policy location inventory
+!
+interface TwoPointFiveGigabitEthernet6
+ lacp port-priority 128
+ switchport general allowed vlan add 4-7 tagged
+ lldp optional-tlv port-desc sys-name sys-desc sys-cap 802.3-mac-phy 802.3-lag 802.3-max-frame-size
+ lldp med enable network-policy location inventory
+!
+interface FiveGigabitEthernet7
+ lacp port-priority 128
+ switchport general allowed vlan add 6 untagged
+ switchport general pvid 6
+ lldp optional-tlv port-desc sys-name sys-desc sys-cap 802.3-mac-phy 802.3-lag 802.3-max-frame-size
+ lldp med enable network-policy location inventory
+!
+interface FiveGigabitEthernet8
+ lacp port-priority 128
+ switchport general allowed vlan add 6 untagged
+ switchport general pvid 6
+ lldp optional-tlv port-desc sys-name sys-desc sys-cap 802.3-mac-phy 802.3-lag 802.3-max-frame-size
+ lldp med enable network-policy location inventory
+!
+interface TengigabitEthernet9
+ lacp port-priority 128
+ switchport general allowed vlan add 4-7 tagged
+ lldp optional-tlv port-desc sys-name sys-desc sys-cap 802.3-mac-phy 802.3-lag 802.3-max-frame-size
+ lldp med enable network-policy location inventory
+!
+interface TengigabitEthernet10
+ lacp port-priority 128
+ switchport general allowed vlan add 4-7 tagged
+ lldp optional-tlv port-desc sys-name sys-desc sys-cap 802.3-mac-phy 802.3-lag 802.3-max-frame-size
+ lldp med enable network-policy location inventory
+!
+exit
+scc mode disable
+no ipv6 mld snooping querier
+no ip igmp snooping querier
+snmp-server set  rlManagementIpIfindex rlManagementIpIfindex 100003

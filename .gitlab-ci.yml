@@ -25,6 +25,10 @@
 #   router:deploy [id_tokens]  zwave:deploy [id_tokens]  sat-2:deploy [id_tokens]  vault:configure  vault:rotate [manual]
 #   (router:deploy needs vault:configure)
 #
+#   NETGEAR SWITCHES (see networking/switches/netgear/README.md)
+#   netgear:test (MR + main, offline) -> netgear:apply (main, on changes)
+#   netgear:drift (scheduled on main, NETGEAR_TASK=drift)
+#
 #   AUTO-MERGE (see docs/AUTOMERGE.md)
 #   automerge:test + automerge:eligibility (MR, informational)
 #   automerge:sweep / automerge:report (scheduled on main, AUTOMERGE_TASK=sweep|report)
@@ -145,10 +149,11 @@ variables:
   interruptible: true
 
 # Auto-merge rule fragments (used via !reference).
-# Scheduled auto-merge pipelines run only the automerge:* jobs.
+# Scheduled pipelines that set AUTOMERGE_TASK or NETGEAR_TASK run only their
+# own jobs (automerge:* / netgear:drift).
 .automerge_task_skip:
   rules:
-    - if: $AUTOMERGE_TASK
+    - if: $AUTOMERGE_TASK || $NETGEAR_TASK
       when: never
 
 # Commits merged by the auto-merge policy get router:deploy-service instead of
@@ -913,6 +918,105 @@ vault:validate:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - terraform/vault/**/*
+
+# =============================================================================
+# NETGEAR switches (networking/switches/netgear, see README.md there)
+# =============================================================================
+# MR pipelines run offline only: unit tests, file checks, and a plan against
+# the export committed on the target branch. Jobs that read switch credentials
+# from Vault or write to switches run only on main (protected runner).
+
+netgear:test:
+  extends: .interruptible
+  stage: validate
+  image: willhallonline/ansible:latest
+  needs: []
+  variables:
+    GIT_DEPTH: "50"
+  script:
+    - python3 -m unittest discover -s networking/switches/netgear -p 'test_*.py' -v
+    - python3 networking/switches/netgear/ngswitch.py check
+    - |
+      base_dir=$(mktemp -d)
+      base="${CI_MERGE_REQUEST_DIFF_BASE_SHA:-$CI_COMMIT_BEFORE_SHA}"
+      if [ -n "$base" ] && [ "$base" != "0000000000000000000000000000000000000000" ]; then
+        git fetch -q --depth=50 origin "$base" || true
+        for f in networking/switches/netgear/*.running-config.txt; do
+          git show "$base:$f" > "$base_dir/${f##*/}" 2>/dev/null || rm -f "$base_dir/${f##*/}"
+        done
+      fi
+      echo "Baseline: exports at ${base:-none}"
+      python3 networking/switches/netgear/ngswitch.py plan --offline --snapshot-dir "$base_dir"
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - networking/switches/netgear/**/*
+        - .gitlab-ci.yml
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - networking/switches/netgear/**/*
+
+.netgear_vault:
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: https://vault.lab.nkontur.com:8200
+  variables:
+    VAULT_ADDR: "https://vault.lab.nkontur.com:8200"
+    VAULT_SKIP_VERIFY: "true"
+    VAULT_JWT_ROLE: "ci-deploy"
+
+# Writes only the differences between the desired state and the live switch,
+# then re-reads and re-exports to verify. No differences: no writes.
+netgear:apply:
+  extends: .netgear_vault
+  stage: deploy
+  image: willhallonline/ansible:latest
+  resource_group: netgear-switches
+  needs:
+    - job: netgear:test
+  script:
+    - python3 networking/switches/netgear/ngswitch.py apply --export-dir netgear-export
+  artifacts:
+    when: always
+    paths:
+      - netgear-export/
+    expire_in: 30 days
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - networking/switches/netgear/**/*
+
+# Scheduled daily with NETGEAR_TASK=drift: fails and mails the report to root
+# via the router's mail when a switch differs from its desired state or export.
+netgear:drift:
+  extends:
+    - .ansible
+    - .netgear_vault
+  stage: deploy
+  needs: []
+  resource_group: netgear-switches
+  script:
+    - rc=0; python3 networking/switches/netgear/ngswitch.py drift --report netgear-drift.txt --export-dir netgear-export || rc=$?
+    - |
+      if [ "$rc" -ne 0 ]; then
+        [ -s netgear-drift.txt ] || echo "ngswitch drift exited with $rc before writing a report." > netgear-drift.txt
+        printf '\nJob: %s\n' "$CI_JOB_URL" >> netgear-drift.txt
+        ssh -i tmp -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 \
+          -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+          root@10.4.0.1 "mail -s 'Homelab: NETGEAR switch drift' root" < netgear-drift.txt \
+          || echo "WARN: sending mail failed"
+        exit 1
+      fi
+  artifacts:
+    when: always
+    paths:
+      - netgear-drift.txt
+      - netgear-export/
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $NETGEAR_TASK == "drift" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
 
 # =============================================================================
 # Auto-merge for low-risk image updates (see docs/AUTOMERGE.md)
