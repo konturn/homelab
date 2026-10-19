@@ -62,6 +62,7 @@ variables:
         - ansible/roles/configure-notifications/**/*
         - ansible/roles/fetch-vault-secrets/**/*
         - ansible/roles/restic/**/*
+        - ansible/roles/configure-excel-vm/**/*
         - docker/docker-compose.yml
         - docker/**/*
         - networking/**/*

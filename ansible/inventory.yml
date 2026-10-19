@@ -65,6 +65,10 @@ all:
     weather_mqtt_bridge_ip: 10.6.32.6
     mopidy_address: 10.6.32.7
     openclaw_gateway_ip: 10.4.0.50
+    # libvirt guest on the router (ansible/roles/configure-excel-vm). Static
+    # address: must stay inside 10.3.0.0/18, see the role defaults.
+    excel_vm_mac: "52:54:00:3a:48:0a"
+    excel_vm_address: 10.3.48.10
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     omapi_secret: "{{ (vault_omapi_secret | default(lookup('env', 'OMAPI_SECRET'))) | trim }}"
     tailscale_api_token: "{{ (vault_tailscale_api_token | default(lookup('env', 'TAILSCALE_API_TOKEN'))) | trim }}"
@@ -127,6 +131,7 @@ all:
         - "{{ lab_nginx_ip }} novnc-dev2.lab.nkontur.com"
         - "{{ lab_nginx_ip }} novnc-dev3.lab.nkontur.com"
         - "{{ jit_approval_svc_ip }} jit-approval-svc.lab.nkontur.com"
+        - "{{ excel_vm_address }} excel-vm.lab.nkontur.com"
         - "10.6.0.1 router.lab.nkontur.com"
       docker_config: 
         - src: "docker/pihole/custom.conf"

@@ -14,6 +14,15 @@ restic_default_folders:
 # Vault unseal keys on disk + offsite backup = defeat the purpose of seal/unseal.
 restic_global_excludes:
   - "/persistent_data/application/vault/unseal"
+  # libvirt VMs (configure-excel-vm): the excel-vm disk holds work data and
+  # is ~100G; install ISOs are re-downloadable. /persistent_data/vms is outside
+  # every restic folder today -- these patterns keep it out even if a folder
+  # list or the VM path changes later.
+  - "/persistent_data/vms"
+  - "*.qcow2"
+  - "Win11_*.iso"
+  - "virtio-win-*.iso"
+  - "excel-vm-unattend.iso"
   # SQLite write-ahead-log sidecars. They are created and removed constantly
   # under live services (radarr, sonarr, homeassistant, ...), so restic scans
   # them and then finds them gone -> "could not be read" -> exit 3. They are

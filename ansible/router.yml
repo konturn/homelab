@@ -19,6 +19,8 @@
   - configure-homelab-services
   - configure-notifications
   - configure-mullvad-failover
+  - role: configure-excel-vm
+    tags: [excel-vm]
   - role: restic
     vars:
       restic_ssh_enabled: false

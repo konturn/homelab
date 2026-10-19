@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- {{ ansible_managed }}
+     Rendered at build time only; contains the admin password. The rendered
+     file lives on the unattend ISO under {{ excel_vm_install_dir }} and must be
+     deleted once the guest is installed. -->
+{% set arch = 'processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"' %}
+{% set letters = ['D', 'E', 'F', 'G', 'H', 'I'] %}
+{% set driver_dirs = ['viostor\\w11\\amd64', 'NetKVM\\w11\\amd64', 'vioscsi\\w11\\amd64'] %}
+<unattend xmlns="urn:schemas-microsoft-com:unattend">
+  <settings pass="windowsPE">
+    <component name="Microsoft-Windows-International-Core-WinPE" {{ arch }}>
+      <SetupUILanguage>
+        <UILanguage>en-US</UILanguage>
+      </SetupUILanguage>
+      <InputLocale>en-US</InputLocale>
+      <SystemLocale>en-US</SystemLocale>
+      <UILanguage>en-US</UILanguage>
+      <UserLocale>en-US</UserLocale>
+    </component>
+    <component name="Microsoft-Windows-PnpCustomizationsWinPE" {{ arch }}>
+      <!-- virtio-win CD letter is not fixed in WinPE: offer every likely one. -->
+      <DriverPaths>
+{% for l in letters %}{% for d in driver_dirs %}
+        <PathAndCredentials wcm:action="add" wcm:keyValue="{{ l }}{{ loop.index }}">
+          <Path>{{ l }}:\{{ d }}</Path>
+        </PathAndCredentials>
+{% endfor %}{% endfor %}
+      </DriverPaths>
+    </component>
+    <component name="Microsoft-Windows-Setup" {{ arch }}>
+      <RunSynchronous>
+        <!-- Ivy Bridge-EP is below Windows 11's CPU list: documented setup bypass. -->
+        <RunSynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Path>reg.exe add HKLM\SYSTEM\Setup\LabConfig /v BypassCPUCheck /t REG_DWORD /d 1 /f</Path>
+        </RunSynchronousCommand>
+      </RunSynchronous>
+      <DiskConfiguration>
+        <Disk wcm:action="add">
+          <DiskID>0</DiskID>
+          <WillWipeDisk>true</WillWipeDisk>
+          <CreatePartitions>
+            <CreatePartition wcm:action="add">
+              <Order>1</Order>
+              <Type>EFI</Type>
+              <Size>300</Size>
+            </CreatePartition>
+            <CreatePartition wcm:action="add">
+              <Order>2</Order>
+              <Type>MSR</Type>
+              <Size>16</Size>
+            </CreatePartition>
+            <CreatePartition wcm:action="add">
+              <Order>3</Order>
+              <Type>Primary</Type>
+              <Extend>true</Extend>
+            </CreatePartition>
+          </CreatePartitions>
+          <ModifyPartitions>
+            <ModifyPartition wcm:action="add">
+              <Order>1</Order>
+              <PartitionID>1</PartitionID>
+              <Format>FAT32</Format>
+              <Label>System</Label>
+            </ModifyPartition>
+            <ModifyPartition wcm:action="add">
+              <Order>2</Order>
+              <PartitionID>2</PartitionID>
+            </ModifyPartition>
+            <ModifyPartition wcm:action="add">
+              <Order>3</Order>
+              <PartitionID>3</PartitionID>
+              <Format>NTFS</Format>
+              <Label>Windows</Label>
+              <Letter>C</Letter>
+            </ModifyPartition>
+          </ModifyPartitions>
+        </Disk>
+      </DiskConfiguration>
+      <ImageInstall>
+        <OSImage>
+          <InstallFrom>
+            <MetaData wcm:action="add">
+{% if excel_vm_windows_iso.image_index is defined %}
+              <Key>/IMAGE/INDEX</Key>
+              <Value>{{ excel_vm_windows_iso.image_index }}</Value>
+{% else %}
+              <Key>/IMAGE/NAME</Key>
+              <Value>{{ excel_vm_windows_iso.image_name }}</Value>
+{% endif %}
+            </MetaData>
+          </InstallFrom>
+          <InstallTo>
+            <DiskID>0</DiskID>
+            <PartitionID>3</PartitionID>
+          </InstallTo>
+        </OSImage>
+      </ImageInstall>
+      <UserData>
+        <AcceptEula>true</AcceptEula>
+        <FullName>{{ excel_vm_admin_user }}</FullName>
+        <Organization>homelab</Organization>
+{% if excel_vm_windows_iso.product_key | default('') | length > 0 %}
+        <ProductKey>
+          <Key>{{ excel_vm_windows_iso.product_key }}</Key>
+          <WillShowUI>OnError</WillShowUI>
+        </ProductKey>
+{% endif %}
+      </UserData>
+    </component>
+  </settings>
+  <settings pass="offlineServicing">
+    <component name="Microsoft-Windows-PnpCustomizationsNonWinPE" {{ arch }}>
+      <DriverPaths>
+{% for l in letters %}{% for d in driver_dirs %}
+        <PathAndCredentials wcm:action="add" wcm:keyValue="{{ l }}{{ loop.index }}">
+          <Path>{{ l }}:\{{ d }}</Path>
+        </PathAndCredentials>
+{% endfor %}{% endfor %}
+      </DriverPaths>
+    </component>
+  </settings>
+  <settings pass="specialize">
+    <component name="Microsoft-Windows-Shell-Setup" {{ arch }}>
+      <ComputerName>{{ excel_vm_hostname }}</ComputerName>
+      <TimeZone>{{ excel_vm_timezone }}</TimeZone>
+    </component>
+    <component name="Microsoft-Windows-TCPIP" {{ arch }}>
+      <Interfaces>
+        <Interface wcm:action="add">
+          <Identifier>{{ excel_vm_mac | upper | replace(':', '-') }}</Identifier>
+          <Ipv4Settings>
+            <DhcpEnabled>false</DhcpEnabled>
+          </Ipv4Settings>
+          <UnicastIpAddresses>
+            <IpAddress wcm:action="add" wcm:keyValue="1">{{ excel_vm_address }}/{{ excel_vm_prefix }}</IpAddress>
+          </UnicastIpAddresses>
+          <Routes>
+            <Route wcm:action="add">
+              <Identifier>0</Identifier>
+              <Prefix>0.0.0.0/0</Prefix>
+              <NextHopAddress>{{ excel_vm_gateway }}</NextHopAddress>
+              <Metric>10</Metric>
+            </Route>
+          </Routes>
+        </Interface>
+      </Interfaces>
+    </component>
+    <component name="Microsoft-Windows-DNS-Client" {{ arch }}>
+      <Interfaces>
+        <Interface wcm:action="add">
+          <Identifier>{{ excel_vm_mac | upper | replace(':', '-') }}</Identifier>
+          <DNSDomain>{{ excel_vm_dns_domain }}</DNSDomain>
+          <DNSServerSearchOrder>
+{% for dns in excel_vm_dns_servers %}
+            <IpAddress wcm:action="add" wcm:keyValue="{{ loop.index }}">{{ dns }}</IpAddress>
+{% endfor %}
+          </DNSServerSearchOrder>
+        </Interface>
+      </Interfaces>
+    </component>
+    <component name="Microsoft-Windows-TerminalServices-LocalSessionManager" {{ arch }}>
+      <fDenyTSConnections>false</fDenyTSConnections>
+    </component>
+    <component name="Microsoft-Windows-Deployment" {{ arch }}>
+      <RunSynchronous>
+        <!-- No automatic BitLocker/device encryption: the TPM is emulated (swtpm)
+             and losing its state must not lock the disk. -->
+        <RunSynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Path>reg.exe add HKLM\SYSTEM\CurrentControlSet\Control\BitLocker /v PreventDeviceEncryption /t REG_DWORD /d 1 /f</Path>
+        </RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>2</Order>
+          <Path>reg.exe add HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE /v BypassNRO /t REG_DWORD /d 1 /f</Path>
+        </RunSynchronousCommand>
+      </RunSynchronous>
+    </component>
+  </settings>
+  <settings pass="oobeSystem">
+    <component name="Microsoft-Windows-International-Core" {{ arch }}>
+      <InputLocale>en-US</InputLocale>
+      <SystemLocale>en-US</SystemLocale>
+      <UILanguage>en-US</UILanguage>
+      <UserLocale>en-US</UserLocale>
+    </component>
+    <component name="Microsoft-Windows-Shell-Setup" {{ arch }}>
+      <OOBE>
+        <HideEULAPage>true</HideEULAPage>
+        <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
+        <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+        <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+        <HideLocalAccountScreen>true</HideLocalAccountScreen>
+        <ProtectYourPC>3</ProtectYourPC>
+      </OOBE>
+      <UserAccounts>
+        <LocalAccounts>
+          <LocalAccount wcm:action="add">
+            <Name>{{ excel_vm_admin_user }}</Name>
+            <DisplayName>{{ excel_vm_admin_user }}</DisplayName>
+            <Group>Administrators</Group>
+            <Password>
+              <Value>{{ excel_vm_admin_password | e }}</Value>
+              <PlainText>true</PlainText>
+            </Password>
+          </LocalAccount>
+        </LocalAccounts>
+      </UserAccounts>
+      <!-- One automatic logon so FirstLogonCommands run as the admin user
+           (Excel's VBA trust setting is per-user). setup.ps1 clears the
+           stored autologon password when it finishes. -->
+      <AutoLogon>
+        <Enabled>true</Enabled>
+        <LogonCount>1</LogonCount>
+        <Username>{{ excel_vm_admin_user }}</Username>
+        <Password>
+          <Value>{{ excel_vm_admin_password | e }}</Value>
+          <PlainText>true</PlainText>
+        </Password>
+      </AutoLogon>
+      <FirstLogonCommands>
+        <SynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Description>excel-vm guest provisioning</Description>
+          <CommandLine>cmd.exe /c "for %d in (D E F G H I) do @if exist %d:\excel-vm-setup.ps1 powershell.exe -NoProfile -ExecutionPolicy Bypass -File %d:\excel-vm-setup.ps1"</CommandLine>
+        </SynchronousCommand>
+      </FirstLogonCommands>
+    </component>
+  </settings>
+</unattend>
