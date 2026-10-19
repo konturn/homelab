@@ -1,0 +1,30 @@
+# Desired state for netgear-movie (MS510TXPP).
+# Applied by CI from main with networking/switches/netgear/ngswitch.py; see README.md.
+name: netgear-movie
+model: MS510TXPP
+vault_path: homelab/network/netgear-movie
+management:
+  vlan: 4
+  uplink: te10
+  # Ports carrying the management VLAN; the tool never changes their
+  # management VLAN membership or PVID.
+  protected_ports: [gi3, tw6, te9, te10]
+# PoE values the switch omits from its exported configuration.
+poe_defaults_offline: {enabled: true, priority: low, limit_mw: 30000}
+vlans:
+  1: ""
+  4: "Management"
+  5: "Guest"
+  6: "Iot"
+  7: "Airgap"
+ports:
+  gi1: {pvid: 6, untagged: [6], tagged: [], poe: {enabled: true, priority: low, limit_mw: 30000}}
+  gi2: {pvid: 6, untagged: [6], tagged: [], poe: {enabled: true, priority: low, limit_mw: 30000}}
+  gi3: {pvid: 4, untagged: [4], tagged: [], poe: {enabled: true, priority: low, limit_mw: 30000}}
+  gi4: {pvid: 6, untagged: [6], tagged: [], poe: {enabled: true, priority: low, limit_mw: 30000}}
+  tw5: {pvid: 6, untagged: [6], tagged: [], poe: {enabled: true, priority: low, limit_mw: 30000}}
+  tw6: {pvid: 1, untagged: [], tagged: [4, 5, 6, 7], poe: {enabled: true, priority: low, limit_mw: 30000}}
+  hx7: {pvid: 6, untagged: [6], tagged: [], poe: {enabled: true, priority: low, limit_mw: 30000}}
+  hx8: {pvid: 6, untagged: [6], tagged: [], poe: {enabled: true, priority: low, limit_mw: 30000}}
+  te9: {pvid: 1, untagged: [], tagged: [4, 5, 6, 7]}
+  te10: {pvid: 1, untagged: [], tagged: [4, 5, 6, 7]}
