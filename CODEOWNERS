@@ -57,6 +57,10 @@
 # Could intercept TLS traffic
 /networking/ssl/                         @root
 
+# === AUTO-MERGE POLICY ===
+# Defines which MRs may merge and deploy without review (docs/AUTOMERGE.md)
+/ci/                                     @root
+
 # === THIS FILE ===
 # Prevent moltbot from removing its own restrictions
 /CODEOWNERS                              @root
