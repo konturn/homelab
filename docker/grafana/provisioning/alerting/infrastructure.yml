@@ -95,22 +95,80 @@ groups:
         labels:
           severity: critical
 
+      # docker_container_status.oomkilled is Docker's State.OOMKilled flag. It is
+      # STATE, not an event: Docker sets it when the cgroup OOM fires and clears
+      # it only when the container is *recreated*. Alerting on its value
+      # therefore reports "this container has been OOM-killed at some point in
+      # its current life", which is not the same question as "a container was
+      # just OOM-killed".
+      #
+      # That distinction is the live defect this rule replaces, and it has two
+      # halves. Both were measured against Grafana's own state history
+      # (/api/v1/rules/history?ruleUID=container-oom-kill) on 2026-10-09, which
+      # is the only instrument that answers "did this rule fire?" -- re-running
+      # the query by hand answers a different question.
+      #
+      # 1. The previous revision of this MR claimed the last()-before-filter
+      #    ordering meant the rule never fired, citing four missed chromium
+      #    episodes. THAT WAS WRONG. The history shows container-oom-kill went
+      #    Normal -> Pending -> Alerting for container_name=chromium-browser on
+      #    09-24 06:20, 09-26 06:15, 09-28 06:20, 09-29 06:13 and 09-30 06:14,
+      #    resolving at 08:01 each time. The transitions are at 06:07-06:15 and
+      #    the flag clears at 08:00:02, so last() saw true for ~105 minutes per
+      #    episode. The "0 rows" measurement behind that claim was taken over
+      #    07:56-08:01Z -- the one 5-minute window straddling the clear, i.e.
+      #    exactly when the rule was correctly resolving. The MR was opened at
+      #    08:11, ten minutes after that morning's alert went back to Normal.
+      #    Detection was never the problem here; acting on it was (!719 is the
+      #    chromium fix and is still unmerged).
+      #
+      # 2. The real defect is that a value-based rule cannot resolve. A
+      #    container whose MAIN process survives the cgroup OOM never gets
+      #    recreated, so the flag stays true for the container's lifetime.
+      #    nextcloud OOMed once at 2026-10-08T05:16:11Z (six PHP workers killed,
+      #    #145); at the time of writing it has restart_count=0 and 35 days of
+      #    uptime, oomkilled has read true for 27 hours straight (2,160 samples
+      #    per 6h, unbroken), and this alert has been Alerting since 05:22 on
+      #    10-08 with no path back to Normal short of recreating the container.
+      #    A permanently-firing critical is the #143 latch pathology, and
+      #    filtering before max() over a 15m window does not fix it -- the
+      #    source data is true in every window from now on.
+      #
+      # So: alert on the TRANSITION. difference() over the window yields +1 only
+      # where the flag went false -> true inside it, which is the OOM event
+      # itself. Verified both directions on 2026-10-09: a window containing
+      # 05:16:11 returns nextcloud=1, and a -15m window 27h later returns zero
+      # rows, so the alert clears on its own. It still catches the restarting
+      # case -- the same query over 09-24 and 09-26 returns chromium-browser=1.
+      # Recreation produces a -1, which nonNegative drops, so a container coming
+      # back does not alert.
+      #
+      # for: 0s rather than 5m. An edge cannot flap, so there is nothing to
+      # dampen, and dampening would eat half of the window the alert is visible
+      # in. The rule fires at the first evaluation after the OOM and self-clears
+      # once the transition ages out of the 15m range -- the same event-in-a-
+      # window shape restic-backup-incomplete below already uses.
       - uid: container-oom-kill
         title: Container OOM Kill
         condition: C
         data:
           - refId: A
-            relativeTimeRange: {from: 300, to: 0}
+            relativeTimeRange: {from: 900, to: 0}
             datasourceUid: influxdb
             model:
               query: |
                 from(bucket: "metrics")
-                  |> range(start: -5m)
+                  |> range(start: -15m)
                   |> filter(fn: (r) => r._measurement == "docker_container_status")
                   |> filter(fn: (r) => r._field == "oomkilled")
-                  |> last()
-                  |> filter(fn: (r) => r._value == true)
-                  |> map(fn: (r) => ({r with _value: 1}))
+                  |> map(fn: (r) => ({r with _value: if r._value then 1 else 0}))
+                  |> group(columns: ["container_name"])
+                  |> sort(columns: ["_time"])
+                  |> difference(nonNegative: true)
+                  |> group(columns: ["container_name"])
+                  |> max()
+                  |> filter(fn: (r) => r._value > 0)
+                  |> map(fn: (r) => ({r with _time: now()}))
                   |> keep(columns: ["_time", "_value", "container_name"])
               refId: A
           - refId: B
@@ -123,9 +181,69 @@ groups:
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
         noDataState: OK
         execErrState: Error
-        for: 5m
+        for: 0s
         annotations:
-          summary: "Container killed by OOM"
+          summary: "Container {{ $labels.container_name }} killed by OOM"
+          description: "The cgroup OOM killer fired inside this container within the last 15 minutes. Note the container may still be running: Docker sets State.OOMKilled when any process in the cgroup is killed, so check whether the main process survived (docker inspect -f '{{ .RestartCount }} {{ .State.StartedAt }}' {{ $labels.container_name }}) before assuming a restart. Kernel detail, including which process and its anon-rss: journalctl -k | grep -A3 'Memory cgroup out of memory'."
+        labels:
+          severity: critical
+
+      # The rule above reads a per-container metric, which means it cannot see
+      # the one OOM kill that matters most: InfluxDB's own. telegraf writes
+      # docker_container_status *into* InfluxDB, so when InfluxDB is the process
+      # the kernel kills, the sample recording that fact has nowhere to go. Any
+      # container whose death takes the metrics pipeline down with it is
+      # structurally invisible to container-oom-kill.
+      #
+      # Measured 2026-09-30, and this is the whole argument for keeping both
+      # rules: over 30 days InfluxDB has *zero* oomkilled=true samples, while
+      # its own uptime_ns shows it restarting with <30 s of uptime on 09-02,
+      # 09-05 and 09-13. Same window, chromium-browser has 3,268 true samples
+      # and nextcloud 13,635. The metric is not broken -- it simply cannot
+      # report the collector's own death.
+      #
+      # The kernel's memcg line survives that, because it goes to the journal
+      # and promtail ships it to Loki, a different store on a different path.
+      # Verified present: 7 "Memory cgroup out of memory" lines in the last 7
+      # days, each naming the killed process and its anon-rss.
+      #
+      # This rule is the journal half of !712, kept alongside the metric half
+      # rather than replacing it. !712 proposed swapping container-oom-kill over
+      # to this query outright, on the evidence of the InfluxDB kill above. That
+      # evidence is real but does not generalise: swapping would trade away the
+      # container_name label (the journal line carries a *process* name, so
+      # "chromium" rather than "chromium-browser") and would inherit Loki's
+      # delivery gaps -- per !698 the satellite hosts currently ship zero logs,
+      # while they do still report telegraf metrics. Two cheap rules, two
+      # independent failure paths.
+      - uid: kernel-oom-kill
+        title: Kernel OOM Kill (catches the collector's own death)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({job="systemd-journal"} |= "Memory cgroup out of memory" [15m]))'
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: replaceNN, replaceWithValue: 0}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        # for: 0s, unlike container-oom-kill's 5m. A journal line is a single
+        # instant, not a state that persists to be re-sampled; requiring it to
+        # hold for five minutes is the mistake that made the original metric
+        # rule unfireable.
+        for: 0s
+        annotations:
+          summary: "A container was killed by the kernel OOM killer"
+          description: "If Container OOM Kill did not also fire, the victim was probably the metrics collector itself. Which process and how much it held: journalctl -k --since '15 minutes ago' | grep 'Memory cgroup out of memory'. Then raise that container's deploy.resources.limits.memory in docker/docker-compose.yml."
         labels:
           severity: critical
 
