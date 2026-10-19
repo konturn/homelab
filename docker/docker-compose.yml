@@ -489,7 +489,7 @@ services:
       retries: 3
       start_period: 30s
   radarr:
-    image: linuxserver/radarr:6.4.4.10685-ls321@sha256:ea6822c956d26db648b237919f41340318f32e5b7dcc4ba702cf256a0f5f3c12
+    image: linuxserver/radarr:6.4.4.10685-ls322@sha256:ff4430fe2d6159b4dbaac9903acfecee5aa68dec8c929259e2f3114c63f7a09e
     container_name: radarr
     security_opt:
       - no-new-privileges=true
@@ -533,7 +533,7 @@ services:
       retries: 3
       start_period: 60s
   jackett:
-    image: linuxserver/jackett:0.24.2865@sha256:4fcf3cc22dd3ee9718ac70db6edc8f805e5a74b315caccf1f699e3bd2d9fd0b2
+    image: linuxserver/jackett:0.24.2875@sha256:104a82c2f75892745d36b65a8c1244761e9f66678424ca547b203ff2ed708975
     container_name: jackett
     security_opt:
       - no-new-privileges=true
@@ -923,7 +923,7 @@ services:
       - "443:80"
     networks:
       - internal
-    image: 'gitlab/gitlab-ee:19.4.2-ee.0@sha256:28235a4da8491e4059999d31febc0434715f4a2021e338da2034998818dd1198'
+    image: 'gitlab/gitlab-ee:19.5.0-ee.0@sha256:f04c71f565601283971d6472dd466609f4679450526f39aab3e3dcd6d23dc0ec'
     restart: unless-stopped
     ulimits:
       nofile:
@@ -1123,7 +1123,7 @@ services:
       retries: 3
       start_period: 30s
   blog:
-    image: wordpress:7.1.3-php8.3-apache@sha256:8ecd8d8e374167ea22235acf30f80d1165b82f07ffa5bcef90c1cad8f7be251f
+    image: wordpress:7.1.3-php8.3-apache@sha256:81a34254acaa6ff3b9a67268c2745e9a041c4094cbe5ccd35b75ed3bbdc033b5
     container_name: wordpress
     security_opt:
       - no-new-privileges=true
@@ -1163,7 +1163,7 @@ services:
       retries: 3
       start_period: 60s
   wordpress_db:
-    image: mysql:9.7.2-oraclelinux9@sha256:b2cf29815e62fea06b7de22b8b8e57dfe0eb32706e38ce951930bde6faef4ab6
+    image: mysql:9.7.2-oraclelinux9@sha256:c7cb87a9822f499375287930cbff71d6d3b201e346b45108b1115b435ee2df13
     container_name: wordpress_db
     security_opt:
       - no-new-privileges=true
@@ -1746,7 +1746,7 @@ services:
     # crashes on this host with "Fatal glibc error: CPU does not support
     # x86-64-v3". Stay on the Debian-based default variant. Do not switch to
     # any -ubi*/-ubi10* tag.
-    image: mariadb:12.3.3@sha256:ab1c3dd381940233af12512b97d47b508fd3a0f17fbe3ba388739b7bc17cbc0b
+    image: mariadb:12.3.3@sha256:99c125f103f5d081ebbc9ffe064e63daf7f688ac33a5f7f29af2d7260a96debf
     container_name: nextcloud_database
     security_opt:
       - no-new-privileges=true
@@ -1784,7 +1784,7 @@ services:
       retries: 3
       start_period: 60s
   nextcloud:
-    image: nextcloud:33.0.10-apache@sha256:9493688f78554945b475d64bf24318aa157202959ff2c663c749304367726c39
+    image: nextcloud:33.0.10-apache@sha256:a353c1bb14d9d70a4cbd677af586a7848d1e96d26130f225db4af75100609371
     container_name: nextcloud
     security_opt:
       - no-new-privileges=true
