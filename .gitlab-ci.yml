@@ -937,12 +937,16 @@ netgear:test:
     - python3 -m unittest discover -s networking/switches/netgear -p 'test_*.py' -v
     - python3 networking/switches/netgear/ngswitch.py check
     - |
+      git config --global --add safe.directory "$CI_PROJECT_DIR"
       base_dir=$(mktemp -d)
       base="${CI_MERGE_REQUEST_DIFF_BASE_SHA:-$CI_COMMIT_BEFORE_SHA}"
       if [ -n "$base" ] && [ "$base" != "0000000000000000000000000000000000000000" ]; then
         git fetch -q --depth=50 origin "$base" || true
+        git cat-file -e "$base^{commit}" || { echo "ERROR: baseline commit $base not available"; exit 1; }
         for f in networking/switches/netgear/*.running-config.txt; do
-          git show "$base:$f" > "$base_dir/${f##*/}" 2>/dev/null || rm -f "$base_dir/${f##*/}"
+          if git cat-file -e "$base:$f" 2>/dev/null; then
+            git show "$base:$f" > "$base_dir/${f##*/}"
+          fi
         done
       fi
       echo "Baseline: exports at ${base:-none}"
