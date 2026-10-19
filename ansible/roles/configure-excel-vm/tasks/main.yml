@@ -1,0 +1,156 @@
+---
+# =============================================================================
+# excel-vm: Windows 11 Pro guest on libvirt/KVM. See defaults/main.yml for the
+# safety contract and README.md for the build procedure.
+# =============================================================================
+
+- name: Refuse VM settings outside the host budget / storage policy
+  ansible.builtin.assert:
+    that:
+      - excel_vm_vcpus | int <= excel_vm_max_vcpus | int
+      - excel_vm_memory_mib | int <= excel_vm_max_memory_mib | int
+      - excel_vm_root is not match('^/mpool')
+      - excel_vm_disk_path is not match('^/mpool')
+      - excel_vm_address is match('^10\.3\.(\d|[1-5]\d|6[0-3])\.\d+$')
+    fail_msg: >-
+      excel-vm must stay within 6 vCPU / 12 GiB, must not live on mpool, and
+      its address must be inside 10.3.0.0/18 (the block the host routes via
+      vlan3-shim) or nothing routed will reach it.
+    quiet: true
+
+- name: Install virtualization packages (present only, never upgraded)
+  ansible.builtin.apt:
+    name:
+      - qemu-system-x86
+      - qemu-utils
+      - libvirt-daemon-system
+      - libvirt-clients
+      - ovmf
+      - swtpm
+      - swtpm-tools
+      - xorriso
+    state: present
+
+# libvirtd is socket-activated and was not enabled, so nothing would start it
+# at boot and `virsh autostart` would never fire. Enabling it does not block
+# boot: nothing is ordered after it except libvirt-guests (instant, see below).
+# Deliberately enabled only, never started/restarted here.
+- name: Start libvirtd at boot so autostarted domains come back
+  ansible.builtin.systemd_service:
+    name: libvirtd.service
+    enabled: true
+
+# ON_BOOT=ignore: libvirt-guests does not resume anything at boot (autostart
+# does that). ON_SHUTDOWN=shutdown: on host shutdown, guests get an ACPI
+# shutdown (bounded by SHUTDOWN_TIMEOUT) instead of the default managed-save
+# of 12 GiB of RAM onto the root filesystem.
+- name: Configure libvirt-guests for clean guest shutdown
+  ansible.builtin.lineinfile:
+    path: /etc/default/libvirt-guests
+    regexp: '^#?\s*{{ item.key }}='
+    line: "{{ item.key }}={{ item.value }}"
+  loop:
+    - { key: ON_BOOT, value: ignore }
+    - { key: ON_SHUTDOWN, value: shutdown }
+    - { key: SHUTDOWN_TIMEOUT, value: "120" }
+  loop_control:
+    label: "{{ item.key }}"
+
+# NEVER add a restart here: stopping libvirt-guests shuts every guest down.
+- name: Enable libvirt-guests (its stop action shuts guests down cleanly)
+  ansible.builtin.systemd_service:
+    name: libvirt-guests.service
+    enabled: true
+    state: started
+
+# On this host (Ubuntu 24.04, libvirt 10.0) the per-domain private mount
+# namespace makes every guest fail at start-up with "Cannot delete directory
+# /run/libvirt/qemu/N-<name>.shm: Device or resource busy". Guests remain
+# confined by their AppArmor profile (virt-aa-helper) and DAC.
+- name: Disable libvirt's per-domain mount namespace
+  ansible.builtin.lineinfile:
+    path: /etc/libvirt/qemu.conf
+    regexp: '^#?\s*namespaces\s*='
+    line: "namespaces = []"
+  register: _excel_vm_qemu_conf
+
+# Inline rather than a handler, so other roles' handlers are not flushed early.
+# Restarting libvirtd does not stop running guests (QEMU keeps running and the
+# daemon reconnects).
+- name: Restart libvirtd to apply qemu.conf
+  ansible.builtin.systemd_service:
+    name: libvirtd.service
+    state: restarted
+  when: _excel_vm_qemu_conf is changed
+
+# 0711: libvirt-qemu must traverse to the images, nobody needs to list them.
+- name: Create VM directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0711"
+  loop:
+    - "{{ excel_vm_root }}"
+    - "{{ excel_vm_iso_dir }}"
+    - "{{ excel_vm_dir }}"
+
+- name: Download pinned virtio-win driver ISO
+  ansible.builtin.get_url:
+    url: "{{ excel_vm_virtio_iso.url }}"
+    dest: "{{ excel_vm_iso_dir }}/{{ excel_vm_virtio_iso.filename }}"
+    checksum: "sha256:{{ excel_vm_virtio_iso.sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+    timeout: 120
+
+- name: Look up existing domain
+  ansible.builtin.command:
+    cmd: virsh -c qemu:///system domstate {{ excel_vm_name }}
+  register: _excel_vm_domstate
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Report that the VM is not built
+  ansible.builtin.debug:
+    msg: >-
+      Domain {{ excel_vm_name }} is not defined. Nothing to do; to build it,
+      place the Windows ISO and run with -e excel_vm_install=true
+      (ansible/roles/configure-excel-vm/README.md).
+  when:
+    - _excel_vm_domstate.rc != 0
+    - not (excel_vm_install | bool)
+
+- name: Build the VM (first time only)
+  ansible.builtin.include_tasks: build.yml
+  when:
+    - _excel_vm_domstate.rc != 0
+    - excel_vm_install | bool
+
+- name: Read domain autostart flag
+  ansible.builtin.command:
+    cmd: virsh -c qemu:///system dominfo {{ excel_vm_name }}
+  register: _excel_vm_dominfo
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Autostart the VM with the host
+  ansible.builtin.command:
+    cmd: virsh -c qemu:///system autostart {{ excel_vm_name }}
+  when:
+    - _excel_vm_dominfo.rc == 0
+    - _excel_vm_dominfo.stdout is search('Autostart:\s+disable')
+  changed_when: true
+
+# Opt-in: after the guest wrote C:\ProgramData\excel-vm-setup\DONE, run with
+# -e excel_vm_cleanup_install_media=true to eject the install CDs and delete
+# the unattend media (it contains the admin password).
+- name: Remove install media
+  ansible.builtin.include_tasks: cleanup.yml
+  when:
+    - _excel_vm_dominfo.rc == 0
+    - excel_vm_cleanup_install_media | default(false) | bool

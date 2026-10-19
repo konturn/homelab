@@ -1,0 +1,143 @@
+---
+# One-time build. Only reached when no domain named excel_vm_name exists and
+# excel_vm_install=true. Every guard below fails closed.
+
+- name: Require the admin password (Vault homelab/excel-vm admin_password)
+  ansible.builtin.assert:
+    that:
+      - excel_vm_admin_password | length >= 12
+    fail_msg: >-
+      No admin password: set admin_password in Vault homelab/excel-vm (or
+      EXCEL_VM_ADMIN_PASSWORD for a manual run).
+    quiet: true
+  no_log: true
+
+- name: Check for an existing disk image
+  ansible.builtin.stat:
+    path: "{{ excel_vm_disk_path }}"
+    get_checksum: false
+  register: _excel_vm_disk
+
+- name: Never install over an existing disk
+  ansible.builtin.fail:
+    msg: >-
+      {{ excel_vm_disk_path }} already exists but no domain is defined. Refusing
+      to reinstall over it. Re-define the domain from {{ excel_vm_domain_xml_path }}
+      by hand (virsh define) or move the disk away first.
+  when: _excel_vm_disk.stat.exists
+
+- name: Check the Windows ISO
+  ansible.builtin.stat:
+    path: "{{ excel_vm_windows_iso_path }}"
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: _excel_vm_win_iso
+
+- name: Require the pinned Windows ISO
+  ansible.builtin.assert:
+    that:
+      - _excel_vm_win_iso.stat.exists
+      - _excel_vm_win_iso.stat.checksum == excel_vm_windows_iso.sha256
+    fail_msg: >-
+      {{ excel_vm_windows_iso_path }} is missing or its SHA256 is not
+      {{ excel_vm_windows_iso.sha256 }}. Download it from
+      https://www.microsoft.com/en-us/software-download/windows11 (README.md).
+
+- name: Create install media directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ excel_vm_install_dir }}", mode: "0711" }
+    - { path: "{{ excel_vm_install_dir }}/media", mode: "0700" }
+    - { path: "{{ excel_vm_install_dir }}/media/installers", mode: "0700" }
+
+- name: Download pinned guest installers
+  ansible.builtin.get_url:
+    url: "{{ item.url }}"
+    dest: "{{ excel_vm_install_dir }}/media/installers/{{ item.filename }}"
+    checksum: "sha256:{{ item.sha256 }}"
+    mode: "0600"
+    timeout: 120
+  loop: "{{ excel_vm_installers }}"
+  loop_control:
+    label: "{{ item.filename }}"
+
+- name: Render autounattend.xml (contains the admin password)
+  ansible.builtin.template:
+    src: autounattend.xml.j2
+    dest: "{{ excel_vm_install_dir }}/media/autounattend.xml"
+    mode: "0600"
+  no_log: true
+
+- name: Render guest provisioning script and Office config
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ excel_vm_install_dir }}/media/{{ item.dest }}"
+    mode: "0600"
+  loop:
+    - { src: excel-vm-setup.ps1.j2, dest: excel-vm-setup.ps1 }
+    - { src: office-config.xml.j2, dest: office-config.xml }
+
+- name: Build the unattend ISO
+  ansible.builtin.command:
+    argv:
+      - xorriso
+      - -as
+      - mkisofs
+      - -quiet
+      - -o
+      - "{{ excel_vm_unattend_iso }}"
+      - -J
+      - -joliet-long
+      - -r
+      - -V
+      - EXCELVM_UNATTEND
+      - "{{ excel_vm_install_dir }}/media"
+  changed_when: true
+
+- name: Restrict the unattend ISO
+  ansible.builtin.file:
+    path: "{{ excel_vm_unattend_iso }}"
+    mode: "0600"
+
+- name: Create the system disk
+  ansible.builtin.command:
+    cmd: qemu-img create -f qcow2 {{ excel_vm_disk_path }} {{ excel_vm_disk_size }}
+    creates: "{{ excel_vm_disk_path }}"
+
+- name: Render the domain definition
+  ansible.builtin.template:
+    src: domain.xml.j2
+    dest: "{{ excel_vm_domain_xml_path }}"
+    mode: "0600"
+
+- name: Define the domain
+  ansible.builtin.command:
+    cmd: virsh -c qemu:///system define {{ excel_vm_domain_xml_path }}
+  changed_when: true
+
+- name: Start the domain
+  ansible.builtin.command:
+    cmd: virsh -c qemu:///system start {{ excel_vm_name }}
+  changed_when: true
+
+# OVMF shows "Press any key to boot from CD or DVD" for ~5 s on the empty disk.
+- name: Answer the boot-from-CD prompt
+  ansible.builtin.shell:
+    cmd: |
+      for i in $(seq 1 15); do
+        virsh -c qemu:///system send-key {{ excel_vm_name }} KEY_ENTER >/dev/null 2>&1 || true
+        sleep 1
+      done
+  changed_when: false
+
+- name: Report build started
+  ansible.builtin.debug:
+    msg: >-
+      {{ excel_vm_name }} is installing (about 30-60 min including Office).
+      It is done when the guest has C:\ProgramData\excel-vm-setup\DONE; then
+      run with -e excel_vm_cleanup_install_media=true.

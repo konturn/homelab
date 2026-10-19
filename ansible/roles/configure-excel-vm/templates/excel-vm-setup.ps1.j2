@@ -1,0 +1,149 @@
+# {{ ansible_managed }}
+# First-logon provisioning for {{ excel_vm_name }}. Runs once, elevated, as
+# {{ excel_vm_admin_user }} (FirstLogonCommands). Each step is independent and
+# logged; a failed step does not stop the others. Progress/result:
+#   C:\ProgramData\excel-vm-setup\setup.log      transcript
+#   C:\ProgramData\excel-vm-setup\status.json    per-step result (read by the host via qemu-ga)
+#   C:\ProgramData\excel-vm-setup\DONE           written last
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+$state = 'C:\ProgramData\excel-vm-setup'
+New-Item -ItemType Directory -Force -Path $state | Out-Null
+Start-Transcript -Path "$state\setup.log" -Append | Out-Null
+
+$media = $PSScriptRoot
+$installers = Join-Path $media 'installers'
+$virtio = (Get-Volume | Where-Object { $_.FileSystemLabel -like 'virtio-win*' } | Select-Object -First 1).DriveLetter
+$status = [ordered]@{}
+
+function Step([string]$name, [scriptblock]$body) {
+    Write-Host "==== $name"
+    try {
+        & $body
+        $status[$name] = 'ok'
+    } catch {
+        Write-Host "!!!! $name failed: $_"
+        $status[$name] = "failed: $_"
+    }
+    $status | ConvertTo-Json | Set-Content -Encoding UTF8 "$state\status.json"
+}
+
+function Run([string]$file, [string[]]$argList) {
+    $p = Start-Process -FilePath $file -ArgumentList $argList -Wait -PassThru -NoNewWindow
+    if ($p.ExitCode -notin 0, 3010) { throw "$file exited $($p.ExitCode)" }
+}
+
+function Refresh-Path {
+    $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
+                [Environment]::GetEnvironmentVariable('Path', 'User')
+}
+
+Step 'virtio-guest-tools' {
+    if (-not $virtio) { throw 'virtio-win CD not found' }
+    # Trust the virtio-win driver signer so the bundle installs without a prompt.
+    Get-ChildItem "${virtio}:\" -Recurse -Filter *.cat -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -match '\\w11\\amd64\\' } | ForEach-Object {
+            $sig = Get-AuthenticodeSignature $_.FullName
+            if ($sig.SignerCertificate) { $sig.SignerCertificate }
+        } | Sort-Object Thumbprint -Unique | ForEach-Object {
+            $store = New-Object System.Security.Cryptography.X509Certificates.X509Store('TrustedPublisher', 'LocalMachine')
+            $store.Open('ReadWrite'); $store.Add($_); $store.Close()
+        }
+    # Installs every virtio driver plus the QEMU guest agent service.
+    Run "${virtio}:\virtio-win-guest-tools.exe" @('/install', '/quiet', '/norestart')
+    Get-Service QEMU-GA | Set-Service -StartupType Automatic
+    Start-Service QEMU-GA
+}
+
+Step 'network-profile' {
+    Get-NetConnectionProfile | Set-NetConnectionProfile -NetworkCategory Private
+}
+
+Step 'power' {
+    powercfg /hibernate off
+    powercfg /change standby-timeout-ac 0
+    powercfg /change monitor-timeout-ac 0
+}
+
+Step 'rdp' {
+    Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0
+    Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name UserAuthentication -Value 1
+    # "Remote Desktop" rule group (locale-independent resource id)
+    Get-NetFirewallRule | Where-Object { $_.Group -eq '@FirewallAPI.dll,-28752' } | Enable-NetFirewallRule
+}
+
+Step 'openssh-server' {
+    $cap = Get-WindowsCapability -Online -Name 'OpenSSH.Server*' | Select-Object -First 1
+    if ($cap.State -ne 'Installed') { Add-WindowsCapability -Online -Name $cap.Name | Out-Null }
+    Set-Service sshd -StartupType Automatic
+    Start-Service sshd
+    New-ItemProperty 'HKLM:\SOFTWARE\OpenSSH' -Name DefaultShell -PropertyType String -Force `
+        -Value 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' | Out-Null
+    if (-not (Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue)) {
+        New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (sshd)' `
+            -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22 | Out-Null
+    }
+}
+
+Step 'python' {
+    Run "$installers\{{ (excel_vm_installers | selectattr('name', 'equalto', 'python') | first).filename }}" @(
+        '/quiet', 'InstallAllUsers=1', 'PrependPath=1', 'Include_test=0', 'Include_launcher=1')
+    Refresh-Path
+}
+
+Step 'pip-packages' {
+    $py = (Get-ChildItem 'C:\Program Files\Python3*\python.exe' | Select-Object -First 1).FullName
+    & $py -m pip install --disable-pip-version-check --no-warn-script-location{% for p in excel_vm_pip_packages %} '{{ p }}'{% endfor %}
+    if ($LASTEXITCODE -ne 0) { throw "pip exited $LASTEXITCODE" }
+}
+
+Step 'git' {
+    Run "$installers\{{ (excel_vm_installers | selectattr('name', 'equalto', 'git') | first).filename }}" @(
+        '/VERYSILENT', '/NORESTART', '/NOCANCEL', '/SP-', '/SUPPRESSMSGBOXES')
+    Refresh-Path
+}
+
+Step 'node' {
+    Run 'msiexec.exe' @('/i', "`"$installers\{{ (excel_vm_installers | selectattr('name', 'equalto', 'node') | first).filename }}`"", '/qn', '/norestart')
+    Refresh-Path
+}
+
+Step 'npm-packages' {
+    Refresh-Path
+    $env:Path += ";$env:APPDATA\npm"
+    New-Item -ItemType Directory -Force -Path "$env:APPDATA\npm" | Out-Null
+    & 'C:\Program Files\nodejs\npm.cmd' install -g{% for p in excel_vm_npm_packages %} '{{ p }}'{% endfor %}
+    if ($LASTEXITCODE -ne 0) { throw "npm exited $LASTEXITCODE" }
+}
+
+Step 'office-excel' {
+    # Microsoft 365 Apps 64-bit, Excel only, Current Channel. Installs
+    # unlicensed; activation is the Microsoft-account sign-in done by Noah.
+    $odt = 'C:\ODT'
+    New-Item -ItemType Directory -Force -Path $odt | Out-Null
+    Copy-Item "$media\office-config.xml" "$odt\office-config.xml" -Force
+    Run "$installers\{{ (excel_vm_installers | selectattr('name', 'equalto', 'odt') | first).filename }}" @('/quiet', "/extract:$odt")
+    Run "$odt\setup.exe" @('/configure', "$odt\office-config.xml")
+    if (-not (Test-Path 'C:\Program Files\Microsoft Office\root\Office16\EXCEL.EXE')) { throw 'EXCEL.EXE missing after ODT run' }
+}
+
+Step 'excel-trust-vbom' {
+    # Trust Center > Macro Settings > "Trust access to the VBA project object model"
+    if (-not (Test-Path 'C:\Program Files\Microsoft Office\root\Office16\EXCEL.EXE')) { throw 'Excel not installed' }
+    $k = 'HKCU:\Software\Microsoft\Office\16.0\Excel\Security'
+    New-Item -Path $k -Force | Out-Null
+    New-ItemProperty -Path $k -Name AccessVBOM -PropertyType DWord -Value 1 -Force | Out-Null
+}
+
+Step 'scrub-unattend-secrets' {
+    $wl = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
+    Set-ItemProperty $wl -Name AutoAdminLogon -Value '0'
+    Remove-ItemProperty $wl -Name DefaultPassword -ErrorAction SilentlyContinue
+    Remove-ItemProperty $wl -Name AutoLogonCount -ErrorAction SilentlyContinue
+    Remove-Item -Force -ErrorAction SilentlyContinue 'C:\Windows\Panther\unattend.xml', 'C:\Windows\Panther\Unattend\unattend.xml', 'C:\Windows\System32\Sysprep\unattend.xml'
+}
+
+$status | ConvertTo-Json | Set-Content -Encoding UTF8 "$state\status.json"
+Get-Date -Format o | Set-Content "$state\DONE"
+Stop-Transcript | Out-Null
+shutdown.exe /r /t 30 /c "excel-vm provisioning finished"
