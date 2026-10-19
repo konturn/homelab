@@ -326,11 +326,15 @@ class FileChange:
 def evaluate_mr(*, author: str, target_branch: str, labels: List[str],
                 files: List[FileChange], base_compose: Optional[str],
                 head_compose: Optional[str], allowlist: dict,
-                codeowners_text: str) -> Verdict:
+                codeowners_text: str, merger: Optional[str] = None) -> Verdict:
+    """`merger` is the identity that would merge (the sweep's token user). When
+    given, an MR authored by that identity is rejected: author != merger."""
     v = Verdict()
     authors = allowlist.get("authors") or []
     if author not in authors:
         v.reject(f"author {author!r} is not in the auto-merge author list")
+    if merger is not None and author == merger:
+        v.reject(f"author {author!r} is the merging identity; the merger must not be the author")
     if target_branch != allowlist.get("target_branch", "main"):
         v.reject(f"target branch {target_branch!r} is not {allowlist.get('target_branch', 'main')!r}")
     freeze_label = allowlist.get("freeze_label", "freeze")

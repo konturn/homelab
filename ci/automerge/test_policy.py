@@ -44,7 +44,7 @@ networks:
 """
 
 ALLOW = {
-    "authors": ["moltbot"],
+    "authors": ["moltbot", "renovate-bot"],
     "target_branch": "main",
     "allowed_files": [policy.COMPOSE_PATH],
     "services": {s: {} for s in ["radarr", "prowlarr", "grafana", "homeassistant", "jackett",
@@ -66,11 +66,12 @@ def edit(text: str, old: str, new: str) -> str:
     return text.replace(old, new, 1)
 
 
-def evaluate(head: str, *, author="moltbot", files=None, labels=()):
+def evaluate(head: str, *, author="moltbot", files=None, labels=(), merger=None):
     return policy.evaluate_mr(
         author=author, target_branch="main", labels=list(labels),
         files=files or [FileChange(path=policy.COMPOSE_PATH)],
-        base_compose=BASE, head_compose=head, allowlist=ALLOW, codeowners_text=CODEOWNERS)
+        base_compose=BASE, head_compose=head, allowlist=ALLOW, codeowners_text=CODEOWNERS,
+        merger=merger)
 
 
 class ImageRefTests(unittest.TestCase):
@@ -187,6 +188,24 @@ class DiffParserTests(unittest.TestCase):
         head = edit(BASE, f"prowlarr:latest@{D1}", f"prowlarr:latest@{D2}")
         v = evaluate(head, author="someone")
         self.assertFalse(v.eligible)
+
+    def test_second_author_ok(self):
+        head = edit(BASE, f"prowlarr:latest@{D1}", f"prowlarr:latest@{D2}")
+        self.assertTrue(evaluate(head, author="renovate-bot", merger="automerge-bot").eligible)
+
+    def test_author_is_merger_rejected(self):
+        head = edit(BASE, f"prowlarr:latest@{D1}", f"prowlarr:latest@{D2}")
+        v = evaluate(head, author="moltbot", merger="moltbot")
+        self.assertFalse(v.eligible)
+        self.assertIn("merger must not be the author", " ".join(v.reasons))
+
+    def test_multi_service_same_image_ok(self):
+        # one image used by several allowlisted services, bumped in one MR
+        base = (f"services:\n  nginx:\n    image: nginx:1.31.1-alpine3.23-perl@{D1}\n"
+                f"  lab_nginx:\n    image: nginx:1.31.1-alpine3.23-perl@{D1}\n")
+        head = base.replace(f"1.31.1-alpine3.23-perl@{D1}", f"1.31.2-alpine3.23-perl@{D2}")
+        changes = policy.diff_compose(base, head)
+        self.assertEqual([c.service for c in changes], ["nginx", "lab_nginx"])
 
     def test_freeze_label_rejected(self):
         head = edit(BASE, f"prowlarr:latest@{D1}", f"prowlarr:latest@{D2}")

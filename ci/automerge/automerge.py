@@ -43,6 +43,7 @@ CODEOWNERS_PATH = REPO_ROOT / "CODEOWNERS"
 LABEL_ELIGIBLE = "automerge-eligible"
 LABEL_MERGED = "automerged"
 LABEL_ROLLBACK = "automerge-rollback"
+LABEL_SECURITY = "security"
 TRAILER = "Automerge-Policy: image-update"
 
 API = os.environ.get("CI_API_V4_URL", "https://gitlab.lab.nkontur.com/api/v4").rstrip("/")
@@ -240,7 +241,7 @@ def mr_file_changes(gl: GitLab, iid: int) -> List[policy.FileChange]:
     return out
 
 
-def evaluate_api(gl: GitLab, mr: dict, allow: dict) -> policy.Verdict:
+def evaluate_api(gl: GitLab, mr: dict, allow: dict, merger: Optional[str] = None) -> policy.Verdict:
     refs = mr.get("diff_refs") or {}
     base_sha, head_sha = refs.get("base_sha"), refs.get("head_sha")
     files = mr_file_changes(gl, mr["iid"])
@@ -251,7 +252,12 @@ def evaluate_api(gl: GitLab, mr: dict, allow: dict) -> policy.Verdict:
     return policy.evaluate_mr(
         author=mr["author"]["username"], target_branch=mr["target_branch"],
         labels=mr.get("labels") or [], files=files, base_compose=base, head_compose=head,
-        allowlist=allow, codeowners_text=read_codeowners())
+        allowlist=allow, codeowners_text=read_codeowners(), merger=merger)
+
+
+def token_user(gl: GitLab) -> str:
+    """Username of the identity behind the token (the merger)."""
+    return gl.get("user")["username"]
 
 
 def readiness(mr: dict) -> List[str]:
@@ -330,9 +336,10 @@ def cmd_mr_check(args: argparse.Namespace) -> int:
 def cmd_evaluate(args: argparse.Namespace) -> int:
     gl = gitlab_from_env(dry_run=True)
     allow = load_allowlist()
+    merger = token_user(gl)
     for iid in args.iids:
         mr = gl.get(f"projects/{PROJECT}/merge_requests/{iid}")
-        v = evaluate_api(gl, mr, allow)
+        v = evaluate_api(gl, mr, allow, merger=merger)
         if args.json:
             log(json.dumps({"iid": iid, "title": mr["title"], **v.as_dict()}))
         else:
@@ -345,6 +352,8 @@ def cmd_sweep(args: argparse.Namespace) -> int:
     gl = gitlab_from_env(dry_run=dry)
     allow = load_allowlist()
     gl.ensure_labels()
+    merger = token_user(gl)
+    log(f"Merging identity: {merger}{' (dry run: no labels, approvals or merges)' if dry else ''}")
 
     candidates: Dict[int, dict] = {}
     for author in allow.get("authors") or []:
@@ -361,7 +370,7 @@ def cmd_sweep(args: argparse.Namespace) -> int:
     for iid in sorted(candidates):
         mr = gl.get(f"projects/{PROJECT}/merge_requests/{iid}")  # full record (pipeline, merge status)
         candidates[iid] = mr
-        verdicts[iid] = evaluate_api(gl, mr, allow)
+        verdicts[iid] = evaluate_api(gl, mr, allow, merger=merger)
 
     gates: List[str] = []
     if any(v.eligible for v in verdicts.values()):
@@ -371,8 +380,10 @@ def cmd_sweep(args: argparse.Namespace) -> int:
             log(f"  - {g}")
     log()
 
+    # MRs labelled `security` (e.g. by the running-image CVE scan) go first.
+    order = sorted(candidates, key=lambda i: (LABEL_SECURITY not in (candidates[i].get("labels") or []), i))
     merged_one = False
-    for iid in sorted(candidates):
+    for iid in order:
         mr, v = candidates[iid], verdicts[iid]
         eligible = v.eligible and not gates
         print_verdict(mr, v, gates if v.eligible else [])
@@ -450,6 +461,9 @@ def cmd_plan_deploy(args: argparse.Namespace) -> int:
         return abort(f"!{mr['iid']} does not carry the {LABEL_MERGED} label")
     if mr["author"]["username"] not in (allow.get("authors") or []):
         return abort(f"!{mr['iid']} author is not on the auto-merge author list")
+    merged_by = (mr.get("merge_user") or mr.get("merged_by") or {}).get("username")
+    if merged_by != token_user(gl) or merged_by == mr["author"]["username"]:
+        return abort(f"!{mr['iid']} was not merged by the auto-merge identity")
 
     changed = [p for p in git("diff", "--name-only", first_parent, sha).splitlines() if p]
     if changed != [policy.COMPOSE_PATH]:
