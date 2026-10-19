@@ -954,7 +954,18 @@ services:
   # Initial setup uses file storage; will be configured for GitLab JWT auth in future MR
   vault:
     container_name: vault
-    image: hashicorp/vault:1.21.4@sha256:4e33b126a59c0c333b76fb4e894722462659a6bec7c48c9ee8cea56fccfd2569
+    # Vault 2.x images default to the unprivileged `vault` user (uid 100). This
+    # service overrides the entrypoint with auto-unseal.sh, so the image's
+    # docker-entrypoint.sh (which used to handle ownership and the IPC_LOCK file
+    # capability) never runs, and 1.21 ran as root here by default. Tested
+    # 2026-10-18 against a copy of vault_data: as uid 100, Vault cannot read
+    # /vault/config/config.hcl ("permission denied") and would also be blocked
+    # by the root-owned unseal keys (0600), the audit log in /vault/logs, and
+    # mlock (disable_mlock = false, IPC_LOCK no longer on the binary since
+    # 2.0.2). As root it starts, auto-unseals and loads all mounts. Keep root
+    # until those paths are re-owned to uid 100 and disable_mlock is revisited.
+    user: "0:0"
+    image: hashicorp/vault:2.0.4@sha256:5be49781ecf78bfe775c5309c6a4d9f4e9e040b6c885c99eb2b12fb69855e1a2
     restart: unless-stopped
     networks:
       internal:
