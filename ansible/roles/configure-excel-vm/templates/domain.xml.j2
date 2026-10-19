@@ -1,0 +1,106 @@
+<!-- {{ ansible_managed }}
+     Rendered once, at build time, by ansible/roles/configure-excel-vm.
+     The role never redefines an existing domain: changing this template does
+     NOT change the running VM. Apply changes by hand with `virsh edit`. -->
+<domain type='kvm'>
+  <name>{{ excel_vm_name }}</name>
+  <title>Windows 11 Pro - Excel/VBA test VM</title>
+  <description>Managed by gitlab.lab.nkontur.com root/homelab ansible/roles/configure-excel-vm</description>
+  <memory unit='MiB'>{{ excel_vm_memory_mib }}</memory>
+  <currentMemory unit='MiB'>{{ excel_vm_memory_mib }}</currentMemory>
+  <vcpu placement='static'>{{ excel_vm_vcpus }}</vcpu>
+  <os>
+    <type arch='x86_64' machine='q35'>hvm</type>
+    <loader readonly='yes' secure='yes' type='pflash'>{{ excel_vm_ovmf_code }}</loader>
+    <nvram template='{{ excel_vm_ovmf_vars_template }}'>{{ excel_vm_nvram_path }}</nvram>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+    <hyperv mode='custom'>
+      <relaxed state='on'/>
+      <vapic state='on'/>
+      <spinlocks state='on' retries='8191'/>
+      <vpindex state='on'/>
+      <runtime state='on'/>
+      <synic state='on'/>
+      <stimer state='on'/>
+      <reset state='on'/>
+      <frequencies state='on'/>
+      <tlbflush state='on'/>
+      <ipi state='on'/>
+    </hyperv>
+    <vmport state='off'/>
+    <smm state='on'/>
+  </features>
+  <cpu mode='host-passthrough' check='none' migratable='on'>
+    <topology sockets='1' dies='1' cores='{{ excel_vm_vcpus }}' threads='1'/>
+  </cpu>
+  <clock offset='localtime'>
+    <timer name='rtc' tickpolicy='catchup'/>
+    <timer name='pit' tickpolicy='delay'/>
+    <timer name='hpet' present='no'/>
+    <timer name='hypervclock' present='yes'/>
+  </clock>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>destroy</on_crash>
+  <pm>
+    <suspend-to-mem enabled='no'/>
+    <suspend-to-disk enabled='no'/>
+  </pm>
+  <devices>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2' cache='none' io='native' discard='unmap'/>
+      <source file='{{ excel_vm_disk_path }}'/>
+      <target dev='vda' bus='virtio'/>
+      <boot order='1'/>
+    </disk>
+    <disk type='file' device='cdrom'>
+      <driver name='qemu' type='raw'/>
+      <source file='{{ excel_vm_windows_iso_path }}'/>
+      <target dev='sda' bus='sata'/>
+      <readonly/>
+      <boot order='2'/>
+    </disk>
+    <disk type='file' device='cdrom'>
+      <driver name='qemu' type='raw'/>
+      <source file='{{ excel_vm_iso_dir }}/{{ excel_vm_virtio_iso.filename }}'/>
+      <target dev='sdb' bus='sata'/>
+      <readonly/>
+    </disk>
+    <disk type='file' device='cdrom'>
+      <driver name='qemu' type='raw'/>
+      <source file='{{ excel_vm_unattend_iso }}'/>
+      <target dev='sdc' bus='sata'/>
+      <readonly/>
+    </disk>
+    <controller type='usb' model='qemu-xhci' ports='15'/>
+    <controller type='sata' index='0'/>
+    <interface type='direct'>
+      <mac address='{{ excel_vm_mac }}'/>
+      <source dev='{{ excel_vm_network_parent }}' mode='bridge'/>
+      <model type='virtio'/>
+    </interface>
+    <channel type='unix'>
+      <target type='virtio' name='org.qemu.guest_agent.0'/>
+    </channel>
+    <input type='tablet' bus='usb'/>
+    <input type='keyboard' bus='ps2'/>
+    <tpm model='tpm-crb'>
+      <backend type='emulator' version='2.0'/>
+    </tpm>
+    <!-- Console only on host loopback: ssh -L 5900:127.0.0.1:5900 root@router -->
+    <graphics type='vnc' port='-1' autoport='yes' listen='127.0.0.1'>
+      <listen type='address' address='127.0.0.1'/>
+    </graphics>
+    <video>
+      <model type='vga' vram='16384' heads='1' primary='yes'/>
+    </video>
+    <memballoon model='virtio'/>
+    <rng model='virtio'>
+      <backend model='random'>/dev/urandom</backend>
+    </rng>
+  </devices>
+</domain>

@@ -1,0 +1,145 @@
+---
+# =============================================================================
+# excel-vm — Windows 11 Pro x64 test VM for Excel/VBA work
+# =============================================================================
+# SAFETY CONTRACT (this role runs on every router deploy):
+#   * It NEVER redefines, undefines, stops, restarts or reinstalls an existing
+#     domain, and NEVER touches an existing disk image.
+#   * Creating the VM is opt-in: it only happens when `excel_vm_install` is
+#     true AND no domain named `excel_vm_name` exists AND no disk exists at
+#     `excel_vm_disk_path`. Normal deploys leave it false.
+#   * It does not touch host networking (macvtap on an existing VLAN device).
+# See README.md in this role for the one-time build procedure.
+# =============================================================================
+
+excel_vm_install: false
+excel_vm_cleanup_install_media: false
+
+excel_vm_name: excel-vm
+excel_vm_hostname: EXCEL-VM
+
+# Resource caps: this host is also the house router running ~60 containers.
+excel_vm_vcpus: 6
+excel_vm_memory_mib: 12288
+excel_vm_max_vcpus: 6
+excel_vm_max_memory_mib: 12288
+excel_vm_disk_size: 100G
+
+# Storage: /persistent_data (ext4 on LUKS SSD). NOT mpool.
+# /persistent_data/vms is outside every restic folder AND explicitly excluded
+# in restic_global_excludes (ansible/roles/restic/defaults/main.yml).
+excel_vm_root: /persistent_data/vms
+excel_vm_iso_dir: "{{ excel_vm_root }}/iso"
+excel_vm_dir: "{{ excel_vm_root }}/{{ excel_vm_name }}"
+excel_vm_disk_path: "{{ excel_vm_dir }}/{{ excel_vm_name }}.qcow2"
+excel_vm_nvram_path: "{{ excel_vm_dir }}/{{ excel_vm_name }}_VARS.fd"
+excel_vm_domain_xml_path: "{{ excel_vm_dir }}/{{ excel_vm_name }}.xml"
+# Holds the rendered autounattend.xml (contains the admin password) and the
+# installers. Delete it (and eject the CDs) once the guest has finished setup.
+excel_vm_install_dir: "{{ excel_vm_dir }}/install"
+excel_vm_unattend_iso: "{{ excel_vm_install_dir }}/{{ excel_vm_name }}-unattend.iso"
+
+excel_vm_ovmf_code: /usr/share/OVMF/OVMF_CODE_4M.secboot.fd
+excel_vm_ovmf_vars_template: /usr/share/OVMF/OVMF_VARS_4M.ms.fd
+
+# Network: macvtap (bridge mode) on the internal/LAN VLAN. The static address
+# MUST stay inside 10.3.0.0/18: the host routes that block via vlan3-shim
+# (a macvlan sibling of the macvtap), so routed traffic (internet, mgmt VLAN,
+# tailscale) can reach the guest. Addresses in the DHCP pool (10.3.64.0+) are
+# routed out bond0.3 and would never reach a guest that lives on this host.
+# 10.3.48.0/24 is above docker's first-free IPAM allocations (10.3.0.x) and the
+# static container block (10.3.32.x).
+excel_vm_network_parent: bond0.3
+excel_vm_mac: "52:54:00:3a:48:0a"
+excel_vm_address: 10.3.48.10
+excel_vm_prefix: 16
+excel_vm_gateway: 10.3.0.1
+excel_vm_dns_servers:
+  - 10.3.32.2
+  - 1.1.1.1
+excel_vm_dns_domain: lab.nkontur.com
+excel_vm_timezone: Eastern Standard Time
+
+# Local administrator. Password comes from Vault homelab/data/excel-vm
+# (field admin_password) via fetch-vault-secrets, or EXCEL_VM_ADMIN_PASSWORD.
+# Only needed when building the VM.
+excel_vm_admin_user: noah
+excel_vm_admin_password: "{{ (vault_excel_vm_admin_password | default(lookup('env', 'EXCEL_VM_ADMIN_PASSWORD'), true)) | trim }}"
+
+# -----------------------------------------------------------------------------
+# Pinned media
+# -----------------------------------------------------------------------------
+# Windows 11 Pro is on Microsoft's multi-edition consumer ISO. Microsoft's
+# download API refuses non-interactive requests ("Sentinel marked this request
+# as rejected"), so this file is placed by hand — see README.md.
+# SHA256 is from Microsoft's "Verify your download" table on
+# https://www.microsoft.com/en-us/software-download/windows11 (English 64-bit,
+# Windows 11 2026 Update, Version 26H2, build 26300.9457).
+excel_vm_windows_iso:
+  filename: Win11_26H2_English_x64.iso
+  sha256: bd4307df32bc8af33b39cceccb1174aeb345386630f89a2b86c7a4e36b55ea650
+  image_name: Windows 11 Pro
+  # Microsoft's generic (non-activating) Windows 11 Pro installation key: it
+  # only selects the edition. Activate with a real license afterwards.
+  product_key: VK7JG-NPHTM-C97JM-9MPGT-3V66T
+excel_vm_windows_iso_path: "{{ excel_vm_iso_dir }}/{{ excel_vm_windows_iso.filename }}"
+
+# Fedora virtio-win. Fedora publishes no checksum for the ISO itself; this is
+# the SHA256 of the file fetched over HTTPS on 2026-10-18.
+excel_vm_virtio_iso:
+  filename: virtio-win-0.1.302.iso
+  url: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.302-1/virtio-win-0.1.302.iso
+  sha256: 303f7ae40dad495d6ae474fdc571df58958a4dbc5c37a522d80f9a203867949d
+
+# Guest software, staged on the unattend ISO and verified by checksum.
+# Hashes verified against the publisher's own checksum where one exists
+# (python.org API, nodejs.org SHASUMS256.txt, git-for-windows release notes).
+excel_vm_installers:
+  - name: python
+    filename: python-3.13.16-amd64.exe
+    url: https://www.python.org/ftp/python/3.13.16/python-3.13.16-amd64.exe
+    sha256: fb4f9f5d438b2396da0086dc70b935c530cb578e37adc6d354f7ad2037fee83b
+  - name: node
+    filename: node-v24.22.0-x64.msi
+    url: https://nodejs.org/dist/v24.22.0/node-v24.22.0-x64.msi
+    sha256: 97ebad47ad35da4b59182a5fbe9fad2b1a1836f1042b4833ff5b4b9571175088
+  - name: git
+    filename: Git-2.56.0.2-64-bit.exe
+    url: https://github.com/git-for-windows/git/releases/download/v2.56.0.windows.2/Git-2.56.0.2-64-bit.exe
+    sha256: 52188f917b378f00c70ec136bcf090005f30d44fbc4eba0bce759cc6592d60f6
+  - name: openssh
+    # Microsoft's Win32-OpenSSH release (same code as the inbox capability;
+    # the project tags every release "-Preview"). Used instead of
+    # Add-WindowsCapability, which was still downloading/installing from
+    # Windows Update after 20 min on a fresh install. SHA256 = GitHub release
+    # digest.
+    filename: OpenSSH-Win64-v10.0.0.0.msi
+    url: https://github.com/PowerShell/Win32-OpenSSH/releases/download/10.0.0.0p2-Preview/OpenSSH-Win64-v10.0.0.0.msi
+    sha256: ddec9c53864280759cf9f74791cefd387100e3946aa849a1c138a4ed1b96b7d9
+  - name: odt
+    # Office Deployment Tool (https://www.microsoft.com/en-us/download/details.aspx?id=49117).
+    # No published checksum; SHA256 of the file fetched over HTTPS on 2026-10-18.
+    filename: officedeploymenttool_20326-20112.exe
+    url: https://download.microsoft.com/download/6c1eeb25-cf8b-41d9-8d0d-cc1dbc032140/officedeploymenttool_20326-20112.exe
+    sha256: fbb64358fd4168acd52ee4efe47ffd032b6231dfb415ae2dce61b0e58ba67f86
+
+excel_vm_pip_packages:
+  - xlwings==0.37.6
+  - oletools==0.60.2
+excel_vm_npm_packages:
+  - "@anthropic-ai/claude-code@2.1.303"
+
+# Microsoft 365 Apps, 64-bit, Excel only, Current Channel.
+excel_vm_office_product_id: O365ProPlusRetail
+excel_vm_office_channel: Current
+excel_vm_office_exclude_apps:
+  - Access
+  - Groove
+  - Lync
+  - OneDrive
+  - OneNote
+  - Outlook
+  - PowerPoint
+  - Publisher
+  - Teams
+  - Word

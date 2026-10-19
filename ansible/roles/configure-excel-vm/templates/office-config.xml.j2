@@ -1,0 +1,15 @@
+<!-- {{ ansible_managed }}
+     Office Deployment Tool config: Microsoft 365 Apps, 64-bit, Excel only. -->
+<Configuration>
+  <Add OfficeClientEdition="64" Channel="{{ excel_vm_office_channel }}">
+    <Product ID="{{ excel_vm_office_product_id }}">
+      <Language ID="en-us" />
+{% for app in excel_vm_office_exclude_apps %}
+      <ExcludeApp ID="{{ app }}" />
+{% endfor %}
+    </Product>
+  </Add>
+  <Updates Enabled="TRUE" Channel="{{ excel_vm_office_channel }}" />
+  <Display Level="None" AcceptEULA="TRUE" />
+  <Property Name="FORCEAPPSHUTDOWN" Value="TRUE" />
+</Configuration>

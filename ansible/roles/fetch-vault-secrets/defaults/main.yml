@@ -33,6 +33,11 @@ vault_secret_paths:
     fields:
       vault_openai_api_key: "api_key"
 
+  # excel-vm local admin (ansible/roles/configure-excel-vm; build time only)
+  - path: "excel-vm"
+    fields:
+      vault_excel_vm_admin_password: "admin_password"
+
   # JIT Approval Service secrets
   - path: "docker/jit-approval-svc"
     fields:

@@ -1,0 +1,28 @@
+---
+# Eject the Windows and unattend CDs (virtio-win stays for drivers) and delete
+# the rendered unattend media, which contains the admin password.
+
+- name: Read attached block devices
+  ansible.builtin.command:
+    cmd: virsh -c qemu:///system domblklist {{ excel_vm_name }} --details
+  register: _excel_vm_blk
+  changed_when: false
+  check_mode: false
+
+- name: Eject install CDs
+  ansible.builtin.command:
+    cmd: >-
+      virsh -c qemu:///system change-media {{ excel_vm_name }} {{ item.target }}
+      --eject --config {{ '--live' if _excel_vm_domstate.stdout | trim == 'running' else '' }}
+  loop:
+    - { target: sda, source: "{{ excel_vm_windows_iso_path }}" }
+    - { target: sdc, source: "{{ excel_vm_unattend_iso }}" }
+  loop_control:
+    label: "{{ item.target }}"
+  when: _excel_vm_blk.stdout is search(item.target ~ '\s+' ~ (item.source | regex_escape))
+  changed_when: true
+
+- name: Delete unattend media
+  ansible.builtin.file:
+    path: "{{ excel_vm_install_dir }}"
+    state: absent
