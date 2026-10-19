@@ -51,6 +51,22 @@ scrape_configs:
       - source_labels: ['__journal_priority_keyword']
         target_label: 'level'
     pipeline_stages:
+      # The i801 SMBus driver logs "SMBus is busy, can't use it!" once for every
+      # address libsensors probes, and the BMC holds that bus so every probe
+      # fails. Measured 2026-09-14: 126 lines every 10s, dead constant, for the
+      # entire 30d retention window -- 1,088,640 lines/day, 42.7% of all Loki
+      # ingest, from a single unchanging string. Telegraf's poll interval is
+      # dropping to 60s in this same change, which cuts it 6x; this drops the
+      # remainder, because a line that has said the same thing 32 million times
+      # is a constant, not a signal. Scoped to the exact string, so a genuinely
+      # different SMBus error still reaches Loki, and drop_counter_reason keeps
+      # the discarded volume visible in promtail's metrics.
+      - match:
+          selector: '{syslog_identifier="kernel"}'
+          stages:
+            - drop:
+                expression: "SMBus is busy, can't use it!"
+                drop_counter_reason: i801_smbus_busy
       # Redact credentials that upstream services embed in request URLs.
       # Telegraf logs the full URL when an HTTP input errors (Tautulli requires
       # its API key as a query parameter, so it cannot move to a header) and
@@ -103,6 +119,67 @@ scrape_configs:
             - drop:
                 expression: '^\s*$'
                 drop_counter_reason: gitlab_blank_line
+      # Loki indexes its own housekeeping chatter. The compactor logs a
+      # "compacting table"/"finished compacting table" pair and a "listed files"
+      # line for every index table on every compaction cycle, and index_set.go
+      # logs an upload/finished-upload/cleanup triple on every shipper flush.
+      # Measured 2026-09-20 over a 24h window: 160,114 lines from
+      # tables_manager.go + index_set.go, 32,807 "listed files", 5,760
+      # recalculate-owned-streams -- 198,681 lines/day, which is 94.6% of
+      # everything the loki container emits and 7.9% of total Loki ingest
+      # (2,520,059 lines/day). None of it is actionable; it restates that
+      # periodic maintenance ran on schedule.
+      #
+      # Every drop below is anchored on `level=info`, so any warn/error from the
+      # same callers still ships. Over that same 24h window those three callers
+      # emitted zero non-info lines, so today this drops only the success path --
+      # the day one of them starts failing, the failure is what survives.
+      - match:
+          selector: '{container="loki"}'
+          stages:
+            - drop:
+                expression: 'level=info .*caller=(index_set|tables_manager)\.go:'
+                drop_counter_reason: loki_compaction_chatter
+            - drop:
+                expression: 'level=info .*caller=table\.go:.*msg="listed files"'
+                drop_counter_reason: loki_listed_files
+            - drop:
+                expression: 'level=info .*recalculate owned streams'
+                drop_counter_reason: loki_owned_streams
+      # Tempo 3.0 starts the backend scheduler/worker even when it runs as a
+      # single binary against local storage, where there is never any distributed
+      # compaction work to hand out. The worker polls the scheduler, gets an empty
+      # result, and logs it at level=error; the server side logs a matching gRPC
+      # warn. Both carry "no jobs found". Measured 2026-09-19: 4,108 lines/24h,
+      # which is 100% of the lines this container emits matching
+      # /error|fatal|panic|exception/ -- so an error-rate signal on tempo is
+      # entirely false positives until these are dropped. (Volume itself is not
+      # the problem: 4.1k/24h is 0.3% of docker ingest. Signal quality is.)
+      # Scoped to the exact empty-result string so genuine scheduler failures,
+      # which carry a different err=, still reach Loki.
+      - match:
+          selector: '{container="tempo"}'
+          stages:
+            - drop:
+                expression: 'no jobs found'
+                drop_counter_reason: tempo_scheduler_no_jobs
+            # GitLab omnibus ships Sidekiq and Rails at DEBUG by default, which
+            # is job-scheduling chatter -- meta.caller_id lines for
+            # Ci::UnlockPipelinesInQueueWorker, PackageMetadata::* sync workers,
+            # MergeRequestCleanupRefsWorker and friends, emitted whether or not
+            # anything is wrong. Measured 2026-09-13 over 24h: 150,302 of
+            # GitLab's 567,516 lines were severity DEBUG (26.5%), and GitLab is
+            # already the largest single producer in Loki by a wide margin. None
+            # of it has been used to diagnose anything; it just shortens the
+            # window that the logs we do read survive in.
+            #
+            # This drops DEBUG only. INFO, WARN, ERROR and FATAL are untouched,
+            # so every line that reports a problem still lands. If GitLab
+            # internals ever need tracing, raise the verbosity at the source
+            # rather than paying for it continuously here.
+            - drop:
+                expression: '"severity":"DEBUG"'
+                drop_counter_reason: gitlab_debug_severity
       # Redact credentials that upstream services embed in request URLs.
       # Telegraf logs the full URL when an HTTP input errors (Tautulli requires
       # its API key as a query parameter, so it cannot move to a header) and

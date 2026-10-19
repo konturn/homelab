@@ -21,6 +21,5 @@ dev18 UUID=ce52e619-be52-443a-88b3-c10478633967 /etc/password_file.txt luks
 dev19 UUID=26e02b46-c04c-4c4c-8cec-c39cf0aa0dee /etc/password_file.txt luks
 dev20 UUID=8f89d266-da67-4fca-b3da-f3476616d505 /etc/password_file.txt luks
 dev21 UUID=811a5d3a-d420-43a3-9e53-c7f6ae2abcd3 /etc/password_file.txt luks
-dev22 UUID=3305d956-eb4d-46a0-9162-bca7453c1882 /etc/password_file.txt luks
 dev23 UUID=b88a723b-0cf5-445f-ae96-607e08774819 /etc/password_file.txt luks
 dev24 UUID=48c4588e-0122-42ab-8e38-7156c89cd14a /etc/password_file.txt luks

@@ -67,10 +67,30 @@ graph TB
 
 **Promtail** scrapes Docker container logs via the Docker logging driver and ships them to **Loki**.
 
-- Config: `docker/promtail/promtail-config.yaml`
+- Config: `docker/promtail/config.yml` (router), `docker/promtail/satellite-config.yml` (satellites)
 - All containers use the default `json-file` log driver (Promtail reads from `/var/lib/docker/containers`)
 - Loki config: `docker/loki/local-config.yaml`
 - Query via Grafana Explore with LogQL
+
+#### Dropped lines
+
+Some containers emit high-volume lines that carry no information. Promtail drops
+them in the `docker` job's `pipeline_stages` before they reach Loki. Each rule
+sets a `drop_counter_reason`, so what was discarded is still countable via
+promtail's `promtail_dropped_lines_total` metric.
+
+| Reason | Container | What it drops | Measured volume |
+|--------|-----------|---------------|-----------------|
+| `gitlab_tail_banner`      | gitlab | `==> /var/log/gitlab/<file> <==` banners from omnibus `tail -F` | 11.5k/hr (2026-09-11) |
+| `gitlab_blank_line`       | gitlab | blank lines from the same `tail -F` | 11.4k/hr (2026-09-11) |
+| `loki_compaction_chatter` | loki   | `index_set.go` / `tables_manager.go` info lines | 160k/day (2026-09-20) |
+| `loki_listed_files`       | loki   | `table.go` `msg="listed files"` info lines | 33k/day (2026-09-20) |
+| `loki_owned_streams`      | loki   | `recalculate owned streams` info lines | 5.8k/day (2026-09-20) |
+
+The `loki_*` rules are anchored on `level=info`, so a warn or error from the same
+caller still ships. Before adding a rule here, measure the line's share of total
+ingest rather than guessing: `sum(count_over_time({job=~".+"}[24h]))` is the
+denominator.
 
 ### Metrics: Telegraf → InfluxDB
 
@@ -117,7 +137,7 @@ Grafana evaluates alert rules against all three backends and routes notification
 | Tempo           | `docker/tempo/tempo.yaml`                      | 3200, 4317, 4318 |
 | InfluxDB        | Env vars in `docker-compose.yml`               | 8086             |
 | Telegraf        | `docker/telegraf/telegraf.conf`                 | —                |
-| Promtail        | `docker/promtail/promtail-config.yaml`         | —                |
+| Promtail        | `docker/promtail/config.yml`                   | —                |
 | otel-collector  | `docker/otel-collector/config.yaml`            | 4317, 4318       |
 
 ## Adding Instrumentation

@@ -95,22 +95,80 @@ groups:
         labels:
           severity: critical
 
+      # docker_container_status.oomkilled is Docker's State.OOMKilled flag. It is
+      # STATE, not an event: Docker sets it when the cgroup OOM fires and clears
+      # it only when the container is *recreated*. Alerting on its value
+      # therefore reports "this container has been OOM-killed at some point in
+      # its current life", which is not the same question as "a container was
+      # just OOM-killed".
+      #
+      # That distinction is the live defect this rule replaces, and it has two
+      # halves. Both were measured against Grafana's own state history
+      # (/api/v1/rules/history?ruleUID=container-oom-kill) on 2026-10-09, which
+      # is the only instrument that answers "did this rule fire?" -- re-running
+      # the query by hand answers a different question.
+      #
+      # 1. The previous revision of this MR claimed the last()-before-filter
+      #    ordering meant the rule never fired, citing four missed chromium
+      #    episodes. THAT WAS WRONG. The history shows container-oom-kill went
+      #    Normal -> Pending -> Alerting for container_name=chromium-browser on
+      #    09-24 06:20, 09-26 06:15, 09-28 06:20, 09-29 06:13 and 09-30 06:14,
+      #    resolving at 08:01 each time. The transitions are at 06:07-06:15 and
+      #    the flag clears at 08:00:02, so last() saw true for ~105 minutes per
+      #    episode. The "0 rows" measurement behind that claim was taken over
+      #    07:56-08:01Z -- the one 5-minute window straddling the clear, i.e.
+      #    exactly when the rule was correctly resolving. The MR was opened at
+      #    08:11, ten minutes after that morning's alert went back to Normal.
+      #    Detection was never the problem here; acting on it was (!719 is the
+      #    chromium fix and is still unmerged).
+      #
+      # 2. The real defect is that a value-based rule cannot resolve. A
+      #    container whose MAIN process survives the cgroup OOM never gets
+      #    recreated, so the flag stays true for the container's lifetime.
+      #    nextcloud OOMed once at 2026-10-08T05:16:11Z (six PHP workers killed,
+      #    #145); at the time of writing it has restart_count=0 and 35 days of
+      #    uptime, oomkilled has read true for 27 hours straight (2,160 samples
+      #    per 6h, unbroken), and this alert has been Alerting since 05:22 on
+      #    10-08 with no path back to Normal short of recreating the container.
+      #    A permanently-firing critical is the #143 latch pathology, and
+      #    filtering before max() over a 15m window does not fix it -- the
+      #    source data is true in every window from now on.
+      #
+      # So: alert on the TRANSITION. difference() over the window yields +1 only
+      # where the flag went false -> true inside it, which is the OOM event
+      # itself. Verified both directions on 2026-10-09: a window containing
+      # 05:16:11 returns nextcloud=1, and a -15m window 27h later returns zero
+      # rows, so the alert clears on its own. It still catches the restarting
+      # case -- the same query over 09-24 and 09-26 returns chromium-browser=1.
+      # Recreation produces a -1, which nonNegative drops, so a container coming
+      # back does not alert.
+      #
+      # for: 0s rather than 5m. An edge cannot flap, so there is nothing to
+      # dampen, and dampening would eat half of the window the alert is visible
+      # in. The rule fires at the first evaluation after the OOM and self-clears
+      # once the transition ages out of the 15m range -- the same event-in-a-
+      # window shape restic-backup-incomplete below already uses.
       - uid: container-oom-kill
         title: Container OOM Kill
         condition: C
         data:
           - refId: A
-            relativeTimeRange: {from: 300, to: 0}
+            relativeTimeRange: {from: 900, to: 0}
             datasourceUid: influxdb
             model:
               query: |
                 from(bucket: "metrics")
-                  |> range(start: -5m)
+                  |> range(start: -15m)
                   |> filter(fn: (r) => r._measurement == "docker_container_status")
                   |> filter(fn: (r) => r._field == "oomkilled")
-                  |> last()
-                  |> filter(fn: (r) => r._value == true)
-                  |> map(fn: (r) => ({r with _value: 1}))
+                  |> map(fn: (r) => ({r with _value: if r._value then 1 else 0}))
+                  |> group(columns: ["container_name"])
+                  |> sort(columns: ["_time"])
+                  |> difference(nonNegative: true)
+                  |> group(columns: ["container_name"])
+                  |> max()
+                  |> filter(fn: (r) => r._value > 0)
+                  |> map(fn: (r) => ({r with _time: now()}))
                   |> keep(columns: ["_time", "_value", "container_name"])
               refId: A
           - refId: B
@@ -123,11 +181,147 @@ groups:
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
         noDataState: OK
         execErrState: Error
-        for: 5m
+        for: 0s
         annotations:
-          summary: "Container killed by OOM"
+          summary: "Container {{ $labels.container_name }} killed by OOM"
+          description: "The cgroup OOM killer fired inside this container within the last 15 minutes. Note the container may still be running: Docker sets State.OOMKilled when any process in the cgroup is killed, so check whether the main process survived (docker inspect -f '{{ .RestartCount }} {{ .State.StartedAt }}' {{ $labels.container_name }}) before assuming a restart. Kernel detail, including which process and its anon-rss: journalctl -k | grep -A3 'Memory cgroup out of memory'."
         labels:
           severity: critical
+
+      # The rule above reads a per-container metric, which means it cannot see
+      # the one OOM kill that matters most: InfluxDB's own. telegraf writes
+      # docker_container_status *into* InfluxDB, so when InfluxDB is the process
+      # the kernel kills, the sample recording that fact has nowhere to go. Any
+      # container whose death takes the metrics pipeline down with it is
+      # structurally invisible to container-oom-kill.
+      #
+      # Measured 2026-09-30, and this is the whole argument for keeping both
+      # rules: over 30 days InfluxDB has *zero* oomkilled=true samples, while
+      # its own uptime_ns shows it restarting with <30 s of uptime on 09-02,
+      # 09-05 and 09-13. Same window, chromium-browser has 3,268 true samples
+      # and nextcloud 13,635. The metric is not broken -- it simply cannot
+      # report the collector's own death.
+      #
+      # The kernel's memcg line survives that, because it goes to the journal
+      # and promtail ships it to Loki, a different store on a different path.
+      # Verified present: 7 "Memory cgroup out of memory" lines in the last 7
+      # days, each naming the killed process and its anon-rss.
+      #
+      # This rule is the journal half of !712, kept alongside the metric half
+      # rather than replacing it. !712 proposed swapping container-oom-kill over
+      # to this query outright, on the evidence of the InfluxDB kill above. That
+      # evidence is real but does not generalise: swapping would trade away the
+      # container_name label (the journal line carries a *process* name, so
+      # "chromium" rather than "chromium-browser") and would inherit Loki's
+      # delivery gaps -- per !698 the satellite hosts currently ship zero logs,
+      # while they do still report telegraf metrics. Two cheap rules, two
+      # independent failure paths.
+      - uid: kernel-oom-kill
+        title: Kernel OOM Kill (catches the collector's own death)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({job="systemd-journal"} |= "Memory cgroup out of memory" [15m]))'
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: replaceNN, replaceWithValue: 0}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        # for: 0s, unlike container-oom-kill's 5m. A journal line is a single
+        # instant, not a state that persists to be re-sampled; requiring it to
+        # hold for five minutes is the mistake that made the original metric
+        # rule unfireable.
+        for: 0s
+        annotations:
+          summary: "A container was killed by the kernel OOM killer"
+          description: "If Container OOM Kill did not also fire, the victim was probably the metrics collector itself. Which process and how much it held: journalctl -k --since '15 minutes ago' | grep 'Memory cgroup out of memory'. Then raise that container's deploy.resources.limits.memory in docker/docker-compose.yml."
+        labels:
+          severity: critical
+
+      # Container OOM Kill above only fires *after* the kernel has already killed
+      # the container. For anything that other services depend on, that is too
+      # late: influxdb dying takes every alert in this file down with it, because
+      # they all query it.
+      #
+      # This rule is the early warning. It measures *anon* memory
+      # (active_anon + inactive_anon), not docker's `usage`, because only anon
+      # pages are unreclaimable. `usage` includes page cache, which the kernel
+      # drops on pressure -- deluge sits at ~99% of its 12G `usage` limit
+      # permanently and is nowhere near an OOM, so a usage_percent rule would be
+      # pure noise. active+inactive anon is what the OOM killer actually weighs.
+      #
+      # `max` over a 10m window rather than `last`: the spikes this is meant to
+      # catch are short. Every influxdb spike over the last 30d lasted between
+      # 20 seconds and 4 minutes, so a `last`-based rule sampling every minute
+      # would miss most of them entirely. Taking the window max also means a
+      # 20-second spike stays visible for a full 10m, which is what lets
+      # `for: 5m` latch on it instead of flapping.
+      #
+      # limit == 0 means telegraf could not read the cgroup (satellite/zwave
+      # hosts report this for some containers); those are dropped rather than
+      # divided by zero. GitLab runner containers are excluded -- they are
+      # ephemeral and inherit the host limit, so they always read ~0%.
+      - uid: container-memory-near-limit
+        title: Container Memory Near Limit (85%+)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                base = from(bucket: "metrics")
+                  |> range(start: -10m)
+                  |> filter(fn: (r) => r._measurement == "docker_container_mem")
+                  |> filter(fn: (r) => not r.container_name =~ /^runner-/)
+
+                anon = base
+                  |> filter(fn: (r) => r._field == "active_anon" or r._field == "inactive_anon")
+                  |> group(columns: ["container_name", "_field"])
+                  |> max()
+                  |> group(columns: ["container_name"])
+                  |> sum()
+
+                lim = base
+                  |> filter(fn: (r) => r._field == "limit")
+                  |> group(columns: ["container_name"])
+                  |> max()
+                  |> group(columns: ["container_name"])
+                  |> sum()
+
+                join(tables: {a: anon, l: lim}, on: ["container_name"])
+                  |> filter(fn: (r) => r._value_l > 0)
+                  |> map(fn: (r) => ({
+                      _time: now(),
+                      container_name: r.container_name,
+                      _value: float(v: r._value_a) * 100.0 / float(v: r._value_l)}))
+                  |> keep(columns: ["_time", "_value", "container_name"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [85]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "Container {{ $labels.container_name }} anon memory above 85% of its limit"
+          description: "Unreclaimable (anon) memory is within 15% of the container's hard limit; the next allocation spike may trigger an OOM kill. Check the configured limit in docker/docker-compose.yml against actual use: sudo docker stats --no-stream {{ $labels.container_name }}. Either raise deploy.resources.limits.memory or find what is driving the allocation."
+        labels:
+          severity: warning
 
       - uid: critical-service-down
         title: Critical Service Down
@@ -167,6 +361,65 @@ groups:
     folder: General Alerting
     interval: 1m
     rules:
+      # A host that stops reporting is invisible to every other rule in this
+      # file. high-memory-usage, high-cpu-temps, disk-space-*, smart-* and
+      # critical-service-down all read the *last* sample for a host or
+      # container; when the host dies there is no last sample, the series
+      # simply stops existing, and each of those rules resolves to Normal.
+      # The only trace left was a warning-severity "IoT Device Unreachable"
+      # ping alert, which cannot tell a flat camera battery apart from an
+      # Ansible-managed Docker host going away.
+      #
+      # This rule measures staleness directly: minutes since each host last
+      # wrote mem.used_percent. Telegraf writes every 10s, so 20 minutes is
+      # 120 consecutive missed samples — generous enough not to flap on a
+      # reboot or a brief network blip.
+      #
+      # The 7d lookback is deliberate. A 5m or 24h window would only contain
+      # hosts that are *currently* healthy, so a host already dead when the
+      # rule is installed would never appear in the query at all and would
+      # never fire. 7d means a host stays flagged for a week after it dies,
+      # which is the behaviour you want for a machine you have not fixed yet,
+      # and means a genuinely decommissioned host ages out on its own.
+      - uid: host-metrics-stale
+        title: Host Metrics Stale (host not reporting)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 604800, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -7d)
+                  |> filter(fn: (r) => r._measurement == "mem")
+                  |> filter(fn: (r) => r._field == "used_percent")
+                  |> group(columns: ["host"])
+                  |> last()
+                  |> map(fn: (r) => ({
+                      host: r.host,
+                      _time: now(),
+                      _value: float(v: int(v: now()) - int(v: r._time)) / 60000000000.0,
+                    }))
+                  |> keep(columns: ["_time", "_value", "host"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [20]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        annotations:
+          summary: "Host {{ $labels.host }} has not reported metrics in {{ $values.B }} minutes"
+          description: "Telegraf writes mem.used_percent every 10s. Check the host is powered on and reachable, then: systemctl status telegraf"
+        labels:
+          severity: critical
+
       - uid: high-memory-usage
         title: High Memory Usage (90%+)
         condition: C
@@ -251,6 +504,14 @@ groups:
                   |> filter(fn: (r) => r._field == "used_percent")
                   |> filter(fn: (r) => r.device !~ /^loop/)
                   |> filter(fn: (r) => r.path !~ /^\/snap/)
+                  // ZFS datasets are not independent filesystems -- every
+                  // dataset in a pool reports the SAME free space (the pool's),
+                  // while used_percent is computed against its own
+                  // used+available. So the percentage measures the dataset's
+                  // share of the pool, not how close anything is to being
+                  // full. Keeping only the pool root (device has no "/") gives
+                  // one honest number per pool and covers every dataset in it.
+                  |> filter(fn: (r) => not (r.fstype == "zfs" and r.device =~ /\//))
                   |> group(columns: ["device", "path", "host"])
                   |> mean()
                   |> map(fn: (r) => ({r with _time: now()}))
@@ -290,6 +551,14 @@ groups:
                   |> filter(fn: (r) => r._field == "used_percent")
                   |> filter(fn: (r) => r.device !~ /^loop/)
                   |> filter(fn: (r) => r.path !~ /^\/snap/)
+                  // ZFS datasets are not independent filesystems -- every
+                  // dataset in a pool reports the SAME free space (the pool's),
+                  // while used_percent is computed against its own
+                  // used+available. So the percentage measures the dataset's
+                  // share of the pool, not how close anything is to being
+                  // full. Keeping only the pool root (device has no "/") gives
+                  // one honest number per pool and covers every dataset in it.
+                  |> filter(fn: (r) => not (r.fstype == "zfs" and r.device =~ /\//))
                   |> group(columns: ["device", "path", "host"])
                   |> mean()
                   |> map(fn: (r) => ({r with _time: now()}))
@@ -438,6 +707,86 @@ groups:
         for: 30m
         annotations:
           summary: "smartctl is failing on one or more disks on {{ $labels.host }} — SMART failure prediction is blind for those drives (see issue #129)"
+        labels:
+          severity: warning
+
+      # -----------------------------------------------------------------
+      # Counts systemd unit FAILURE EVENTS from the journal instead of
+      # sampling unit state, because state is the wrong instrument class for
+      # this and we had the data to prove it. Measured 2026-10-05 over the
+      # full 29-day Loki retention window, four units failed on router:
+      #
+      #   snap.certbot.renew.service   2/day, every single day
+      #   logrotate.service            1/day, every single day
+      #   mullvad-failover.service     1 event in 7d
+      #   rpc-svcgssd.service          1 event in 7d
+      #
+      # inputs.systemd_units reported none of them, for two different reasons:
+      #
+      #  1. Coverage. telegraf.conf:378 is an allow-list
+      #     ("docker* ssh* telegraf* nginx* restic* mullvad-failover*"), so
+      #     certbot, logrotate and rpc-svcgssd are not collected at all. 11
+      #     units, one host.
+      #  2. Instrument class, and this is the half a wider pattern would not
+      #     fix. mullvad-failover.service IS in that pattern and still never
+      #     alerted. active_code + last() only reports a failure that is still
+      #     the unit's most recent outcome at sample time; a unit that fails
+      #     and is later re-run successfully reads inactive (2), not failed
+      #     (3). With for: 15m on the active_code rules, an intermittent
+      #     failure of a frequently-run unit cannot alert, ever.
+      #
+      # Which is why the only systemd instance that has ever fired is
+      # restic-notify-failure@restic-check.service.service -- it is LATCHED,
+      # the one case a state sampler can see. That single red instance has
+      # been reading as "systemd coverage works". It does not.
+      #
+      # This rule starts out firing on certbot and logrotate. That is the
+      # finding, not a defect: both have failed daily for at least 29 days
+      # with no notification. The always-red objection that shaped the restic
+      # rules (see "Restic Unit Failed" below) does not apply here, because
+      # failed_unit is a label -- a new unit failing is a NEW alert instance,
+      # distinguishable from the known-chronic ones rather than absorbed by
+      # them.
+      #
+      # Neither chronic failure logs a reason; systemd's wrapper lines are all
+      # the journal has ("Main process exited, code=exited, status=1/FAILURE").
+      # certbot -q is quiet by design and logrotate emits nothing. Diagnosis
+      # needs journalctl -u on the router. Note certbot here is a dead second
+      # renewal path -- real renewal is networking/ssl/renew.sh via root cron,
+      # and all 44 monitored certs are valid with 69+ days to expiry.
+      #
+      # Only router ships job="systemd-journal" today, so despite the host
+      # label this is single-host coverage until promtail's journal scrape is
+      # extended to the satellites.
+      - uid: systemd-unit-failed-event
+        title: Systemd Unit Failure
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: loki
+            model:
+              # The unit name is in the message body, not in a label: these
+              # lines come from PID 1, so the stream carries init.scope rather
+              # than the unit that failed. Hence the regexp extraction.
+              expr: 'sum by (failed_unit, host) (count_over_time({job="systemd-journal"} |= "Failed with result" | regexp "(?P<failed_unit>[^ ]+): Failed with result" [15m]))'
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: replaceNN, replaceWithValue: 0}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        # Event-counting, not state-sampling: a for: window would re-introduce
+        # exactly the blindness to transient failures this rule exists to fix.
+        for: 0s
+        annotations:
+          summary: "systemd unit {{ $labels.failed_unit }} failed on {{ $labels.host }}"
+          description: "The unit exited non-zero at least once in the last 15 minutes. Check: journalctl -u {{ $labels.failed_unit }} -n 50 --no-pager"
         labels:
           severity: warning
 
@@ -1165,3 +1514,76 @@ groups:
         labels:
           service: vault
           severity: critical
+  - orgId: 1
+    name: log-volume-alerts
+    folder: General Alerting
+    interval: 15m
+    rules:
+      # A single container can go from a handful of lines an hour to five figures
+      # without anything crashing, restarting or OOMing -- so none of the existing
+      # container rules see it. Every log flood in this lab so far was found by a
+      # human or agent eyeballing Loki volume long after the fact:
+      #
+      #   !716  SMBus probe flood        42.7% of all Loki ingest
+      #   !715  GitLab DEBUG lines       150k/day, 26.5% of GitLab volume
+      #   !722  Loki compaction chatter  7.9% of all Loki ingest
+      #   !721  Tempo scheduler noise
+      #
+      # This rule is the detector those four were missing.
+      #
+      # Why the expression looks the way it does -- each clause is load-bearing and
+      # was tuned against 48h of real log data, not guessed:
+      #
+      #   > 3000 (absolute floor)
+      #     Without it, a container idling at 2 lines/h that briefly reaches 40
+      #     trips a 20x ratio and pages for nothing. 3000/h is above every benign
+      #     burst measured in 48h -- nzbget's post-download cleanup chatter peaks
+      #     at 1339/h -- and well under the flood this was written for (15000/h).
+      #
+      #   ratio > 10 vs the SAME container 24h earlier
+      #     A single absolute threshold cannot work here. GitLab steadily writes
+      #     ~21000 lines/h while healthy, so any absolute limit that catches
+      #     radarr's 15000/h flood would page on GitLab continuously. Comparing a
+      #     container to its own recent past is what separates "loud" from
+      #     "newly loud". Offset 24h rather than a longer window so a flood that
+      #     has been running for days still reads as elevated for at least a day.
+      #
+      #   + 60 on the denominator
+      #     Guards against divide-by-near-zero. A container that logs 1 line/h
+      #     baseline would otherwise show a 15000x ratio from any activity at all.
+      #
+      # Verified against live Loki over the 48h to 2026-09-26T09:00Z: fires on
+      # radarr for exactly the 5 hours of the real flood (05:00-09:00Z) and on
+      # nothing else in that window. for: 1h additionally drops single-hour bursts.
+      - uid: container-log-flood
+        title: Container Log Flood (rate 10x its own 24h baseline)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 90000, to: 0}
+            datasourceUid: loki
+            model:
+              expr: '(sum by (container) (count_over_time({job="docker"}[1h])) > 3000) and (sum by (container) (count_over_time({job="docker"}[1h])) / (sum by (container) (count_over_time({job="docker"}[1h] offset 24h)) + 60) > 10)'
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B, settings: {mode: replaceNN, replaceWithValue: 0}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 1h
+        annotations:
+          summary: "{{ $labels.container }} log rate is 10x its own 24h baseline (>3000 lines/hour)"
+          description: >-
+            A container is flooding Loki. This is usually a stuck retry loop, not a
+            crash -- the container stays healthy and keeps failing the same operation.
+            Find the repeated line first, and read it before trusting what it says:
+            the 2026-09-26 radarr flood printed "make sure ffprobe is available" while
+            ffprobe was present and working fine.
+            Check: logcli query '{container="<name>"}' --limit=50 --since=15m
+        labels:
+          severity: warning
