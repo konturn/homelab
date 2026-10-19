@@ -109,6 +109,9 @@ Step 'node' {
 }
 
 Step 'npm-packages' {
+    # npm installs PowerShell shims (claude.ps1); the Windows client default
+    # policy (Restricted) refuses to run them.
+    Set-ExecutionPolicy RemoteSigned -Scope LocalMachine -Force
     Refresh-Path
     $env:Path += ";$env:APPDATA\npm"
     New-Item -ItemType Directory -Force -Path "$env:APPDATA\npm" | Out-Null
