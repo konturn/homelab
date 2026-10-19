@@ -276,6 +276,38 @@
       dest: "{{ docker_persistent_data_path }}/grafana/provisioning/alerting/infrastructure.yml"
   when: "'router' in inventory_hostname"
 
+# Vaultwarden's admin-panel settings (/data/config.json) take precedence over
+# env vars, so SIGNUPS_ALLOWED=false in global.override.env alone is not
+# enough once the panel has saved a config. Keep the key false there too.
+- name: Keep Vaultwarden sign-ups disabled in config.json
+  ansible.builtin.shell: |
+    f={{ docker_persistent_data_path }}/bitwarden/data/config.json
+    [ -f "$f" ] || exit 0
+    python3 - "$f" <<'EOF'
+    import json, os, sys
+    p = sys.argv[1]
+    d = json.load(open(p))
+    if d.get("signups_allowed") is False:
+        sys.exit(0)
+    d["signups_allowed"] = False
+    tmp = p + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(d, f, indent=2)
+    os.chmod(tmp, 0o700)
+    os.replace(tmp, p)
+    print("changed")
+    EOF
+  register: vaultwarden_signups
+  changed_when: "'changed' in vaultwarden_signups.stdout"
+  when: "'router' in inventory_hostname"
+
+- name: Restart Vaultwarden after config.json change
+  ansible.builtin.command:
+    cmd: docker restart -t 30 bitwarden
+  when:
+    - vaultwarden_signups is changed
+    - not ansible_check_mode
+
 - name: Restart containers if config change
   ansible.builtin.command:
     cmd: "docker restart -t 30 {{ item.item.name }}"
