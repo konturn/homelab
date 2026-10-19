@@ -16,6 +16,21 @@ $installers = Join-Path $media 'installers'
 $virtio = (Get-Volume | Where-Object { $_.FileSystemLabel -like 'virtio-win*' } | Select-Object -First 1).DriveLetter
 $status = [ordered]@{}
 
+# The host reads status.json through qemu-ga (guest-file-open), which holds
+# the file open without write sharing. Retry instead of letting that
+# IOException (terminating under ErrorActionPreference=Stop) end the run.
+function Save-Status {
+    for ($i = 1; $i -le 30; $i++) {
+        try {
+            $status | ConvertTo-Json | Set-Content -Encoding UTF8 "$state\status.json"
+            return
+        } catch {
+            Start-Sleep -Seconds 2
+        }
+    }
+    Write-Host "!!!! could not write status.json"
+}
+
 function Step([string]$name, [scriptblock]$body) {
     Write-Host "==== $name"
     try {
@@ -25,7 +40,7 @@ function Step([string]$name, [scriptblock]$body) {
         Write-Host "!!!! $name failed: $_"
         $status[$name] = "failed: $_"
     }
-    $status | ConvertTo-Json | Set-Content -Encoding UTF8 "$state\status.json"
+    Save-Status
 }
 
 function Run([string]$file, [string[]]$argList) {
@@ -146,7 +161,7 @@ Step 'scrub-unattend-secrets' {
     Remove-Item -Force -ErrorAction SilentlyContinue 'C:\Windows\Panther\unattend.xml', 'C:\Windows\Panther\Unattend\unattend.xml', 'C:\Windows\System32\Sysprep\unattend.xml'
 }
 
-$status | ConvertTo-Json | Set-Content -Encoding UTF8 "$state\status.json"
+Save-Status
 Get-Date -Format o | Set-Content "$state\DONE"
 Stop-Transcript | Out-Null
 shutdown.exe /r /t 30 /c "excel-vm provisioning finished"
