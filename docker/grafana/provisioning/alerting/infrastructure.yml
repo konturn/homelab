@@ -1447,14 +1447,24 @@ groups:
       # Verified against live Loki over the 48h to 2026-09-26T09:00Z: fires on
       # radarr for exactly the 5 hours of the real flood (05:00-09:00Z) and on
       # nothing else in that window. for: 1h additionally drops single-hour bursts.
+      #
+      # queryType: instant. The expression is a filter (`> 3000 and ... > 10`),
+      # so a range query only has points where the condition held, and the
+      # `last` reducer then returns the most recent point where it held -- not
+      # whether it holds now. With a 25h range, a flood that had already stopped
+      # kept the alert firing for up to a day (2026-10-19: nextcloud's flood
+      # ended 03:15Z and was still firing at 14:30Z). An instant query evaluates
+      # the expression at now only. The `offset 24h` baseline does not need a
+      # 25h query range; LogQL reads it independently of the range.
       - uid: container-log-flood
         title: Container Log Flood (rate 10x its own 24h baseline)
         condition: C
         data:
           - refId: A
-            relativeTimeRange: {from: 90000, to: 0}
+            relativeTimeRange: {from: 3600, to: 0}
             datasourceUid: loki
             model:
+              queryType: instant
               expr: '(sum by (container) (count_over_time({job="docker"}[1h])) > 3000) and (sum by (container) (count_over_time({job="docker"}[1h])) / (sum by (container) (count_over_time({job="docker"}[1h] offset 24h)) + 60) > 10)'
               refId: A
           - refId: B
