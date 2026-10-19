@@ -4,9 +4,12 @@
 # review. Anything not listed under `services` always needs a human.
 # This file is CODEOWNERS-protected.
 
-# MR authors whose image-update MRs may be auto-merged.
+# MR authors whose image-update MRs may be auto-merged. The merging identity
+# (AUTOMERGE_TOKEN's user) is never one of them: author != merger is enforced.
 authors:
   - moltbot
+  # Renovate (RENOVATE_TOKEN project bot, see docs/RENOVATE.md)
+  - project_4_bot_af78a2ea227eba9e10006515fbde375e
 
 target_branch: main
 

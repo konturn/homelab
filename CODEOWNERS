@@ -39,7 +39,10 @@
 # === DOCKER COMPOSE ===
 # Could mount host paths, add privileged containers, modify any service
 # This is the big one — compose controls everything
-/docker/docker-compose.yml               @root
+# The second owner is the auto-merge bot (AUTOMERGE_TOKEN project bot). Its
+# approval satisfies this rule only for MRs that pass ci/automerge/policy.py,
+# because the token is used solely by the automerge:sweep job on main.
+/docker/docker-compose.yml               @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
 /docker/docker-compose-*.yml             @root
 /docker/daemon.json                      @root
 
