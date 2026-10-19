@@ -1,5 +1,5 @@
 # Extend official OpenClaw image with additional tooling
-FROM ghcr.io/openclaw/openclaw:2026.7.1-2
+FROM ghcr.io/openclaw/openclaw:2026.7.1-2@sha256:8789721d2e9b24b780a1504b56deb4c6bd5c7dbf96a1dd117e7c45c2ed72c8ac
 
 USER root
 
@@ -83,14 +83,15 @@ RUN curl -fsSL https://github.com/aquasecurity/trivy/releases/download/v0.69.3/t
     && rm /tmp/trivy.deb
 
 # Install nikto (web server vulnerability scanner) - not in base image repos
-RUN git clone --depth 1 https://github.com/sullo/nikto.git /opt/nikto \
+RUN git clone https://github.com/sullo/nikto.git /opt/nikto \
+    && git -C /opt/nikto checkout -q 312645d873478a77986627ab1fc8cffe595e85d4 \
     && ln -s /opt/nikto/program/nikto.pl /usr/local/bin/nikto \
     && chmod +x /opt/nikto/program/nikto.pl
 
 # Install playwright globally first, then agent-browser
 # Uses system Chromium via PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
-RUN npm install -g playwright \
-    && npm install -g agent-browser \
+RUN npm install -g playwright@1.62.1 \
+    && npm install -g agent-browser@0.35.1 \
     && agent-browser install --skip-download
 
 # Install Claude CLI for the openclaw claude-cli backend (auth via CLAUDE_CODE_OAUTH_TOKEN env)
