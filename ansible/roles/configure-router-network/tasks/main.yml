@@ -258,7 +258,7 @@
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/networkd/' }}"
     dest: /etc/systemd/network
     rsync_opts:
-    - "--chmod=755"
+    - "--chmod=D755,F644"
   register: networkd
 
 - name: Make sure systemd-networkd is started and enabled
@@ -267,12 +267,23 @@
     state: started
     enabled: yes
 
-# `networkctl reload` re-reads .network/.netdev files and reconfigures only
-# the links whose config changed. A full restart reconfigured every link and
-# could drop foreign routing state (Tailscale's ip rules / table 52).
-- name: Reload systemd-networkd when the drop-in files change
+# Not applied automatically. On systemd 255 both `networkctl reload` and a
+# networkd restart reconfigure *every* link, including the WAN: its DHCP
+# lease is dropped and the ISP may hand out a new public IP. Apply networkd
+# changes by hand in a maintenance window:
+#   networkctl reload            # reconfigures all links (brief blip)
+# Setting networkd_apply=true for a run applies them automatically.
+- name: Apply systemd-networkd changes (opt-in)
   ansible.builtin.command: networkctl reload
-  when: networkd.changed
+  when: networkd.changed and (networkd_apply | default(false) | bool)
+
+- name: Warn about pending systemd-networkd changes
+  ansible.builtin.debug:
+    msg: >-
+      networkd files under /etc/systemd/network changed but were NOT applied.
+      Run `networkctl reload` on the router in a maintenance window (it
+      reconfigures every link, including the WAN).
+  when: networkd.changed and not (networkd_apply | default(false) | bool)
 
 # The systemd-networkd [Ethtool] EnergyEfficientEthernet=false directive in
 # 10-wan-usb-ethernet.link only applies at device-setup time; the r8152 USB
