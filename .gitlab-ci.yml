@@ -29,6 +29,10 @@
 #   netgear:test (MR + main, offline) -> netgear:apply (main, on changes)
 #   netgear:drift (scheduled on main, NETGEAR_TASK=drift)
 #
+#   ARUBA INSTANT APs (see networking/aruba-iap/README.md)
+#   aruba-iap:test (MR + main, offline) -> aruba-iap:apply (main, on changes)
+#   aruba-iap:apply-protected (main, manual), aruba-iap:drift (scheduled, IAP_TASK=drift)
+#
 #   AUTO-MERGE (see docs/AUTOMERGE.md)
 #   automerge:test + automerge:eligibility (MR, informational)
 #   automerge:sweep / automerge:report (scheduled on main, AUTOMERGE_TASK=sweep|report)
@@ -149,11 +153,11 @@ variables:
   interruptible: true
 
 # Auto-merge rule fragments (used via !reference).
-# Scheduled pipelines that set AUTOMERGE_TASK or NETGEAR_TASK run only their
-# own jobs (automerge:* / netgear:drift).
+# Scheduled pipelines that set AUTOMERGE_TASK, NETGEAR_TASK or IAP_TASK run
+# only their own jobs (automerge:* / netgear:drift / aruba-iap:drift).
 .automerge_task_skip:
   rules:
-    - if: $AUTOMERGE_TASK || $NETGEAR_TASK
+    - if: $AUTOMERGE_TASK || $NETGEAR_TASK || $IAP_TASK
       when: never
 
 # Commits merged by the auto-merge policy get router:deploy-service instead of
@@ -1021,6 +1025,121 @@ netgear:drift:
     expire_in: 30 days
   rules:
     - if: $CI_COMMIT_BRANCH == "main" && $NETGEAR_TASK == "drift" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+
+# =============================================================================
+# Aruba Instant AP cluster (networking/aruba-iap, see README.md there)
+# =============================================================================
+# MR pipelines run offline only: unit tests and a plan against the config
+# committed on the target branch. Jobs that read AP credentials from Vault or
+# write to the cluster run only on main (protected runner).
+
+aruba-iap:test:
+  extends: .interruptible
+  stage: validate
+  image: willhallonline/ansible:latest
+  needs: []
+  variables:
+    GIT_DEPTH: "50"
+  script:
+    - python3 -m unittest discover -s networking/aruba-iap -p 'test_*.py' -v
+    - |
+      git config --global --add safe.directory "$CI_PROJECT_DIR"
+      f=networking/aruba-iap/running-config.conf
+      current=$(mktemp)
+      base="${CI_MERGE_REQUEST_DIFF_BASE_SHA:-$CI_COMMIT_BEFORE_SHA}"
+      if [ -n "$base" ] && [ "$base" != "0000000000000000000000000000000000000000" ]; then
+        git fetch -q --depth=50 origin "$base" || true
+        git cat-file -e "$base^{commit}" || { echo "ERROR: baseline commit $base not available"; exit 1; }
+        git show "$base:$f" > "$current" 2>/dev/null || : > "$current"
+      fi
+      echo "Plan: $f at ${base:-none} -> this commit"
+      python3 networking/aruba-iap/iapctl.py plan --current "$current"
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - networking/aruba-iap/**/*
+        - .gitlab-ci.yml
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - networking/aruba-iap/**/*
+
+.aruba_iap_live:
+  image: willhallonline/ansible:latest
+  resource_group: aruba-iap
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: https://vault.lab.nkontur.com:8200
+  variables:
+    VAULT_ADDR: "https://vault.lab.nkontur.com:8200"
+    VAULT_SKIP_VERIFY: "true"
+    VAULT_JWT_ROLE: "ci-deploy"
+    PIP_CACHE_DIR: "/cache/pip"
+
+# Sends only the blocks that differ from the live cluster, commits them, then
+# re-exports and verifies. No differences: nothing is sent. Changes to the
+# management VLAN, uplink, mesh or controller address are refused here.
+aruba-iap:apply:
+  extends: .aruba_iap_live
+  stage: deploy
+  needs:
+    - job: aruba-iap:test
+  before_script:
+    - pip3 install -q --break-system-packages paramiko
+  script:
+    - python3 networking/aruba-iap/iapctl.py apply
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - networking/aruba-iap/**/*
+
+# Same, with the protected-settings guard lifted. Run by hand after reviewing
+# the plan.
+aruba-iap:apply-protected:
+  extends: .aruba_iap_live
+  stage: deploy
+  needs: []
+  when: manual
+  allow_failure: true
+  variables:
+    IAP_ALLOW_PROTECTED: "1"
+  before_script:
+    - pip3 install -q --break-system-packages paramiko
+  script:
+    - python3 networking/aruba-iap/iapctl.py apply --allow-protected
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# Scheduled daily with IAP_TASK=drift: fails and mails the report to root via
+# the router's mail when the live cluster differs from running-config.conf.
+aruba-iap:drift:
+  extends:
+    - .ansible
+    - .aruba_iap_live
+  stage: deploy
+  needs: []
+  script:
+    - pip3 install -q --break-system-packages paramiko
+    - rc=0; python3 networking/aruba-iap/iapctl.py drift > aruba-iap-drift.txt 2>&1 || rc=$?
+    - cat aruba-iap-drift.txt
+    - |
+      if [ "$rc" -ne 0 ]; then
+        printf '\nExit code: %s\nJob: %s\n' "$rc" "$CI_JOB_URL" >> aruba-iap-drift.txt
+        ssh -i tmp -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 \
+          -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+          root@10.4.0.1 "mail -s 'Homelab: Aruba AP config drift' root" < aruba-iap-drift.txt \
+          || echo "WARN: sending mail failed"
+        exit 1
+      fi
+  artifacts:
+    when: always
+    paths:
+      - aruba-iap-drift.txt
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $IAP_TASK == "drift" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
 
 # =============================================================================
 # Auto-merge for low-risk image updates (see docs/AUTOMERGE.md)
