@@ -5,6 +5,7 @@ Name=vlan4-shim
 Address=10.4.0.2/32
 IPForward=yes
 ConfigureWithoutCarrier=yes
+IPv6AcceptRA=no
 
 [Route]
 Destination=10.4.0.0/18

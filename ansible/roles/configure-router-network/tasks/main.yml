@@ -58,6 +58,16 @@
     validate: /usr/sbin/iptables-restore --test %s
   register: iptables
 
+- name: Template the ip6tables rules file
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/iptables/rules.v6' }}"
+    dest: /etc/iptables/rules.v6
+    owner: root
+    group: root
+    mode: '0640'
+    validate: /usr/sbin/ip6tables-restore --test %s
+  register: iptables6
+
 - name: Copy the ipset rules file
   ansible.builtin.copy:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/iptables/rules.ipset' }}"
@@ -103,6 +113,16 @@
   ansible.builtin.debug:
     var: fw_apply_v4.stdout_lines
   when: fw_apply_v4 is changed
+
+- name: Load ip6tables rules (keeps Docker/Tailscale/libvirt chains)
+  ansible.builtin.command: /usr/local/sbin/fw-apply 6 /etc/iptables/rules.v6
+  register: fw_apply_v6
+  when: iptables6.changed
+
+- name: Show ip6tables changes
+  ansible.builtin.debug:
+    var: fw_apply_v6.stdout_lines
+  when: fw_apply_v6 is changed
 
 - name: Setup cron script directory
   ansible.builtin.file:

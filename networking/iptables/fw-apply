@@ -139,16 +139,23 @@ def run(cmd, data=None):
     return p.stdout
 
 
-def canon(text):
-    """Ruleset without comments/counters, for diffing."""
-    return [re.sub(r" \[\d+:\d+\]$", "", l) for l in text.splitlines()
-            if l and not l.startswith("#")]
+def canon(text, tables=None):
+    """Ruleset without comments/counters (optionally only some tables)."""
+    out, keep = [], True
+    for l in text.splitlines():
+        if not l or l.startswith("#"):
+            continue
+        if l.startswith("*"):
+            keep = tables is None or l[1:] in tables
+        if keep:
+            out.append(re.sub(r" \[\d+:\d+\]$", "", l))
+    return out
 
 
-def diff(before, after):
+def diff(before, after, tables=None):
     return "\n".join(l for l in difflib.unified_diff(
-        canon(before), canon(after), "live", "new", n=0, lineterm="")
-        if not l.startswith("@@"))
+        canon(before, tables), canon(after, tables), "live", "new", n=0,
+        lineterm="") if not l.startswith("@@"))
 
 
 def load_in_netns(ruleset, save, restore):
@@ -190,7 +197,9 @@ def main(argv):
         sys.stdout.write(merged)
         return
     if "--diff" in flags:
-        print(diff(live_text, load_in_netns(merged, save, restore)) or "(no change)")
+        tables = set(parse(managed_text, "managed")[0])
+        print(diff(live_text, load_in_netns(merged, save, restore), tables)
+              or "(no change)")
         return
     run([restore, "-w", "--test"], merged)
     if "--test" in flags:

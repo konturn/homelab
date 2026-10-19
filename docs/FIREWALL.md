@@ -153,6 +153,18 @@ Infrastructure services:
 
 ---
 
+## IPv6
+
+`networking/iptables/rules.v6` is a default-drop filter (INPUT/FORWARD DROP,
+OUTPUT ACCEPT), loaded with `fw-apply 6`. INPUT admits loopback, established,
+ICMPv6 errors/echo, NDP (hop limit 255), MLD from link-local on the LAN,
+Tailscale, SSH on the mgmt VLAN and mDNS from the LAN. FORWARD admits only
+established flows plus Tailscale (via its own `ts-forward` hook). The WAN has
+no global IPv6 today; if that changes, add the DHCPv6 client rule there.
+
+LAN-side links (`bond0`, `bond0.N`, `vlanN-shim`) run with `IPv6AcceptRA=no`
+so the router never takes addresses/routes from RAs sent by LAN devices.
+
 ## Docker and iptables
 
 Docker's iptables management is **disabled** on the router (`"iptables": false` in `daemon.json`).

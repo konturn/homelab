@@ -5,6 +5,7 @@ Name=vlan6-shim
 Address=10.6.0.2/32
 IPForward=yes
 ConfigureWithoutCarrier=yes
+IPv6AcceptRA=no
 
 [Route]
 Destination=10.6.0.0/18
