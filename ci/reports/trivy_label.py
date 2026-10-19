@@ -18,7 +18,7 @@ import urllib.request
 from typing import Iterable, List, Set
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from run_remote import SSH  # noqa: E402
+from run_remote import SSH, urlopen_retry  # noqa: E402
 
 API = os.environ.get("CI_API_V4_URL", "https://gitlab.lab.nkontur.com/api/v4").rstrip("/")
 PROJECT = os.environ.get("CI_PROJECT_ID", "4")
@@ -61,7 +61,7 @@ def api(method: str, path: str, token: str, params=None, body=None):
     url = f"{API}/{path}" + ("?" + urllib.parse.urlencode(params) if params else "")
     req = urllib.request.Request(url, method=method, data=json.dumps(body).encode() if body else None,
                                  headers={"PRIVATE-TOKEN": token, "Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=30) as r:
+    with urlopen_retry(req, timeout=30) as r:
         return json.loads(r.read() or b"null")
 
 

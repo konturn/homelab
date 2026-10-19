@@ -19,6 +19,8 @@ import ssl
 import subprocess
 import sys
 import tarfile
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -28,6 +30,20 @@ SSH_KEY = os.environ.get("REPORT_SSH_KEY", str(ROOT / "tmp"))
 SSH = ["ssh", "-i", SSH_KEY, "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes", "-o", "ConnectTimeout=15",
        "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
        "-o", "ServerAliveInterval=30", f"root@{HOST}"]
+
+
+def urlopen_retry(req, tries: int = 6, **kw):
+    """urlopen with retries: name lookups of *.lab hosts fail intermittently on the
+    runner (musl races pihole against public resolvers). HTTP errors are not retried."""
+    for n in range(tries):
+        try:
+            return urllib.request.urlopen(req, **kw)
+        except urllib.error.HTTPError:
+            raise
+        except (urllib.error.URLError, OSError):
+            if n + 1 == tries:
+                raise
+            time.sleep(1 + n)
 
 
 def ssl_ctx() -> ssl.SSLContext:
@@ -48,13 +64,13 @@ def vault_secrets(pairs) -> dict:
     ctx = ssl_ctx()
     body = json.dumps({"role": os.environ.get("VAULT_JWT_ROLE", "ci-deploy"), "jwt": jwt}).encode()
     req = urllib.request.Request(f"{addr}/v1/auth/jwt/login", data=body, headers={"Content-Type": "application/json"})
-    token = json.load(urllib.request.urlopen(req, context=ctx, timeout=30))["auth"]["client_token"]
+    token = json.load(urlopen_retry(req, context=ctx, timeout=30))["auth"]["client_token"]
     out = {}
     for pair in pairs:
         name, _, path = pair.partition("=")
         req = urllib.request.Request(f"{addr}/v1/homelab/data/{path}", headers={"X-Vault-Token": token})
         try:
-            out[name] = json.load(urllib.request.urlopen(req, context=ctx, timeout=30))["data"]["data"]
+            out[name] = json.load(urlopen_retry(req, context=ctx, timeout=30))["data"]["data"]
         except Exception as e:  # noqa: BLE001 - report which path failed, never the value
             print(f"WARN: could not read Vault path {path}: {type(e).__name__}", file=sys.stderr)
     return out
