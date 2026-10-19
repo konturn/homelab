@@ -1,0 +1,65 @@
+# =============================================================================
+# IP6TABLES RULES - Homelab Infrastructure
+# =============================================================================
+# Default-drop IPv6 filter for the router. Only the filter table is managed;
+# Docker/Tailscale/libvirt chains are kept by fw-apply (see docs/FIREWALL.md).
+#
+# The WAN ({{ inet_interface_name }}) currently has no global IPv6 (link-local
+# only, no DHCPv6/RA upstream), so all IPv6 the router handles is link-local /
+# ULA on the LAN VLANs plus Tailscale. Nothing is routed over IPv6, so FORWARD
+# only admits Tailscale (via the ts-forward hook) and established flows.
+#
+# If the ISP starts offering IPv6, add here: DHCPv6 client (udp 546 from
+# fe80::/10 on the WAN) and the RA/ICMPv6 already allowed below covers SLAAC.
+# =============================================================================
+
+*filter
+:INPUT DROP [0:0]
+:FORWARD DROP [0:0]
+:OUTPUT ACCEPT [0:0]
+
+# -----------------------------------------------------------------------------
+# INPUT
+# -----------------------------------------------------------------------------
+-A INPUT -i lo -j ACCEPT
+-A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+
+# ICMPv6 errors + echo (needed for PMTU discovery and diagnostics)
+-A INPUT -p ipv6-icmp -m icmp6 --icmpv6-type 1 -j ACCEPT
+-A INPUT -p ipv6-icmp -m icmp6 --icmpv6-type 2 -j ACCEPT
+-A INPUT -p ipv6-icmp -m icmp6 --icmpv6-type 3 -j ACCEPT
+-A INPUT -p ipv6-icmp -m icmp6 --icmpv6-type 4 -j ACCEPT
+-A INPUT -p ipv6-icmp -m icmp6 --icmpv6-type 128 -j ACCEPT
+-A INPUT -p ipv6-icmp -m icmp6 --icmpv6-type 129 -j ACCEPT
+
+# Neighbor discovery: RS/RA/NS/NA/redirect - only valid with hop limit 255
+-A INPUT -p ipv6-icmp -m icmp6 --icmpv6-type 133 -m hl --hl-eq 255 -j ACCEPT
+-A INPUT -p ipv6-icmp -m icmp6 --icmpv6-type 134 -m hl --hl-eq 255 -j ACCEPT
+-A INPUT -p ipv6-icmp -m icmp6 --icmpv6-type 135 -m hl --hl-eq 255 -j ACCEPT
+-A INPUT -p ipv6-icmp -m icmp6 --icmpv6-type 136 -m hl --hl-eq 255 -j ACCEPT
+-A INPUT -p ipv6-icmp -m icmp6 --icmpv6-type 137 -m hl --hl-eq 255 -j ACCEPT
+
+# Multicast listener discovery (MLDv1 130-132, MLDv2 143) - LAN side only
+-A INPUT ! -i {{ inet_interface_name }} -s fe80::/10 -p ipv6-icmp -m icmp6 --icmpv6-type 130 -j ACCEPT
+-A INPUT ! -i {{ inet_interface_name }} -s fe80::/10 -p ipv6-icmp -m icmp6 --icmpv6-type 131 -j ACCEPT
+-A INPUT ! -i {{ inet_interface_name }} -s fe80::/10 -p ipv6-icmp -m icmp6 --icmpv6-type 132 -j ACCEPT
+-A INPUT ! -i {{ inet_interface_name }} -s fe80::/10 -p ipv6-icmp -m icmp6 --icmpv6-type 143 -j ACCEPT
+
+# Tailscale (tailnet traffic and its WireGuard port)
+-A INPUT -i tailscale0 -j ACCEPT
+-A INPUT -p udp -m udp --dport 41641 -j ACCEPT
+
+# SSH from the management VLAN (any link-local/ULA source on that VLAN)
+-A INPUT -i {{ local_interface_name }}.4 -p tcp -m tcp --dport 22 -j ACCEPT
+-A INPUT -i vlan4-shim -p tcp -m tcp --dport 22 -j ACCEPT
+
+# mDNS (avahi reflector) from the LAN, never from the WAN
+-A INPUT ! -i {{ inet_interface_name }} -p udp -m udp --dport 5353 -j ACCEPT
+
+# -----------------------------------------------------------------------------
+# FORWARD - Tailscale is admitted by the ts-forward hook; nothing else is
+# routed over IPv6.
+# -----------------------------------------------------------------------------
+-A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+
+COMMIT

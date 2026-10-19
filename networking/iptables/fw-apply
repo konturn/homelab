@@ -20,8 +20,9 @@ Instead, this script:
 Docker/Tailscale/libvirt keep running with their rules in place, so nothing
 has to be restarted.
 
-Foreign hook rules keep their place relative to the managed rules (top of
-the chain if they were inserted above them, bottom if appended after them).
+Foreign hook rules go to the top of their chain, except a trailing run of
+them after the chain's last other rule (appended, e.g. Docker's nat
+PREROUTING -j DOCKER), which stays at the bottom.
 
 Usage:
   fw-apply 4 /etc/iptables/rules.v4          apply
@@ -105,22 +106,26 @@ def merge(managed_text, live_text):
         managed_rules = set(m.rules)
         foreign = [c for c in l.chain_order
                    if FOREIGN_CHAIN.match(c) and c not in m.chain_lines]
-        # A foreign hook keeps its side of the managed rules: hooks that sit
-        # above every non-foreign rule of their chain in the live ruleset
-        # (inserted with -I, e.g. DOCKER-USER, ts-input) go first, hooks that
-        # were appended after them (e.g. Docker's nat PREROUTING -j DOCKER)
-        # go last.
-        head, tail, bodies, below_managed = [], [], [], set()
-        for r in l.rules:
+        def is_hook(r):
+            return (m.builtin(chain_of(r)) and r not in managed_rules
+                    and (target_of(r) in foreign or FOREIGN_IFACE.search(r)
+                         or FOREIGN_RULE.search(r)))
+
+        # A foreign hook goes to the top of its chain (Docker, Tailscale and
+        # libvirt insert with -I), unless it is part of the trailing run of
+        # foreign rules after the last other rule of that chain (appended,
+        # e.g. Docker's nat PREROUTING -j DOCKER): those go last.
+        last_other = {}
+        for i, r in enumerate(l.rules):
+            if chain_of(r) not in foreign and not is_hook(r):
+                last_other[chain_of(r)] = i
+        head, tail, bodies = [], [], []
+        for i, r in enumerate(l.rules):
             c = chain_of(r)
             if c in foreign:
                 bodies.append(r)
-            elif (m.builtin(c) and r not in managed_rules
-                  and (target_of(r) in foreign or FOREIGN_IFACE.search(r)
-                       or FOREIGN_RULE.search(r))):
-                (tail if c in below_managed else head).append(r)
-            else:
-                below_managed.add(c)
+            elif is_hook(r):
+                (tail if i > last_other.get(c, len(l.rules)) else head).append(r)
         out.append(f"*{name}")
         out.extend(m.chain_lines[c] for c in m.chain_order)
         out.extend(f":{c} - [0:0]" for c in foreign)
@@ -139,16 +144,23 @@ def run(cmd, data=None):
     return p.stdout
 
 
-def canon(text):
-    """Ruleset without comments/counters, for diffing."""
-    return [re.sub(r" \[\d+:\d+\]$", "", l) for l in text.splitlines()
-            if l and not l.startswith("#")]
+def canon(text, tables=None):
+    """Ruleset without comments/counters (optionally only some tables)."""
+    out, keep = [], True
+    for l in text.splitlines():
+        if not l or l.startswith("#"):
+            continue
+        if l.startswith("*"):
+            keep = tables is None or l[1:] in tables
+        if keep:
+            out.append(re.sub(r" \[\d+:\d+\]$", "", l))
+    return out
 
 
-def diff(before, after):
+def diff(before, after, tables=None):
     return "\n".join(l for l in difflib.unified_diff(
-        canon(before), canon(after), "live", "new", n=0, lineterm="")
-        if not l.startswith("@@"))
+        canon(before, tables), canon(after, tables), "live", "new", n=0,
+        lineterm="") if not l.startswith("@@"))
 
 
 def load_in_netns(ruleset, save, restore):
@@ -190,7 +202,9 @@ def main(argv):
         sys.stdout.write(merged)
         return
     if "--diff" in flags:
-        print(diff(live_text, load_in_netns(merged, save, restore)) or "(no change)")
+        tables = set(parse(managed_text, "managed")[0])
+        print(diff(live_text, load_in_netns(merged, save, restore), tables)
+              or "(no change)")
         return
     run([restore, "-w", "--test"], merged)
     if "--test" in flags:
