@@ -196,6 +196,24 @@ fw-apply 4 --rollback                         # restore the ruleset saved before
 `networking/iptables/rules.v4` cover any new forwarding needs — don't re-enable Docker iptables
 management, as it will conflict with the existing ruleset.
 
+### GitLab CI job network
+
+Jobs from MR and branch pipelines run on the `main.nkontur.com` runner in the Docker
+network `gitlab-ci` (bridge `br-ci`, 172.28.0.0/24, created by `configure-docker`); jobs from
+`main` run on the `router-protected` runner with host networking (see
+`base/gitlab-runner/config.toml`). Rules for `br-ci` in `rules.v4`:
+
+| Table / chain | Rule |
+|---|---|
+| raw `PREROUTING` → `CI-EGRESS` | allow Pi-hole :53, lab_nginx :443, Vault :8200; drop the router's own addresses, broadcast/multicast, RFC1918, 100.64.0.0/10, 169.254.0.0/16 |
+| filter `INPUT` | drop everything from `br-ci` |
+| filter `FORWARD` | same allowlist + `-o` WAN, then drop |
+| nat `POSTROUTING` | MASQUERADE 172.28.0.0/24 leaving `br-ci` |
+
+The allowlist sits in the raw table because the filter hooks that fw-apply keeps at the top
+of FORWARD/INPUT (`DOCKER-*`, `ts-forward`, `ts-input`, `LIBVIRT_*`) run before the managed
+filter rules; `ts-forward`, for example, accepts anything routed out `tailscale0`.
+
 ---
 
 ## Known Issues

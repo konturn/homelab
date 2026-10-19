@@ -30,6 +30,33 @@
 *raw
 :PREROUTING ACCEPT [10862423444:8773868890721]
 :OUTPUT ACCEPT [3758513187:2086126889453]
+
+# -----------------------------------------------------------------------------
+# GitLab CI job network (docker network "gitlab-ci", bridge br-ci, 172.28.0.0/24)
+# -----------------------------------------------------------------------------
+# Egress allowlist for containers of the "main.nkontur.com" runner (MR and
+# branch pipelines). Kept in raw PREROUTING because it is evaluated before
+# the filter hooks other daemons insert at the top of FORWARD/INPUT
+# (DOCKER-*, ts-forward, ts-input, LIBVIRT_*), which fw-apply keeps in place.
+# Allowed: Pi-hole DNS, nginx 443 (GitLab, registry), Vault 8200, internet.
+# Everything else private/local (RFC1918, CGNAT/Tailscale, link-local,
+# multicast, the router's own addresses) is dropped.
+:CI-EGRESS - [0:0]
+-A PREROUTING -i br-ci -j CI-EGRESS
+-A CI-EGRESS -d {{ pihole_ip }}/32 -p udp -m udp --dport 53 -j RETURN
+-A CI-EGRESS -d {{ pihole_ip }}/32 -p tcp -m tcp --dport 53 -j RETURN
+-A CI-EGRESS -d {{ lab_nginx_ip }}/32 -p tcp -m tcp --dport 443 -j RETURN
+-A CI-EGRESS -d {{ vault_ip }}/32 -p tcp -m tcp --dport 8200 -j RETURN
+-A CI-EGRESS -m addrtype --dst-type LOCAL -j DROP
+-A CI-EGRESS -m addrtype --dst-type BROADCAST -j DROP
+-A CI-EGRESS -d 0.0.0.0/8 -j DROP
+-A CI-EGRESS -d 10.0.0.0/8 -j DROP
+-A CI-EGRESS -d 100.64.0.0/10 -j DROP
+-A CI-EGRESS -d 127.0.0.0/8 -j DROP
+-A CI-EGRESS -d 169.254.0.0/16 -j DROP
+-A CI-EGRESS -d 172.16.0.0/12 -j DROP
+-A CI-EGRESS -d 192.168.0.0/16 -j DROP
+-A CI-EGRESS -d 224.0.0.0/3 -j DROP
 COMMIT
 
 # =============================================================================
@@ -108,6 +135,9 @@ COMMIT
 # Masquerade all traffic going out WAN interface (standard NAT)
 -A POSTROUTING -o {{ inet_interface_name }} -j MASQUERADE
 
+# GitLab CI job network (br-ci): masquerade everything leaving the bridge
+-A POSTROUTING -s 172.28.0.0/24 ! -o br-ci -j MASQUERADE
+
 # Hairpin NAT needs no SNAT: the hairpinned clients are on other subnets than
 # nginx, so nginx's replies already return via the router (its gateway) and
 # are un-DNATed there, and nginx keeps seeing the real client address.
@@ -128,6 +158,10 @@ COMMIT
 # Loopback — always accept (standard practice, required for local services
 # including GitLab CI runner which runs on the router itself)
 -A INPUT -i lo -j ACCEPT
+
+# GitLab CI job network (br-ci): no access to the router itself (see raw
+# CI-EGRESS; containers use Docker's embedded DNS inside their own netns)
+-A INPUT -i br-ci -j DROP
 
 # SSH access to router — restricted to trusted sources
 # mgmt VLAN (10.4.0.0/16): infrastructure management network
@@ -192,6 +226,14 @@ COMMIT
 
 # Allow established/related connections (stateful firewall)
 -A FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
+
+# GitLab CI job network (br-ci): allowlist, mirrors raw CI-EGRESS
+-A FORWARD -i br-ci -d {{ pihole_ip }} -p udp -m udp --dport 53 -j ACCEPT
+-A FORWARD -i br-ci -d {{ pihole_ip }} -p tcp -m tcp --dport 53 -j ACCEPT
+-A FORWARD -i br-ci -d {{ lab_nginx_ip }} -p tcp -m tcp --dport 443 -j ACCEPT
+-A FORWARD -i br-ci -d {{ vault_ip }} -p tcp -m tcp --dport 8200 -j ACCEPT
+-A FORWARD -i br-ci -o {{ inet_interface_name }} -j ACCEPT
+-A FORWARD -i br-ci -j DROP
 
 # Management VLAN (bond0.4) - Full access to all networks
 # Trusted infrastructure management network
