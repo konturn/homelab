@@ -54,6 +54,10 @@ COMMIT
 -A PREROUTING ! -d 10.0.0.0/8 -i vlan6-shim -j MARK --set-xmark 0x1/0xffffffff
 -A PREROUTING ! -d 10.0.0.0/8 -i {{ local_interface_name }}.6 -j MARK --set-xmark 0x1/0xffffffff
 
+# Mark VLAN 7 (reserved) internet-bound traffic - egress via Mullvad like IoT
+# (docs/NETWORK.md)
+-A PREROUTING ! -d 10.0.0.0/8 -i {{ local_interface_name }}.7 -j MARK --set-xmark 0x1/0xffffffff
+
 COMMIT
 
 # =============================================================================
@@ -217,6 +221,10 @@ COMMIT
 # IoT to Vault (for SSH CA key fetch during Ansible deploys)
 -A FORWARD -d {{ vault_ip }} -p tcp -m tcp --dport 8200 -i {{ local_interface_name }}.6 -j ACCEPT
 -A FORWARD -d {{ vault_ip }} -p tcp -m tcp --dport 8200 -i vlan6-shim -j ACCEPT
+
+# Marked traffic (VLANs 3/6/7, policy-routed to Mullvad via table 252) is
+# never forwarded out the WAN, independent of the routing-table fallback.
+-A FORWARD -m mark --mark 0x1 -o {{ inet_interface_name }} -j REJECT --reject-with icmp-net-prohibited
 
 # All local VLANs to internet (outbound)
 -A FORWARD -i {{ local_interface_name }}+ -o {{ inet_interface_name }} -j ACCEPT

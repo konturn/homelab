@@ -283,6 +283,7 @@ Internet
 
 **Kill Switch:**
 Route table 252 has a `prohibit` route as fallback — if Mullvad is down, traffic is blocked rather than leaking to WAN.
+In addition, the FORWARD chain REJECTs any fwmark 0x1 packet whose output interface is the WAN.
 
 ### LAN Device → External Service (Hairpin NAT)
 
