@@ -213,14 +213,16 @@ COMMIT
 # ICMP from internal to mgmt (diagnostics)
 -A FORWARD -p icmp -i vlan3-shim -o bond0.4 -j ACCEPT
 
-# IoT to Pi-hole DNS
-# Allows IoT devices to use Pi-hole for DNS resolution
--A FORWARD -d {{ pihole_ip }} -i {{ local_interface_name }}.6 -j ACCEPT
--A FORWARD -d {{ pihole_ip }} -i vlan6-shim -j ACCEPT
+# IoT to Pi-hole DNS (udp/tcp 53 only)
+-A FORWARD -d {{ pihole_ip }} -i {{ local_interface_name }}.6 -p udp -m udp --dport 53 -j ACCEPT
+-A FORWARD -d {{ pihole_ip }} -i {{ local_interface_name }}.6 -p tcp -m tcp --dport 53 -j ACCEPT
+-A FORWARD -d {{ pihole_ip }} -i vlan6-shim -p udp -m udp --dport 53 -j ACCEPT
+-A FORWARD -d {{ pihole_ip }} -i vlan6-shim -p tcp -m tcp --dport 53 -j ACCEPT
 
-# IoT to Vault (for SSH CA key fetch during Ansible deploys)
--A FORWARD -d {{ vault_ip }} -p tcp -m tcp --dport 8200 -i {{ local_interface_name }}.6 -j ACCEPT
--A FORWARD -d {{ vault_ip }} -p tcp -m tcp --dport 8200 -i vlan6-shim -j ACCEPT
+# IoT to Vault - only the Pi hosts that fetch secrets / the SSH CA key during
+# their Ansible deploys (zwave, satellite-2)
+-A FORWARD -s {{ zwave_address }} -d {{ vault_ip }} -i {{ local_interface_name }}.6 -p tcp -m tcp --dport 8200 -j ACCEPT
+-A FORWARD -s {{ satellite_2_address }} -d {{ vault_ip }} -i {{ local_interface_name }}.6 -p tcp -m tcp --dport 8200 -j ACCEPT
 
 # Marked traffic (VLANs 3/6/7, policy-routed to Mullvad via table 252) is
 # never forwarded out the WAN, independent of the routing-table fallback.
@@ -273,8 +275,10 @@ COMMIT
 -A FORWARD -s {{ apple_tv_address }} -o {{ inet_interface_name }} -j ACCEPT
 -A FORWARD -s {{ apple_tv_address }} -d {{ lab_nginx_ip }} -p tcp -m tcp --dport 32400 -j ACCEPT
 
-# Snapserver - Allow all inbound
-# Used for: Multi-room audio clients connecting to server
--A FORWARD -d {{ snapserver_address }} -j ACCEPT
+# Snapserver - inbound from other VLANs, service ports only
+#   1704 snapclient audio, 1705 control (JSON-RPC/TCP), 1780 HTTP/websocket/snapweb
+#   80-87  tcp:// stream sources (Network, Network_<room>)
+#   50000-50007 librespot zeroconf (Spotify Connect, one per room)
+-A FORWARD -d {{ snapserver_address }} -p tcp -m multiport --dports 80:87,1704,1705,1780,50000:50007 -j ACCEPT
 
 COMMIT
