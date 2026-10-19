@@ -284,10 +284,10 @@ groups:
                   |> filter(fn: (r) => r._measurement == "docker_container_mem")
                   |> filter(fn: (r) => not r.container_name =~ /^runner-/)
 
-                # Sum the two fields per sample, then take the max. Taking each
-                # field's max first double-counts: the kernel moves pages
-                # between the active and inactive lists, so both maxima can
-                # include the same pages.
+                // Sum the two fields per sample, then take the max. Taking each
+                // field's max first double-counts: the kernel moves pages
+                // between the active and inactive lists, so both maxima can
+                // include the same pages.
                 anon = base
                   |> filter(fn: (r) => r._field == "active_anon" or r._field == "inactive_anon")
                   |> group(columns: ["container_name", "_time"])
