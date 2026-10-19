@@ -59,8 +59,23 @@
       - docker-ce-cli
       - containerd.io
       - docker-compose-plugin
-    state: latest
+    # present + hold, not latest: a docker-ce/containerd upgrade restarts
+    # dockerd and with it every container on the host (2026-10-18 deploy).
+    # To upgrade deliberately:
+    #   apt-mark unhold docker-ce docker-ce-cli containerd.io
+    #   apt install --only-upgrade docker-ce docker-ce-cli containerd.io
+    #   apt-mark hold docker-ce docker-ce-cli containerd.io
+    state: present
     update_cache: yes
+
+- name: Hold docker engine packages (upgrades are a manual step)
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - docker-ce
+    - docker-ce-cli
+    - containerd.io
 
 - name: Download NVIDIA Container Toolkit GPG key
   ansible.builtin.get_url:

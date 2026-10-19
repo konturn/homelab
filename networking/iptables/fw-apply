@@ -1,0 +1,212 @@
+#!/usr/bin/env python3
+"""fw-apply - load the repo-managed iptables ruleset without wiping the chains
+that other daemons own.
+
+`netfilter-persistent reload` is a plain `iptables-restore < rules.v4`: it
+flushes every table in the file and deletes every user-defined chain, which
+silently removes the rules Docker (DOCKER*), libvirt (LIBVIRT_*) and Tailscale
+(ts-*) installed at runtime. The deploy used to paper over the Docker half of
+that by restarting dockerd, which restarts all ~60 containers and still left
+Tailscale and libvirt without their rules.
+
+Instead, this script:
+  1. dumps the live ruleset (and keeps a copy under /var/backups/fw-apply/),
+  2. takes the managed file and adds the foreign chains plus the rules in the
+     built-in chains that hook into them (or that match the Docker/libvirt
+     bridge interfaces, e.g. Docker's MASQUERADE for 172.17.0.0/16),
+  3. validates the merged ruleset with `iptables-restore --test`,
+  4. loads it with one iptables-restore call, so each table is swapped
+     atomically.
+Docker/Tailscale/libvirt keep running with their rules in place, so nothing
+has to be restarted.
+
+Foreign hook rules keep their place relative to the managed rules (top of
+the chain if they were inserted above them, bottom if appended after them).
+
+Usage:
+  fw-apply 4 /etc/iptables/rules.v4          apply
+  fw-apply 6 /etc/iptables/rules.v6          apply (IPv6)
+  fw-apply 4 /etc/iptables/rules.v4 --test   validate only
+  fw-apply 4 /etc/iptables/rules.v4 --print  print the merged ruleset
+  fw-apply 4 /etc/iptables/rules.v4 --diff   show what would change vs. live
+                                             (loads it in a scratch netns)
+  fw-apply 4 --rollback                      restore the newest backup
+"""
+import datetime
+import difflib
+import glob
+import os
+import re
+import subprocess
+import sys
+
+FOREIGN_CHAIN = re.compile(r"^(DOCKER(-[A-Z-]+)?|LIBVIRT_[A-Z]+|ts-[a-z-]+)$")
+FOREIGN_IFACE = re.compile(r"(^|\s)-[io]\s+(docker0|br-[0-9a-f]{12}|virbr\d+)(\s|$)")
+# Tailscale's connmark save/restore rules in mangle (it owns mark bits 0xff0000)
+FOREIGN_RULE = re.compile(r"-j CONNMARK .*--nfmask 0xff0000 --ctmask 0xff0000")
+TARGET = re.compile(r"\s-[jg]\s+(\S+)")
+BACKUP_DIR = "/var/backups/fw-apply"
+KEEP_BACKUPS = 30
+
+
+class Table:
+    def __init__(self, name):
+        self.name = name
+        self.chain_lines = {}   # chain -> ":CHAIN POLICY [x:y]"
+        self.chain_order = []
+        self.rules = []         # "-A CHAIN ..." lines, in order
+
+    def builtin(self, chain):
+        line = self.chain_lines.get(chain, "")
+        return len(line.split()) > 1 and line.split()[1] != "-"
+
+
+def parse(text, source):
+    tables, order, cur = {}, [], None
+    for n, raw in enumerate(text.splitlines(), 1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("*"):
+            cur = Table(line[1:])
+            tables[cur.name] = cur
+            order.append(cur.name)
+        elif line == "COMMIT":
+            cur = None
+        elif cur is None:
+            sys.exit(f"fw-apply: {source}:{n}: rule outside a table: {line}")
+        elif line.startswith(":"):
+            chain = line[1:].split()[0]
+            cur.chain_lines[chain] = line
+            cur.chain_order.append(chain)
+        elif line.startswith("-A "):
+            cur.rules.append(line)
+        else:
+            sys.exit(f"fw-apply: {source}:{n}: unsupported line (only :CHAIN and -A): {line}")
+    return tables, order
+
+
+def chain_of(rule):
+    return rule.split()[1]
+
+
+def target_of(rule):
+    m = TARGET.search(rule)
+    return m.group(1) if m else None
+
+
+def merge(managed_text, live_text):
+    managed, order = parse(managed_text, "managed")
+    live, _ = parse(live_text, "live")
+    out = []
+    for name in order:
+        m = managed[name]
+        l = live.get(name, Table(name))
+        managed_rules = set(m.rules)
+        foreign = [c for c in l.chain_order
+                   if FOREIGN_CHAIN.match(c) and c not in m.chain_lines]
+        # A foreign hook keeps its side of the managed rules: hooks that sit
+        # above every non-foreign rule of their chain in the live ruleset
+        # (inserted with -I, e.g. DOCKER-USER, ts-input) go first, hooks that
+        # were appended after them (e.g. Docker's nat PREROUTING -j DOCKER)
+        # go last.
+        head, tail, bodies, below_managed = [], [], [], set()
+        for r in l.rules:
+            c = chain_of(r)
+            if c in foreign:
+                bodies.append(r)
+            elif (m.builtin(c) and r not in managed_rules
+                  and (target_of(r) in foreign or FOREIGN_IFACE.search(r)
+                       or FOREIGN_RULE.search(r))):
+                (tail if c in below_managed else head).append(r)
+            else:
+                below_managed.add(c)
+        out.append(f"*{name}")
+        out.extend(m.chain_lines[c] for c in m.chain_order)
+        out.extend(f":{c} - [0:0]" for c in foreign)
+        out.extend(head)
+        out.extend(m.rules)
+        out.extend(tail)
+        out.extend(bodies)
+        out.append("COMMIT")
+    return "\n".join(out) + "\n"
+
+
+def run(cmd, data=None):
+    p = subprocess.run(cmd, input=data, capture_output=True, text=True)
+    if p.returncode != 0:
+        sys.exit(f"fw-apply: {' '.join(cmd)} failed ({p.returncode}): {p.stderr.strip()}")
+    return p.stdout
+
+
+def canon(text):
+    """Ruleset without comments/counters, for diffing."""
+    return [re.sub(r" \[\d+:\d+\]$", "", l) for l in text.splitlines()
+            if l and not l.startswith("#")]
+
+
+def diff(before, after):
+    return "\n".join(l for l in difflib.unified_diff(
+        canon(before), canon(after), "live", "new", n=0, lineterm="")
+        if not l.startswith("@@"))
+
+
+def load_in_netns(ruleset, save, restore):
+    ns = f"fwapply{os.getpid()}"
+    run(["ip", "netns", "add", ns])
+    try:
+        sets = run(["ipset", "save"])
+        if sets.strip():
+            run(["ip", "netns", "exec", ns, "ipset", "restore"], sets)
+        run(["ip", "netns", "exec", ns, restore, "-w"], ruleset)
+        return run(["ip", "netns", "exec", ns, save])
+    finally:
+        subprocess.run(["ip", "netns", "del", ns])
+
+
+def main(argv):
+    if len(argv) < 2 or argv[1] not in ("4", "6"):
+        sys.exit(__doc__)
+    v = argv[1]
+    save, restore = ("iptables-save", "iptables-restore") if v == "4" else \
+                    ("ip6tables-save", "ip6tables-restore")
+    flags = set(argv[2:])
+    if "--rollback" in flags:
+        backups = sorted(glob.glob(f"{BACKUP_DIR}/rules.v{v}.*"))
+        if not backups:
+            sys.exit("fw-apply: no backup to roll back to")
+        data = open(backups[-1]).read()
+        run([restore, "-w", "--test"], data)
+        run([restore, "-w"], data)
+        print(f"fw-apply: restored {backups[-1]}")
+        return
+    files = [a for a in argv[2:] if not a.startswith("--")]
+    if len(files) != 1:
+        sys.exit(__doc__)
+    managed_text = open(files[0]).read()
+    live_text = run([save])
+    merged = merge(managed_text, live_text)
+    if "--print" in flags:
+        sys.stdout.write(merged)
+        return
+    if "--diff" in flags:
+        print(diff(live_text, load_in_netns(merged, save, restore)) or "(no change)")
+        return
+    run([restore, "-w", "--test"], merged)
+    if "--test" in flags:
+        print(f"fw-apply: merged IPv{v} ruleset is valid")
+        return
+    os.makedirs(BACKUP_DIR, mode=0o700, exist_ok=True)
+    stamp = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+    with open(f"{BACKUP_DIR}/rules.v{v}.{stamp}", "w") as f:
+        f.write(live_text)
+    for old in sorted(glob.glob(f"{BACKUP_DIR}/rules.v{v}.*"))[:-KEEP_BACKUPS]:
+        os.remove(old)
+    run([restore, "-w"], merged)
+    print(diff(live_text, run([save])) or "(no rule changes)")
+    print(f"fw-apply: loaded {files[0]} (previous ruleset saved as "
+          f"{BACKUP_DIR}/rules.v{v}.{stamp})")
+
+
+if __name__ == "__main__":
+    main(sys.argv)
