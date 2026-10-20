@@ -13,3 +13,12 @@ FROM dchesterton/amcrest2mqtt:1.0.16@sha256:5a503bcf7b39bd846ca60be1846ce8b73eae
 
 COPY patch.py /tmp/patch.py
 RUN python3 /tmp/patch.py && rm /tmp/patch.py
+
+# 3. Upstream exits immediately when the camera is unreachable, and does so
+#    slowly enough (~13s) that Docker's restart backoff never engages. Wrap the
+#    image CMD so a failed run sleeps before exiting. Base image sets no
+#    ENTRYPOINT and CMD ["python","-u","/app/amcrest2mqtt.py"], so running "$@"
+#    preserves the original command unchanged.
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
