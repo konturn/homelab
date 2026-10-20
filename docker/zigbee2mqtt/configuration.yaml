@@ -1,6 +1,7 @@
-homeassistant: true
-permit_join: true
-frontend: true
+homeassistant:
+  enabled: true
+frontend:
+  enabled: true
 mqtt:
   base_topic: zigbee2mqtt
   server: mqtts://mqtt.lab.nkontur.com:8883
@@ -15,14 +16,11 @@ serial:
   baudrate: 115200
   rtscts: false
 advanced:
-  homeassistant_legacy_entity_attributes: false
-  legacy_api: false
-  legacy_availability_payload: false
   transmit_power: 20
   channel: 25
-device_options:
-  legacy: false
-availability: true
+device_options: {}
+availability:
+  enabled: true
 devices:
   '0x88571dfffe0e4b8a':
     friendly_name: Dining Room Right Rear
@@ -68,3 +66,4 @@ devices:
     friendly_name: Soffit Light 3
 blocklist:
   - '0x88571dfffe76802a'
+version: 5
