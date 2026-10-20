@@ -5,7 +5,7 @@ mqtt:
   base_topic: zigbee2mqtt
   server: mqtts://mqtt.lab.nkontur.com:8883
   user: mosquitto
-  password: {{ vault_mqtt_pass | default(lookup('env', 'MQTT_PASS')) | trim }}
+  password: {{ vault_mqtt_pass | trim }}
   keepalive: 60
   reject_unauthorized: true
   version: 4

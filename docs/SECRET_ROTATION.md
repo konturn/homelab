@@ -27,7 +27,7 @@ Secrets are managed through a **Vault-first** architecture with CI environment v
 └──────┬──────┘                   └───────────┘
        │
        │ Jinja2 template with
-       │ vault_var | default(lookup('env', 'CI_VAR'))
+       │ {{ vault_var }}
        ▼
 ┌─────────────┐
 │ Templated   │
@@ -36,7 +36,7 @@ Secrets are managed through a **Vault-first** architecture with CI environment v
 └─────────────┘
 ```
 
-**If Vault is down:** Every secret reference uses `| default(lookup('env', 'CI_VAR'))`, so CI environment variables serve as automatic fallback. Deploys never break due to Vault downtime.
+**If Vault is down:** the deploy fails. `fetch-vault-secrets` fails closed on any auth or read error and asserts every required secret is non-empty, so templates use the plain `vault_*` variable with no env fallback. Optional secrets are declared in `fetch-vault-secrets/defaults/main.yml` and resolve to `""`.
 
 **Vault UI:** `https://vault.lab.nkontur.com:8200/ui`
 **GitLab CI Variables:** Settings → CI/CD → Variables (Project: root/homelab)
@@ -74,7 +74,7 @@ The `fetch-vault-secrets` role runs as the **first role** in every playbook. It:
 1. Authenticates to Vault via JWT (CI pipeline) or AppRole (moltbot)
 2. Reads all secret paths from `homelab/` KV v2 mount
 3. Sets each secret as an Ansible fact (e.g., `vault_pihole_password`)
-4. If Vault is unreachable, secrets remain unset and the `| default(lookup('env', ...))` fallback activates
+4. Fails the play if Vault is unreachable or a required secret is missing or empty
 
 **Secret variable naming convention:** `vault_<lowercase_ci_var_name>`
 
@@ -88,14 +88,7 @@ FTLCONF_webserver_api_password: {{ vault_pihole_password }}
 To rotate a secret:
 
 1. **Update in Vault** (UI or CLI) — this is the source of truth
-2. **Update GitLab CI variable** — keeps fallback in sync
-3. **Trigger deploy** — push to main or run pipeline manually
-4. Vault value is used immediately; CI variable is backup
-
-To remove CI variable fallback (after Vault is proven stable):
-1. Remove the `| default(lookup('env', ...))` from templates
-2. Delete the CI variable
-3. Update this document
+2. **Trigger deploy** — push to main or run pipeline manually
 
 ---
 

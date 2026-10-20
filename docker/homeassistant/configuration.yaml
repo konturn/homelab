@@ -52,8 +52,8 @@ http:
   ip_ban_enabled: true
   login_attempts_threshold: 5
 spotcast:
-  sp_dc: "{{ vault_spotify_dc | default(lookup('env', 'SPOTIFY_DC')) }}"
-  sp_key: "{{ vault_spotify_key | default(lookup('env', 'SPOTIFY_KEY')) }}"
+  sp_dc: "{{ vault_spotify_dc }}"
+  sp_key: "{{ vault_spotify_key }}"
 
 shell_command:
   sound_doorbell: cat /config/sounds/doorbell-1.wav | nc {{ snapserver_address }} 80

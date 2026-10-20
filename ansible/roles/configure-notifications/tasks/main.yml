@@ -1,11 +1,12 @@
 - name: Resolve Gmail app password
   ansible.builtin.set_fact:
     _msmtp_password: >-
-      {{ (vault_gmail_app_password | default(lookup('env', 'GMAIL_APP_PASSWORD'), true)) | trim }}
+      {{ vault_gmail_app_password | trim }}
   no_log: true
 
-# Vault outages fall back to CI env vars by design, but if both are empty the
-# template still renders a syntactically valid msmtprc with a blank password.
+# fetch-vault-secrets fails the play when this secret is missing or empty, so
+# this is a second guard. If it were ever empty, the template would still
+# render a syntactically valid msmtprc with a blank password.
 # msmtp then fails every send with "authentication method PLAIN needs a
 # password", which is how restic failure notifications were lost between
 # 2026-08-16 and 2026-08-30. Leaving the previous working /etc/msmtprc in
@@ -13,10 +14,9 @@
 - name: Warn when Gmail app password is unavailable
   ansible.builtin.debug:
     msg: >-
-      WARNING: Gmail app password resolved empty from both Vault and
-      GMAIL_APP_PASSWORD. Leaving the existing /etc/msmtprc untouched so mail
-      keeps working. Outbound mail config is now STALE — re-run this deploy
-      once Vault is reachable.
+      WARNING: Gmail app password resolved empty from Vault. Leaving the
+      existing /etc/msmtprc untouched so mail keeps working. Outbound mail
+      config is now STALE — re-run this deploy once Vault is reachable.
   when: _msmtp_password | length == 0
 
 # Deployed BEFORE msmtprc on purpose: msmtprc is the file that names this
