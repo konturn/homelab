@@ -43,7 +43,12 @@ these hold:
 7. Fewer than `max_per_24h` (default 3) MRs carry the `automerged` label with a
    merge time in the last 24 hours.
 8. The router's ZFS pools all report `ONLINE` and no resilver is running. Any error
-   while checking counts as a failure.
+   while checking counts as a failure. A pool listed under `storage_known_state` in
+   the allowlist may instead be `DEGRADED` while a resilver is in progress, but only
+   if it is no worse than recorded there: no other vdev `FAULTED`, `UNAVAIL`,
+   `OFFLINE` or `REMOVED`, no `READ`/`WRITE`/`CKSUM` counter above its recorded
+   value (0 if not listed), no data errors, and I/O not suspended. A listed pool
+   that is `DEGRADED` without a resilver running still blocks.
 
 Before merging, the sweep also requires: the MR pipeline for the current head
 commit succeeded, the MR is not a draft and has no conflicts. MRs labelled
