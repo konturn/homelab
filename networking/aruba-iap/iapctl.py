@@ -485,13 +485,45 @@ PROMPT_RE = re.compile(r"(?:^|\n)[\w.\-]+(?: \([^)]*\))? ?# ?$")
 ERROR_RE = re.compile(r"% ?Parse error|Invalid input|^ERROR|% ?Invalid|% ?Incomplete|not allowed", re.M | re.I)
 
 
+def load_known_keys(path: str) -> dict[str, set[tuple[str, str]]]:
+    """Read an OpenSSH known_hosts file into host -> {(key type, base64 key)}.
+
+    Unlike paramiko's HostKeys, this keeps every key of a type for a host.
+    The virtual controller address is served by whichever AP is the
+    conductor, so known_hosts lists it once per AP, with that AP's keys.
+    Hashed host names are not supported.
+    """
+    known: dict[str, set[tuple[str, str]]] = {}
+    with open(path) as f:
+        for line in f:
+            parts = line.split()
+            if len(parts) < 3 or parts[0].startswith("#"):
+                continue
+            for host in parts[0].split(","):
+                known.setdefault(host, set()).add((parts[1], parts[2]))
+    return known
+
+
+def host_key_known(known: dict[str, set[tuple[str, str]]], host: str, key_type: str, key_b64: str) -> bool:
+    return (key_type, key_b64) in known.get(host, set())
+
+
 class Session:
     def __init__(self, host, user, password, known_hosts=DEFAULT_KNOWN_HOSTS, timeout=20):
         import paramiko  # imported lazily so offline use needs no dependency
         self.client = paramiko.SSHClient()
         if known_hosts and os.path.exists(known_hosts):
-            self.client.load_host_keys(known_hosts)
-            self.client.set_missing_host_key_policy(paramiko.RejectPolicy())
+            known = load_known_keys(known_hosts)
+
+            class KnownKeysPolicy(paramiko.MissingHostKeyPolicy):
+                # No keys are loaded into the client, so every connection is
+                # checked here, against all keys listed for the host.
+                def missing_host_key(self, client, hostname, key):
+                    if not host_key_known(known, hostname, key.get_name(), key.get_base64()):
+                        raise paramiko.SSHException("host key for %s (%s) is not in %s"
+                                                    % (hostname, key.get_name(), known_hosts))
+
+            self.client.set_missing_host_key_policy(KnownKeysPolicy())
         else:
             self.client.set_missing_host_key_policy(paramiko.WarningPolicy())
         self.client.connect(host, username=user, password=password, look_for_keys=False,
