@@ -285,6 +285,9 @@ COMMIT
 # External VLAN to internet
 -A FORWARD -i vlan2-shim -o {{ inet_interface_name }} -j ACCEPT
 
+# Guest VLAN (shim) to internet
+-A FORWARD -i vlan5-shim -o {{ inet_interface_name }} -j ACCEPT
+
 # Internal VLAN to Mullvad VPN
 -A FORWARD -i vlan3-shim -o {{ mullvad_interface_name }} -j ACCEPT
 
