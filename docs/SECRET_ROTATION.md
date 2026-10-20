@@ -64,7 +64,7 @@ homelab/
 ├── infrastructure/  # Aruba, IPMI, LUKS, OMAPI, Pi-hole, router, SNMP, Tailscale, VRRP
 ├── moltbot/         # Gateway, GitLab, Telegram tokens
 ├── mqtt/            # Mosquitto credentials
-└── networking/      # Cloudflare, Mullvad, Namesilo, Wireguard
+└── networking/      # Cloudflare, Mullvad, Wireguard
 ```
 
 ### Ansible Vault Integration
@@ -144,7 +144,6 @@ To remove CI variable fallback (after Vault is proven stable):
 | `OMAPI_SECRET` | `infrastructure/omapi` | `secret` | DHCP OMAPI |
 | `CLOUDFLARE_API_KEY` | `networking/cloudflare` | `api_key` | DDNS cron |
 | `CLOUDFLARE_ZONE_ID` | `networking/cloudflare` | `zone_id` | DDNS cron |
-| `NAMESILO_API_KEY` | `networking/namesilo` | `api_key` | SSL renewal cron |
 | `GRAFANA_TOKEN` | `docker/grafana` | `token` | moltbot-gateway |
 | `SPOTIFY_DC` | `infrastructure/spotify` | `sp_dc` | Home Assistant spotcast |
 | `SPOTIFY_KEY` | `infrastructure/spotify` | `sp_key` | Home Assistant spotcast |
@@ -155,6 +154,13 @@ To remove CI variable fallback (after Vault is proven stable):
 | `BACKBLAZE_ACCESS_KEY_ID` | `backup/backblaze` | `access_key_id` | Restic backups |
 | `BACKBLAZE_SECRET_ACCESS_KEY` | `backup/backblaze` | `secret_access_key` | Restic backups |
 | `RESTIC_PASSWORD` | `backup/restic` | `password` | Restic backups |
+
+> **SSL certificates** are issued and renewed by `networking/ssl/renew.sh` (root cron) using
+> certbot `dns-cloudflare` DNS-01 against Cloudflare, with the token in `/root/cron/credentials`.
+>
+> **Pending deletion:** the Vault path `networking/namesilo` is legacy and unused (no Ansible
+> role fetches it any more). It is kept only until the key is revoked at the registrar;
+> delete the Vault path after that.
 
 ### Secrets NOT in Vault (CI-only)
 

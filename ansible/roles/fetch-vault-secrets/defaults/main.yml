@@ -181,9 +181,6 @@ vault_secret_paths:
     fields:
       vault_cloudflare_api_key: "api_key"
       vault_cloudflare_zone_id: "zone_id"
-  - path: "networking/namesilo"
-    fields:
-      vault_namesilo_api_key: "api_key"
 
   # Spotify credentials (used by Home Assistant spotcast)
   - path: "infrastructure/spotify"

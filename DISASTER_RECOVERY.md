@@ -256,10 +256,10 @@ export RESTIC_PASSWORD="<from secure storage>"
 export OMAPI_SECRET="<from secure storage>"
 export TAILSCALE_AUTH_KEY="<from secure storage>"
 
-# DNS/SSL
+# DNS/SSL (DNS is on Cloudflare; certs use certbot dns-cloudflare DNS-01 via
+# networking/ssl/renew.sh, which reads its token from /root/cron/credentials)
 export CLOUDFLARE_API_KEY="<from secure storage>"
 export CLOUDFLARE_ZONE_ID="<from secure storage>"
-export NAMESILO_API_KEY="<from secure storage>"
 
 # Vault (needed in Phase 4.5 — Vault stays sealed without these)
 export VAULT_UNSEAL_KEYS="<3 of the 5 keys, one per line>"
@@ -622,7 +622,6 @@ restic backup --dry-run /persistent_data/application
 | `TAILSCALE_AUTH_KEY` | Tailscale node auth | Ansible (Tailscale role) |
 | `CLOUDFLARE_API_KEY` | DDNS updates | Ansible (cron job) |
 | `CLOUDFLARE_ZONE_ID` | DNS zone identifier | Ansible (cron job) |
-| `NAMESILO_API_KEY` | SSL cert renewal | Ansible (cron job) |
 | `VAULT_UNSEAL_KEYS` | Unseal Vault (3 of 5, one per line) | Phase 4.5 (`bootstrap.yml`) |
 | `VAULT_TOKEN` | Vault root token — enable KV v2, apply Terraform | Phase 4.5, `vault:configure` |
 | `APPROLE_ROTATION_PAT` | Write rotated secret_ids back to CI variables | `vault:rotate-approles` |
