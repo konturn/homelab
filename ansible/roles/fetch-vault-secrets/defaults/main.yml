@@ -229,5 +229,8 @@ vault_secret_paths:
     fields:
       vault_loki_push_username: "username"
       vault_loki_push_password: "password"
+      # Push-only credential for satellite promtail via iot_nginx
+      vault_loki_iot_push_username: "iot_username"
+      vault_loki_iot_push_password: "iot_password"
 
   # Nominatim vault secret removed — replaced by Pelias geocoding (Headway stack)

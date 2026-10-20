@@ -159,15 +159,32 @@
 - name: Write Loki htpasswd file
   ansible.builtin.copy:
     content: "{{ loki_htpasswd_content.stdout }}"
-    dest: "{{ docker_persistent_data_path }}/{{ item }}/conf/loki.htpasswd"
+    dest: "{{ docker_persistent_data_path }}/lab_nginx/conf/loki.htpasswd"
     owner: root
     group: systemd-journal
     mode: '0640'
-  # iot_nginx serves the push endpoint for satellite promtail, so it needs the
-  # same credentials file as lab_nginx.
-  loop:
-    - lab_nginx
-    - iot_nginx
+  no_log: true
+
+# Push-only credential for satellite promtail on the IoT VLAN. It lives in a
+# separate file that only iot_nginx reads, so it cannot be used against the
+# query API on lab_nginx.
+- name: Generate Loki IoT push htpasswd
+  ansible.builtin.shell: |
+    printf '%s:%s\n' '{{ vault_loki_iot_push_username }}' \
+      "$(openssl passwd -apr1 '{{ vault_loki_iot_push_password }}')"
+  register: loki_iot_htpasswd_content
+  delegate_to: localhost
+  check_mode: no
+  changed_when: false
+  no_log: true
+
+- name: Write Loki IoT push htpasswd file
+  ansible.builtin.copy:
+    content: "{{ loki_iot_htpasswd_content.stdout }}"
+    dest: "{{ docker_persistent_data_path }}/iot_nginx/conf/loki-iot.htpasswd"
+    owner: root
+    group: systemd-journal
+    mode: '0640'
   no_log: true
 
 - name: Ensure nginx conf directory is traversable by workers

@@ -11,8 +11,8 @@ clients:
   # the push path to loki:3100 over the loki-backend network.
   - url: https://loki.iot.lab.nkontur.com/loki/api/v1/push
     basic_auth:
-      username: promtail
-      password: "{{ vault_loki_push_password }}"
+      username: "{{ vault_loki_iot_push_username }}"
+      password: "{{ vault_loki_iot_push_password }}"
     tls_config:
       insecure_skip_verify: true
 
