@@ -1339,6 +1339,9 @@ automerge:eligibility:
   variables:
     GIT_DEPTH: "50"
   script:
+    # The job image runs as a different user than the checkout owner, so git
+    # refuses the repo ("dubious ownership") without this.
+    - git config --global --add safe.directory "$CI_PROJECT_DIR"
     - git fetch -q --depth=50 origin "$CI_MERGE_REQUEST_DIFF_BASE_SHA" || true
     - >-
       python3 ci/automerge/automerge.py mr-check
