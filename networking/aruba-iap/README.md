@@ -3,12 +3,17 @@
 The Wi-Fi cluster (two AP-515s running Aruba Instant, one acting as virtual
 controller) is configured from `running-config.conf` in this directory.
 
+The cluster has a static virtual controller address, 10.4.128.10 on the
+management VLAN (`virtual-controller-ip`, outside the DHCP pool). It always
+answers on the current conductor, so the live tools and CI connect to it
+(Vault `homelab/network/aruba-iap#host`), never to an AP's own DHCP address.
+
 | File | Purpose |
 |---|---|
 | `running-config.conf` | Desired state: the cluster's `show running-config`, normalised |
 | `iapctl.py` | Export, plan, apply and drift check over the controller's SSH CLI |
 | `test_iapctl.py` | Offline unit tests |
-| `known_hosts` | SSH host keys of the APs (either can become the controller) |
+| `known_hosts` | SSH host keys of the APs and of the virtual controller address, which is listed with both APs' keys (either can become the conductor) |
 
 ## Secrets
 
