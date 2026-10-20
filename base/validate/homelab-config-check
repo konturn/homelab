@@ -1,0 +1,176 @@
+#!/usr/bin/env python3
+"""homelab-config-check: sanity checks for rendered, secret-bearing configs.
+
+Used as the `validate:` step of the ansible template tasks in
+configure-homelab-services, so a file that fails a check is never written and
+the service is never restarted onto it. Messages name keys and line numbers
+only, never values.
+
+  homelab-config-check yaml FILE
+      Parses as YAML. Every secret-looking key (see SECRET_KEYS) and every
+      value under `secureJsonData` must be a non-empty string.
+  homelab-config-check nut-users FILE
+      upsd.users: at least one [user] section, an [upsmon] section, and
+      exactly one single-token `password = ...` per section.
+  homelab-config-check nut-upsmon FILE
+      upsmon.conf: at least one well-formed MONITOR line with a non-empty
+      password, plus a SHUTDOWNCMD.
+  homelab-config-check json-size FILE [--min-ratio R] [PREVIOUS ...]
+      Parses as JSON and must be at least R (default 0.5) times the size of
+      each PREVIOUS file that exists.
+"""
+import argparse
+import json
+import os
+import re
+import sys
+
+SECRET_KEYS = {
+    "authorization_credentials",
+    "password",
+    "basicauthpassword",
+    "token",
+    "bottoken",
+    "apikey",
+    "integrationkey",
+}
+
+
+def fail(msg):
+    print(f"homelab-config-check: {msg}", file=sys.stderr)
+    sys.exit(1)
+
+
+def _is_empty(value):
+    return value is None or (isinstance(value, str) and not value.strip())
+
+
+def _walk(node, path, problems, under_secure=False):
+    if isinstance(node, dict):
+        for key, value in node.items():
+            sub = f"{path}.{key}"
+            secure = under_secure or key == "secureJsonData"
+            if isinstance(value, (dict, list)):
+                _walk(value, sub, problems, secure)
+            elif (under_secure or str(key).lower() in SECRET_KEYS) and _is_empty(value):
+                problems.append(sub)
+    elif isinstance(node, list):
+        for i, value in enumerate(node):
+            _walk(value, f"{path}[{i}]", problems, under_secure)
+
+
+def check_yaml(path):
+    try:
+        import yaml
+    except ImportError:
+        fail("python3-yaml is not installed")
+    try:
+        with open(path) as fh:
+            docs = list(yaml.safe_load_all(fh))
+    except yaml.YAMLError as exc:
+        mark = getattr(exc, "problem_mark", None)
+        where = f" at line {mark.line + 1}" if mark else ""
+        fail(f"YAML parse error{where}")
+    if not any(d is not None for d in docs):
+        fail("YAML file is empty")
+    problems = []
+    for i, doc in enumerate(docs):
+        _walk(doc, f"doc{i}", problems)
+    if problems:
+        fail("empty secret value(s): " + ", ".join(problems))
+
+
+def check_nut_users(path):
+    sections = {}
+    current = None
+    with open(path) as fh:
+        for lineno, raw in enumerate(fh, 1):
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            m = re.fullmatch(r"\[([^\]\s]+)\]", line)
+            if m:
+                current = m.group(1)
+                if current in sections:
+                    fail(f"duplicate section [{current}] at line {lineno}")
+                sections[current] = 0
+                continue
+            if current is None:
+                fail(f"line {lineno}: directive outside a [user] section")
+            if re.match(r"password\b", line):
+                m = re.fullmatch(r'password\s*=\s*("[^"]+"|[^\s"#]+)', line)
+                if not m:
+                    fail(f"line {lineno}: password in [{current}] is empty or not a single token")
+                sections[current] += 1
+    if "upsmon" not in sections:
+        fail("no [upsmon] section")
+    for name, count in sections.items():
+        if count != 1:
+            fail(f"[{name}] has {count} password lines, expected 1")
+
+
+def check_nut_upsmon(path):
+    monitors = 0
+    shutdown = False
+    with open(path) as fh:
+        for lineno, raw in enumerate(fh, 1):
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            fields = line.split()
+            if fields[0] == "MONITOR":
+                if len(fields) != 6:
+                    fail(f"line {lineno}: MONITOR needs 5 arguments, has {len(fields) - 1}")
+                if "@" not in fields[1] or not fields[2].isdigit():
+                    fail(f"line {lineno}: MONITOR system or power value malformed")
+                if fields[5] not in ("primary", "secondary", "master", "slave"):
+                    fail(f"line {lineno}: MONITOR type must be primary or secondary")
+                monitors += 1
+            elif fields[0] == "SHUTDOWNCMD":
+                shutdown = len(fields) > 1
+    if monitors == 0:
+        fail("no MONITOR line")
+    if not shutdown:
+        fail("no SHUTDOWNCMD")
+
+
+def check_json_size(path, previous, min_ratio):
+    try:
+        with open(path) as fh:
+            json.load(fh)
+    except ValueError as exc:
+        fail(f"JSON parse error: {exc.__class__.__name__} at line {getattr(exc, 'lineno', '?')}")
+    size = os.path.getsize(path)
+    for prev in previous:
+        if not os.path.isfile(prev):
+            continue
+        prev_size = os.path.getsize(prev)
+        if prev_size and size < min_ratio * prev_size:
+            fail(
+                f"new file is {size} bytes, under {min_ratio:.0%} of {prev} "
+                f"({prev_size} bytes)"
+            )
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    for name in ("yaml", "nut-users", "nut-upsmon"):
+        sub.add_parser(name).add_argument("file")
+    js = sub.add_parser("json-size")
+    js.add_argument("file")
+    js.add_argument("previous", nargs="*")
+    js.add_argument("--min-ratio", type=float, default=0.5)
+    args = ap.parse_args()
+    if args.cmd == "yaml":
+        check_yaml(args.file)
+    elif args.cmd == "nut-users":
+        check_nut_users(args.file)
+    elif args.cmd == "nut-upsmon":
+        check_nut_upsmon(args.file)
+    else:
+        check_json_size(args.file, args.previous, args.min_ratio)
+
+
+if __name__ == "__main__":
+    main()

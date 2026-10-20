@@ -240,6 +240,20 @@
   loop_control:
     label: "{{ item.stat.path | default('skip') }}"
 
+# Pre-restart checks for rendered, secret-bearing configs. Used as the
+# `validate:` step of the template tasks below: a file that fails is never
+# written, the task fails, and the play stops before the restart that would
+# have loaded it. See the script header for what each check covers.
+- name: Install config check helper
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/base/validate/homelab-config-check"
+    dest: /usr/local/sbin/homelab-config-check
+    owner: root
+    group: root
+    mode: '0755'
+  when: "'router' in inventory_hostname"
+
+# Grafana provisioning YAML (datasources) gets a parse + non-empty-secret check.
 - name: Copy docker configuration files
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/{{ item.src }}"
@@ -248,6 +262,9 @@
     group: "{{ item.group | default(item.owner | default('root')) }}"
     mode: "{{ item.mode | default('0640') }}"
     force: "{{ item.force | default(true) }}"
+    validate: >-
+      {{ '/usr/local/sbin/homelab-config-check yaml %s'
+         if item.dest is search('/grafana/provisioning/.+[.]ya?ml$') else omit }}
   register: docker_config_copy
   loop: "{{ docker_config + (docker_config_nginx | default([])) }}"
 
@@ -258,6 +275,7 @@
     owner: root
     group: root
     mode: "0640"
+    validate: /usr/local/sbin/homelab-config-check yaml %s
   register: grafana_contactpoints
   when: "'router' in inventory_hostname"
 
@@ -407,11 +425,14 @@
     owner: root
     group: nut
     mode: "{{ item.mode }}"
+    # upsd 2.8 has no config-test mode, so the files that carry the monitor
+    # password get structural checks instead (homelab-config-check).
+    validate: "{{ item.validate | default(omit) }}"
   loop:
     - { src: "ups.conf", dest: "ups.conf", mode: "0640" }
     - { src: "upsd.conf", dest: "upsd.conf", mode: "0640" }
-    - { src: "upsd.users", dest: "upsd.users", mode: "0640" }
-    - { src: "upsmon.conf", dest: "upsmon.conf", mode: "0640" }
+    - { src: "upsd.users", dest: "upsd.users", mode: "0640", validate: "/usr/local/sbin/homelab-config-check nut-users %s" }
+    - { src: "upsmon.conf", dest: "upsmon.conf", mode: "0640", validate: "/usr/local/sbin/homelab-config-check nut-upsmon %s" }
     - { src: "notify.sh", dest: "notify.sh", mode: "0755" }
   register: nut_configs
   when: "'router' in inventory_hostname"
@@ -615,6 +636,14 @@
     owner: konoahko
     group: konoahko
     mode: "0600"
+    # Must parse as JSON and be at least half the size of the current file and
+    # of OpenClaw's last-known-good copy. OpenClaw restores an older config when
+    # a new one shrinks by more than 50%, while the deploy still reports
+    # success. A deliberate large shrink needs that baseline cleared first.
+    validate: >-
+      /usr/local/sbin/homelab-config-check json-size %s
+      {{ docker_persistent_data_path }}/openclaw/data/openclaw.json
+      {{ docker_persistent_data_path }}/openclaw/data/openclaw.json.last-good
   register: openclaw_config
   when: "'router' in inventory_hostname"
 
