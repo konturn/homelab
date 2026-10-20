@@ -308,17 +308,40 @@
     - vaultwarden_signups is changed
     - not ansible_check_mode
 
+# One action per container, not per changed file. Looping over
+# docker_config_copy.results directly restarted lab_nginx once for each of its
+# four templated files, so a single deploy took it down up to 4 times in a row.
+# Each `docker restart -t 30` sends nginx SIGQUIT, waits out the full 30s on
+# long-lived connections, then SIGKILLs. Measured 2026-10-18: 25 lab_nginx
+# starts in 3h during a merge batch, each one a connection-refused window on
+# *.lab.nkontur.com (Grafana's Loki datasource included).
+- name: Collect containers whose config changed
+  ansible.builtin.set_fact:
+    _changed_config_containers: "{{ docker_config_copy.results | selectattr('changed') | map(attribute='item.name') | unique | list }}"
+    _nginx_container_names: "{{ nginx_config | default([]) | map(attribute='name') | list }}"
+
+# nginx mounts its whole conf dir, so the new files are already visible inside
+# the container and a graceful reload applies them with no downtime. nginx -t
+# runs first: a bad config fails the deploy while the old config keeps serving,
+# where a restart would have left nginx dead. A container that is not running
+# is skipped; compose-up below starts it with the new config.
+- name: Reload nginx containers if config changed
+  ansible.builtin.shell: |
+    if [ "$(docker inspect -f '{{ '{{' }}.State.Running{{ '}}' }}' {{ item }} 2>/dev/null)" != "true" ]; then
+      echo "{{ item }} not running, compose-up will start it"
+      exit 0
+    fi
+    docker exec {{ item }} nginx -t && docker exec {{ item }} nginx -s reload
+  timeout: 60
+  when: not ansible_check_mode
+  loop: "{{ _changed_config_containers | intersect(_nginx_container_names) }}"
+
 - name: Restart containers if config change
   ansible.builtin.command:
-    cmd: "docker restart -t 30 {{ item.item.name }}"
+    cmd: "docker restart -t 30 {{ item }}"
   timeout: 60
-  when:
-    - item.changed
-    - item.item.name != 'telegraf'
-    - not ansible_check_mode
-  loop: "{{ docker_config_copy.results }}"
-  loop_control:
-    label: "{{ item.item.name | default('unknown') }} ({{ item.item.src | default('?') }})"
+  when: not ansible_check_mode
+  loop: "{{ _changed_config_containers | difference(_nginx_container_names + ['telegraf']) }}"
   ignore_errors: yes
 
 - name: Restart Telegraf systemd service if config changed
