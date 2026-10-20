@@ -142,11 +142,7 @@ vault_secret_paths:
   - path: "infrastructure/pihole"
     fields:
       vault_pihole_password: "password"
-      vault_pihole_api_token: "api_token"
-    # password is not set in Vault; docker-compose.yml renders WEBPASSWORD
-    # from it (empty, as before). Set it in Vault or drop WEBPASSWORD, then
-    # remove this.
-    optional_fields: [vault_pihole_password]
+      vault_pihole_api_token: "api_token"  # app password (telegraf)
   - path: "infrastructure/tailscale"
     fields:
       vault_tailscale_api_token: "api_token"

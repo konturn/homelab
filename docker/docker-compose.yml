@@ -248,7 +248,9 @@ services:
           memory: 192M
     environment:
       TZ: America/New_York
-      WEBPASSWORD: {{ vault_pihole_password | default(lookup('env', 'PIHOLE_PASSWORD')) | trim | replace("$", "$$") }}
+      # Pi-hole v6 ignores WEBPASSWORD; this sets the admin password (and
+      # makes it read-only in the UI). Required in Vault.
+      FTLCONF_webserver_api_password: {{ vault_pihole_password | trim | replace("$", "$$") }}
       DNSMASQ_USER: root
     volumes:
       - {{ docker_persistent_data_path }}/pihole/conf:/etc/pihole
