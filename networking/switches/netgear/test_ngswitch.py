@@ -1,5 +1,10 @@
 """Unit tests for ngswitch.py (offline; no switch or Vault access)."""
+import argparse
 import copy
+import io
+import tempfile
+from contextlib import redirect_stdout
+from unittest import mock
 import sys
 import unittest
 from pathlib import Path
@@ -498,17 +503,46 @@ class TestFirmwareArtifact(unittest.TestCase):
 
 IMAGE_XML = """<ImageUnitList><Entry><unitID>1</unitID><image1Version>6.7.0.42</image1Version>
 <image2Version>{v2}</image2Version><currentImage>1</currentImage><nextBootImage>{nb}</nextBootImage>
-<image1Description></image1Description><image2Description></image2Description></Entry></ImageUnitList>"""
+<image1Description></image1Description><image2Description></image2Description>{names}</Entry></ImageUnitList>"""
+NAMES = "<image1Name>flash://system/images/image1.bin</image1Name><image2Name>flash://system/images/{n2}</image2Name>"
 
 
 class TestFirmwareStatus(unittest.TestCase):
-    def img(self, v2="6.7.0.42", nb="1"):
+    def img(self, v2="6.7.0.42", nb="1", n2="image2.bin", names=True):
         import xml.etree.ElementTree as ET
-        return ng.parse_image_status(ET.fromstring(IMAGE_XML.format(v2=v2, nb=nb)))
+        xml = IMAGE_XML.format(v2=v2, nb=nb, names=NAMES.format(n2=n2) if names else "")
+        return ng.parse_image_status(ET.fromstring(xml))
 
     def test_parse(self):
-        self.assertEqual(self.img(), {"image1": "6.7.0.42", "image2": "6.7.0.42", "current": 1, "next": 1})
+        self.assertEqual(self.img(), {"image1": "6.7.0.42", "image2": "6.7.0.42", "current": 1, "next": 1,
+                                      "image1_name": "flash://system/images/image1.bin",
+                                      "image2_name": "flash://system/images/image2.bin"})
         self.assertEqual(ng.running_version(self.img()), "6.7.0.42")
+        self.assertIsNone(self.img(names=False)["image2_name"])
+
+    def test_slot_problems(self):
+        self.assertEqual(ng.slot_problems(self.img(v2="6.7.0.52"), 2, "6.7.0.52"), [])
+        # a truncated file name after a failed upload, even though the version reads fine
+        bad = self.img(v2="6.7.0.52", nb="2", n2="rs")
+        self.assertIn("incomplete write", " ".join(ng.slot_problems(bad, 2, "6.7.0.52")))
+        self.assertEqual(ng.slot_problems(bad, 1), [])
+        self.assertIn("expected 6.7.0.52", " ".join(ng.slot_problems(self.img(), 2, "6.7.0.52")))
+        self.assertIn("cannot be verified", " ".join(ng.slot_problems(self.img(names=False), 2)))
+        self.assertIn("no version", " ".join(ng.slot_problems(self.img(v2=""), 2)))
+        self.assertIn("image2 6.7.0.52 [INVALID]", ng.describe_images(bad))
+        self.assertNotIn("INVALID", ng.describe_images(self.img()))
+
+    def test_status_line_flags_invalid_next_boot(self):
+        bad = self.img(v2="6.7.0.52", nb="2", n2="rs")
+        line, flagged = ng.firmware_status_line("sw", dict(FW, version="6.7.0.42"), bad)
+        self.assertTrue(flagged)
+        self.assertIn("NEXT BOOT IMAGE IS INVALID", line)
+
+    def test_upload_problems(self):
+        self.assertEqual(ng.upload_problems({"bytesTransfered": "100", "copyStatusType": "5"}, 100), [])
+        self.assertTrue(ng.upload_problems({"bytesTransfered": "99"}, 100))
+        self.assertTrue(ng.upload_problems({}, 100))
+        self.assertTrue(ng.upload_problems(None, 100))
 
     def test_status_line(self):
         line, behind = ng.firmware_status_line("sw", dict(FW), self.img())
@@ -574,3 +608,120 @@ class TestCommittedFiles(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FakeSwitch:
+    """Stands in for Switch in the firmware command tests (no network)."""
+    def __init__(self, images, upload_status=None, **_):
+        self.images = images
+        self.upload_status = upload_status
+        self.calls = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def login(self, attempts=4):
+        pass
+
+    def logout(self):
+        pass
+
+    def image_status(self):
+        return dict(self.images)
+
+    def set_next_boot(self, slot):
+        self.calls.append(("set_next_boot", slot))
+        self.images["next"] = slot
+
+    def read_state(self):
+        return self.state, [4]
+
+    def export(self):
+        return "exported"
+
+    def clear_load_status(self):
+        pass
+
+    def upload_firmware(self, image, timeout=0, progress=None):
+        self.calls.append(("upload", image.name))
+        self.images.update(self.after_upload)
+        return self.upload_status
+
+    def reboot(self):
+        self.calls.append(("reboot",))
+
+
+def _images(v2="6.7.0.42", n2="image2.bin", nb=2):
+    return {"image1": "6.7.0.42", "image2": v2, "current": 1, "next": nb,
+            "image1_name": "flash://system/images/image1.bin", "image2_name": f"flash://system/images/{n2}"}
+
+
+class TestFirmwareCommands(unittest.TestCase):
+    def setUp(self):
+        self.desired = HERE / "netgear-movie.yml"
+        self.patches = [mock.patch.object(ng, "credentials", return_value={"host": "h", "username": "u", "password": "p"})]
+        for pt in self.patches:
+            pt.start()
+
+    def tearDown(self):
+        mock.patch.stopall()
+
+    def run_set(self, sw, slot, dry=False):
+        with mock.patch.object(ng, "Switch", return_value=sw), redirect_stdout(io.StringIO()):
+            return ng.cmd_firmware_set_next_boot(argparse.Namespace(file=str(self.desired), slot=slot, dry_run=dry))
+
+    def test_set_next_boot_to_running_image(self):
+        sw = FakeSwitch(_images(v2="6.7.0.52", n2="rs", nb=2))
+        self.assertEqual(self.run_set(sw, 1), 0)
+        self.assertEqual(sw.calls, [("set_next_boot", 1)])
+
+    def test_set_next_boot_refuses_invalid_image(self):
+        sw = FakeSwitch(_images(v2="6.7.0.52", n2="rs", nb=1))
+        with self.assertRaises(ng.NgError):
+            self.run_set(sw, 2)
+        self.assertEqual(sw.calls, [])
+
+    def test_set_next_boot_noop_and_dry_run(self):
+        sw = FakeSwitch(_images(nb=1))
+        self.assertEqual(self.run_set(sw, 1), 0)
+        self.assertEqual(self.run_set(sw, 2, dry=True), 0)
+        self.assertEqual(sw.calls, [])
+
+    def _upgrade(self, sw, tmp):
+        d = ng.load_desired(self.desired)
+        sw.state = d["state"]
+        image = Path(tmp) / d["firmware"]["image"]
+        image.write_bytes(b"x" * 10)
+        args = argparse.Namespace(file=str(self.desired), cache_dir=tmp, backup_dir=tmp, export_dir=None,
+                                  report=None, upload_timeout=1, reboot_timeout=1, dry_run=False)
+        with mock.patch.object(ng, "Switch", return_value=sw), \
+                mock.patch.object(ng, "fetch_firmware", return_value=image), redirect_stdout(io.StringIO()):
+            return ng.cmd_firmware_upgrade(args)
+
+    def test_upgrade_refuses_when_next_boot_is_not_running(self):
+        sw = FakeSwitch(_images(nb=2))
+        with tempfile.TemporaryDirectory() as tmp, self.assertRaises(ng.NgError) as cm:
+            self._upgrade(sw, tmp)
+        self.assertIn("is not the running image1", str(cm.exception))
+        self.assertNotIn(("upload", ng.load_desired(self.desired)["firmware"]["image"]), sw.calls)
+
+    def test_upgrade_truncated_image_restores_next_boot_and_does_not_reboot(self):
+        sw = FakeSwitch(_images(nb=1), upload_status={"bytesTransfered": "10", "copyStatusType": "5"})
+        sw.after_upload = {"image2": "6.7.0.52", "image2_name": "flash://system/images/rs", "next": 2}
+        with tempfile.TemporaryDirectory() as tmp, self.assertRaises(ng.NgError) as cm:
+            self._upgrade(sw, tmp)
+        self.assertIn("DID NOT VERIFY", str(cm.exception))
+        self.assertIn(("set_next_boot", 1), sw.calls)
+        self.assertNotIn(("reboot",), sw.calls)
+        self.assertEqual(sw.images["next"], 1)
+
+    def test_upgrade_size_mismatch_does_not_reboot(self):
+        sw = FakeSwitch(_images(nb=1), upload_status={"bytesTransfered": "9", "copyStatusType": "5"})
+        sw.after_upload = {"image2": "6.7.0.52", "next": 2}
+        with tempfile.TemporaryDirectory() as tmp, self.assertRaises(ng.NgError) as cm:
+            self._upgrade(sw, tmp)
+        self.assertIn("bytes transferred", str(cm.exception))
+        self.assertNotIn(("reboot",), sw.calls)

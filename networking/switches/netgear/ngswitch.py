@@ -10,6 +10,7 @@ Subcommands
   generate         write a desired-state file from the live switch
   render-snapshot  update the managed lines of a snapshot from the desired state (offline)
   firmware status  running / stored image versions against the desired firmware
+  firmware set-next-boot  choose the image slot for the next boot (no reboot)
   firmware upgrade upload the desired firmware, reboot into it, verify, check drift
 
 Managed settings: VLANs (id, name), per-port VLAN membership (untagged/tagged),
@@ -1006,8 +1007,11 @@ class Switch:
         except NgError:
             pass
 
-    def upload_firmware(self, image: Path, timeout: int = 1200, progress=None) -> None:
-        """HTTP File Download (Maintenance > Download), file type Software, then wait for the flash write."""
+    def upload_firmware(self, image: Path, timeout: int = 1200, progress=None) -> dict:
+        """HTTP File Download (Maintenance > Download), file type Software, then wait for the flash write.
+
+        Returns the switch's final LoadStatus. A "done" status does not mean the image
+        is good: check it with upload_problems() and slot_problems() before booting it."""
         _, form = self._open(f"{self.base}/{self.cs}/Maintenance/httpconfigprocess.htm")
         m = re.search(r'id="rlCopyFreeHistoryIndex\$scalar"\s+value="([^"]*)"', form.decode("latin-1"))
         if not m:
@@ -1037,7 +1041,7 @@ class Switch:
                     progress(f"   transfer done: {st.get('destinationFileName', '?')}, "
                              f"{st.get('bytesTransfered', '?')} bytes")
                 self.clear_load_status()
-                return
+                return st
             if progress and st and st.get("bytesTransfered") != last:
                 last = st.get("bytesTransfered")
                 progress(f"   transfer status {code}, bytes {last}")
@@ -1297,7 +1301,39 @@ def parse_image_status(el: ET.Element) -> dict:
     def slot(v):
         return int(v) if v in ("1", "2") else None
     return {"image1": d.get("image1Version", ""), "image2": d.get("image2Version", ""),
-            "current": slot(d.get("currentImage")), "next": slot(d.get("nextBootImage"))}
+            "current": slot(d.get("currentImage")), "next": slot(d.get("nextBootImage")),
+            "image1_name": d.get("image1Name"), "image2_name": d.get("image2Name")}
+
+
+def slot_problems(img: dict, slot: int, version: Optional[str] = None) -> List[str]:
+    """Reasons image<slot> is not safe to boot; empty when it looks complete.
+
+    The switch stores image<n> as flash://system/images/image<n>.bin. An HTTP upload
+    that fails part-way can still report "done" and a plausible version while
+    leaving a truncated file name (seen on the MS510TXPP: ".../images/rs"); the
+    switch then refuses that image at boot."""
+    out = []
+    v = img.get(f"image{slot}") or ""
+    if not v:
+        out.append(f"image{slot} has no version")
+    elif version is not None and v != version:
+        out.append(f"image{slot} holds {v}, expected {version}")
+    name = img.get(f"image{slot}_name")
+    if not name:
+        out.append(f"switch does not report the image{slot} file name, so it cannot be verified")
+    elif not name.endswith(f"/image{slot}.bin"):
+        out.append(f"image{slot} file name is {name!r}, expected .../image{slot}.bin (incomplete write)")
+    return out
+
+
+def upload_problems(status: Optional[dict], size: int) -> List[str]:
+    """Check the switch's final transfer status against the local image size."""
+    if not status:
+        return ["switch returned no transfer status"]
+    got = (status.get("bytesTransfered") or "").strip()
+    if got != str(size):
+        return [f"switch reports {got or 'no'} bytes transferred, the image is {size} bytes"]
+    return []
 
 
 def running_version(img: dict) -> Optional[str]:
@@ -1305,8 +1341,10 @@ def running_version(img: dict) -> Optional[str]:
 
 
 def describe_images(img: dict) -> str:
-    return (f"image1 {img['image1'] or '-'}, image2 {img['image2'] or '-'}, "
-            f"running image{img['current']}, next boot image{img['next']}")
+    def one(s):
+        bad = "" if img.get(f"image{s}_name") is None or not slot_problems(img, s) else " [INVALID]"
+        return f"image{s} {img[f'image{s}'] or '-'}{bad}"
+    return f"{one(1)}, {one(2)}, running image{img['current']}, next boot image{img['next']}"
 
 
 # =============================================================================
@@ -1558,6 +1596,10 @@ def cmd_drift(args) -> int:
 def firmware_status_line(name: str, fw: Optional[dict], img: dict) -> Tuple[str, bool]:
     """Return (report line, behind) for one switch."""
     run = running_version(img)
+    nb = img.get("next")
+    if nb and img.get(f"image{nb}_name") is not None and slot_problems(img, nb):
+        return (f"== {name}: firmware {run}; NEXT BOOT IMAGE IS INVALID ({describe_images(img)}): "
+                f"{'; '.join(slot_problems(img, nb))}"), True
     if fw is None:
         return f"== {name}: firmware {run} ({describe_images(img)}); no desired version declared", False
     if run == fw["version"]:
@@ -1576,6 +1618,30 @@ def cmd_firmware_status(args) -> int:
         if behind and args.detailed_exitcode:
             rc = 2
     return rc
+
+
+def cmd_firmware_set_next_boot(args) -> int:
+    d = load_desired(Path(args.file))
+    name, slot = d["name"], args.slot
+    with Switch(**credentials(d)) as sw:
+        img = sw.image_status()
+        print(f"{name}: {describe_images(img)}")
+        problems = slot_problems(img, slot)
+        if problems:
+            raise NgError(f"{name}: refusing to boot image{slot}: " + "; ".join(problems))
+        if img["next"] == slot:
+            print(f"{name}: image{slot} is already the next boot image; nothing to do")
+            return 0
+        if args.dry_run:
+            print(f"{name}: dry run; would set image{slot} ({img[f'image{slot}']}) as the next boot image")
+            return 0
+        sw.set_next_boot(slot)
+        img = sw.image_status()
+    print(f"{name}: now {describe_images(img)}")
+    if img["next"] != slot:
+        raise NgError(f"{name}: next boot image is still image{img['next']} after setting image{slot}")
+    print(f"{name}: next boot image{slot}; the switch was not rebooted")
+    return 0
 
 
 def _stamp(t0: float):
@@ -1604,6 +1670,9 @@ def cmd_firmware_upgrade(args) -> int:
             raise NgError(f"{name}: already running {run}; refusing to upgrade to the same version")
         if img["current"] is None:
             raise NgError(f"{name}: could not tell which image is running")
+        if img["next"] != img["current"]:
+            raise NgError(f"{name}: next boot image{img['next']} is not the running image{img['current']}; "
+                          f"check both slots and fix it first (firmware set-next-boot {f.name} {img['current']})")
         current, mgmt = sw.read_state()
         changes, _ = plan(current, d["state"])
         if changes:
@@ -1620,10 +1689,20 @@ def cmd_firmware_upgrade(args) -> int:
             return 0
         sw.clear_load_status()
         log(f"{name}: uploading {image.name} ({image.stat().st_size} bytes)")
-        sw.upload_firmware(image, timeout=args.upload_timeout, progress=log)
+        st = sw.upload_firmware(image, timeout=args.upload_timeout, progress=log)
         img = sw.image_status()
         log(f"{name}: after upload: {describe_images(img)}")
-        new_slot = slot_after_upload(img, fw["version"])
+        problems = upload_problems(st, image.stat().st_size)
+        try:
+            new_slot = slot_after_upload(img, fw["version"])
+            problems += slot_problems(img, new_slot, fw["version"])
+        except NgError as e:
+            problems.append(str(e))
+        if problems:
+            restore_next_boot(sw, img, name, log)
+            raise NgError(f"{name}: UPLOADED IMAGE DID NOT VERIFY, NOT REBOOTING: {'; '.join(problems)}. "
+                          "The HTTP upload is unreliable on this model (see README.md, Firmware); "
+                          "do not boot the new slot")
         fallback = 2 if new_slot == 1 else 1
         if not img[f"image{fallback}"] or img[f"image{fallback}"] == fw["version"]:
             raise NgError(f"{name}: no previous firmware left in image{fallback} to fall back to; not rebooting")
@@ -1666,6 +1745,25 @@ def cmd_firmware_upgrade(args) -> int:
         return 1
     log(f"{name}: upgraded {old_version} -> {run} in {time.time() - t0:.0f}s; no drift")
     return 0
+
+
+def restore_next_boot(sw, img: dict, name: str, log) -> None:
+    """After a bad upload, point the next boot back at the running image."""
+    run = img.get("current")
+    if not run or img.get("next") == run:
+        return
+    log(f"{name}: setting the next boot image back to the running image{run}")
+    try:
+        sw.set_next_boot(run)
+        after = sw.image_status()
+    except (NgError, urllib.error.URLError, OSError) as e:
+        log(f"!! {name}: could not restore the next boot image: {e}")
+        return
+    if after["next"] != run:
+        log(f"!! {name}: next boot is still image{after['next']}; set image{run} in the web UI "
+            "(Maintenance > File Management > Dual Image) before the switch reboots")
+    else:
+        log(f"{name}: next boot image{run} again ({describe_images(after)})")
 
 
 def slot_after_upload(img: dict, version: str) -> int:
@@ -1771,6 +1869,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     fs.add_argument("files", nargs="*")
     fs.add_argument("--detailed-exitcode", action="store_true", help="exit 2 when a switch is behind")
     fs.set_defaults(fn=cmd_firmware_status)
+    fs = fsub.add_parser("set-next-boot", help="make image 1 or 2 the next boot image (does not reboot)")
+    fs.add_argument("file")
+    fs.add_argument("slot", type=int, choices=(1, 2))
+    fs.add_argument("--dry-run", action="store_true")
+    fs.set_defaults(fn=cmd_firmware_set_next_boot)
     fs = fsub.add_parser("upgrade", help="upload the desired firmware, boot it, verify, check drift")
     fs.add_argument("file")
     fs.add_argument("--cache-dir", help="firmware download cache (default $NETGEAR_FIRMWARE_DIR or ~/.cache/ngswitch-firmware)")
