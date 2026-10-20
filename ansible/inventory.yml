@@ -70,10 +70,12 @@ all:
     excel_vm_mac: "52:54:00:3a:48:0a"
     excel_vm_address: 10.3.48.10
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
-    omapi_secret: "{{ (vault_omapi_secret | default(lookup('env', 'OMAPI_SECRET'))) | trim }}"
-    tailscale_api_token: "{{ (vault_tailscale_api_token | default(lookup('env', 'TAILSCALE_API_TOKEN'))) | trim }}"
-    tailscale_oauth_client_id: "{{ vault_tailscale_oauth_client_id | default(lookup('env', 'TAILSCALE_OAUTH_CLIENT_ID')) | trim }}"
-    tailscale_oauth_client_secret: "{{ vault_tailscale_oauth_client_secret | default(lookup('env', 'TAILSCALE_OAUTH_CLIENT_SECRET')) | trim }}"
+    # Secrets come only from fetch-vault-secrets, which fails the play when
+    # one is missing. No env/empty fallback: an undefined value must fail.
+    omapi_secret: "{{ vault_omapi_secret | trim }}"
+    tailscale_api_token: "{{ vault_tailscale_api_token | trim }}"
+    tailscale_oauth_client_id: "{{ vault_tailscale_oauth_client_id | trim }}"
+    tailscale_oauth_client_secret: "{{ vault_tailscale_oauth_client_secret | trim }}"
     tailscale_tailnet: "tail2360f8.ts.net"
     tailscale_split_dns:
       lab.nkontur.com:
@@ -81,8 +83,8 @@ all:
       iot.lab.nkontur.com:
         - "10.3.32.2"
     grafana_url: "http://grafana:3000"
-    grafana_token: "{{ (vault_grafana_token | default(lookup('env', 'GRAFANA_TOKEN'))) | trim }}"
-    brave_api_key: "{{ (vault_brave_api_key | default(lookup('env', 'BRAVE_API_KEY'))) | trim }}"
+    grafana_token: "{{ vault_grafana_token | trim }}"
+    brave_api_key: "{{ vault_brave_api_key | trim }}"
     is_satellite: false
   hosts:
     router.lab.nkontur.com:

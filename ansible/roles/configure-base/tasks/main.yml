@@ -83,14 +83,49 @@
     group: root
     mode: 0600
 
-- name: write to LUKS password file
+# /etc/password_file.txt unlocks the data disks at boot (see crypttab), so it
+# is only ever replaced by a key that is known to work: the value from Vault
+# must be non-empty and non-trivial, and the candidate file must open at least
+# one LUKS device that crypttab unlocks with it (luks-keyfile-check, run as
+# the copy's validate step). The previous file is kept as a timestamped
+# backup next to it.
+- name: Install LUKS key file check helper
   ansible.builtin.copy:
-    content: "{{ (vault_luks_password_base64 | default(lookup('env', 'LUKS_PASSWORD_BASE64'))) | trim | b64decode }}"
-    dest: '/etc/password_file.txt'
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/disk/luks-keyfile-check' }}"
+    dest: /usr/local/sbin/luks-keyfile-check
     owner: root
     group: root
-    mode: 0600
-  no_log: true
+    mode: '0755'
+
+- name: Check the LUKS key from Vault before writing it
+  ansible.builtin.assert:
+    that:
+      - vault_secrets_verified | default(false) | bool
+      - vault_luks_password_base64 | default('') | trim | length > 0
+      - vault_luks_password_base64 | trim | b64decode | length >= 16
+    fail_msg: "LUKS key from Vault is missing, empty or too short. Not touching /etc/password_file.txt."
+    quiet: true
+
+- name: Write the LUKS password file
+  block:
+    - name: write to LUKS password file
+      ansible.builtin.copy:
+        content: "{{ vault_luks_password_base64 | trim | b64decode }}"
+        dest: '/etc/password_file.txt'
+        owner: root
+        group: root
+        mode: 0600
+        backup: true
+        validate: /usr/local/sbin/luks-keyfile-check %s
+      no_log: true
+  rescue:
+    # The task above is no_log, so say what happened without its output.
+    - name: LUKS password file was not replaced
+      ansible.builtin.fail:
+        msg: >-
+          Writing /etc/password_file.txt failed (most likely the key from Vault
+          does not open any crypttab device). The existing file was left in
+          place. Run /usr/local/sbin/luks-keyfile-check on the host to check.
 
 - name: Set max memory per process for non-root users
   community.general.pam_limits:

@@ -1,0 +1,47 @@
+# Fail-closed tests for ansible/roles/fetch-vault-secrets, run by run.sh
+# against a fake Vault (mock_vault.py). Each run sets `scenario`; the play
+# must either resolve every secret or stop before the "write config" task.
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    vault_addr: "http://127.0.0.1:{{ mock_port }}/{{ scenario }}"
+    vault_jwt_token: "test-jwt"
+    vault_approle_role_id: ""
+    vault_approle_secret_id: ""
+    vault_timeout: 1
+    vault_fetch_retries: 1
+    vault_fetch_delay: 0
+    fetch_ssh_ca_key: true
+    vault_secret_paths:
+      - path: "svc/a"
+        fields:
+          test_one: "one"
+          test_two: "two"
+      - path: "svc/b"
+        fields:
+          test_three: "three"
+      - path: "opt/c"
+        fields:
+          test_four: "four"
+        optional: true
+  roles:
+    - role: fetch-vault-secrets
+  tasks:
+    - name: Check resolved values
+      ansible.builtin.assert:
+        that:
+          - vault_secrets_verified | bool
+          - test_one == 'value-one'
+          - test_two == 'value-two'
+          - test_three == 'value-three'
+          - test_four == ('' if scenario == 'missing-opt' else 'value-four')
+          - vault_ssh_ca_public_key | length > 0
+
+    # Stands in for every config-writing task in the real playbooks.
+    - name: Write config
+      ansible.builtin.copy:
+        content: "{{ test_one }}\n"
+        dest: "{{ marker }}"
+        mode: '0600'
+      no_log: true

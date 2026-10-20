@@ -148,8 +148,8 @@
 # Promtail and Docker logging driver authenticate to Loki via nginx reverse proxy
 - name: Generate Loki htpasswd file
   ansible.builtin.shell: |
-    printf '%s:%s\n' '{{ vault_loki_push_username | default("promtail") }}' \
-      "$(openssl passwd -apr1 '{{ vault_loki_push_password | default(lookup("env", "LOKI_PUSH_PASSWORD")) }}')"
+    printf '%s:%s\n' '{{ vault_loki_push_username }}' \
+      "$(openssl passwd -apr1 '{{ vault_loki_push_password }}')"
   register: loki_htpasswd_content
   delegate_to: localhost
   check_mode: no

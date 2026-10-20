@@ -197,11 +197,19 @@
     group: root
     mode: '0700'
 
+- name: Refuse to write DDNS credentials without Cloudflare secrets
+  ansible.builtin.assert:
+    that:
+      - vault_cloudflare_api_key | default('') | trim | length > 0
+      - vault_cloudflare_zone_id | default('') | trim | length > 0
+    fail_msg: "Cloudflare secrets are empty (Vault read failed?). Not touching /root/cron/.ddns.env."
+    quiet: true
+
 - name: Deploy DDNS credentials to environment file
   ansible.builtin.copy:
     content: |
-      CLOUDFLARE_API_KEY={{ (vault_cloudflare_api_key | default(lookup('env', 'CLOUDFLARE_API_KEY'))) | trim }}
-      CLOUDFLARE_ZONE_ID={{ (vault_cloudflare_zone_id | default(lookup('env', 'CLOUDFLARE_ZONE_ID'))) | trim }}
+      CLOUDFLARE_API_KEY={{ vault_cloudflare_api_key | trim }}
+      CLOUDFLARE_ZONE_ID={{ vault_cloudflare_zone_id | trim }}
       CLOUDFLARE_EMAIL=konoahko@gmail.com
     dest: /root/cron/.ddns.env
     owner: root
@@ -324,6 +332,7 @@
     owner: root
     group: root
     mode: '0640'
+    validate: /usr/sbin/dnsmasq --test -C %s
   register: dnsmasq
 
 - name: Restart dnsmasq when the drop-in files change
@@ -367,6 +376,25 @@
     enabled: yes
   when: avahi_conf.changed or avahi_services.changed or avahi_hosts.changed
 
+# fetch-vault-secrets already fails the play on a missing secret; this keeps
+# dhcpd.conf safe even if the role is skipped or the variable is overridden.
+- name: Refuse to render dhcpd.conf without an OMAPI secret
+  ansible.builtin.assert:
+    that:
+      - omapi_secret | default('') | length > 0
+    fail_msg: "omapi_secret is empty (Vault read failed?). Not touching dhcpd.conf."
+
+# dhcpd -t runs on the rendered candidate before it replaces the live file
+# (dhcpd-check copies it into /etc/dhcp because of dhcpd's AppArmor profile).
+# A config that fails the test is never installed and dhcpd is not restarted.
+- name: Install dhcpd config check helper
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/dhcp/dhcpd-check' }}"
+    dest: /usr/local/sbin/dhcpd-check
+    owner: root
+    group: root
+    mode: '0755'
+
 - name: Populate DHCP conf file
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/dhcp/dhcpd.conf' }}"
@@ -374,6 +402,7 @@
     owner: root
     group: root
     mode: '0640'
+    validate: /usr/local/sbin/dhcpd-check %s
   register: dhcp
 
 - name: Populate isc-dhcp-server defaults (listen interfaces)
@@ -391,4 +420,17 @@
     state: restarted
     enabled: yes
   when: dhcp.changed or dhcp_defaults.changed
+
+# The restart above reports success even when dhcpd exits right after
+# starting, so check that it is still running.
+- name: Check isc-dhcp-server is running after the restart
+  ansible.builtin.command: systemctl is-active isc-dhcp-server
+  register: dhcpd_active
+  changed_when: false
+  until: dhcpd_active.stdout == 'active'
+  retries: 5
+  delay: 3
+  when:
+    - dhcp.changed or dhcp_defaults.changed
+    - not ansible_check_mode
 
