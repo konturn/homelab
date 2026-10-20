@@ -343,13 +343,44 @@
 # runs first: a bad config fails the deploy while the old config keeps serving,
 # where a restart would have left nginx dead. A container that is not running
 # is skipped; compose-up below starts it with the new config.
+#
+# `nginx -s reload` only signals the master and returns 0 either way. If the
+# master then rejects the config, it logs [emerg] and keeps serving the old
+# one, and the deploy used to pass. After the reload, fail if the error log
+# gained an [emerg] line, or if the master started no new worker processes
+# (a successful reload always replaces its workers).
 - name: Reload nginx containers if config changed
   ansible.builtin.shell: |
-    if [ "$(docker inspect -f '{{ '{{' }}.State.Running{{ '}}' }}' {{ item }} 2>/dev/null)" != "true" ]; then
-      echo "{{ item }} not running, compose-up will start it"
+    set -eu
+    c={{ item }}
+    if [ "$(docker inspect -f '{{ '{{' }}.State.Running{{ '}}' }}' "$c" 2>/dev/null)" != "true" ]; then
+      echo "$c not running, compose-up will start it"
       exit 0
     fi
-    docker exec {{ item }} nginx -t && docker exec {{ item }} nginx -s reload
+    docker exec "$c" nginx -t
+    log=/data/log/error.log
+    before=" $(docker exec "$c" pgrep -P 1 | tr '\n' ' ') "
+    off=$(docker exec "$c" sh -c "wc -c < $log" 2>/dev/null || echo 0)
+    docker exec "$c" nginx -s reload
+    i=0
+    while [ "$i" -lt 30 ]; do
+      sleep 0.5
+      i=$((i + 1))
+      emerg=$(docker exec "$c" sh -c "tail -c +$((off + 1)) $log 2>/dev/null | grep -F '[emerg]'" || true)
+      if [ -n "$emerg" ]; then
+        echo "$c rejected the new config, still running the old one:" >&2
+        echo "$emerg" >&2
+        exit 1
+      fi
+      for p in $(docker exec "$c" pgrep -P 1); do
+        case "$before" in
+          *" $p "*) ;;
+          *) echo "$c reloaded (new worker $p)"; exit 0 ;;
+        esac
+      done
+    done
+    echo "$c started no new workers within 15s of reload; new config not applied" >&2
+    exit 1
   timeout: 60
   when: not ansible_check_mode
   loop: "{{ _changed_config_containers | intersect(_nginx_container_names) }}"
