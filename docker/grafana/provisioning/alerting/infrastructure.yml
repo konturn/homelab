@@ -1052,6 +1052,41 @@ groups:
         labels:
           severity: critical
 
+      # Battery ladder is 80% warn -> 50% critical -> 30% critical. On a real
+      # outage all three fire in sequence; that escalation is intentional.
+      # Same error/no-data handling as the other short-pending UPS rules: a
+      # failed or empty query is not a low battery (see datasource-health).
+      - uid: ups-battery-warning-80
+        title: UPS Battery Below 80%
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "snmp")
+                  |> filter(fn: (r) => r._field == "percent_charge")
+                  |> last()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: min, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [80]}}]}
+        noDataState: OK
+        execErrState: KeepLast
+        for: 2m
+        annotations:
+          summary: "UPS battery charge dropped below 80% — may be on battery power"
+        labels:
+          severity: warning
+
       - uid: ups-battery-low
         title: UPS Battery Low
         condition: C
@@ -1080,6 +1115,37 @@ groups:
         for: 2m
         annotations:
           summary: "UPS battery charge below 50%"
+        labels:
+          severity: critical
+
+      - uid: ups-battery-critical-30
+        title: UPS Battery Critical (<30%)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "snmp")
+                  |> filter(fn: (r) => r._field == "percent_charge")
+                  |> last()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: min, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [30]}}]}
+        noDataState: OK
+        execErrState: KeepLast
+        for: 1m
+        annotations:
+          summary: "UPS battery critically low — below 30%. Imminent power loss risk."
         labels:
           severity: critical
 
