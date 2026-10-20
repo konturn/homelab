@@ -26,7 +26,8 @@ processors:
         action: upsert
 
 exporters:
-  otlp/tempo:
+  # OTLP over gRPC (the old "otlp" exporter name is a deprecated alias).
+  otlp_grpc/tempo:
     endpoint: tempo:4317
     tls:
       insecure: true
@@ -48,7 +49,7 @@ service:
     traces:
       receivers: [otlp]
       processors: [resource, batch]
-      exporters: [otlp/tempo]
+      exporters: [otlp_grpc/tempo]
 
     metrics:
       receivers: [otlp]
