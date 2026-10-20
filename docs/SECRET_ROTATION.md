@@ -80,7 +80,7 @@ The `fetch-vault-secrets` role runs as the **first role** in every playbook. It:
 
 Example in docker-compose.yml template:
 ```yaml
-WEBPASSWORD: {{ vault_pihole_password | default(lookup('env', 'PIHOLE_PASSWORD')) }}
+FTLCONF_webserver_api_password: {{ vault_pihole_password }}
 ```
 
 ### Rotation Procedure (Vault-First)
@@ -181,11 +181,11 @@ To remove CI variable fallback (after Vault is proven stable):
 **Description:** Web admin password for Pi-hole DNS management interface.
 
 **Used by:**
-- `pihole` container (environment variable `WEBPASSWORD`)
+- `pihole` container (environment variable `FTLCONF_webserver_api_password`)
 
 **How to rotate:**
 1. Update in Vault: `homelab/infrastructure/pihole` → `password`
-2. Update GitLab CI variable `PIHOLE_PASSWORD` (fallback)
+2. No CI fallback: the deploy fails if the Vault field is missing
 3. Trigger a deployment (push to main or manually run pipeline)
 4. Pi-hole picks up the new password on container restart
 
