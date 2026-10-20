@@ -29,7 +29,12 @@ SEV_ORDER = {"CRITICAL": 0, "HIGH": 1}
 
 
 def trivy(args: List[str], timeout: int) -> "common.subprocess.CompletedProcess":
-    return common.run(["docker", "run", "--rm", "-v", "/var/run/docker.sock:/var/run/docker.sock:ro",
+    # --log-driver none: the JSON report is read from the attached stdout, never
+    # from `docker logs`. With the default json-file driver promtail shipped every
+    # report to Loki: 1.33M lines from one run on 2026-10-19, about 2x GitLab's
+    # daily volume, under ~36 one-off auto-generated container names.
+    return common.run(["docker", "run", "--rm", "--log-driver", "none",
+                       "-v", "/var/run/docker.sock:/var/run/docker.sock:ro",
                        "-v", f"{TRIVY_CACHE}:/root/.cache/trivy", TRIVY_IMAGE] + args, timeout=timeout)
 
 
