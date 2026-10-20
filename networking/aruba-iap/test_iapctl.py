@@ -237,6 +237,48 @@ class SecretsTests(unittest.TestCase):
         self.assertIn("{{vault:", iapctl.format_plan(changes, guards))
 
 
+class KnownHostsTests(unittest.TestCase):
+    def test_vc_address_accepts_either_ap_key(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            kh = os.path.join(tmp, "known_hosts")
+            with open(kh, "w") as f:
+                f.write("# comment\n\n"
+                        "10.0.0.11 ssh-ed25519 AAAAap1\n"
+                        "10.0.0.12 ssh-ed25519 AAAAap2\n"
+                        "10.0.0.10,vc.example ssh-ed25519 AAAAap1\n"
+                        "10.0.0.10 ssh-ed25519 AAAAap2\n"
+                        "10.0.0.10 ssh-rsa AAAArsa1\n")
+            known = iapctl.load_known_keys(kh)
+        for host in ("10.0.0.10", "vc.example"):
+            self.assertTrue(iapctl.host_key_known(known, host, "ssh-ed25519", "AAAAap1"))
+        self.assertTrue(iapctl.host_key_known(known, "10.0.0.10", "ssh-ed25519", "AAAAap2"))
+        self.assertTrue(iapctl.host_key_known(known, "10.0.0.10", "ssh-rsa", "AAAArsa1"))
+        self.assertFalse(iapctl.host_key_known(known, "vc.example", "ssh-ed25519", "AAAAap2"))
+        self.assertFalse(iapctl.host_key_known(known, "10.0.0.11", "ssh-ed25519", "AAAAap2"))
+        self.assertFalse(iapctl.host_key_known(known, "10.0.0.10", "ssh-ed25519", "AAAAother"))
+        self.assertFalse(iapctl.host_key_known(known, "10.0.0.99", "ssh-ed25519", "AAAAap1"))
+
+    def test_repo_known_hosts_lists_vc_address_for_both_aps(self):
+        known = iapctl.load_known_keys(iapctl.DEFAULT_KNOWN_HOSTS)
+        conf = open(iapctl.DEFAULT_DESIRED).read()
+        m = re.search(r"^virtual-controller-ip (\S+)$", conf, re.M)
+        self.assertIsNotNone(m, "running-config.conf sets no virtual-controller-ip")
+        vc = known.get(m.group(1), set())
+        aps = [h for h in known if h != m.group(1)]
+        self.assertGreaterEqual(len(aps), 2)
+        for ap in aps:
+            self.assertTrue(known[ap] <= vc, "VC address is missing the keys of %s" % ap)
+
+    def test_vc_ip_is_single_valued(self):
+        base = sanitized() + [iapctl.Block("virtual-controller-ip 10.0.0.10")]
+        d = [b for b in base if not b.header.startswith("virtual-controller-ip")] + [
+            iapctl.Block("virtual-controller-ip 10.0.0.20")]
+        changes, _ = iapctl.compute(base, d)
+        self.assertEqual([(c.kind, c.commands) for c in changes],
+                         [("replace-line", ["virtual-controller-ip 10.0.0.20"])])
+
+
 class OfflinePlanCli(unittest.TestCase):
     def test_offline_plan_exit_codes(self):
         import tempfile
