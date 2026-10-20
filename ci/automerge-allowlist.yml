@@ -21,6 +21,19 @@ allowed_files:
 # Maximum auto-merges in any rolling 24h window.
 max_per_24h: 3
 
+# Rule 8 (ZFS). Every pool must be ONLINE with no resilver running, except a
+# pool listed here: it may also be DEGRADED while a resilver runs, as long as
+# nothing is worse than recorded below. Any other vdev going FAULTED, UNAVAIL,
+# OFFLINE or REMOVED, any READ/WRITE/CKSUM counter above its value here (0 when
+# not listed), data errors, or suspended I/O still block. Remove the entry once
+# the pool is ONLINE again.
+storage_known_state:
+  mpool:
+    bad_vdevs: [dev22, dev12]
+    errors:            # [read, write, cksum]
+      dev22: [25, 0, 0]
+      dev12: [55, 0, 0]
+
 # MR label that blocks auto-merge for that MR.
 freeze_label: freeze
 

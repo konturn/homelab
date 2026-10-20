@@ -189,27 +189,20 @@ def gitlab_from_env(dry_run: bool) -> GitLab:
 # Global gates
 # ---------------------------------------------------------------------------
 
-def host_storage_ok() -> Tuple[bool, str]:
-    """Fail closed: any error, degraded pool or resilver blocks auto-merge."""
+def host_storage_ok(known: Optional[dict] = None) -> Tuple[bool, str]:
+    """Fail closed: any error, or a pool outside policy.storage_verdict, blocks auto-merge."""
     cmd = ["ssh", "-i", SSH_KEY, "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes", "-o", "ConnectTimeout=15",
            "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
            "-o", "LogLevel=ERROR", f"root@{ROUTER_HOST}",
-           "zpool list -H -o name,health && echo --- && zpool status | grep -E 'resilver in progress' || true"]
+           "zpool list -H -o name,health && echo --- && zpool status -p"]
     try:
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
     except Exception as e:  # noqa: BLE001
         return False, f"storage check failed to run: {e}"
     if out.returncode != 0 or "---" not in out.stdout:
         return False, f"storage check failed (rc={out.returncode}): {out.stderr.strip()[:200]}"
-    pools, _, tail = out.stdout.partition("---")
-    bad = [l for l in pools.strip().splitlines() if l.split()[-1:] != ["ONLINE"]]
-    if not pools.strip():
-        return False, "storage check returned no pools"
-    if bad:
-        return False, "storage pool not ONLINE: " + "; ".join(bad)
-    if "resilver in progress" in tail:
-        return False, "storage pool is resilvering"
-    return True, "storage pools ONLINE"
+    pools, _, status = out.stdout.partition("---")
+    return policy.storage_verdict(pools, status, known)
 
 
 def global_gates(gl: GitLab, allow: dict, host_check: bool = True) -> List[str]:
@@ -227,7 +220,7 @@ def global_gates(gl: GitLab, allow: dict, host_check: bool = True) -> List[str]:
     if len(recent) >= limit:
         reasons.append(f"rate limit: {len(recent)} auto-merges in the last 24h (max {limit})")
     if host_check:
-        ok, msg = host_storage_ok()
+        ok, msg = host_storage_ok(allow.get("storage_known_state"))
         if not ok:
             reasons.append(msg)
     return reasons

@@ -378,3 +378,138 @@ def evaluate_mr(*, author: str, target_branch: str, labels: List[str],
     elif v.eligible:
         v.reject("MR does not change the compose file")
     return v
+
+
+# ---------------------------------------------------------------------------
+# Host storage (rule 8)
+# ---------------------------------------------------------------------------
+# A pool must be ONLINE with no resilver running, unless it has an entry under
+# `storage_known_state` in the allowlist. Such a pool may also be DEGRADED while
+# a resilver runs, as long as nothing is worse than the recorded state: no vdev
+# FAULTED/UNAVAIL/OFFLINE/REMOVED beyond the listed ones, no READ/WRITE/CKSUM
+# counter above its recorded value, no data errors, not suspended.
+
+BAD_VDEV_STATES = {"FAULTED", "UNAVAIL", "OFFLINE", "REMOVED"}
+POOL_OK_HEALTH = {"ONLINE", "DEGRADED"}
+
+
+@dataclass
+class PoolStatus:
+    name: str
+    state: str = ""
+    resilvering: bool = False
+    suspended: bool = False
+    errors_line: str = ""
+    # vdev name -> (state, (read, write, cksum) or None when the row has no counters)
+    rows: Dict[str, Tuple[str, Optional[Tuple[int, int, int]]]] = field(default_factory=dict)
+
+
+def _counter(tok: str) -> int:
+    """`zpool status -p` prints exact integers; anything else fails closed."""
+    if not tok.isdigit():
+        raise PolicyError(f"unparsable error counter {tok!r} (expected `zpool status -p` output)")
+    return int(tok)
+
+
+def parse_zpool_status(text: str) -> Dict[str, PoolStatus]:
+    pools: Dict[str, PoolStatus] = {}
+    cur: Optional[PoolStatus] = None
+    in_config = False
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        stripped = line.strip()
+        m = re.match(r"^\s*(pool|state|status|scan|errors):\s*(.*)$", line)
+        if m and not raw.startswith("\t"):
+            key, val = m.group(1), m.group(2).strip()
+            if key == "pool":
+                cur = pools.setdefault(val, PoolStatus(val))
+                in_config = False
+            elif cur is None:
+                raise PolicyError(f"zpool status: {key!r} line before any pool line")
+            elif key == "state":
+                cur.state = val
+            elif key == "status":
+                if "suspend" in val.lower():
+                    cur.suspended = True
+            elif key == "scan":
+                if "resilver in progress" in val:
+                    cur.resilvering = True
+            elif key == "errors":
+                cur.errors_line = val
+                in_config = False
+            continue
+        if cur is None:
+            continue
+        if stripped.startswith("config:"):
+            in_config = True
+            continue
+        if "suspend" in stripped.lower() and not in_config:
+            cur.suspended = True   # continuation of a status: paragraph
+        if not in_config or not stripped:
+            continue
+        toks = stripped.split()
+        if toks[0] == "NAME" or len(toks) < 2:
+            continue   # header, or a section label (logs, cache, spares)
+        name, state = toks[0], toks[1]
+        counts = None
+        if len(toks) >= 5:
+            counts = (_counter(toks[2]), _counter(toks[3]), _counter(toks[4]))
+        cur.rows[name] = (state, counts)
+    return pools
+
+
+def storage_verdict(list_text: str, status_text: str, known: Optional[dict]) -> Tuple[bool, str]:
+    """Decide rule 8 from `zpool list -H -o name,health` and `zpool status -p` output."""
+    known = known or {}
+    health = {}
+    for line in list_text.strip().splitlines():
+        parts = line.split()
+        if len(parts) != 2:
+            return False, f"unexpected zpool list line: {line!r}"
+        health[parts[0]] = parts[1]
+    if not health:
+        return False, "storage check returned no pools"
+    try:
+        status = parse_zpool_status(status_text)
+    except PolicyError as e:
+        return False, f"storage check: {e}"
+    notes = []
+    for name, h in health.items():
+        st = status.get(name)
+        if st is None:
+            return False, f"storage pool {name}: missing from zpool status"
+        if h not in POOL_OK_HEALTH or st.state not in POOL_OK_HEALTH:
+            return False, f"storage pool {name} is {h}"
+        if st.suspended:
+            return False, f"storage pool {name}: I/O suspended"
+        if st.errors_line != "No known data errors":
+            return False, f"storage pool {name}: errors: {st.errors_line or 'line missing'}"
+        if not st.rows:
+            return False, f"storage pool {name}: no vdevs parsed from zpool status"
+        k = known.get(name)
+        if k is None:
+            if h != "ONLINE":
+                return False, f"storage pool not ONLINE: {name} {h}"
+            if st.resilvering:
+                return False, f"storage pool {name} is resilvering"
+        elif h != "ONLINE" and not st.resilvering:
+            return False, f"storage pool {name} is {h} with no resilver running"
+        k = k or {}
+        known_bad = set(k.get("bad_vdevs") or [])
+        baseline = {v: tuple(c) for v, c in (k.get("errors") or {}).items()}
+        for vdev, (vstate, counts) in st.rows.items():
+            if vstate in BAD_VDEV_STATES and vdev not in known_bad:
+                return False, f"storage pool {name}: {vdev} is {vstate} (not in the known state)"
+            if counts is None:
+                continue
+            base = baseline.get(vdev, (0, 0, 0))
+            for label, got, was in zip(("read", "write", "cksum"), counts, base):
+                if got > was:
+                    return False, f"storage pool {name}: {vdev} {label} errors {got} (known {was})"
+        if h == "ONLINE" and not st.resilvering:
+            notes.append(f"{name} ONLINE")
+        else:
+            bad = sorted(v for v, (vs, _) in st.rows.items() if vs in BAD_VDEV_STATES)
+            notes.append(f"{name} {h}{', resilvering' if st.resilvering else ''}, within the known state"
+                         f" ({', '.join(bad) or 'no faulted vdevs'})")
+    return True, "storage pools: " + "; ".join(notes)
