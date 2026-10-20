@@ -367,6 +367,15 @@
     enabled: yes
   when: avahi_conf.changed or avahi_services.changed or avahi_hosts.changed
 
+# The Vault role falls back to CI env vars when a read fails, and OMAPI_SECRET
+# is not set there, so a Vault timeout renders "secret ;". dhcpd then refuses
+# the file and stays down until the next deploy. Fail the deploy instead.
+- name: Refuse to render dhcpd.conf without an OMAPI secret
+  ansible.builtin.assert:
+    that:
+      - omapi_secret | default('') | length > 0
+    fail_msg: "omapi_secret is empty (Vault read failed?). Not touching dhcpd.conf."
+
 - name: Populate DHCP conf file
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/dhcp/dhcpd.conf' }}"
