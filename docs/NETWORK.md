@@ -466,6 +466,11 @@ ISC DHCP server runs on the router, serving:
 | 6 (iot) | 10.6.64.0 - 10.6.127.255 | PiHole, 1.1.1.1 |
 | 7 | 10.7.64.0 - 10.7.127.255 | 1.1.1.1 |
 
+Lease times: 12 h default / 24 h max (`default-lease-time 43200`,
+`max-lease-time 86400`) on all subnets except guest (VLAN 5), which uses
+4 h / 8 h for its transient clients. Clients renew at half the lease, so a
+dhcpd outage of up to ~6 h (2 h on guest) does not expire any lease.
+
 Static reservations are defined for critical devices (see DHCP config).
 
 ---
