@@ -586,6 +586,10 @@ zwave:deploy:
   extends: .ansible
   stage: deploy
   resource_group: deploy-zwave
+  # environment: enables "prevent outdated deployment jobs"; with the
+  # resource group in newest_ready_first mode, older queued deploys are skipped.
+  environment:
+    name: zwave
   id_tokens:
     VAULT_ID_TOKEN:
       aud: https://vault.lab.nkontur.com:8200
@@ -603,6 +607,10 @@ satellite-2:deploy:
   extends: .ansible
   stage: deploy
   resource_group: deploy-satellite-2
+  # environment: enables "prevent outdated deployment jobs"; with the
+  # resource group in newest_ready_first mode, older queued deploys are skipped.
+  environment:
+    name: satellite-2
   id_tokens:
     VAULT_ID_TOKEN:
       aud: https://vault.lab.nkontur.com:8200
@@ -637,6 +645,10 @@ macmini:deploy:
   extends: .ansible
   stage: deploy
   resource_group: deploy-macmini
+  # environment: enables "prevent outdated deployment jobs"; with the
+  # resource group in newest_ready_first mode, older queued deploys are skipped.
+  environment:
+    name: macmini
   id_tokens:
     VAULT_ID_TOKEN:
       aud: https://vault.lab.nkontur.com:8200
