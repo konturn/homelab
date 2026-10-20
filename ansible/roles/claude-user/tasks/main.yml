@@ -35,11 +35,13 @@
     owner: "{{ claude_user_name }}"
     group: "{{ claude_user_group }}"
 
-- name: Symlink allowed commands into restricted PATH
-  file:
-    src: "{{ item.src }}"
-    dest: "/home/{{ claude_user_name }}/bin/{{ item.name }}"
-    state: link
+# Not every host ships every binary (satellite-2 has no `file` or `dig`).
+# Stat first and link only what exists, instead of ignore_errors, which also
+# swallowed real failures in this loop.
+- name: Check which allowed commands exist on this host
+  stat:
+    path: "{{ item.src }}"
+  register: claude_allowed_cmds
   loop:
     - { src: /usr/bin/cat, name: cat }
     - { src: /usr/bin/ls, name: ls }
@@ -69,7 +71,16 @@
     - { src: /usr/bin/dig, name: dig }
     - { src: /usr/bin/ping, name: ping }
     - { src: /usr/bin/traceroute, name: traceroute }
-  ignore_errors: yes  # Some binaries may not exist on all hosts
+
+- name: Symlink allowed commands into restricted PATH
+  file:
+    src: "{{ item.item.src }}"
+    dest: "/home/{{ claude_user_name }}/bin/{{ item.item.name }}"
+    state: link
+  loop: "{{ claude_allowed_cmds.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: item.stat.exists
 
 - name: Configure restricted .bashrc
   copy:
