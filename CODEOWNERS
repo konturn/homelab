@@ -31,10 +31,16 @@
 # Could run arbitrary commands during CI, exfiltrate secrets
 /.gitlab-ci.yml                          @root
 
+# GitLab runner config: templated to /etc/gitlab-runner/config.toml on the
+# router (configure-base). Sets the executor options, volumes and environment
+# for every CI job.
+/base/gitlab-runner/                     @root
+
 # === TELEGRAF ===
 # Exec plugins run arbitrary scripts on the host as telegraf user
 # (which has sudo access to smartctl). Protect scripts and config.
-/base/telegraf/                          @root
+# Templated from docker/telegraf/ to /etc/telegraf/ (ansible/inventory.yml).
+/docker/telegraf/                        @root
 
 # === DOCKER COMPOSE ===
 # Could mount host paths, add privileged containers, modify any service
