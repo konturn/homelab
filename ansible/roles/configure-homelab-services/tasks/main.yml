@@ -756,6 +756,19 @@
     job: >-
       /usr/local/bin/scrub-transcripts.sh {{ docker_persistent_data_path }}/openclaw/data/agents/main/sessions 2>&1 | logger -t scrub-transcripts
 
+# The moltbot -> openclaw rename changed this task's name, and
+# ansible.builtin.cron keys entries on name, so the pre-rename entry was left
+# in root's crontab unmanaged. Manage it under its original name so it is
+# tracked here. The [ -d ] guard makes it a no-op (exit 0) once the old
+# directory is removed; delete this task then.
+- name: Set up legacy transcript scrub cron job (every 10 minutes)
+  ansible.builtin.cron:
+    name: "Scrub credentials from moltbot transcripts"
+    minute: "*/10"
+    job: >-
+      [ -d {{ docker_persistent_data_path }}/moltbot/data/agents/main/sessions ] || exit 0;
+      /usr/local/bin/scrub-transcripts.sh {{ docker_persistent_data_path }}/moltbot/data/agents/main/sessions 2>&1 | logger -t scrub-transcripts
+
 - name: Daily chromium-browser restart (clear tabs and free memory)
   ansible.builtin.cron:
     name: "Restart chromium-browser daily"
