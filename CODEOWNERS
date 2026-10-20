@@ -39,9 +39,11 @@
 # === DOCKER COMPOSE ===
 # Could mount host paths, add privileged containers, modify any service
 # This is the big one — compose controls everything
-# The second owner is the auto-merge bot (AUTOMERGE_TOKEN project bot). Its
-# approval satisfies this rule only for MRs that pass ci/automerge/policy.py,
-# because the token is used solely by the automerge:sweep job on main.
+# The second owner is the auto-merge bot (AUTOMERGE_TOKEN project bot). It
+# approves moltbot/Renovate MRs only via the automerge:sweep job on main, for
+# MRs that pass ci/automerge/policy.py. Root-authored MRs (root cannot approve
+# its own) get its approval via scripts/approve-root-mr.sh, which refuses any
+# other author. See docs/AUTOMERGE.md.
 /docker/docker-compose.yml               @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
 /docker/docker-compose-*.yml             @root
 /docker/daemon.json                      @root

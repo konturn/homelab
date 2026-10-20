@@ -128,13 +128,38 @@ migrates data one way on upgrade, and anything the deploy itself depends on.
 Without a container healthcheck or a probe, the only signal is "stays up
 for 60s", so add a probe where an HTTP endpoint exists.
 
+## Root-authored MRs
+
+GitLab never lets an author approve their own MR. For a code-owned path whose
+only owner is `@root`, a root-authored MR has no eligible approver, GitLab treats
+that rule as invalid and it does not block. `docker/docker-compose.yml` also lists
+the automerge bot, so there the rule stays valid and a root-authored MR (Noah, or
+an agent working as root) needs the bot's approval.
+
+After the MR's last push, once its pipeline has passed:
+
+```bash
+cd /root/repos/homelab   # on the router
+scripts/approve-root-mr.sh <iid>
+```
+
+The script approves as the bot only if the author is root, the target is `main`,
+the MR is open and not a draft, and the head pipeline for the current head commit
+succeeded. The approval is pinned to that commit, and approvals reset on push, so
+any later push needs a new run. It reads `AUTOMERGE_TOKEN` from the CI variable
+and never prints it. Merge as usual afterwards.
+
+The bot approves moltbot or Renovate MRs only through the sweep, under the policy
+above. The script refuses any MR not authored by root.
+
 ## Setup
 
 - `AUTOMERGE_TOKEN`: masked, protected CI/CD variable holding a **project access
   token** (`automerge-bot`, role Developer, scope `api`, expires yearly; the bot
   user is `project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6`). It is never an MR
   author. It is listed as a second code owner of `docker/docker-compose.yml` so its
-  approval satisfies the required code-owner approval on `main`. Rotate it by
+  approval satisfies the required code-owner approval on `main`. Besides the sweep,
+  it is used only by `scripts/approve-root-mr.sh` (see "Root-authored MRs"). Rotate it by
   creating a new project access token with the same name/role/scope and updating
   the variable; the CODEOWNERS entry changes only if the bot user changes.
 - Authors: `moltbot` and the Renovate bot (`RENOVATE_TOKEN`, see
