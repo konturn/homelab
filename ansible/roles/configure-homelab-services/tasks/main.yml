@@ -611,20 +611,37 @@
     path: "{{ docker_persistent_data_path }}/deluge"
   register: deluge_dir
 
-- name: Deploy Deluge core.conf (managed cache_size)
+# Compare content only. The linuxserver image chowns /config to abc on every
+# start, so asserting owner here made every deploy report "changed" and
+# restart deluge. Without owner/group, copy keeps the existing owner.
+# deluged saves its in-memory config on shutdown, so a real change is
+# written while the container is stopped (stop -> copy -> start), not before
+# a restart.
+- name: Check Deluge core.conf for drift (managed cache_size, listen port)
   ansible.builtin.copy:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/deluge/core.conf' }}"
     dest: "{{ docker_persistent_data_path }}/deluge/core.conf"
-    owner: root
-    group: root
     mode: '0644'
-  register: deluge_config
+  check_mode: true
+  register: deluge_config_check
   when: deluge_dir.stat.exists and not ansible_check_mode
 
-- name: Restart deluge if config was modified
+- name: Stop deluge before updating core.conf
   ansible.builtin.command:
-    cmd: "docker restart deluge"
-  when: deluge_dir.stat.exists and deluge_config is changed and not ansible_check_mode
+    cmd: "docker stop deluge"
+  when: deluge_dir.stat.exists and deluge_config_check is changed and not ansible_check_mode
+
+- name: Deploy Deluge core.conf
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/deluge/core.conf' }}"
+    dest: "{{ docker_persistent_data_path }}/deluge/core.conf"
+    mode: '0644'
+  when: deluge_dir.stat.exists and deluge_config_check is changed and not ansible_check_mode
+
+- name: Start deluge after updating core.conf
+  ansible.builtin.command:
+    cmd: "docker start deluge"
+  when: deluge_dir.stat.exists and deluge_config_check is changed and not ansible_check_mode
 
 ### OpenClaw config
 # Deploy the main OpenClaw config (openclaw.json) from the repo template.
