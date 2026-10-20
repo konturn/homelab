@@ -1184,7 +1184,7 @@ services:
       retries: 3
       start_period: 60s
   wordpress_db:
-    image: mysql:9.7.0-oraclelinux9@sha256:f0ef1d92fa650fcfa5b85f1d82bb1a56a6dd579bf256b8f8f2a5a0b1b61c8b0b
+    image: mysql:9.7.2-oraclelinux9@sha256:e2fa358a74ac81148e7e27d9433e4c0ab62133de8ea4428b4f39a51a4ba7d07f
     container_name: wordpress_db
     security_opt:
       - no-new-privileges=true
