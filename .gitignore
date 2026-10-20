@@ -1,2 +1,6 @@
 # DNS update key (secret)
 networking/dhcp/rndc.key
+
+# Python bytecode
+__pycache__/
+*.pyc
