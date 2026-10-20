@@ -542,6 +542,10 @@ router:deploy:
   extends: .ansible
   stage: deploy
   resource_group: deploy-router
+  # environment: enables "prevent outdated deployment jobs"; with the
+  # resource group in newest_ready_first mode, older queued deploys are skipped.
+  environment:
+    name: router
   id_tokens:
     VAULT_ID_TOKEN:
       aud: https://vault.lab.nkontur.com:8200
@@ -1340,6 +1344,10 @@ router:deploy-service:
   extends: .ansible
   stage: deploy
   resource_group: deploy-router
+  # environment: enables "prevent outdated deployment jobs"; with the
+  # resource group in newest_ready_first mode, older queued deploys are skipped.
+  environment:
+    name: router
   id_tokens:
     VAULT_ID_TOKEN:
       aud: https://vault.lab.nkontur.com:8200
