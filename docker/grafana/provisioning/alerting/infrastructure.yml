@@ -1472,6 +1472,46 @@ groups:
         labels:
           severity: warning
 
+      # Imported from the rule created through the API (same uid, so Grafana
+      # keeps its state history). telegraf writes vault_health.sealed; a sealed
+      # Vault is 1, and no data (Vault unreachable or the input failing) also
+      # fires. Short pending period, so query errors hold the last state; see
+      # datasource-health below for the "InfluxDB is down" signal.
+      - uid: efeju4cob1ipsb
+        title: Vault Unavailable or Sealed
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "vault_health" and r._field == "sealed")
+                  |> last()
+                  |> map(fn: (r) => ({r with _value: if r._value == false then 0.0 else 1.0}))
+              intervalMs: 30000
+              maxDataPoints: 43200
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B}
+          - refId: C
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: Alerting
+        execErrState: KeepLast
+        for: 2m
+        annotations:
+          summary: "Vault is either unreachable, sealed, or uninitialized. All secret-dependent operations will fail."
+          description: "Vault health check failed. Check if the Vault container is running and unsealed at 10.3.32.6:8200."
+        labels:
+          service: vault
+          severity: critical
+
   - orgId: 1
     name: log-volume-alerts
     folder: General Alerting
