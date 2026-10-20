@@ -1,9 +1,18 @@
 # =============================================================================
 # Fetch secrets from HashiCorp Vault
 # =============================================================================
-# Authenticates via JWT (CI pipeline) or AppRole (openclaw), then reads all
-# secrets into Ansible variables. Falls back to CI environment variables if
-# Vault is unreachable — deploys must never break due to Vault downtime.
+# Authenticates via JWT (CI pipeline) or AppRole (openclaw), then reads every
+# path in vault_secret_paths into Ansible variables.
+#
+# Fails closed: if authentication fails, a read fails after its retries
+# (timeout, 403, 5xx), a required path is missing (404), or a required field
+# is missing or empty, the play stops here, before any role writes config.
+# There is no fallback to empty values or CI env vars.
+#
+# Optional secrets are declared explicitly in defaults/main.yml with
+# `optional: true` (whole entry) or `optional_fields: [var, ...]`. They are
+# set to "" when absent, and every consumer must check `| length > 0` before
+# rendering them into a file.
 #
 # All secret-handling tasks use no_log to prevent credential leakage in CI logs.
 # =============================================================================
@@ -13,7 +22,7 @@
     _vault_url: "{{ vault_addr }}/v1"
     _vault_token: ""
     _vault_available: false
-    _vault_secrets: {}
+    vault_secrets_verified: false
   no_log: true
 
 # ---------------------------------------------------------------------------
@@ -35,6 +44,10 @@
         timeout: "{{ vault_timeout }}"
         status_code: [200]
       register: _vault_jwt_response
+      check_mode: false  # read-only login; needed for --check runs
+      until: _vault_jwt_response.status | default(-1) != -1
+      retries: "{{ vault_fetch_retries }}"
+      delay: "{{ vault_fetch_delay }}"
       no_log: true
 
     - name: Store JWT Vault token
@@ -46,7 +59,7 @@
   rescue:
     - name: JWT authentication failed
       ansible.builtin.debug:
-        msg: "Vault JWT auth failed — will try AppRole or fall back to env vars"
+        msg: "Vault JWT auth failed (HTTP {{ _vault_jwt_response.status | default('n/a') }}), trying AppRole"
 
 - name: Attempt AppRole authentication (non-CI or JWT failure)
   when:
@@ -66,6 +79,10 @@
         timeout: "{{ vault_timeout }}"
         status_code: [200]
       register: _vault_approle_response
+      check_mode: false
+      until: _vault_approle_response.status | default(-1) != -1
+      retries: "{{ vault_fetch_retries }}"
+      delay: "{{ vault_fetch_delay }}"
       no_log: true
 
     - name: Store AppRole Vault token
@@ -77,81 +94,127 @@
   rescue:
     - name: AppRole authentication failed
       ansible.builtin.debug:
-        msg: "Vault AppRole auth failed — falling back to CI environment variables"
+        msg: "Vault AppRole auth failed (HTTP {{ _vault_approle_response.status | default('n/a') }})"
 
-- name: Report Vault authentication status
-  ansible.builtin.debug:
-    msg: >-
-      Vault {{ 'authenticated successfully' if _vault_available
-      else 'unavailable — all secrets will use CI env var fallback' }}
-
-- name: Fail if Vault is unreachable
+- name: Fail if Vault authentication failed
   ansible.builtin.fail:
-    msg: "Vault authentication failed — refusing to continue with stale/missing secrets. Fix Vault connectivity and retry."
+    msg: "Vault authentication failed. Refusing to continue without secrets; fix Vault connectivity and retry."
   when: not _vault_available
 
 # ---------------------------------------------------------------------------
 # Step 2: Fetch secrets from Vault KV v2
 # ---------------------------------------------------------------------------
+# The read task itself never fails (failed_when: false) so that the next task
+# can name the failing paths; the response bodies stay no_log. Any status
+# other than 200/404 after the retries (timeout = -1, 403, 5xx) fails the
+# play there. 404 is checked against `optional` after that.
 
-- name: Fetch and extract secrets from Vault
-  when: _vault_available
-  block:
-    - name: Read each secret path from Vault
-      ansible.builtin.uri:
-        url: "{{ _vault_url }}/{{ vault_kv_mount }}/data/{{ item.path }}"
-        method: GET
-        headers:
-          X-Vault-Token: "{{ _vault_token }}"
-        validate_certs: "{{ not vault_skip_verify }}"
-        timeout: "{{ vault_timeout }}"
-        status_code: [200, 404]
-      register: _vault_raw_responses
-      loop: "{{ vault_secret_paths }}"
-      loop_control:
-        label: "{{ item.path }}"
-      no_log: true
+- name: Read each secret path from Vault
+  ansible.builtin.uri:
+    url: "{{ _vault_url }}/{{ vault_kv_mount }}/data/{{ item.path }}"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ _vault_token }}"
+    validate_certs: "{{ not vault_skip_verify }}"
+    timeout: "{{ vault_timeout }}"
+    status_code: [200, 404]
+  register: _vault_raw_responses
+  check_mode: false
+  until: _vault_raw_responses.status | default(-1) in [200, 404]
+  retries: "{{ vault_fetch_retries }}"
+  delay: "{{ vault_fetch_delay }}"
+  failed_when: false
+  loop: "{{ vault_secret_paths }}"
+  loop_control:
+    label: "{{ item.path }}"
+  no_log: true
 
-    - name: Warn about missing Vault paths
-      ansible.builtin.debug:
-        msg: "Vault path '{{ item.item.path }}' not found (404) — variables will default to empty strings"
-      loop: "{{ _vault_raw_responses.results | selectattr('status', 'equalto', 404) | list }}"
-      loop_control:
-        label: "{{ item.item.path }}"
+- name: Fail on Vault read errors
+  ansible.builtin.fail:
+    msg: >-
+      Vault read failed after {{ vault_fetch_retries }} retries for:
+      {{ _failed_reads | join(', ') }}. Refusing to continue without secrets.
+  vars:
+    _failed_reads: >-
+      {%- set failed = [] -%}
+      {%- for r in _vault_raw_responses.results
+            if (r.status | default(-1)) not in [200, 404] -%}
+      {%-   set _ = failed.append(r.item.path ~ ' (HTTP ' ~ (r.status | default(-1)) ~ ')') -%}
+      {%- endfor -%}
+      {{ failed }}
+  when: _failed_reads | length > 0
 
-    - name: Set empty defaults for missing Vault paths
-      ansible.builtin.include_tasks: default_missing_secret.yml
-      loop: "{{ _vault_raw_responses.results | selectattr('status', 'equalto', 404) | list }}"
-      loop_control:
-        loop_var: _vault_missing
-        label: "{{ _vault_missing.item.path }}"
-      no_log: true
+- name: Fail on missing required Vault paths
+  ansible.builtin.fail:
+    msg: >-
+      Vault path(s) not found (404): {{ _missing_paths | join(', ') }}.
+      Create them or mark the entries `optional: true` in
+      fetch-vault-secrets/defaults/main.yml.
+  vars:
+    _missing_paths: >-
+      {%- set missing = [] -%}
+      {%- for r in _vault_raw_responses.results
+            if r.status == 404 and not (r.item.optional | default(false) | bool) -%}
+      {%-   set _ = missing.append(r.item.path) -%}
+      {%- endfor -%}
+      {{ missing }}
+  when: _missing_paths | length > 0
 
-    - name: Map Vault responses to Ansible variable names
-      ansible.builtin.include_tasks: extract_secret.yml
-      loop: "{{ _vault_raw_responses.results | selectattr('status', 'equalto', 200) | list }}"
-      loop_control:
-        loop_var: _vault_response
-        label: "{{ _vault_response.item.path }}"
-      no_log: true
+- name: Note missing optional Vault paths
+  ansible.builtin.debug:
+    msg: "Optional Vault path '{{ item.item.path }}' not found (404); its variables are empty"
+  loop: "{{ _vault_raw_responses.results | selectattr('status', 'equalto', 404) | list }}"
+  loop_control:
+    label: "{{ item.item.path }}"
 
-  rescue:
-    - name: Vault secret fetch failed
-      ansible.builtin.debug:
-        msg: "Failed to fetch one or more secrets from Vault — falling back to CI env vars"
+- name: Set empty values for missing optional Vault paths
+  ansible.builtin.include_tasks: default_missing_secret.yml
+  loop: "{{ _vault_raw_responses.results | selectattr('status', 'equalto', 404) | list }}"
+  loop_control:
+    loop_var: _vault_missing
+    label: "{{ _vault_missing.item.path }}"
 
-    - name: Mark Vault as unavailable after fetch failure
-      ansible.builtin.set_fact:
-        _vault_available: false
+- name: Map Vault responses to Ansible variable names
+  ansible.builtin.include_tasks: extract_secret.yml
+  loop: "{{ _vault_raw_responses.results | selectattr('status', 'equalto', 200) | list }}"
+  loop_control:
+    loop_var: _vault_response
+    label: "{{ _vault_response.item.path }}"
 
 # ---------------------------------------------------------------------------
-# Step 3: Fetch SSH CA public key (non-KV secret)
+# Step 3: Every required secret must be defined and non-empty
+# ---------------------------------------------------------------------------
+# Covers a field missing from a Vault entry and a field that is present but
+# empty. Only variable names are printed.
+
+- name: Collect required secrets that are missing or empty
+  ansible.builtin.set_fact:
+    _vault_missing_required: >-
+      {%- set missing = [] -%}
+      {%- for entry in vault_secret_paths if not (entry.optional | default(false) | bool) -%}
+      {%-   for var in entry.fields if var not in (entry.optional_fields | default([])) -%}
+      {%-     if (lookup('vars', var, default='') | string | trim | length) == 0 -%}
+      {%-       set _ = missing.append(var ~ ' (' ~ entry.path ~ ':' ~ entry.fields[var] ~ ')') -%}
+      {%-     endif -%}
+      {%-   endfor -%}
+      {%- endfor -%}
+      {{ missing }}
+
+- name: Assert all required secrets are present
+  ansible.builtin.assert:
+    that:
+      - _vault_missing_required | length == 0
+    fail_msg: >-
+      Required secret(s) missing or empty in Vault: {{ _vault_missing_required | join(', ') }}.
+      Refusing to template config with empty secrets.
+    success_msg: "All required Vault secrets are present"
+
+# ---------------------------------------------------------------------------
+# Step 4: Fetch SSH CA public key (non-KV secret)
 # ---------------------------------------------------------------------------
 
 - name: Fetch SSH CA public key from Vault
-  when:
-    - _vault_available
-    - fetch_ssh_ca_key | default(false) | bool
+  when: fetch_ssh_ca_key | default(false) | bool
   block:
     - name: Read SSH CA public key
       ansible.builtin.uri:
@@ -163,6 +226,10 @@
         timeout: "{{ vault_timeout }}"
         status_code: [200]
       register: _vault_ssh_ca_response
+      check_mode: false
+      until: _vault_ssh_ca_response.status | default(-1) == 200
+      retries: "{{ vault_fetch_retries }}"
+      delay: "{{ vault_fetch_delay }}"
       no_log: true
 
     - name: Set SSH CA public key variable
@@ -170,7 +237,17 @@
         vault_ssh_ca_public_key: "{{ _vault_ssh_ca_response.json.data.public_key }}"
       no_log: true
 
+    - name: Assert SSH CA public key is not empty
+      ansible.builtin.assert:
+        that:
+          - vault_ssh_ca_public_key | trim | length > 0
+        fail_msg: "SSH CA public key from Vault is empty"
+
   rescue:
     - name: SSH CA public key fetch failed — abort
       ansible.builtin.fail:
         msg: "Failed to fetch SSH CA public key from Vault — refusing to deploy empty CA file. Fix Vault connectivity and retry."
+
+- name: Mark Vault secrets as verified
+  ansible.builtin.set_fact:
+    vault_secrets_verified: true

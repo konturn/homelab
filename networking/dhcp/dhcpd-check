@@ -1,0 +1,24 @@
+#!/bin/sh
+# Usage: dhcpd-check CANDIDATE
+#
+# Syntax-checks a candidate dhcpd.conf with `dhcpd -t`. Used as the
+# `validate:` command for /etc/dhcp/dhcpd.conf, so a broken config is never
+# installed and the running dhcpd keeps its current one.
+#
+# dhcpd's AppArmor profile only lets it read /etc/dhcp, so the candidate is
+# copied there first. dhcpd echoes the offending line on errors; key lines
+# are redacted so the job log never shows the OMAPI secret.
+set -u
+
+cand=${1:?usage: dhcpd-check CANDIDATE}
+tmp=$(mktemp /etc/dhcp/.dhcpd-check.XXXXXX) || exit 1
+trap 'rm -f "$tmp"' EXIT
+
+cat "$cand" > "$tmp" || exit 1
+out=$(/usr/sbin/dhcpd -t -4 -cf "$tmp" 2>&1)
+rc=$?
+if [ "$rc" -ne 0 ]; then
+    printf '%s\n' "$out" | sed -E 's/(secret)[[:space:]]+[^;]*/\1 <redacted>/' >&2
+    echo "dhcpd-check: candidate config failed dhcpd -t (rc=$rc)" >&2
+fi
+exit "$rc"

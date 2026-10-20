@@ -4,6 +4,12 @@ vault_skip_verify: true
 vault_kv_mount: "homelab"
 vault_timeout: 10
 
+# Each Vault request is retried this many times (delay in seconds) on
+# connection failures, timeouts and unexpected status codes before the play
+# fails. There is no fallback: a fetch that still fails stops the deploy.
+vault_fetch_retries: 3
+vault_fetch_delay: 5
+
 # Authentication method priority: jwt > approle > env_fallback
 # JWT token is set by GitLab CI id_tokens block
 vault_jwt_token: "{{ lookup('env', 'VAULT_ID_TOKEN') }}"
@@ -14,7 +20,13 @@ vault_approle_role_id: "{{ lookup('env', 'VAULT_APPROLE_ROLE_ID') }}"
 vault_approle_secret_id: "{{ lookup('env', 'VAULT_APPROLE_SECRET_ID') }}"
 
 # Map of Vault paths to fetch. Each entry produces ansible variables.
-# Format: { vault_path: "path/under/mount", fields: { ansible_var: vault_field } }
+# Format: { path: "path/under/mount", fields: { ansible_var: vault_field } }
+#
+# Every variable is REQUIRED (defined and non-empty) unless declared optional:
+#   optional: true            the whole entry; a 404 for the path is allowed
+#   optional_fields: [var]    individual variables of an entry
+# Optional variables resolve to "" when absent. Anything that renders one into
+# a file must check `| length > 0` first.
 vault_secret_paths:
   # API keys
   - path: "api-keys/aclawdemy"
@@ -71,10 +83,12 @@ vault_secret_paths:
       vault_influxdb_password: "password"
       vault_influxdb_token: "token"
       vault_influxdb_telegraf_token: "telegraf_token"
+    optional_fields: [vault_influxdb_token]  # not referenced by any template
   - path: "docker/nextcloud"
     fields:
       vault_nextcloud_db_password: "db_password"
       vault_nextcloud_secret: "secret"
+    optional_fields: [vault_nextcloud_secret]  # not referenced by any template
   - path: "docker/nzbget"
     fields:
       vault_nzbget_password: "password"
@@ -82,18 +96,22 @@ vault_secret_paths:
   - path: "docker/ombi"
     fields:
       vault_ombi_api_key: "api_key"
+    optional: true  # not referenced by any template
   - path: "docker/paperless"
     fields:
       vault_paperless_token: "token"
+    optional: true  # not referenced by any template
   - path: "docker/plex"
     fields:
       vault_plex_token: "token"
   - path: "docker/tautulli"
     fields:
       vault_tautulli_api_key: "api_key"
+    optional: true  # telegraf.conf skips the tautulli input when empty
   - path: "docker/prowlarr"
     fields:
       vault_prowlarr_api_key: "api_key"
+    optional: true  # not referenced by any template
   - path: "docker/radarr"
     fields:
       vault_radarr_api_key: "api_key"
@@ -120,6 +138,7 @@ vault_secret_paths:
     fields:
       vault_ipmi_password: "password"
       vault_ipmi_user: "user"
+    optional_fields: [vault_ipmi_user]  # not referenced by any template
   - path: "infrastructure/pihole"
     fields:
       vault_pihole_password: "password"
@@ -139,6 +158,7 @@ vault_secret_paths:
   - path: "infrastructure/router"
     fields:
       vault_router_private_key_base64: "private_key_base64"
+    optional: true  # not referenced by any template (CI uses ROUTER_PRIVATE_KEY_BASE64)
   - path: "infrastructure/snmp"
     fields:
       vault_snmp_password: "password"
@@ -166,6 +186,7 @@ vault_secret_paths:
   - path: "clawrouter"
     fields:
       vault_openclaw_clawrouter_wallet_address: "wallet_address"
+    optional: true  # telegraf.conf skips the clawrouter input when empty
 
   # Backup secrets
   - path: "backup/backblaze"

@@ -1,0 +1,44 @@
+#!/bin/sh
+# Usage: luks-keyfile-check CANDIDATE [CRYPTTAB] [KEYFILE]
+#
+# Succeeds if CANDIDATE opens at least one LUKS device that CRYPTTAB
+# (default /etc/crypttab) unlocks with KEYFILE (default
+# /etc/password_file.txt). Used as the `validate:` command when Ansible
+# replaces the key file, so a wrong or empty key never lands on disk.
+# Only device names are printed, never key material.
+set -u
+
+cand=${1:?usage: luks-keyfile-check CANDIDATE [CRYPTTAB] [KEYFILE]}
+crypttab=${2:-/etc/crypttab}
+keyfile=${3:-/etc/password_file.txt}
+max_tries=${LUKS_CHECK_MAX_TRIES:-5}
+
+if [ ! -s "$cand" ]; then
+    echo "luks-keyfile-check: candidate key file is empty" >&2
+    exit 1
+fi
+
+tried=0
+while read -r name dev kf _opts; do
+    case "$name" in ''|\#*) continue ;; esac
+    [ "$kf" = "$keyfile" ] || continue
+    case "$dev" in
+        UUID=*) path="/dev/disk/by-uuid/${dev#UUID=}" ;;
+        *) path="$dev" ;;
+    esac
+    [ -b "$path" ] || continue
+    tried=$((tried + 1))
+    if cryptsetup open --test-passphrase --key-file "$cand" "$path" >/dev/null 2>&1; then
+        echo "luks-keyfile-check: candidate key opens $name"
+        exit 0
+    fi
+    echo "luks-keyfile-check: candidate key does not open $name" >&2
+    [ "$tried" -ge "$max_tries" ] && break
+done < "$crypttab"
+
+if [ "$tried" -eq 0 ]; then
+    echo "luks-keyfile-check: no present device in $crypttab uses $keyfile" >&2
+else
+    echo "luks-keyfile-check: candidate key opened none of $tried device(s)" >&2
+fi
+exit 1

@@ -305,6 +305,27 @@ jit-approval-svc:test:
       changes:
         - docker/jit-approval-svc/**/*
 
+# Offline: runs fetch-vault-secrets against a fake Vault and checks that every
+# failure (timeout, 403, missing path/field, empty field, bad auth) stops the
+# play before anything is written. See ansible/tests/fetch-vault-secrets/.
+fetch-vault-secrets:test:
+  extends: .interruptible
+  stage: validate
+  image: willhallonline/ansible:latest
+  needs: []
+  script:
+    - sh ansible/tests/fetch-vault-secrets/run.sh
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - ansible/roles/fetch-vault-secrets/**/*
+        - ansible/tests/fetch-vault-secrets/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - ansible/roles/fetch-vault-secrets/**/*
+        - ansible/tests/fetch-vault-secrets/**/*
+
 # =============================================================================
 # Build Stage - Container images (GitLab Registry)
 # =============================================================================
