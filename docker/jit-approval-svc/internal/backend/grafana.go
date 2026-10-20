@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -48,13 +49,18 @@ func (b *GrafanaBackend) MintCredential(resource string, tier int, ttl time.Dura
 		return nil, fmt.Errorf("missing service_account_id in vault path %s", b.vaultPath)
 	}
 
-	// Create a token with expiration
-	expires := time.Now().Add(ttl).UTC().Format(time.RFC3339)
-	tokenName := fmt.Sprintf("jit-%d", time.Now().Unix())
+	// Create a token that Grafana itself expires. The service account token API
+	// takes the lifetime as `secondsToLive`; any other field (e.g. `expires`) is
+	// silently ignored and the token never expires.
+	secondsToLive := int64(math.Ceil(ttl.Seconds()))
+	if secondsToLive < 1 {
+		return nil, fmt.Errorf("invalid ttl %s for grafana token", ttl)
+	}
+	tokenName := fmt.Sprintf("jit-%d", time.Now().UnixNano())
 
 	payload := map[string]interface{}{
-		"name":    tokenName,
-		"expires": expires,
+		"name":          tokenName,
+		"secondsToLive": secondsToLive,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {

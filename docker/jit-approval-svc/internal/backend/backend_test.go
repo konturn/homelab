@@ -165,8 +165,11 @@ func TestGrafanaBackend_MintCredential(t *testing.T) {
 		if name, ok := body["name"].(string); !ok || name == "" {
 			t.Error("expected non-empty name in body")
 		}
-		if _, ok := body["expires"].(string); !ok {
-			t.Error("expected expires in body")
+		if v, ok := body["secondsToLive"].(float64); !ok || v != 300 {
+			t.Errorf("expected secondsToLive 300 in body, got %v", body["secondsToLive"])
+		}
+		if _, ok := body["expires"]; ok {
+			t.Error("unexpected expires in body (ignored by Grafana)")
 		}
 
 		w.Header().Set("Content-Type", "application/json")
