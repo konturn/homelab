@@ -632,7 +632,7 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=America/New_York
-      - AUDIOSERVE_SHARED_SECRET={{ vault_audioserve_secret | default(lookup('env', 'AUDIOSERVE_SECRET')) | trim | replace("$", "$$") }}
+      - AUDIOSERVE_SHARED_SECRET={{ vault_audioserve_secret | trim | replace("$", "$$") }}
       - VIRTUAL_HOST=audioserve.nkontur.com
       - LETSENCRYPT_HOST=audioserve.nkontur.com
     command: /audiobooks
@@ -691,10 +691,10 @@ services:
     environment:
       - DOCKER_INFLUXDB_INIT_MODE=setup
       - DOCKER_INFLUXDB_INIT_USERNAME=admin
-      - DOCKER_INFLUXDB_INIT_PASSWORD={{ vault_influxdb_password | default(lookup('env', 'INFLUXDB_PASSWORD')) | trim | replace("$", "$$") }}
+      - DOCKER_INFLUXDB_INIT_PASSWORD={{ vault_influxdb_password | trim | replace("$", "$$") }}
       - DOCKER_INFLUXDB_INIT_ORG=homelab
       - DOCKER_INFLUXDB_INIT_BUCKET=metrics
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN={{ vault_influxdb_admin_token | default(lookup('env', 'INFLUXDB_ADMIN_TOKEN')) | trim | replace("$", "$$") }}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN={{ vault_influxdb_admin_token | trim | replace("$", "$$") }}
       - INFLUXD_PPROF_DISABLED=true
       # Per-query Flux memory cap (default: unlimited). A query that exceeds it
       # fails with "memory allocation limit reached" instead of growing influxd
@@ -735,15 +735,15 @@ services:
       - {{ docker_persistent_data_path }}/grafana/provisioning:/etc/grafana/provisioning
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD={{ vault_grafana_admin_password | default(lookup('env', 'GRAFANA_ADMIN_PASSWORD')) | trim | replace("$", "$$") }}
+      - GF_SECURITY_ADMIN_PASSWORD={{ vault_grafana_admin_password | trim | replace("$", "$$") }}
       - GF_SERVER_ROOT_URL=https://grafana.lab.nkontur.com
       - GF_USERS_ALLOW_SIGN_UP=false
-      - INFLUXDB_TOKEN={{ vault_influxdb_grafana_read_token | default(vault_influxdb_admin_token) | default(lookup('env', 'INFLUXDB_ADMIN_TOKEN')) | trim | replace("$", "$$") }}
+      - INFLUXDB_TOKEN={{ vault_influxdb_grafana_read_token | trim | replace("$", "$$") }}
       # SMTP for email alerts
       - GF_SMTP_ENABLED=true
       - GF_SMTP_HOST=smtp.gmail.com:587
       - GF_SMTP_USER=konoahko@gmail.com
-      - GF_SMTP_PASSWORD={{ vault_grafana_smtp_password | default(lookup('env', 'GRAFANA_SMTP_PASSWORD')) | trim | replace("$", "$$") }}
+      - GF_SMTP_PASSWORD={{ vault_grafana_smtp_password | trim | replace("$", "$$") }}
       - GF_SMTP_FROM_ADDRESS=konoahko@gmail.com
       - GF_SMTP_FROM_NAME=Grafana Homelab
       - GF_SMTP_STARTTLS_POLICY=MandatoryStartTLS
@@ -1179,7 +1179,7 @@ services:
     environment:
       WORDPRESS_DB_HOST: wordpress_db
       WORDPRESS_DB_USER: wordpress
-      WORDPRESS_DB_PASSWORD: {{ vault_wordpress_db_password | default(lookup('env', 'WORDPRESS_DB_PASSWORD')) | trim | replace("$", "$$") }}
+      WORDPRESS_DB_PASSWORD: {{ vault_wordpress_db_password | trim | replace("$", "$$") }}
       WORDPRESS_DB_NAME: wordpress
       # Code changes come from git (docker/wordpress/), not the admin UI.
       # wp-cli is exempt from DISALLOW_FILE_MODS so the reconcile step can apply them.
@@ -1221,8 +1221,8 @@ services:
     environment:
       MYSQL_DATABASE: wordpress
       MYSQL_USER: wordpress
-      MYSQL_PASSWORD: {{ vault_wordpress_db_password | default(lookup('env', 'WORDPRESS_DB_PASSWORD')) | trim | replace("$", "$$") }}
-      MYSQL_ROOT_PASSWORD: {{ vault_wordpress_db_password | default(lookup('env', 'WORDPRESS_DB_PASSWORD')) | trim | replace("$", "$$") }}
+      MYSQL_PASSWORD: {{ vault_wordpress_db_password | trim | replace("$", "$$") }}
+      MYSQL_ROOT_PASSWORD: {{ vault_wordpress_db_password | trim | replace("$", "$$") }}
     volumes:
       - wordpress_db:/var/lib/mysql
     healthcheck:
@@ -1633,11 +1633,11 @@ services:
           memory: 256M
     environment:
       AMCREST_HOST: 10.6.128.9
-      AMCREST_PASSWORD: {{ vault_doorbell_pass | default(lookup('env', 'DOORBELL_PASS')) | trim | replace("$", "$$") }}
+      AMCREST_PASSWORD: {{ vault_doorbell_pass | trim | replace("$", "$$") }}
       MQTT_HOST: "mqtt.lab.nkontur.com"
       MQTT_PORT: "8883"
       MQTT_USERNAME: mosquitto
-      MQTT_PASSWORD: {{ vault_mqtt_pass | default(lookup('env', 'MQTT_PASS')) | trim | replace("$", "$$") }}
+      MQTT_PASSWORD: {{ vault_mqtt_pass | trim | replace("$", "$$") }}
       HOME_ASSISTANT: "true"
       MQTT_TLS_ENABLED: "true"
       MQTT_TLS_CA_CERT: "/etc/ssl/certs/ca-certificates.crt"
@@ -1670,7 +1670,7 @@ services:
       TZ: America/New_York
       PORT: 8080
       MQTT_USERNAME: mosquitto
-      MQTT_PASSWORD: {{ vault_mqtt_pass | default(lookup('env', 'MQTT_PASS')) | trim | replace("$", "$$") }}
+      MQTT_PASSWORD: {{ vault_mqtt_pass | trim | replace("$", "$$") }}
       MQTT_REJECT_UNAUTHORIZED: "false"
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/data/ || exit 1"]
@@ -1808,8 +1808,8 @@ services:
     volumes:
       - nextcloud_db:/var/lib/mysql
     environment:
-      - MYSQL_ROOT_PASSWORD={{ vault_nextcloud_db_password | default(lookup('env', 'NEXTCLOUD_DB_PASSWORD')) | trim | replace("$", "$$") }}
-      - MYSQL_PASSWORD={{ vault_nextcloud_db_password | default(lookup('env', 'NEXTCLOUD_DB_PASSWORD')) | trim | replace("$", "$$") }}
+      - MYSQL_ROOT_PASSWORD={{ vault_nextcloud_db_password | trim | replace("$", "$$") }}
+      - MYSQL_PASSWORD={{ vault_nextcloud_db_password | trim | replace("$", "$$") }}
       - MYSQL_DATABASE=nextcloud
       - MYSQL_USER=nextcloud
     healthcheck:

@@ -61,10 +61,10 @@ excel_vm_dns_domain: lab.nkontur.com
 excel_vm_timezone: Eastern Standard Time
 
 # Local administrator. Password comes from Vault homelab/data/excel-vm
-# (field admin_password) via fetch-vault-secrets, or EXCEL_VM_ADMIN_PASSWORD.
+# (field admin_password) via fetch-vault-secrets.
 # Only needed when building the VM.
 excel_vm_admin_user: noah
-excel_vm_admin_password: "{{ (vault_excel_vm_admin_password | default(lookup('env', 'EXCEL_VM_ADMIN_PASSWORD'), true)) | trim }}"
+excel_vm_admin_password: "{{ vault_excel_vm_admin_password | trim }}"
 
 # -----------------------------------------------------------------------------
 # Pinned media
