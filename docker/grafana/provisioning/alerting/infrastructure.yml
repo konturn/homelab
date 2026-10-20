@@ -180,7 +180,7 @@ groups:
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
         noDataState: OK
-        execErrState: Error
+        execErrState: KeepLast
         for: 0s
         annotations:
           summary: "Container {{ $labels.container_name }} killed by OOM"
@@ -235,7 +235,7 @@ groups:
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
         noDataState: OK
-        execErrState: Error
+        execErrState: KeepLast
         # for: 0s, unlike container-oom-kill's 5m. A journal line is a single
         # instant, not a state that persists to be re-sampled; requiring it to
         # hold for five minutes is the mistake that made the original metric
@@ -784,7 +784,7 @@ groups:
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
         noDataState: OK
-        execErrState: Error
+        execErrState: KeepLast
         # Event-counting, not state-sampling: a for: window would re-introduce
         # exactly the blindness to transient failures this rule exists to fix.
         for: 0s
@@ -1044,7 +1044,7 @@ groups:
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
         noDataState: OK
-        execErrState: Error
+        execErrState: KeepLast
         for: 1m
         annotations:
           summary: "UPS is running on battery — utility power lost"
@@ -1076,7 +1076,7 @@ groups:
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [50]}}]}
         noDataState: OK
-        execErrState: Error
+        execErrState: KeepLast
         for: 2m
         annotations:
           summary: "UPS battery charge below 50%"
@@ -1168,7 +1168,7 @@ groups:
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
         noDataState: OK
-        execErrState: Error
+        execErrState: KeepLast
         for: 0s
         annotations:
           summary: "Restic backup failed with errors"
@@ -1203,7 +1203,7 @@ groups:
             datasourceUid: __expr__
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
         noDataState: OK
-        execErrState: Error
+        execErrState: KeepLast
         for: 0s
         annotations:
           summary: "Restic wrote an incomplete snapshot - some source files could not be read"
@@ -1399,7 +1399,7 @@ groups:
             # quiet under background noise and fires on a genuine burst.
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [100]}}]}
         noDataState: OK
-        execErrState: Error
+        execErrState: KeepLast
         for: 0s
         annotations:
           summary: "SSH login attempt burst (>100 rejected attempts in 15min)"
@@ -1489,3 +1489,80 @@ groups:
             Check: logcli query '{container="<name>"}' --limit=50 --since=15m
         labels:
           severity: warning
+
+  # =========================================================================
+  # Datasource health (meta-alerts)
+  # =========================================================================
+  # The short-pending rules above (for: 0s-2m) use execErrState: KeepLast, so
+  # a single failed evaluation (SQLite lock, lab_nginx restart, Loki restart)
+  # no longer pages as a DatasourceError. These two rules keep the "a
+  # datasource has actually been down for a while" signal: each runs a cheap
+  # query that never meets its threshold, so the only way it fires is the
+  # query itself failing (execErrState: Alerting) for 15 consecutive minutes.
+  # Rules with for: >= 5m keep execErrState: Error and still report their own
+  # persistent errors.
+  - orgId: 1
+    name: datasource-health
+    folder: General Alerting
+    interval: 1m
+    rules:
+      - uid: datasource-loki-unreachable
+        title: Loki Datasource Unreachable (15m)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: loki
+            model:
+              queryType: instant
+              expr: 'sum(count_over_time({job="systemd-journal"}[5m]))'
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B, settings: {mode: replaceNN, replaceWithValue: 0}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Alerting
+        for: 15m
+        annotations:
+          summary: "Grafana has failed to query Loki for 15+ minutes"
+          description: "Every Loki-backed alert rule (OOM kills, systemd failures, restic, SSH) is blind while this fires; they hold their last state. Check: docker ps --filter name=loki; docker logs --tail 50 loki; and from grafana: docker exec grafana curl -s http://loki:3100/ready"
+        labels:
+          severity: critical
+
+      - uid: datasource-influxdb-unreachable
+        title: InfluxDB Datasource Unreachable (15m)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "mem" and r._field == "used_percent")
+                  |> group()
+                  |> count()
+                  |> map(fn: (r) => ({_time: now(), _value: float(v: r._value)}))
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B, settings: {mode: replaceNN, replaceWithValue: 0}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Alerting
+        for: 15m
+        annotations:
+          summary: "Grafana has failed to query InfluxDB for 15+ minutes"
+          description: "The InfluxDB-backed short-pending rules (container OOM kill, UPS on battery / battery low) hold their last state while this fires. Check: docker ps --filter name=influxdb; docker logs --tail 50 influxdb; then the datasource health check in Grafana (Connections > Data sources > InfluxDB > Test)."
+        labels:
+          severity: critical

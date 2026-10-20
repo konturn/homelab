@@ -756,6 +756,18 @@ services:
       # already shares the loki-backend network with the loki container.
       - GF_UNIFIED_ALERTING_STATE_HISTORY_BACKEND=loki
       - GF_UNIFIED_ALERTING_STATE_HISTORY_LOKI_REMOTE_URL=http://loki:3100
+      # SQLite contention. In the default rollback-journal mode one writer
+      # blocks every reader, so when /persistent_data is slow (CI bursts, the
+      # nightly Home Assistant backup saturating the SSD) the scheduler's
+      # rule-loading reads fail with SQLITE_BUSY and every rule errors at
+      # once -- the 2026-10-20 08:39Z and 15:48Z DatasourceError storms.
+      # WAL lets reads proceed during a write. Grafana switches the journal
+      # mode on startup; grafana.db-wal / -shm then sit next to the DB.
+      # query_retries defaults to 0 (no retry of plain reads on "database is
+      # locked"); transaction_retries defaults to 5.
+      - GF_DATABASE_WAL=true
+      - GF_DATABASE_QUERY_RETRIES=5
+      - GF_DATABASE_TRANSACTION_RETRIES=10
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s

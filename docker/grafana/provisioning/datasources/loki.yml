@@ -5,12 +5,14 @@ datasources:
     uid: loki
     type: loki
     access: proxy
-    url: https://loki.lab.nkontur.com
+    # Direct to the loki container over the internal loki-backend network
+    # (same path GF_UNIFIED_ALERTING_STATE_HISTORY_LOKI_REMOTE_URL uses),
+    # not https://loki.lab.nkontur.com via lab_nginx. Going through nginx
+    # made every lab_nginx restart during a deploy a "connection refused"
+    # DatasourceError on the Loki alert rules. loki-backend is an internal
+    # bridge with only grafana/loki/tempo on it and Loki runs with
+    # auth_enabled: false, so no TLS or basic auth on this hop; the nginx
+    # basic auth still guards the external endpoint.
+    url: http://loki:3100
     isDefault: false
     editable: true
-    basicAuth: true
-    basicAuthUser: "{{ vault_loki_push_username }}"
-    secureJsonData:
-      basicAuthPassword: "{{ vault_loki_push_password }}"
-    jsonData:
-      tlsSkipVerify: true
