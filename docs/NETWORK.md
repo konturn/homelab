@@ -110,6 +110,7 @@ All VLANs use macvlan Docker networks, allowing containers to have their own IP 
 - **IPMI** (10.4.128.7) — Server management interface
 - **UPS** (10.4.128.8) — Network-connected UPS
 - **Wi-Fi controller** (10.4.128.10, `iap.lab.nkontur.com`) — Aruba Instant virtual controller address, served by whichever AP is the conductor
+- **movie-ap / office-ap** (10.4.128.11 / .12) — Aruba AP-515s (DHCP reservations)
 - **Access Points** (10.4.128.21-23) — WiFi APs
 
 **Access:** Full routing privileges, can reach all other VLANs.
