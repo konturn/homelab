@@ -1823,8 +1823,34 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+  # Celery broker for paperless-ngx 2.x (the linuxserver 1.x image bundled
+  # its own Redis). Queue only, no persistence needed; internal network only.
+  paperless-redis:
+    image: redis:8.10.2-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
+    container_name: paperless-redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    security_opt:
+      - no-new-privileges=true
+    cap_drop:
+      - ALL
+    networks:
+      internal:
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+  # Official image (the linuxserver image was archived in 2022). Paths are
+  # kept from the linuxserver layout (/config, /data/media, /data/consume),
+  # per the upstream "Migrating from LinuxServer.io" guide.
   paperless-ngx:
-    image: lscr.io/linuxserver/paperless-ngx:1.8.0@sha256:4016f13609923d1ef926c3d3532cf77f3650dc0b886258947cdf311c5ddc9829
+    image: ghcr.io/paperless-ngx/paperless-ngx:2.20.15@sha256:6c86cad803970ea782683a8e80e7403444c5bf3cf70de63b4d3c8e87500db92f
     container_name: paperless-ngx
     security_opt:
       - no-new-privileges=true
@@ -1840,22 +1866,35 @@ services:
     deploy:
       resources:
         limits:
-          memory: 768M
+          memory: 1536M
     environment:
-      - PUID=1000
-      - PGID=1000
+      - USERMAP_UID=1000
+      - USERMAP_GID=1000
       - TZ=America/New_York
+      # 1.x ran with the Django default (UTC); 2.16 converts `created` to a
+      # date in this zone, so anything else shifts document dates by a day.
+      - PAPERLESS_TIME_ZONE=UTC
       - PAPERLESS_URL=https://paperless-ngx.lab.nkontur.com
+      # nginx (paperless-ngx.lab.nkontur.com) and containers on the internal
+      # network (http://paperless-ngx:8000); localhost is always allowed.
+      - PAPERLESS_ALLOWED_HOSTS=paperless-ngx.lab.nkontur.com,paperless-ngx
+      - PAPERLESS_REDIS=redis://paperless-redis:6379
+      - PAPERLESS_DATA_DIR=/config
+      - PAPERLESS_MEDIA_ROOT=/data/media
+      - PAPERLESS_CONSUMPTION_DIR=/data/consume
     volumes:
       - "{{ docker_persistent_data_path }}/paperless:/config"
       - "/mpool/nextcloud/paperless:/data"
+    depends_on:
+      paperless-redis:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000"]
+      test: ["CMD", "curl", "-fs", "--max-time", "5", "http://localhost:8000"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      start_period: 120s
   mopidy:
     image: wernight/mopidy:latest@sha256:e3156f3da69d3e88b191c852d1fa60907c91e36668bca1f5afb5b57b74a8407d
     container_name: mopidy
