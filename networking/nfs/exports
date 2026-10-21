@@ -1,1 +1,4 @@
-/mpool/nextcloud/paperless/consume {{ satellite_2_address }}(rw,sync,no_subtree_check,root_squash)
+# Paperless consume folder for the scanner Pi. all_squash maps every client
+# user (including root) to the paperless container's PUID/PGID (1000), so
+# scans land owned the way paperless expects and the client gets no root.
+/mpool/nextcloud/paperless/consume {{ satellite_2_address }}(rw,sync,no_subtree_check,all_squash,anonuid=1000,anongid=1000)

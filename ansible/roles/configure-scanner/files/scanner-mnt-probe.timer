@@ -1,0 +1,9 @@
+[Unit]
+Description=Touch /mnt every 5 minutes (paperless consume NFS automount)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target

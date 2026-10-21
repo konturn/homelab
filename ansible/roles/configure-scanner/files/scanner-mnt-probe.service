@@ -1,0 +1,7 @@
+[Unit]
+Description=Touch /mnt so the paperless consume NFS automount stays mounted
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/timeout 30 /bin/ls /mnt/
+StandardOutput=null
