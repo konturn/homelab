@@ -28,7 +28,9 @@ Dependency updates are detected and proposed by a self-hosted
 
 Held back on purpose (see `packageRules`): promtail `>= 3.6`, influxdb 3,
 Headway/Pelias images (they must move together with the separately built map
-data), locally built images in the GitLab registry.
+data), locally built images in the GitLab registry. `ollama/ollama` updates
+wait for dashboard approval: each one must be checked for the CUDA 12 runner
+the Pascal GPU needs ([ollama.md](ollama.md#testing-an-update)).
 
 ## Policy
 

@@ -108,6 +108,15 @@ networks:
   loki-backend:
     driver: bridge
     internal: true
+  # ollama <-> its clients (paperless-ai). Ollama has no authentication, so it
+  # is on no LAN VLAN and has no egress; only containers attached here reach
+  # it. Model pulls: see docs/ollama.md.
+  llm-backend:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.3.0/24
 services:
   # Docker socket proxy - filtered access for CI builds
   # Only allows build/image operations, blocks exec/start/stop
@@ -203,6 +212,52 @@ services:
       timeout: 10s
       retries: 3
       start_period: 120s
+  # Local LLM server on the Quadro P5000, shared with Plex (NVENC).
+  # Version pin: the P5000 is Pascal (compute 6.1). CUDA 13 dropped Pascal, so
+  # the image's cuda_v13 runner skips this card; only its cuda_v12 runner
+  # (CUDA 12.8, built for sm_61) drives it. An image that drops cuda_v12 would
+  # silently run on the CPU. Renovate holds this image (renovate.json); test
+  # an update by hand as in docs/ollama.md before bumping.
+  ollama:
+    image: ollama/ollama:0.40.6@sha256:265409e1d931028a8f7d5a32bcbafddd7bffbc6cc629d77efe9560adf692a5e7
+    container_name: ollama
+    security_opt:
+      - no-new-privileges=true
+    cap_drop:
+      - ALL
+    networks:
+      - llm-backend
+    restart: unless-stopped
+    # Host RAM: weights live in VRAM; ~1-2G resident plus reclaimable page
+    # cache while a model loads. 8G caps a CPU fallback before it hurts.
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 1G
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu, compute, utility]
+    environment:
+      # Unload after 10 idle minutes so VRAM goes back to Plex.
+      - OLLAMA_KEEP_ALIVE=10m
+      # 16 GB VRAM is shared with Plex transcodes: one model, one request.
+      - OLLAMA_MAX_LOADED_MODELS=1
+      - OLLAMA_NUM_PARALLEL=1
+      - OLLAMA_CONTEXT_LENGTH=8192
+      # No ollama.com cloud models or remote hosts; local inference only.
+      - OLLAMA_NO_CLOUD=true
+    volumes:
+      # Models (several GB each) on the pool, outside every restic folder.
+      - /mpool/ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   tautulli:
     container_name: tautulli
     security_opt:
