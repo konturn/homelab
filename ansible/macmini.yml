@@ -11,6 +11,7 @@
   hosts: macmini
   become: yes
   gather_facts: false
+  tags: [always]  # prerequisites for every (also changed-only) run
   tasks:
     - name: Check if Xcode Command Line Tools are installed
       raw: xcode-select -p
@@ -37,8 +38,13 @@
   become: yes
   vars:
     fetch_ssh_ca_key: true
+  # Every role is tagged with its own name: changed-only deploys run
+  # `--tags <roles>` (ci/deploy-scope, docs/DEPLOY.md). fetch-vault-secrets is
+  # tagged `always`, so it runs, and fails closed, whenever any role runs.
   roles:
-    - fetch-vault-secrets
+    - role: fetch-vault-secrets
+      tags: [always]
     - role: claude-user-macos
+      tags: [claude-user-macos]
       vars:
         claude_user_principal: claude-macmini

@@ -14,29 +14,42 @@
       ansible.builtin.set_fact:
         installed_packages: "{{ _dpkg_installed.stdout_lines | select('match', '^.i \t') | map('regex_replace', '^...\t', '') | list }}"
       tags: [always]
+  # Every role is tagged with its own name: changed-only deploys run
+  # `--tags <roles>` (ci/deploy-scope, docs/DEPLOY.md). fetch-vault-secrets is
+  # tagged `always`, so it runs, and fails closed, whenever any role runs.
   roles:
   - role: fetch-vault-secrets
+    tags: [always]
     vars:
       fetch_ssh_ca_key: true
-  - configure-base
+  - role: configure-base
+    tags: [configure-base]
   - role: claude-user
+    tags: [claude-user]
     vars:
       claude_docker_access: false
       claude_user_principal: claude-router
-  - configure-router-network
+  - role: configure-router-network
+    tags: [configure-router-network]
   - role: configure-tailscale
+    tags: [configure-tailscale]
     vars:
       tailscale_auth_key: "{{ vault_tailscale_auth_key | trim }}"
       tailscale_advertised_routes: "10.2.0.0/16,10.3.0.0/16,10.4.0.0/16,10.6.0.0/16"
   - role: configure-docker
+    tags: [configure-docker]
     vars:
       nvidia_container_runtime: true
-  - configure-homelab-services
-  - configure-wordpress  # after compose is up; see docker/wordpress/README.md
-  - configure-notifications
+  - role: configure-homelab-services
+    tags: [configure-homelab-services]
+  - role: configure-wordpress  # after compose is up; see docker/wordpress/README.md
+    tags: [configure-wordpress]
+  - role: configure-notifications
+    tags: [configure-notifications]
   - role: configure-excel-vm
-    tags: [excel-vm]
+    tags: [excel-vm, configure-excel-vm]
   - role: restic
+    tags: [restic]
     vars:
       restic_ssh_enabled: false
       restic_repository: "s3:s3.us-east-005.backblazeb2.com/nkontur-homelab"

@@ -14,16 +14,25 @@
       ansible.builtin.set_fact:
         installed_packages: "{{ _dpkg_installed.stdout_lines | select('match', '^.i \t') | map('regex_replace', '^...\t', '') | list }}"
       tags: [always]
+  # Every role is tagged with its own name: changed-only deploys run
+  # `--tags <roles>` (ci/deploy-scope, docs/DEPLOY.md). fetch-vault-secrets is
+  # tagged `always`, so it runs, and fails closed, whenever any role runs.
   roles:
   - role: fetch-vault-secrets
+    tags: [always]
     vars:
       fetch_ssh_ca_key: true
   - role: claude-user
+    tags: [claude-user]
     vars:
       claude_user_principal: claude-zwave
-  - configure-zwave
-  - configure-snapclient
-  - configure-docker
-  - deploy-compose
+  - role: configure-zwave
+    tags: [configure-zwave]
+  - role: configure-snapclient
+    tags: [configure-snapclient]
+  - role: configure-docker
+    tags: [configure-docker]
+  - role: deploy-compose
+    tags: [deploy-compose]
   become: yes
 
