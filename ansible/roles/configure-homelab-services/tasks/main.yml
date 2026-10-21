@@ -1001,7 +1001,20 @@
   loop:
     - src: "docker/openclaw/hooks/transforms/grafana.js"
       dest: "{{ docker_persistent_data_path }}/openclaw/data/hooks/transforms/grafana.js"
+  register: openclaw_hook_transforms
   when: "'router' in inventory_hostname"
+
+# The gateway loads transform modules once and caches them, so a changed
+# transform only takes effect after a restart (seen 2026-10-21: the first
+# alert after a grafana.js deploy still got the old text). Skipped when the
+# config change above already restarted it.
+- name: Restart OpenClaw gateway if hook transforms changed
+  ansible.builtin.command:
+    cmd: "docker restart openclaw-gateway"
+  when:
+    - openclaw_hook_transforms is changed
+    - openclaw_config is not changed
+    - not ansible_check_mode
 
 ### OpenClaw approved lessons
 # Reviewed lessons file, injected into every agent session by the
