@@ -101,6 +101,21 @@ all:
       docker_compose_file_names:
         -  "docker-compose.yml"
       docker_compose_dest_path: "{{ docker_persistent_data_path }}/ansible_state"
+      # Snapclient zones whose USB sound card is not detected. Each listed zone's
+      # container is rendered with deploy.replicas: 0, so compose removes it
+      # instead of letting it crash-loop on "Can't open plughw:CARD=<Zone>"
+      # (~1,400 restarts/day each, firing Container Restart Loop).
+      # Hardware item: the cards named by base/udev/85-my-usb-audio.rules are
+      # missing from /proc/asound/cards (checked 2026-10-21).
+      # Re-enable a zone: once its card is plugged in and listed under its
+      # udev name in /proc/asound/cards, delete its line here and deploy.
+      snapclient_disabled_zones:
+        - office
+        - kitchen
+        - main_bedroom
+        - main_bathroom
+        - guest_bathroom
+        - guest_bedroom
       nginx_config:
         - dest: "{{ docker_persistent_data_path }}/lab_nginx"
           network: "internal"
@@ -324,6 +339,11 @@ all:
           snapclient_config:
             - soundcard: "plughw:CARD=b1,DEV=0"
               name: "movie"
+              # USB sound card "b1" not detected since the 2026-10-18 reboot
+              # (only bcm2835 Headphones in /proc/asound/cards), so the unit
+              # failed on every deploy. false = unit stopped and disabled.
+              # Re-enable: set true once the card is back in /proc/asound/cards.
+              enabled: false
         satellite-2.lab.nkontur.com:
           ansible_host: 10.6.128.11
           claude_elevated_access: true

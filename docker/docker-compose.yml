@@ -1372,6 +1372,9 @@ services:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
     restart: unless-stopped
     deploy:
+      # 0 while this zone's USB sound card is missing: see
+      # snapclient_disabled_zones in ansible/inventory.yml.
+      replicas: {{ 0 if 'office' in snapclient_disabled_zones | default([]) else 1 }}
       resources:
         limits:
           memory: 256M
@@ -1437,6 +1440,9 @@ services:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
     restart: unless-stopped
     deploy:
+      # 0 while this zone's USB sound card is missing: see
+      # snapclient_disabled_zones in ansible/inventory.yml.
+      replicas: {{ 0 if 'kitchen' in snapclient_disabled_zones | default([]) else 1 }}
       resources:
         limits:
           memory: 256M
@@ -1470,6 +1476,9 @@ services:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
     restart: unless-stopped
     deploy:
+      # 0 while this zone's USB sound card is missing: see
+      # snapclient_disabled_zones in ansible/inventory.yml.
+      replicas: {{ 0 if 'main_bedroom' in snapclient_disabled_zones | default([]) else 1 }}
       resources:
         limits:
           memory: 256M
@@ -1503,6 +1512,9 @@ services:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
     restart: unless-stopped
     deploy:
+      # 0 while this zone's USB sound card is missing: see
+      # snapclient_disabled_zones in ansible/inventory.yml.
+      replicas: {{ 0 if 'main_bathroom' in snapclient_disabled_zones | default([]) else 1 }}
       resources:
         limits:
           memory: 256M
@@ -1536,6 +1548,9 @@ services:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
     restart: unless-stopped
     deploy:
+      # 0 while this zone's USB sound card is missing: see
+      # snapclient_disabled_zones in ansible/inventory.yml.
+      replicas: {{ 0 if 'guest_bathroom' in snapclient_disabled_zones | default([]) else 1 }}
       resources:
         limits:
           memory: 256M
@@ -1569,6 +1584,9 @@ services:
     image: "gitlab-registry.lab.nkontur.com:443/root/homelab/snapclient:latest"
     restart: unless-stopped
     deploy:
+      # 0 while this zone's USB sound card is missing: see
+      # snapclient_disabled_zones in ansible/inventory.yml.
+      replicas: {{ 0 if 'guest_bedroom' in snapclient_disabled_zones | default([]) else 1 }}
       resources:
         limits:
           memory: 256M

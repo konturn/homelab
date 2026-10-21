@@ -56,12 +56,16 @@
     mode: 0600
   loop: "{{ snapclient_config }}"
 
+# A client with `enabled: false` in snapclient_config (its USB sound card is
+# missing) is kept stopped and disabled rather than started into a
+# "No such device" failure on every deploy. Its files are still templated, so
+# flipping the flag back to true is the only change needed to re-enable it.
 - name: Make sure snapclient daemons started
   ansible.builtin.systemd:
     name: "snapclient_{{ item.name }}"
-    state: started
+    state: "{{ 'started' if item.enabled | default(true) else 'stopped' }}"
     daemon_reload: yes
-    enabled: yes
+    enabled: "{{ item.enabled | default(true) }}"
   loop: "{{ snapclient_config }}"
 
 - name: Restart snapclient daemon when config changed
@@ -69,4 +73,4 @@
     name: "snapclient_{{ item.item.name }}"
     state: restarted
   loop: "{{ snapclient.results }}"
-  when: item.changed
+  when: item.changed and item.item.enabled | default(true)
