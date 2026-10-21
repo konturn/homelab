@@ -57,9 +57,16 @@ groups:
       # nonNegative:true still drops the reset-to-zero when a container is
       # recreated, so a redeploy does not read as a restart storm.
       #
-      # Trade-off: the 6h accumulation means the alert stays firing for up to 6h
-      # after a crash loop is actually fixed. That is the right way to be wrong
-      # for a rule whose entire failure mode was staying silent.
+      # The 6h accumulation alone kept the alert firing for up to 6h after a
+      # loop was over (2026-10-20: zigbee2mqtt restarted 8 times during a
+      # coordinator firmware update at 23:15Z, was stable from 23:20Z, and would
+      # have fired until ~05:20Z). So the restart sum is joined with the
+      # container's most recent uptime_ns and only kept while that is under 1h:
+      # a container that has stayed up for an hour is no longer looping and
+      # resolves. A real loop never reaches 1h of uptime -- every sample a
+      # crash-looping container gets is taken seconds after a (re)start -- so
+      # detection is unchanged. A removed container (e.g. scaled to 0) keeps its
+      # last short-uptime sample and still ages out with the 6h window.
       - uid: container-restart-loop
         title: Container Restart Loop
         condition: C
@@ -69,15 +76,23 @@ groups:
             datasourceUid: influxdb
             model:
               query: |
-                from(bucket: "metrics")
+                restarts = from(bucket: "metrics")
                   |> range(start: -6h)
                   |> filter(fn: (r) => r._measurement == "docker_container_status")
                   |> filter(fn: (r) => r._field == "restart_count")
                   |> difference(nonNegative: true)
                   |> group(columns: ["container_name"])
                   |> sum()
-                  |> map(fn: (r) => ({r with _time: now()}))
-                  |> keep(columns: ["_time", "_value", "container_name"])
+                uptime = from(bucket: "metrics")
+                  |> range(start: -6h)
+                  |> filter(fn: (r) => r._measurement == "docker_container_status")
+                  |> filter(fn: (r) => r._field == "uptime_ns")
+                  |> group(columns: ["container_name"])
+                  |> sort(columns: ["_time"])
+                  |> last()
+                join(tables: {r: restarts, u: uptime}, on: ["container_name"])
+                  |> filter(fn: (r) => r._value_u < 3600000000000)
+                  |> map(fn: (r) => ({_time: now(), _value: r._value_r, container_name: r.container_name}))
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -91,7 +106,7 @@ groups:
         execErrState: Error
         for: 5m
         annotations:
-          summary: "Container {{ $labels.container_name }} restarting repeatedly (>5 restarts in 6h)"
+          summary: "Container {{ $labels.container_name }} restarting repeatedly (>5 restarts in 6h, not yet up for 1h)"
         labels:
           severity: critical
 
@@ -638,26 +653,49 @@ groups:
       # sdk has been sitting at 16 pending sectors since 2026-09-03 with
       # health_ok still true, which is what prompted this rule.
       #
-      # Fleet is otherwise clean (2 of 26 devices non-zero as of 2026-09-09),
-      # so a >0 threshold is signal rather than noise. Warning, not critical:
-      # this means "plan a replacement", while smart-disk-error means "the
-      # drive is going now".
+      # Alerts on an INCREASE over 24h, not on any non-zero value. The >0
+      # version fired permanently on the two known-bad disks, which hid the
+      # signal that matters for them: getting worse. Baseline, unchanged since
+      # metrics began on 2026-09-02:
+      #   sdk  WD240KFGX s/n 65HYX6RK   pending 16 (FAULTED in mpool, being
+      #        replaced by sda; RMA once the resilver completes)
+      #   sdb  CT480BX500 s/n 1938E19CE56F (boot/root SSD)  reallocated 1,
+      #        pending 1
+      # Every other disk reads 0, so any new damage on any disk is an increase.
+      # Per series = host+serial_no+device+model+field, so a /dev/sdX rename
+      # after a reboot starts a new series rather than reading as an increase.
+      # last - first rather than summed differences, so a one-sample glitch
+      # (a read of 0 and back) does not fire. Not covered: a disk that is
+      # already damaged when first installed; smart-disk-error still applies.
+      # The alert self-clears 24h after the last increase. Warning, not
+      # critical: this means "plan a replacement", while smart-disk-error
+      # means "the drive is going now".
       - uid: smart-prefail-sectors
         title: SMART Pre-Failure Sectors
         condition: C
         data:
           - refId: A
-            relativeTimeRange: {from: 3600, to: 0}
+            relativeTimeRange: {from: 86400, to: 0}
             datasourceUid: influxdb
             model:
               query: |
                 from(bucket: "metrics")
-                  |> range(start: -1h)
+                  |> range(start: -24h)
                   |> filter(fn: (r) => r._measurement == "smart_device")
                   |> filter(fn: (r) => r._field == "pending_sector_count" or r._field == "uncorrectable_sector_count" or r._field == "reallocated_sectors_count")
-                  |> last()
+                  |> group(columns: ["host", "serial_no", "device", "model", "_field"])
+                  |> sort(columns: ["_time"])
+                  |> reduce(
+                      identity: {n: 0, first: 0, last: 0},
+                      fn: (r, accumulator) => ({
+                        n: accumulator.n + 1,
+                        first: if accumulator.n == 0 then int(v: r._value) else accumulator.first,
+                        last: int(v: r._value),
+                      }),
+                    )
+                  |> map(fn: (r) => ({r with _value: if r.last > r.first then r.last - r.first else 0}))
                   |> group(columns: ["host", "device", "model"])
-                  |> max()
+                  |> sum()
                   |> filter(fn: (r) => r._value > 0)
                   |> map(fn: (r) => ({r with _time: now()}))
                   |> keep(columns: ["_time", "_value", "host", "device", "model"])
@@ -672,9 +710,9 @@ groups:
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
         noDataState: OK
         execErrState: Error
-        for: 1h
+        for: 0s
         annotations:
-          summary: "Disk {{ $labels.device }} on {{ $labels.host }} ({{ $labels.model }}) reports pending/reallocated/uncorrectable sectors — SMART still says healthy, but plan a replacement"
+          summary: "Disk {{ $labels.device }} on {{ $labels.host }} ({{ $labels.model }}) gained {{ $values.B }} pending/reallocated/uncorrectable sectors in 24h — plan a replacement"
         labels:
           severity: warning
 
@@ -842,6 +880,14 @@ groups:
       # the rule above, which is scoped to the three internet/gateway targets.
       # Threshold is 4 of the last 15 one-minute samples so a single dropped
       # reply does not page; "for: 15m" then requires it to stay bad.
+      #
+      # known_offline: devices that are physically offline pending a hardware
+      # fix, excluded only until known_offline_until. The exclusion expires by
+      # itself, so a device still down after that date alerts again instead of
+      # being hidden forever. Re-enable early by deleting its entry once the
+      # device is back; extend the date only with a reason.
+      #   10.6.128.9   doorbell (amcrest2mqtt waits for it)  offline, added 2026-10-21
+      #   10.6.128.14  back camera                          offline, added 2026-10-21
       - uid: iot-device-unreachable
         title: IoT Device Unreachable
         condition: C
@@ -851,11 +897,14 @@ groups:
             datasourceUid: influxdb
             model:
               query: |
+                known_offline = ["10.6.128.9", "10.6.128.14"]
+                known_offline_until = 2026-11-04T00:00:00Z
                 from(bucket: "metrics")
                   |> range(start: -15m)
                   |> filter(fn: (r) => r._measurement == "ping")
                   |> filter(fn: (r) => r._field == "result_code")
                   |> filter(fn: (r) => r.probe == "device")
+                  |> filter(fn: (r) => not (contains(value: r.url, set: known_offline) and now() < known_offline_until))
                   |> filter(fn: (r) => r._value != 0)
                   |> group(columns: ["url"])
                   |> count()
