@@ -177,6 +177,9 @@ This runs `ansible/bootstrap.yml` which:
 
 Once Layer 1 is healthy, run the normal CI pipeline:
 
+0. If the host was reinstalled without restoring `/etc/ssh/ssh_host_*`, its
+   host keys changed and CI (strict host key checking) will refuse to connect.
+   Update `ansible/known_hosts` first: see [DEPLOY.md](DEPLOY.md#ssh-host-keys).
 1. Push a commit (or re-run the pipeline)
 2. The `router:deploy` job runs the full Ansible playbook
 3. All remaining services come up

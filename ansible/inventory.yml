@@ -77,7 +77,9 @@ all:
     # address: must stay inside 10.3.0.0/18, see the role defaults.
     excel_vm_mac: "52:54:00:3a:48:0a"
     excel_vm_address: 10.3.48.10
-    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    # Host keys are pinned in ansible/known_hosts and checked strictly
+    # (docs/DEPLOY.md, "SSH host keys").
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=yes -o UserKnownHostsFile={{ inventory_dir }}/known_hosts"
     # Secrets come only from fetch-vault-secrets, which fails the play when
     # one is missing. No env/empty fallback: an undefined value must fail.
     omapi_secret: "{{ vault_omapi_secret | trim }}"

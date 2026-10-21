@@ -37,6 +37,7 @@ RESOURCE_GROUPS=(deploy-router deploy-zwave deploy-satellite-2 deploy-macmini)
 # The project has 11 schedules (docs/GITLAB_SETTINGS.md).
 WANT_PIPELINE_SCHEDULES=20
 ROUTER_HOST="${ROUTER_HOST:-10.4.0.1}"
+KNOWN_HOSTS="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/ansible/known_hosts"
 
 check=false
 case "${1:-}" in
@@ -127,9 +128,10 @@ gitlab_exec() {
   if command -v docker >/dev/null 2>&1 && docker inspect gitlab >/dev/null 2>&1; then
     docker exec gitlab "$@"
   elif [ -n "${ROUTER_SSH_KEY:-}" ] && [ -s "$ROUTER_SSH_KEY" ]; then
-    # Same SSH options as the other CI jobs that reach the router.
+    # Same SSH options as the other CI jobs that reach the router: host key
+    # pinned in ansible/known_hosts and checked strictly.
     ssh -i "$ROUTER_SSH_KEY" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 \
-      -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+      -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KNOWN_HOSTS" -o LogLevel=ERROR \
       "root@${ROUTER_HOST}" "docker exec gitlab $(printf '%q ' "$@")"
   else
     return 127
