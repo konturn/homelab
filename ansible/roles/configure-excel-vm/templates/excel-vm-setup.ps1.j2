@@ -1,15 +1,27 @@
 # {{ ansible_managed }}
-# First-logon provisioning for {{ excel_vm_name }}. Runs once, elevated, as
-# {{ excel_vm_admin_user }} (FirstLogonCommands). Each step is independent and
-# logged; a failed step does not stop the others. Progress/result:
+# Provisioning for {{ excel_vm_name }}.
+#
+# First logon (no arguments): runs once, elevated, as {{ excel_vm_admin_user }}
+# (FirstLogonCommands), runs every step and reboots at the end. Each step is
+# independent and logged; a failed step does not stop the others.
 #   C:\ProgramData\excel-vm-setup\setup.log      transcript
 #   C:\ProgramData\excel-vm-setup\status.json    per-step result (read by the host via qemu-ga)
 #   C:\ProgramData\excel-vm-setup\DONE           written last
+#
+# -Reapply: runs only the steps marked -Idempotent (the settings, not the
+# installers) against an existing VM, never reboots, and exits 1 if a step
+# failed. Started over SSH as {{ excel_vm_admin_user }} by tasks/reapply.yml.
+# Idempotent steps report "unchanged" or "changed: ...".
+#   C:\ProgramData\excel-vm-setup\reapply.log / reapply-status.json
+# -Check (with -Reapply): report what would change without changing it.
+param([switch]$Reapply, [switch]$Check)
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $state = 'C:\ProgramData\excel-vm-setup'
 New-Item -ItemType Directory -Force -Path $state | Out-Null
-Start-Transcript -Path "$state\setup.log" -Append | Out-Null
+$logName = if ($Reapply) { 'reapply' } else { 'setup' }
+$statusFile = if ($Reapply) { "$state\reapply-status.json" } else { "$state\status.json" }
+Start-Transcript -Path "$state\$logName.log" -Append | Out-Null
 
 $media = $PSScriptRoot
 $installers = Join-Path $media 'installers'
@@ -22,7 +34,7 @@ $status = [ordered]@{}
 function Save-Status {
     for ($i = 1; $i -le 30; $i++) {
         try {
-            $status | ConvertTo-Json | Set-Content -Encoding UTF8 "$state\status.json"
+            $status | ConvertTo-Json | Set-Content -Encoding UTF8 $statusFile
             return
         } catch {
             Start-Sleep -Seconds 2
@@ -31,11 +43,18 @@ function Save-Status {
     Write-Host "!!!! could not write status.json"
 }
 
-function Step([string]$name, [scriptblock]$body) {
+# Steps marked -Idempotent are safe to run again on a configured VM: they
+# check the current state and only act (through Change) when it differs.
+function Step([string]$name, [scriptblock]$body, [switch]$Idempotent) {
+    if ($Reapply -and -not $Idempotent) { return }
     Write-Host "==== $name"
+    $script:changes = New-Object System.Collections.Generic.List[string]
     try {
         & $body
-        $status[$name] = 'ok'
+        if (-not $Idempotent) { $status[$name] = 'ok' }
+        elseif ($script:changes.Count -eq 0) { $status[$name] = 'unchanged' }
+        elseif ($Check) { $status[$name] = 'would change: ' + ($script:changes -join '; ') }
+        else { $status[$name] = 'changed: ' + ($script:changes -join '; ') }
     } catch {
         Write-Host "!!!! $name failed: $_"
         $status[$name] = "failed: $_"
@@ -43,10 +62,21 @@ function Step([string]$name, [scriptblock]$body) {
     Save-Status
 }
 
+# Record a change and make it (or, with -Check, only report it).
+function Change([string]$what, [scriptblock]$action) {
+    $script:changes.Add($what)
+    if ($Check) { Write-Host "  would change: $what"; return }
+    Write-Host "  changing: $what"
+    & $action
+}
+
 function Run([string]$file, [string[]]$argList) {
     $p = Start-Process -FilePath $file -ArgumentList $argList -Wait -PassThru -NoNewWindow
     if ($p.ExitCode -notin 0, 3010) { throw "$file exited $($p.ExitCode)" }
 }
+
+{% macro ps(v) %}'{{ v | replace("'", "''") }}'{% endmacro %}
+$projectDir = {{ ps(excel_vm_project_dir | regex_replace('\\\\+$', '')) }}
 
 function Refresh-Path {
     $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
@@ -80,6 +110,19 @@ Step 'power' {
     powercfg /change monitor-timeout-ac 0
 }
 
+Step 'power-plan' -Idempotent {
+    # High performance: the guest should not throttle long recalculations.
+    $want = '{{ excel_vm_power_scheme_guid }}'
+    if ((powercfg /getactivescheme | Out-String) -notmatch $want) {
+        Change "activate power scheme $want" {
+            # Windows 11 can hide the built-in scheme; restore it under its own GUID.
+            if ((powercfg /list | Out-String) -notmatch $want) { powercfg -duplicatescheme $want $want | Out-Null }
+            powercfg /setactive $want
+            if ($LASTEXITCODE -ne 0) { throw "powercfg /setactive exited $LASTEXITCODE" }
+        }
+    }
+}
+
 Step 'rdp' {
     Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0
     Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name UserAuthentication -Value 1
@@ -100,6 +143,72 @@ Step 'openssh-server' {
     }
 }
 
+Step 'ssh-admin-keys' -Idempotent {
+    # Members of Administrators authenticate from this file, not ~\.ssh, and
+    # sshd ignores it unless only Administrators and SYSTEM have access.
+    $f = "$env:ProgramData\ssh\administrators_authorized_keys"
+    $want = @(
+{% for key in excel_vm_admin_authorized_keys %}
+        {{ ps(key | trim) }}
+{% endfor %}
+    )
+    $have = @(if (Test-Path $f) { Get-Content $f | ForEach-Object { $_.Trim() } | Where-Object { $_ } })
+    $haveBlobs = @($have | ForEach-Object { ($_ -split '\s+')[1] })
+    $missing = @($want | Where-Object { $haveBlobs -notcontains ($_ -split '\s+')[1] })
+    if ($missing.Count) {
+        Change "add $($missing.Count) key(s) to $f" {
+            Set-Content -Path $f -Encoding Ascii -Value (@($have) + $missing)
+        }
+    }
+    $sids = 'S-1-5-18', 'S-1-5-32-544'   # SYSTEM, Administrators
+    $acl = if (Test-Path $f) { Get-Acl $f }
+    $aclOk = $acl -and $acl.AreAccessRulesProtected -and @($acl.Access).Count -eq 2 -and -not @($acl.Access | Where-Object {
+        $_.AccessControlType -ne 'Allow' -or $_.FileSystemRights -ne 'FullControl' -or
+        $sids -notcontains $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value })
+    if (-not $aclOk) {
+        Change "restrict $f to Administrators and SYSTEM" {
+            icacls $f /inheritance:r /grant:r '*S-1-5-32-544:F' '*S-1-5-18:F' | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "icacls exited $LASTEXITCODE" }
+            foreach ($r in (Get-Acl $f).Access) {
+                $sid = $r.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value
+                if ($sids -notcontains $sid) { icacls $f /remove:g "*$sid" | Out-Null }
+            }
+        }
+    }
+}
+
+Step 'sshd-sftp-short-path' -Idempotent {
+    # With PowerShell as DefaultShell, sshd starts the sftp subsystem through
+    # it: the default relative "sftp-server.exe" is not found, and the quoted
+    # "C:\Program Files\..." path is mangled, so sftp and scp fail. The 8.3
+    # short path has neither problem.
+    $cfg = "$env:ProgramData\ssh\sshd_config"
+    $exe = "$env:ProgramFiles\OpenSSH\sftp-server.exe"
+    $short = (New-Object -ComObject Scripting.FileSystemObject).GetFile($exe).ShortPath
+    if ($short -match '\s') { throw "no 8.3 short name for $exe (8dot3 name creation disabled on C:?)" }
+    $want = "Subsystem`tsftp`t$short"
+    $lines = @(Get-Content $cfg)
+    $idx = @(for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^\s*Subsystem\s+sftp\s') { $i } })
+    $current = if ($idx.Count -eq 1) { ($lines[$idx[0]].Trim() -split '\s+') -join ' ' }
+    if ($current -ne "Subsystem sftp $short") {
+        Change "sshd_config: $want; restart sshd" {
+            if (-not (Test-Path "$cfg.bak-excel-vm")) { Copy-Item $cfg "$cfg.bak-excel-vm" }
+            $out = New-Object System.Collections.Generic.List[string]
+            $done = $false
+            foreach ($l in $lines) {
+                if ($l -match '^\s*Subsystem\s+sftp\s') { if (-not $done) { $out.Add($want); $done = $true }; continue }
+                # Global keywords must come before the first Match block.
+                if (-not $done -and $l -match '^\s*Match\s') { $out.Add($want); $done = $true }
+                $out.Add($l)
+            }
+            if (-not $done) { $out.Add($want) }
+            Set-Content -Path $cfg -Encoding Ascii -Value $out
+            # Existing sessions (including this one) survive an sshd restart.
+            Restart-Service sshd
+        }
+    }
+}
+
 Step 'python' {
     Run "$installers\{{ (excel_vm_installers | selectattr('name', 'equalto', 'python') | first).filename }}" @(
         '/quiet', 'InstallAllUsers=1', 'PrependPath=1', 'Include_test=0', 'Include_launcher=1')
@@ -110,6 +219,45 @@ Step 'pip-packages' {
     $py = (Get-ChildItem 'C:\Program Files\Python3*\python.exe' | Select-Object -First 1).FullName
     & $py -m pip install --disable-pip-version-check --no-warn-script-location {{ "'" ~ (excel_vm_pip_packages | join("' '")) ~ "'" }}
     if ($LASTEXITCODE -ne 0) { throw "pip exited $LASTEXITCODE" }
+}
+
+{% set user_py = excel_vm_installers | selectattr('name', 'equalto', 'python-user') | first %}
+{% set user_py_dir = 'Python' ~ (excel_vm_user_python_version.split('.')[:2] | join('')) %}
+Step 'python-user' -Idempotent {
+    # Per-user Python for the Excel automation (xlwings etc.), separate from
+    # the all-users Python above. `py` picks it through PY_PYTHON; the machine
+    # PATH still lists the all-users one first, so a bare `python` is not it.
+    $py = "$env:LOCALAPPDATA\Programs\Python\{{ user_py_dir }}\python.exe"
+    $have = if (Test-Path $py) { (& $py -c 'import platform; print(platform.python_version())').Trim() }
+    if ($have -ne '{{ excel_vm_user_python_version }}') {
+        Change "install Python {{ excel_vm_user_python_version }} for $env:USERNAME (found: $(if ($have) { $have } else { 'none' }))" {
+            Run "$installers\{{ user_py.filename }}" @(
+                '/quiet', 'InstallAllUsers=0', 'PrependPath=1', 'Include_test=0', 'Include_launcher=0')
+            if (-not (Test-Path $py)) { throw "$py missing after install" }
+        }
+    }
+    $pyLauncherDefault = '{{ excel_vm_user_python_version.split('.')[:2] | join('.') }}'
+    if ([Environment]::GetEnvironmentVariable('PY_PYTHON', 'User') -ne $pyLauncherDefault) {
+        Change "PY_PYTHON=$pyLauncherDefault (user)" {
+            [Environment]::SetEnvironmentVariable('PY_PYTHON', $pyLauncherDefault, 'User')
+        }
+    }
+}
+
+Step 'pip-packages-user' -Idempotent {
+    $py = "$env:LOCALAPPDATA\Programs\Python\{{ user_py_dir }}\python.exe"
+    $want = @({{ "'" ~ (excel_vm_user_pip_packages | join("', '")) ~ "'" }})
+    function Norm([string]$req) { ($req.ToLower() -replace '[-_.]+', '-') }
+    $have = @(if (Test-Path $py) {
+        & $py -m pip freeze --disable-pip-version-check | ForEach-Object { Norm $_ }
+    })
+    $missing = @($want | Where-Object { $have -notcontains (Norm $_) })
+    if ($missing.Count) {
+        Change "pip install $($missing -join ' ')" {
+            & $py -m pip install --disable-pip-version-check --no-warn-script-location @want
+            if ($LASTEXITCODE -ne 0) { throw "pip exited $LASTEXITCODE" }
+        }
+    }
 }
 
 Step 'git' {
@@ -152,12 +300,75 @@ Step 'office-excel' {
     if (-not (Test-Path 'C:\Program Files\Microsoft Office\root\Office16\EXCEL.EXE')) { throw 'EXCEL.EXE missing after ODT run' }
 }
 
-Step 'excel-trust-vbom' {
+Step 'excel-trust-vbom' -Idempotent {
     # Trust Center > Macro Settings > "Trust access to the VBA project object model"
     if (-not (Test-Path 'C:\Program Files\Microsoft Office\root\Office16\EXCEL.EXE')) { throw 'Excel not installed' }
     $k = 'HKCU:\Software\Microsoft\Office\16.0\Excel\Security'
-    New-Item -Path $k -Force | Out-Null
-    New-ItemProperty -Path $k -Name AccessVBOM -PropertyType DWord -Value 1 -Force | Out-Null
+    if ((Get-ItemProperty -Path $k -Name AccessVBOM -ErrorAction SilentlyContinue).AccessVBOM -ne 1) {
+        Change 'AccessVBOM=1' {
+            New-Item -Path $k -Force | Out-Null
+            New-ItemProperty -Path $k -Name AccessVBOM -PropertyType DWord -Value 1 -Force | Out-Null
+        }
+    }
+}
+
+Step 'excel-trusted-locations' -Idempotent {
+    # Trust Center > Trusted Locations: the project's folders, subfolders
+    # allowed, so macros in working copies run without the security bar.
+    # An existing location for the same folder is kept (whatever its key name).
+    $base = 'HKCU:\Software\Microsoft\Office\16.0\Excel\Security\Trusted Locations'
+{% for sub in excel_vm_trusted_subdirs %}
+    $dir = Join-Path $projectDir {{ ps(sub) }}
+    if (-not (Test-Path $dir)) {
+        # On re-apply a missing folder means excel_vm_project_dir is wrong.
+        if ($Reapply) { throw "$dir does not exist (is excel_vm_project_dir right?)" }
+        Change "create $dir" { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    }
+    $existing = @(Get-ChildItem $base -ErrorAction SilentlyContinue | Where-Object {
+        "$((Get-ItemProperty $_.PSPath).Path)".TrimEnd('\') -eq $dir.TrimEnd('\') })
+    if ($existing.Count) {
+        foreach ($loc in $existing) {
+            if ((Get-ItemProperty $loc.PSPath).AllowSubFolders -ne 1) {
+                Change "AllowSubFolders=1 on $($loc.PSChildName)" {
+                    New-ItemProperty -Path $loc.PSPath -Name AllowSubFolders -PropertyType DWord -Value 1 -Force | Out-Null
+                }
+            }
+        }
+    } else {
+        $key = Join-Path $base {{ ps('LocationExcelVm' ~ (sub | capitalize)) }}
+        Change "trusted location $dir" {
+            New-Item -Path $key -Force | Out-Null
+            New-ItemProperty -Path $key -Name Path -PropertyType String -Value "$dir\" -Force | Out-Null
+            New-ItemProperty -Path $key -Name AllowSubFolders -PropertyType DWord -Value 1 -Force | Out-Null
+            New-ItemProperty -Path $key -Name Description -PropertyType String -Value 'excel-vm project' -Force | Out-Null
+        }
+    }
+{% endfor %}
+}
+
+Step 'excel-com-systemprofile-desktop' -Idempotent {
+    # Excel started through COM from a non-interactive session (SSH, session 0)
+    # runs with the system profile and fails Workbooks.Open with "Microsoft
+    # Excel cannot access the file" unless these folders exist.
+    foreach ($d in 'C:\Windows\System32\config\systemprofile\Desktop',
+                   'C:\Windows\SysWOW64\config\systemprofile\Desktop') {
+        if (-not (Test-Path $d)) { Change "create $d" { New-Item -ItemType Directory -Force -Path $d | Out-Null } }
+    }
+}
+
+Step 'defender-exclusions' -Idempotent {
+    # Real-time scanning of large workbooks and of Excel itself slows every
+    # open/recalc in the project folder.
+    if ($Reapply -and -not (Test-Path $projectDir)) { throw "$projectDir does not exist (is excel_vm_project_dir right?)" }
+    $p = Get-MpPreference
+    if (@($p.ExclusionPath | ForEach-Object { "$_".TrimEnd('\') }) -notcontains $projectDir) {
+        Change "Defender path exclusion $projectDir" { Add-MpPreference -ExclusionPath $projectDir }
+    }
+{% for proc in excel_vm_defender_exclusion_processes %}
+    if (@($p.ExclusionProcess) -notcontains {{ ps(proc) }}) {
+        Change "Defender process exclusion {{ proc }}" { Add-MpPreference -ExclusionProcess {{ ps(proc) }} }
+    }
+{% endfor %}
 }
 
 Step 'scrub-unattend-secrets' {
@@ -169,6 +380,14 @@ Step 'scrub-unattend-secrets' {
 }
 
 Save-Status
+
+if ($Reapply) {
+    $status.GetEnumerator() | ForEach-Object { Write-Host ("REAPPLY {0}: {1}" -f $_.Key, $_.Value) }
+    Stop-Transcript | Out-Null
+    if ($status.Values | Where-Object { "$_" -like 'failed*' }) { exit 1 }
+    exit 0
+}
+
 Get-Date -Format o | Set-Content "$state\DONE"
 Stop-Transcript | Out-Null
 shutdown.exe /r /t 30 /c "excel-vm provisioning finished"

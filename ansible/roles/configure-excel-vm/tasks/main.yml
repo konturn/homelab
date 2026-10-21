@@ -146,6 +146,14 @@
     - _excel_vm_dominfo.stdout is search('Autostart:\s+disable')
   changed_when: true
 
+# Opt-in: -e excel_vm_reapply=true re-runs the guest settings steps of
+# excel-vm-setup.ps1 on the running VM over SSH (no installs, no reboot).
+- name: Re-apply guest settings
+  ansible.builtin.include_tasks: reapply.yml
+  when:
+    - _excel_vm_domstate.rc == 0
+    - excel_vm_reapply | bool
+
 # Opt-in: after the guest wrote C:\ProgramData\excel-vm-setup\DONE, run with
 # -e excel_vm_cleanup_install_media=true to eject the install CDs and delete
 # the unattend media (it contains the admin password).

@@ -102,6 +102,13 @@ excel_vm_installers:
     filename: python-3.13.16-amd64.exe
     url: https://www.python.org/ftp/python/3.13.16/python-3.13.16-amd64.exe
     sha256: fb4f9f5d438b2396da0086dc70b935c530cb578e37adc6d354f7ad2037fee83b
+  - name: python-user
+    # Per-user interpreter for the Excel automation (see excel_vm_user_python_version).
+    # python.org publishes only an MD5 for 3.12.10 (5eddb0b6f12c852725de071ae681dde4,
+    # matched); SHA256 of the file fetched over HTTPS on 2026-10-20.
+    filename: python-3.12.10-amd64.exe
+    url: https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe
+    sha256: 67b5635e80ea51072b87941312d00ec8927c4db9ba18938f7ad2d27b328b95fb
   - name: node
     filename: node-v24.22.0-x64.msi
     url: https://nodejs.org/dist/v24.22.0/node-v24.22.0-x64.msi
@@ -129,6 +136,19 @@ excel_vm_installers:
 excel_vm_pip_packages:
   - xlwings==0.37.6
   - oletools==0.60.2
+# Per-user Python (installer "python-user" above) for driving Excel over COM
+# and reading workbooks/PDFs. Versions are what the working VM has.
+excel_vm_user_python_version: "3.12.10"
+excel_vm_user_pip_packages:
+  - xlwings==0.37.7
+  - pywin32==312
+  - oletools==0.60.2
+  - openpyxl==3.1.5
+  - pdfplumber==0.11.10
+  - pdfminer.six==20260107
+  - pypdf==6.21.1
+  - pandas==3.0.6
+  - numpy==2.5.4
 excel_vm_npm_packages:
   - "@anthropic-ai/claude-code@2.1.303"
 
@@ -146,3 +166,35 @@ excel_vm_office_exclude_apps:
   - Publisher
   - Teams
   - Word
+
+# -----------------------------------------------------------------------------
+# Guest settings (excel-vm-setup.ps1 steps marked -Idempotent; re-applied to
+# the running VM with -e excel_vm_reapply=true, see README.md)
+# -----------------------------------------------------------------------------
+# Project folder in the guest. The default is a placeholder: pass the real one
+# with -e excel_vm_project_dir=... (re-apply refuses to run against a folder
+# that does not exist). Defender excludes it; <dir>\<subdir> for each of
+# excel_vm_trusted_subdirs is an Excel Trusted Location (subfolders allowed).
+excel_vm_project_dir: 'C:\work'
+excel_vm_trusted_subdirs:
+  - work
+  - out
+excel_vm_defender_exclusion_processes:
+  - EXCEL.EXE
+# Windows built-in "High performance" power scheme.
+excel_vm_power_scheme_guid: 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
+
+# administrators_authorized_keys (noah is an administrator, so sshd reads this
+# file and not ~\.ssh). The router's root keys (/root/.ssh/id_ed25519.pub and
+# id_rsa.pub), used for the re-apply and by automation on the router.
+excel_vm_admin_authorized_keys:
+  - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKdLWsKVo73zY1XFDZZYAtDA71r92PG9MYOUzui9ETWb ansible-generated on router.lab.nkontur.com
+  - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBbTX31FzHoP+pxo1a6RPiR/kJKeQH4AqWHS+yF348m1 root@nkontur.com
+
+# Re-apply (tasks/reapply.yml): SSH from the router to the guest as the admin user.
+excel_vm_reapply: false
+excel_vm_ssh_identity: /root/.ssh/id_ed25519
+excel_vm_ssh_known_hosts: /root/.ssh/known_hosts_excel_vm
+# Installers the -Idempotent steps may need, copied to the guest for a re-apply.
+excel_vm_reapply_installers:
+  - python-user
