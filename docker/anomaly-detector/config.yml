@@ -93,6 +93,31 @@ signals:
         interval: 15m
         max_age: {moderate: 36h}
 
+  # Whole-network check on the Influx side: every Z-Wave node has a
+  # sensor.*_last_seen entity that HA rewrites each time the node reports, so
+  # the bucket normally gets one of these every minute or two. If the Z-Wave
+  # host, zwave-js-ui or the HA integration drops, HA marks the entities
+  # unavailable, the InfluxDB integration writes nothing, and only the arrival
+  # time in Influx shows it. No group_by: an empty lookback is stale too.
+  # The anomaly_* sensors are excluded (sensor.anomaly_zwave_sensor_last_seen
+  # would otherwise keep this fresh).
+  - name: zwave_influx_data
+    description: No Z-Wave data at all is arriving in InfluxDB (Z-Wave host, zwave-js-ui or the HA integration down)
+    owner: house
+    category: gone_quiet
+    source:
+      flux: |
+        from(bucket: "homeassistant")
+          |> range(start: {start}, stop: {stop})
+          |> filter(fn: (r) => r._measurement =~ /^sensor\..+_last_seen(_[0-9]+)?$/ and r._field == "state")
+          |> filter(fn: (r) => not (r.entity_id =~ /^anomaly_/))
+          |> last()
+          |> keep(columns: ["_time", "_value"])
+    checks:
+      - type: stale
+        lookback: 2d
+        max_age: {moderate: 15m, severe: 1h}
+
   - name: weather_station
     description: Ambient weather station data stopped arriving
     owner: house
