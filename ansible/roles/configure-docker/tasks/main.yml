@@ -179,6 +179,9 @@
   ansible.builtin.set_fact:
     docker_gid: "{{ getent_group.docker[1] }}"
 
+# Reports "changed" on every run, and that is a real change: the password is
+# the job's CI_REGISTRY_PASSWORD, a new token for each job, so the stored
+# credential in /root/.docker/config.json really is rewritten each time.
 - name: Log in to GitLab container registry
   docker_login:
     username: "{{ lookup('env', 'CI_REGISTRY_USER') }}"
