@@ -1318,6 +1318,10 @@ services:
       # traffic onto the internal VLAN (10.3.x.x) instead of whatever Docker assigns.
       # Without NET_ADMIN the route change fails and HA falls back to the wrong gateway.
       - NET_ADMIN
+      # The dhcp integration (part of default_config) opens a raw socket to watch
+      # DHCP requests for device discovery and IP updates. Without NET_RAW it
+      # logs "Cannot watch for dhcp packets: Operation not permitted".
+      - NET_RAW
     security_opt:
       - no-new-privileges=true
     restart: unless-stopped
