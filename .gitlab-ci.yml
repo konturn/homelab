@@ -252,12 +252,10 @@ router:bootstrap:
       fi
   after_script:
     - rm -f tmp
-  cache:
-    key: "ansible-deps-v3"
-    paths:
-      - /cache/pip
-      - /cache/ansible-roles
-    policy: pull-push
+  # No `cache:` here: /cache is a runner volume (base/gitlab-runner/config.toml)
+  # and persists on its own. GitLab cache paths must be inside the project
+  # dir, so the old cache entry archived nothing ("No files to cache") and
+  # only cost ~4s per job.
 
 # =============================================================================
 # Validation Stage - Parallel execution on MRs (DAG)
