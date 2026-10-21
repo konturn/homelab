@@ -20,7 +20,7 @@
 #   main: <image>:build builds and pushes :latest and :<sha> (protected runner)
 #   MRs:  <image>:build-check builds with kaniko, no push (unprotected runner)
 #
-#   DEPLOY (main only, parallel)
+#   DEPLOY (main only, parallel; changed-only, see docs/DEPLOY.md)
 #   ┌──────────────────────────┬──────────────┬──────────────┬──────────────────────────┐
 #   router:deploy [id_tokens]  zwave:deploy [id_tokens]  sat-2:deploy [id_tokens]  vault:configure  vault:rotate [manual]
 #   (router:deploy needs vault:configure)
@@ -79,16 +79,23 @@ variables:
   GIT_DEPTH: 5
   ANSIBLE_HOST_KEY_CHECKING: "False"
   ANSIBLE_PIPELINING: "True"
-  # Per-task timings at the end of every playbook run (top 20 slowest tasks),
-  # and one long-lived SSH master per host for the whole run (the default 60s
-  # lapses during long tasks such as compose-up). No -C: module payloads are
-  # already compressed and every target is on the LAN.
+  # Per-task timings at the end of every playbook run (top 20 slowest tasks).
+  # SSH stays on Ansible's default ControlPersist=60s: with 600s the lingering
+  # master added 10-25s to the end of every deploy job.
   ANSIBLE_CALLBACKS_ENABLED: "ansible.posix.profile_tasks"
   PROFILE_TASKS_TASK_OUTPUT_LIMIT: "20"
-  ANSIBLE_SSH_ARGS: "-o ControlMaster=auto -o ControlPersist=600s"
   PIP_CACHE_DIR: "/cache/pip"
   ANSIBLE_ROLES_PATH: "/cache/ansible-roles"
   MOLTBOT_IMAGE_TAG: "latest"
+  # Host deploys (docs/DEPLOY.md): push pipelines deploy only the roles whose
+  # inputs changed; DEPLOY_FULL=1 forces a full deploy, and pipelines not
+  # started by a push deploy in full unless DEPLOY_SCOPE=changed.
+  DEPLOY_FULL:
+    value: ""
+    description: "1 = full deploy of every host (default for manual and scheduled pipelines)"
+  DEPLOY_SCOPE:
+    value: ""
+    description: "changed = changed-only deploy even in a manual pipeline"
 
 # =============================================================================
 # Path-based change detection
@@ -175,6 +182,13 @@ variables:
   rules:
     - if: $AUTOMERGE_TASK || $NETGEAR_TASK || $IAP_TASK || $SCHEDULED_TASK
       when: never
+
+# Nightly full deploy of every host (pipeline schedule with
+# SCHEDULED_TASK=full-deploy): corrects drift in roles that changed-only
+# deploys skipped. Listed before .automerge_task_skip in the deploy jobs.
+.full_deploy_schedule:
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "full-deploy" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
 
 # Commits merged by the auto-merge policy get router:deploy-service instead of
 # the full host deploys; those stay available as manual jobs.
@@ -360,6 +374,31 @@ fetch-vault-secrets:test:
       changes:
         - ansible/roles/fetch-vault-secrets/**/*
         - ansible/tests/fetch-vault-secrets/**/*
+
+# Offline: tag selection for changed-only deploys (sample diffs), and checks
+# that ci/deploy-scope/scope.yml maps every file the roles and the inventory
+# read. See docs/DEPLOY.md.
+deploy-scope:test:
+  extends:
+    - .ansible
+    - .interruptible
+  stage: validate
+  needs: []
+  before_script: []
+  script:
+    - python3 -m unittest discover -s ci/deploy-scope -p 'test_*.py' -v
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == "main"
+      changes:
+        - ci/deploy-scope/**/*
+        - ansible/**/*
+        - docker/**/*
+        - base/**/*
+        - networking/**/*
+        - snapclient/**/*
+        - scripts/**/*
+        - .gitlab-ci.yml
 
 # =============================================================================
 # Build Stage - Container images (GitLab Registry)
@@ -612,8 +651,11 @@ router:deploy:
     - job: vault:configure
       optional: true
   script:
-    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router.yml
+    # Runs only the roles whose inputs changed since the last successful
+    # deploy to the host (full deploy when in doubt); see docs/DEPLOY.md.
+    - python3 ci/deploy-scope/deploy_scope.py run --playbook router
   rules:
+    - !reference [.full_deploy_schedule, rules]
     - !reference [.automerge_task_skip, rules]
     - !reference [.automerged_commit_manual, rules]
     - if: $CI_COMMIT_BRANCH == "main"
@@ -634,8 +676,11 @@ zwave:deploy:
     - job: zwave:validate
       optional: true
   script:
-    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/zwave.yml
+    # Runs only the roles whose inputs changed since the last successful
+    # deploy to the host (full deploy when in doubt); see docs/DEPLOY.md.
+    - python3 ci/deploy-scope/deploy_scope.py run --playbook zwave
   rules:
+    - !reference [.full_deploy_schedule, rules]
     - !reference [.automerge_task_skip, rules]
     - !reference [.automerged_commit_manual, rules]
     - if: $CI_COMMIT_BRANCH == "main"
@@ -656,8 +701,11 @@ satellite-2:deploy:
     - job: satellite-2:validate
       optional: true
   script:
-    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/satellite-2.yml
+    # Runs only the roles whose inputs changed since the last successful
+    # deploy to the host (full deploy when in doubt); see docs/DEPLOY.md.
+    - python3 ci/deploy-scope/deploy_scope.py run --playbook satellite-2
   rules:
+    - !reference [.full_deploy_schedule, rules]
     - !reference [.automerge_task_skip, rules]
     - !reference [.automerged_commit_manual, rules]
     - if: $CI_COMMIT_BRANCH == "main"
@@ -695,8 +743,11 @@ macmini:deploy:
     - job: macmini:validate
       optional: true
   script:
-    - ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/macmini.yml
+    # Runs only the roles whose inputs changed since the last successful
+    # deploy to the host (full deploy when in doubt); see docs/DEPLOY.md.
+    - python3 ci/deploy-scope/deploy_scope.py run --playbook macmini
   rules:
+    - !reference [.full_deploy_schedule, rules]
     - !reference [.automerge_task_skip, rules]
     - !reference [.automerged_commit_manual, rules]
     - if: $CI_COMMIT_BRANCH == "main"

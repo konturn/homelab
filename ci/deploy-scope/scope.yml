@@ -1,0 +1,150 @@
+# Changed-only deploys: which repo paths feed which roles of each host
+# playbook. Read by deploy_scope.py; see docs/DEPLOY.md.
+#
+# For every changed path, rules are tried in this order and the first match
+# decides:
+#   1. shared.full                          -> full deploy
+#   2. ansible/<playbook>.yml               -> full deploy        (generated)
+#   3. shared.none                          -> no effect
+#   4. ansible/roles/<role>/** for a role   -> that role          (generated)
+#      the playbook lists
+#   5. playbooks.<playbook>                 -> the listed roles, or [] = no effect
+#   6. ansible/roles/**                     -> no effect          (generated:
+#                                              roles this playbook does not use)
+#   7. anything else                        -> full deploy
+#
+# So a path that is not listed anywhere deploys everything. Mapping a path to
+# too many roles only costs time; mapping it to too few skips a role whose
+# input changed, so when unsure, add the role (or leave the path unmapped).
+#
+# Patterns: "dir/**" matches everything below dir/. Anything else is an
+# fnmatch pattern on the whole path ("*" also matches "/").
+#
+# fetch-vault-secrets is tagged `always` in the playbooks, so it runs whenever
+# any role runs; it never needs to be listed here.
+
+shared:
+  full:
+    - .gitlab-ci.yml
+    - ci/deploy-scope/**
+    - requirements.txt
+    - ansible/requirements.yml
+    - ansible/ansible.cfg
+    - ansible/inventory.yml
+    - ansible/known_hosts
+    - ansible/group_vars/**
+    - ansible/host_vars/**
+    - ansible/roles/fetch-vault-secrets/**
+    - base/validate/**
+  none:
+    - docs/**
+    - README.md
+    - CLAUDE.md
+    - DISASTER_RECOVERY.md
+    - CODEOWNERS
+    - renovate.json
+    - .gitignore
+    - terraform/**
+    - ci/automerge/**
+    - ci/automerge-allowlist.yml
+    - ci/reports/**
+    - networking/switches/**
+    - networking/aruba-iap/**
+    - ansible/tests/**
+    - ansible/bootstrap.yml
+    - ansible/os-patch-report.yml
+    - ansible/router-service-update.yml
+    - ansible/router.yml
+    - ansible/zwave.yml
+    - ansible/satellite-2.yml
+    - ansible/macmini.yml
+    - ansible/roles/*/README.md
+    - scripts/approve-root-mr.sh
+    - scripts/bootstrap.sh
+    - scripts/check-updates.sh
+    - scripts/gitlab-settings.sh
+    - scripts/validate-nginx-config.sh
+
+playbooks:
+  router:
+    # docker/: specific files first, then the catch-all.
+    - match: [docker/docker-compose.yml]
+      roles: [configure-homelab-services, configure-wordpress]
+    - match: [docker/wordpress/**]
+      roles: [configure-wordpress]
+    - match: [docker/daemon.json]
+      roles: [configure-docker, configure-homelab-services]
+    - match: [docker/plex/convert_isos_makemkv.sh]
+      roles: [configure-router-network]
+    # Satellite-only compose and config files (router renders only
+    # docker-compose.yml; see docker_compose_file_names in the inventory).
+    - match:
+        - docker/docker-compose-satellite.yml
+        - docker/docker-compose-observability.yml
+        - docker/docker-compose-zwave.yml
+        - docker/docker-compose-zigbee.yml
+        - docker/promtail/satellite-config.yml
+        - docker/telegraf/satellite-telegraf.conf
+      roles: []
+    - match: [docker/**]
+      roles: [configure-homelab-services]
+    - match: [scripts/grafana-token-cleanup.sh, base/nut/**]
+      roles: [configure-homelab-services]
+    - match:
+        - base/disk/**
+        - base/gitlab-runner/**
+        - base/systemd/zpool-scrub.*
+        - base/udev/**
+        - networking/nfs/**
+      roles: [configure-base]
+    - match: [base/msmtp/**]
+      roles: [configure-notifications]
+    - match:
+        - networking/avahi/**
+        - networking/dhcp/**
+        - networking/dns/**
+        - networking/iproute2/**
+        - networking/iptables/**
+        - networking/netplan/**
+        - networking/networkd/**
+        - networking/ssl/**
+      roles: [configure-router-network]
+    - match: [base/minidsp/**, base/sane/**, base/systemd/shell2http.service, snapclient/**]
+      roles: []
+
+  zwave:
+    - match:
+        - docker/docker-compose-zwave.yml
+        - docker/docker-compose-observability.yml
+        - docker/docker-compose-satellite.yml
+        - docker/promtail/satellite-config.yml
+        - docker/telegraf/satellite-telegraf.conf
+      roles: [deploy-compose]
+    - match: [docker/daemon.json]
+      roles: [configure-docker, deploy-compose]
+    - match: [base/minidsp/**]
+      roles: [configure-zwave]
+    - match: [snapclient/**]
+      roles: [configure-snapclient]
+    # Everything else under docker/, base/, networking/ and scripts/ is read
+    # only by router roles.
+    - match: [docker/**, base/**, networking/**, scripts/**]
+      roles: []
+
+  satellite-2:
+    - match:
+        - docker/docker-compose-observability.yml
+        - docker/docker-compose-satellite.yml
+        - docker/promtail/satellite-config.yml
+        - docker/telegraf/satellite-telegraf.conf
+      roles: [deploy-compose]
+    - match: [docker/daemon.json]
+      roles: [configure-docker, deploy-compose]
+    - match: [base/sane/**, base/systemd/shell2http.service]
+      roles: [configure-scanner]
+    - match: [docker/**, base/**, networking/**, scripts/**, snapclient/**]
+      roles: []
+
+  macmini:
+    - match: [docker/**, base/**, networking/**, scripts/**, snapclient/**]
+      roles: []
