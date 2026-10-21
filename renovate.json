@@ -195,6 +195,19 @@
       "addLabels": [
         "openclaw"
       ]
+    },
+    {
+      "description": "Ollama must keep a CUDA 12 runner: the Quadro P5000 is Pascal (compute 6.1), which CUDA 13 dropped, so an image without lib/ollama/cuda_v12 silently runs on the CPU. Updates wait for approval on the dependency dashboard; test them as in docs/ollama.md",
+      "matchPackageNames": [
+        "ollama/ollama"
+      ],
+      "dependencyDashboardApproval": true,
+      "addLabels": [
+        "gpu"
+      ],
+      "prBodyNotes": [
+        "Pascal GPU check before merging (docs/ollama.md): the new image must still ship `/usr/lib/ollama/cuda_v12`, and with `OLLAMA_DEBUG=1` the log must show `inference compute ... library=CUDA compute=6.1` and `ollama ps` must show `100% GPU`."
+      ]
     }
   ]
 }
