@@ -1,0 +1,87 @@
+apiVersion: 1
+
+# Rules over the anomaly detector's output (docker/anomaly-detector).
+# The detector rewrites the current state of every check each 5-minute cycle,
+# so `last()` over 10 minutes is the current state; a check that recovers
+# writes anomalous=0 and the rule resolves on the next evaluation.
+#
+# Only severe, unsuppressed anomalies alert. Moderate ones never page: they
+# are in the 08:00 OpenClaw digest, the dashboard and HA.
+groups:
+  - orgId: 1
+    name: anomaly-alerts
+    folder: General Alerting
+    interval: 1m
+    rules:
+      # severity=critical routes to openclaw-webhook (triage per
+      # skills/anomaly-triage/SKILL.md) and email. The synthetic test signal
+      # (category=test, `python -m detector test-anomaly`) gets severity=test,
+      # which the policy tree sends to openclaw-webhook only, so an end-to-end
+      # test never emails.
+      - uid: anomaly-severe
+        title: "Anomaly: severe"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -10m)
+                  |> filter(fn: (r) => r._measurement == "anomaly" and r._field == "anomalous")
+                  |> filter(fn: (r) => r.severity == "severe" and r.suppressed == "false")
+                  |> group(columns: ["signal", "check", "series", "category"])
+                  |> last()
+                  |> keep(columns: ["_time", "_value", "signal", "check", "series", "category"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: KeepLast
+        for: 5m
+        annotations:
+          summary: "{{ if eq $labels.category \"test\" }}[TEST] {{ end }}Anomaly ({{ $labels.category }}): {{ $labels.signal }} {{ $labels.series }} [{{ $labels.check }}]"
+          description: "Severe anomaly from the anomaly detector. Triage per skills/anomaly-triage/SKILL.md; current state at http://anomaly-detector:8080/status"
+        labels:
+          severity: "{{ if eq $labels.category \"test\" }}test{{ else }}critical{{ end }}"
+          source: anomaly-detector
+
+      # The detector writes an anomaly_detector heartbeat point every cycle.
+      - uid: anomaly-detector-down
+        title: Anomaly detector not reporting
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 1200, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -20m)
+                  |> filter(fn: (r) => r._measurement == "anomaly_detector" and r._field == "series")
+                  |> count()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [1]}}]}
+        noDataState: Alerting
+        execErrState: KeepLast
+        for: 10m
+        annotations:
+          summary: "Anomaly detector has written no heartbeat for 20 minutes"
+          description: "docker logs anomaly-detector; GET /healthz on the container"
+        labels:
+          severity: warning
+          source: anomaly-detector
