@@ -60,6 +60,14 @@ vault_secret_paths:
       vault_jit_api_key: "jit_api_key"
       vault_jit_gitlab_admin_token: "gitlab_admin_token"
 
+  # Anomaly detector: Influx read (metrics, homeassistant) / write (metrics)
+  # tokens and its MQTT user's password
+  - path: "docker/anomaly-detector"
+    fields:
+      vault_anomaly_influx_read_token: "influx_read_token"
+      vault_anomaly_influx_write_token: "influx_write_token"
+      vault_anomaly_mqtt_password: "mqtt_password"
+
   # Docker service secrets
   - path: "docker/audioserve"
     fields:

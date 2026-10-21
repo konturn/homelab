@@ -462,6 +462,15 @@
   register: grafana_contactpoints
   when: "'router' in inventory_hostname"
 
+- name: Ensure Grafana dashboard provisioning directory exists
+  ansible.builtin.file:
+    path: "{{ docker_persistent_data_path }}/grafana/provisioning/dashboards/json"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: "'router' in inventory_hostname"
+
 - name: Copy Grafana alerting provisioning files (no Jinja2 templating)
   ansible.builtin.copy:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/{{ item.src }}"
@@ -475,6 +484,13 @@
       dest: "{{ docker_persistent_data_path }}/grafana/provisioning/alerting/policies.yml"
     - src: "docker/grafana/provisioning/alerting/infrastructure.yml"
       dest: "{{ docker_persistent_data_path }}/grafana/provisioning/alerting/infrastructure.yml"
+    - src: "docker/grafana/provisioning/alerting/anomaly.yml"
+      dest: "{{ docker_persistent_data_path }}/grafana/provisioning/alerting/anomaly.yml"
+    # Dashboards: provider (read at startup, hence the restart below) and JSON
+    - src: "docker/grafana/provisioning/dashboards/homelab.yml"
+      dest: "{{ docker_persistent_data_path }}/grafana/provisioning/dashboards/homelab.yml"
+    - src: "docker/grafana/provisioning/dashboards/json/anomaly-detector.json"
+      dest: "{{ docker_persistent_data_path }}/grafana/provisioning/dashboards/json/anomaly-detector.json"
   when: "'router' in inventory_hostname"
 
 # Vaultwarden's admin-panel settings (/data/config.json) take precedence over
@@ -837,6 +853,32 @@
   register: pihole_listening_mode
   when: not ansible_check_mode
   ignore_errors: yes
+
+### MQTT user for the anomaly detector
+# mosquitto.passwd is host state, not in the repo. Add the detector's user when
+# it is missing (mosquitto_passwd inside the container, password from Vault via
+# the environment), then SIGHUP mosquitto to reload. Other users are never
+# touched. To rotate: delete the line from the file and redeploy.
+- name: Ensure the anomaly-detector MQTT user exists
+  ansible.builtin.shell: |
+    set -euo pipefail
+    f={{ docker_persistent_data_path }}/mqtt/conf/mosquitto.passwd
+    if grep -q '^anomaly-detector:' "$f"; then echo present; exit 0; fi
+    [ -n "${PW:-}" ]
+    docker exec -e PW mosquitto sh -c 'mosquitto_passwd -b /mosquitto/config/mosquitto.passwd anomaly-detector "$PW"'
+    chown 1883:1883 "$f"
+    chmod 0700 "$f"
+    grep -q '^anomaly-detector:' "$f"
+    docker kill -s HUP mosquitto >/dev/null
+    echo added
+  args:
+    executable: /bin/bash
+  environment:
+    PW: "{{ vault_anomaly_mqtt_password }}"
+  register: _anomaly_mqtt_user
+  changed_when: "'added' in _anomaly_mqtt_user.stdout"
+  no_log: true
+  when: "'router' in inventory_hostname and not ansible_check_mode"
 
 - name: Restart Grafana if alerting config changed
   ansible.builtin.command:

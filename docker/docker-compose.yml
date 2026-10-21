@@ -1172,6 +1172,60 @@ services:
       retries: 3
       start_period: 10s
 
+  # Anomaly detector (docker/anomaly-detector): aggregate Flux queries against
+  # metrics/homeassistant, writes the `anomaly` measurement to metrics, publishes
+  # retained HA sensors over MQTT, serves /status /digest /context to OpenClaw.
+  anomaly-detector:
+    image: gitlab-registry.lab.nkontur.com:443/root/homelab/anomaly-detector:latest
+    container_name: anomaly-detector
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges=true
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+    networks:
+      internal:
+        ipv4_address: {{ anomaly_detector_ip }}
+      iot:
+    extra_hosts:
+      - "mqtt.lab.nkontur.com:{{ mosquitto_address }}"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    volumes:
+      - "{{ docker_persistent_data_path }}/anomaly-detector:/config:ro"
+    environment:
+      - TZ=America/New_York
+      - INFLUX_URL=http://{{ influxdb_ip }}:8086
+      - INFLUX_ORG=homelab
+      - INFLUX_WRITE_BUCKET=metrics
+      - INFLUX_READ_TOKEN={{ vault_anomaly_influx_read_token | trim | replace("$", "$$") }}
+      - INFLUX_WRITE_TOKEN={{ vault_anomaly_influx_write_token | trim | replace("$", "$$") }}
+      - MQTT_HOST=mqtt.lab.nkontur.com
+      - MQTT_PORT=8883
+      - MQTT_USERNAME=anomaly-detector
+      - MQTT_PASSWORD={{ vault_anomaly_mqtt_password | trim | replace("$", "$$") }}
+      # /status, /digest and /context: OpenClaw gateway and localhost only.
+      - ALLOWED_CLIENTS={{ openclaw_gateway_ip }}/32,127.0.0.1/32
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5).status == 200 else 1)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+
   deluge:
     container_name: deluge
     security_opt:
