@@ -161,6 +161,7 @@ all:
         - "{{ lab_nginx_ip }} novnc-dev3.lab.nkontur.com"
         - "{{ jit_approval_svc_ip }} jit-approval-svc.lab.nkontur.com"
         - "{{ excel_vm_address }} excel-vm.lab.nkontur.com"
+        - "{{ mac_mini_address }} macmini.lab.nkontur.com"
         - "10.6.0.1 router.lab.nkontur.com"
       docker_config: 
         - src: "docker/pihole/custom.conf"
