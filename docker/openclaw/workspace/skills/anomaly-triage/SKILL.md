@@ -49,9 +49,9 @@ and `/context` already covers what triage needs.
 You get a message like
 `Anomaly: severe (critical) [firing]: Anomaly (physical): basement_humidity - [threshold]`.
 
-1. **Status.** If the alert is `[resolved]`, reply `NO_REPLY` unless it was
-   never reported and still matters.
-2. **Test.** If the summary starts with `[TEST]`, or the signal is
+1. **Status.** If the alert is `[resolved]`, your entire reply is `NO_REPLY`,
+   including for `[TEST]` alerts. A resolve is never a second message.
+2. **Test.** If a *firing* alert's summary starts with `[TEST]`, or the signal is
    `test_synthetic`, or category is `test`: this is an end-to-end test. Still
    do steps 3-4 (to prove they work), then send exactly one message starting
    with `[TEST]`, e.g.
