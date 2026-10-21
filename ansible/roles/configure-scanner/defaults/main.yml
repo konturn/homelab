@@ -1,0 +1,2 @@
+scanner_nfs_src: "10.6.0.1:/mpool/nextcloud/paperless/consume"
+scanner_nfs_opts: "rw,hard,_netdev,nofail,x-systemd.automount,x-systemd.mount-timeout=30"

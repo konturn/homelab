@@ -11,6 +11,11 @@
       - ipp-usb
       - scanbd
       - imagemagick
+      # sane-scan-pdf requirements (pnmtops, pdfunite, ps2pdf, units)
+      - netpbm
+      - poppler-utils
+      - ghostscript
+      - units
   # skipped when all are installed (installed_packages: playbook pre_tasks)
   when: _apt_packages | difference(installed_packages | default([])) | length > 0
 
@@ -22,29 +27,94 @@
     group: root
     mode: '0644'
 
-- name: Mount nfs
-  mount:
+# The scanner writes into the router's paperless consume folder over NFS.
+# One fstab entry, managed by its mount point (ansible.posix.mount matches on
+# `path`, so re-runs update that line instead of adding another). The options
+# keep boot from hanging when the router is down (nofail, _netdev) and mount
+# on first access (x-systemd.automount), which also retries after an outage.
+# An older version of this task left ~100 copies of the line in fstab; the
+# cleanup task below collapses any leftovers before the managed entry is set.
+- name: Remove duplicate /mnt entries from fstab
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^\S+\s+/mnt\s+nfs4?\s+(?!.*x-systemd\.automount)'
+    state: absent
+    backup: true
+  register: _scanner_fstab_cleanup
+
+- name: Scanner NFS mount in fstab
+  ansible.posix.mount:
     path: /mnt
-    src: 10.6.0.1:/mpool/nextcloud/paperless/consume
+    src: "{{ scanner_nfs_src }}"
     fstype: nfs
-    opts: rw,hard,intr,rsize=8192,wsize=8192,timeo=14
+    opts: "{{ scanner_nfs_opts }}"
     state: present
-    # state: present adds to fstab without mounting immediately,
-    # so deploy won't fail if NFS server is temporarily unreachable
-    # (replaces separate lineinfile + mounted tasks — mount module manages fstab directly)
+  register: _scanner_fstab
+
+- name: Reload systemd for the /mnt automount
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: _scanner_fstab_cleanup.changed or _scanner_fstab.changed
+
+- name: Start the /mnt automount
+  ansible.builtin.systemd:
+    name: mnt.automount
+    state: started
+
+# Trigger the automount so the share is live after a deploy. Does not fail the
+# deploy if the router is briefly unreachable: the automount retries on the
+# next access, scan.sh refuses to run without it, and the scanner-nfs-mount
+# alert fires if it stays down.
+- name: Ensure the NFS share is mounted
+  ansible.builtin.shell: |
+    timeout 30 ls /mnt/ >/dev/null 2>&1
+    findmnt -n -t nfs,nfs4 -M /mnt >/dev/null
+  register: _scanner_nfs_mounted
+  changed_when: false
+  failed_when: false
+
+- name: Warn when the NFS share is not mounted
+  ansible.builtin.debug:
+    msg: "WARNING: {{ scanner_nfs_src }} is not mounted at /mnt; scans will fail until it is."
+  when: _scanner_nfs_mounted.rc != 0
+
+# x-systemd.automount only mounts on access. After a reboot nothing touches
+# /mnt until the first scan, so the mount alert would see it missing; this
+# timer touches it every 5 minutes so the metric reflects reachability.
+- name: /mnt probe service and timer
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - scanner-mnt-probe.service
+    - scanner-mnt-probe.timer
+  register: _scanner_probe_units
+
+- name: Enable /mnt probe timer
+  ansible.builtin.systemd:
+    name: scanner-mnt-probe.timer
+    state: started
+    enabled: true
+    daemon_reload: "{{ _scanner_probe_units.changed }}"
 
 - name: Git checkout sane-scan-pdf
   ansible.builtin.git:
     repo: 'https://github.com/rocketraman/sane-scan-pdf.git'
     dest: /root/sane-scan-pdf
 
-- name: Template out scan script
+- name: Template out scan scripts
   ansible.builtin.template:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/sane/scan.sh' }}"
-    dest: "/root/scan.sh"
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/sane/' + item }}"
+    dest: "/root/{{ item }}"
     owner: root
     group: root
     mode: '0744'
+  loop:
+    - scan.sh
+    - scan-http.sh
 
 - name: Get dpkg architecture
   ansible.builtin.command: dpkg --print-architecture
@@ -64,10 +134,21 @@
     owner: root
     group: root
     mode: 0600
+  register: _shell2http_unit
 
 - name: Make sure shell2http enabled
   ansible.builtin.systemd:
     name: shell2http
-    state: started
+    state: "{{ 'restarted' if _shell2http_unit.changed else 'started' }}"
     enabled: yes
-    daemon_reload: yes
+    daemon_reload: "{{ _shell2http_unit.changed }}"
+
+# scanbd (scanner button daemon) was replaced by shell2http in 2022: scans are
+# started from Home Assistant (shell_command.scan_doc -> GET :8080/scan). The
+# package is still installed for its sane config; keep the daemon off so it
+# cannot grab the USB device away from scanimage.
+- name: Keep scanbd disabled
+  ansible.builtin.systemd:
+    name: scanbd
+    state: stopped
+    enabled: false
