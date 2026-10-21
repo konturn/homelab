@@ -165,17 +165,27 @@ services:
       - external
       - internal
     restart: unless-stopped
-    # GPU disabled until NVML driver/library mismatch is fixed
-    # runtime: nvidia
     # Memory right-sized: 7-day peak 5186MB, OOM kills detected (3178 samples).
     # Previous 6G limit caused OOM under transcoding/library scan bursts.
-    # 8G gives ~1.5x headroom over observed peak.
+    # 8G gives ~1.5x headroom over observed peak. Kept as is with NVENC:
+    # GPU transcodes use less host RAM, but library scans set the peak.
+    # GPU: the Quadro P5000 (NVDEC/NVENC, no consumer session cap) does
+    # hardware transcoding. The nvidia runtime comes from configure-docker
+    # (nvidia_container_runtime, docker/daemon.json). Each transcode takes
+    # ~200-500 MB of the 16 GB VRAM, so the card can be shared with other
+    # containers (e.g. an LLM server) via the same device reservation.
+    # Plex prefs: HardwareAcceleratedCodecs/Encoders on (Plex defaults) and
+    # HardwareDevicePath pinned to the P5000; see docs/plex-gpu.md.
     deploy:
       resources:
         limits:
           memory: 8G
         reservations:
           memory: 3G
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu, video, compute, utility]
     environment:
       - TZ=America/New_York
       # Advertise lab nginx IP so cross-VLAN clients (Apple TV on IoT) can
@@ -183,8 +193,6 @@ services:
       # Without this, Plex only advertises Docker container IPs which are
       # unreachable from other VLANs, forcing clients to use the cloud relay.
       - ADVERTISE_IP=http://{{ lab_nginx_ip }}:32400
-      # - NVIDIA_VISIBLE_DEVICES=all
-      # - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
     volumes:
       - /mpool/plex/config:/config
       - /mpool/plex/transcode:/transcode
