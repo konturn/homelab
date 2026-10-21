@@ -8,11 +8,20 @@
 #     queued older deploy never runs after a newer one (together with
 #     ci_forward_deployment_enabled, older pending deploys are skipped).
 #   - ci_forward_deployment_enabled=true ("Prevent outdated deployment jobs").
+#   - instance plan limit ci_pipeline_schedules=20 (default plan), so the
+#     project can hold more than GitLab's default of 10 pipeline schedules.
 #
 # Token: GITLAB_SETTINGS_TOKEN (CI: APPROLE_ROTATION_PAT, a Maintainer project
 # access token; the project setting needs Maintainer). When unset and glab is
 # logged in (router checkout), the CI variable is read through glab. The token
 # is never printed.
+#
+# The plan limit is instance-wide and needs GitLab admin, which the project
+# token does not have. It is read and set inside the router's gitlab
+# container instead (gitlab-psql to read, gitlab-rails runner to fix): with
+# docker when run on the router, otherwise over SSH as root@10.4.0.1 with the
+# key in ROUTER_SSH_KEY (CI: ROUTER_PRIVATE_KEY_BASE64, the key the deploy
+# jobs already use). No admin API token exists for this.
 #
 # Usage: scripts/gitlab-settings.sh [--check]
 #   --check   report drift only; exit 3 if anything differs
@@ -24,6 +33,10 @@ WANT_MODE=newest_ready_first
 # The resource_group keys of router:deploy / router:deploy-service,
 # zwave:deploy, satellite-2:deploy and macmini:deploy in .gitlab-ci.yml.
 RESOURCE_GROUPS=(deploy-router deploy-zwave deploy-satellite-2 deploy-macmini)
+# Instance limit on pipeline schedules per project (GitLab default: 10).
+# The project has 11 schedules (docs/GITLAB_SETTINGS.md).
+WANT_PIPELINE_SCHEDULES=20
+ROUTER_HOST="${ROUTER_HOST:-10.4.0.1}"
 
 check=false
 case "${1:-}" in
@@ -104,6 +117,48 @@ else
       echo "FIXED  project ci_forward_deployment_enabled ${fwd} -> true"
     else
       echo "ERROR  project ci_forward_deployment_enabled: PUT returned HTTP ${code}"
+      errors=$((errors + 1))
+    fi
+  fi
+fi
+
+# gitlab_exec CMD...: run CMD in the router's gitlab container.
+gitlab_exec() {
+  if command -v docker >/dev/null 2>&1 && docker inspect gitlab >/dev/null 2>&1; then
+    docker exec gitlab "$@"
+  elif [ -n "${ROUTER_SSH_KEY:-}" ] && [ -s "$ROUTER_SSH_KEY" ]; then
+    # Same SSH options as the other CI jobs that reach the router.
+    ssh -i "$ROUTER_SSH_KEY" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 \
+      -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+      "root@${ROUTER_HOST}" "docker exec gitlab $(printf '%q ' "$@")"
+  else
+    return 127
+  fi
+}
+
+LIMIT_SQL="SELECT l.ci_pipeline_schedules FROM plan_limits l JOIN plans p ON p.id = l.plan_id WHERE p.name = 'default'"
+read_schedule_limit() {
+  gitlab_exec gitlab-psql -d gitlabhq_production -tAc "$LIMIT_SQL" | tr -d '[:space:]'
+}
+
+if ! limit=$(read_schedule_limit); then
+  echo "ERROR  plan_limits default ci_pipeline_schedules: cannot read it (needs the gitlab container: run on the router, or set ROUTER_SSH_KEY)"
+  errors=$((errors + 1))
+elif [ "$limit" = "$WANT_PIPELINE_SCHEDULES" ]; then
+  echo "ok     plan_limits default ci_pipeline_schedules=${limit}"
+else
+  drift=$((drift + 1))
+  if $check; then
+    echo "DRIFT  plan_limits default ci_pipeline_schedules=${limit:-unset} (want ${WANT_PIPELINE_SCHEDULES})"
+  else
+    # Through the model, as PUT /application/plan_limits does (~2 min to boot rails).
+    gitlab_exec gitlab-rails runner \
+      "Plan.default.actual_limits.update!(ci_pipeline_schedules: ${WANT_PIPELINE_SCHEDULES})" >/dev/null || true
+    new=$(read_schedule_limit || true)
+    if [ "$new" = "$WANT_PIPELINE_SCHEDULES" ]; then
+      echo "FIXED  plan_limits default ci_pipeline_schedules ${limit:-unset} -> ${new}"
+    else
+      echo "ERROR  plan_limits default ci_pipeline_schedules: still ${new:-unset} after update"
       errors=$((errors + 1))
     fi
   fi

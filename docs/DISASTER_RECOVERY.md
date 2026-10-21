@@ -146,6 +146,14 @@ The script walks through 7 steps in order:
    - `CLOUDFLARE_API_KEY`, `CLOUDFLARE_ZONE_ID` (SSL certs use Cloudflare DNS-01 via `networking/ssl/renew.sh`)
    - `GRAFANA_TOKEN`
    - `GITLAB_RUNNER_TOKEN`, `IMAGES_GITLAB_RUNNER_TOKEN`
+5. **GitLab instance settings.** A restored GitLab keeps them. On a fresh
+   GitLab, the project has more pipeline schedules than the default limit
+   of 10 allows: run the `gitlab:settings` job (Run pipeline on `main` with
+   `SCHEDULED_TASK=gitlab-settings`), or on the router
+   `scripts/gitlab-settings.sh`. It raises the `ci_pipeline_schedules` plan
+   limit to 20 inside the gitlab container. By hand:
+   `docker exec gitlab gitlab-rails runner 'Plan.default.actual_limits.update!(ci_pipeline_schedules: 20)'`.
+   See [GITLAB_SETTINGS.md](GITLAB_SETTINGS.md).
 
 ---
 

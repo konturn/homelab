@@ -1520,10 +1520,16 @@ gitlab:settings:
   needs: []
   variables:
     GITLAB_SETTINGS_TOKEN: $APPROLE_ROTATION_PAT
+    # The instance plan limit is set inside the router's gitlab container over
+    # SSH with the deploy key (protected), instead of an admin API token.
+    ROUTER_SSH_KEY: $CI_PROJECT_DIR/.router_ssh_key
   before_script:
-    - apk add --no-cache bash curl jq
+    - apk add --no-cache bash curl jq openssh-client
+    - (umask 077; echo "${ROUTER_PRIVATE_KEY_BASE64}" | base64 -d > "$ROUTER_SSH_KEY")
   script:
     - scripts/gitlab-settings.sh
+  after_script:
+    - rm -f "$CI_PROJECT_DIR/.router_ssh_key"
   rules:
     - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "gitlab-settings" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
     - !reference [.automerge_task_skip, rules]
