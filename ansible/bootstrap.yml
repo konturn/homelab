@@ -131,7 +131,8 @@
       block:
         - name: Write vault unseal keys from CI variable
           ansible.builtin.copy:
-            content: "{{ lookup('env', 'VAULT_UNSEAL_KEYS') }}"
+            # Keys may be newline- or colon-separated (colon form allows the CI variable to be masked).
+            content: "{{ lookup('env', 'VAULT_UNSEAL_KEYS') | regex_replace(':', '\n') }}"
             dest: "{{ docker_persistent_data_path }}/vault/unseal/unseal-keys"
             owner: root
             group: root
@@ -200,7 +201,7 @@
             body_format: json
             body:
               key: "{{ item }}"
-          loop: "{{ lookup('env', 'VAULT_UNSEAL_KEYS').split('\n') | select | list }}"
+          loop: "{{ lookup('env', 'VAULT_UNSEAL_KEYS') | regex_replace(':', '\n') | split('\n') | select | list }}"
           loop_control:
             label: "unseal key {{ ansible_loop.index }}"
             extended: true
