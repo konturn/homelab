@@ -25,6 +25,22 @@ module.exports = function transform(raw) {
     alertText = 'No alert details in payload';
   }
 
+  // Alerts from the anomaly detector (label source=anomaly-detector) follow
+  // their own protocol: gather context, message Noah only when actionable.
+  var anomaly = alerts.length > 0 && alerts.every(function(a) {
+    return a.labels && a.labels.source === 'anomaly-detector';
+  });
+  if (anomaly) {
+    return {
+      message: '📈 Anomaly alert (' + status + '):\n' + alertText + '\n\n' +
+        'Follow skills/anomaly-triage/SKILL.md (not ALERTS.md): check /status, recent deploys and /context, ' +
+        'then message Noah only if it is actionable (one line: why + suggested action). ' +
+        'If it is not actionable, your entire reply is NO_REPLY. ' +
+        'If the summary starts with [TEST], send exactly one message prefixed [TEST].',
+      mode: 'now'
+    };
+  }
+
   return {
     message: '🚨 Grafana Alert (' + status + '):\n' + alertText + '\n\nRead ALERTS.md for response protocol. Investigate using Loki logs and Grafana dashboards. Fix if possible. Notify Noah via Telegram with what happened and what you did.',
     mode: 'now'

@@ -76,6 +76,9 @@
 # Could access or redirect secret storage
 /docker/vault/                           @root
 /docker/jit-approval-svc/                @root
+# Anomaly detector signals and suppressions: the OpenClaw agent proposes
+# suppressions by MR; Noah approves them.
+/docker/anomaly-detector/                @root
 /terraform/vault/                        @root
 
 # === SSL CERTS ===
