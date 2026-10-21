@@ -11,6 +11,7 @@ handles every scenario:
   ok              every path returns its fields
   timeout         svc/b never answers in time
   forbidden       svc/b returns 403
+  bad-json        svc/b returns 200 with a body that is not JSON
   missing-path    svc/b returns 404 (required path)
   missing-opt     opt/c returns 404 (optional path)
   missing-field   svc/a is missing field "two"
@@ -79,6 +80,14 @@ class Handler(BaseHTTPRequestHandler):
         data = dict(DATA.get(path, {}))
         if path == "svc/b" and scenario == "timeout":
             time.sleep(3)
+        if path == "svc/b" and scenario == "bad-json":
+            raw = b"<html>not json</html>"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+            return None
         if path == "svc/b" and scenario == "forbidden":
             return self.reply(403, {"errors": ["permission denied"]})
         if path == "svc/b" and scenario == "missing-path":

@@ -28,6 +28,8 @@
   delay: 10
   until: zfs_cache_update is success
   ignore_errors: yes
+  # only needed when the install below has something to do
+  when: "['zfsutils-linux', 'zfs-dkms', 'zfs-zed'] | difference(installed_packages | default([])) | length > 0"
 
 # present + hold, not latest: a zfs-dkms upgrade rebuilds the module and
 # leaves the loaded module out of sync with userland until a reboot. Upgrade
@@ -35,12 +37,16 @@
 # --only-upgrade zfsutils-linux zfs-dkms zfs-zed && apt-mark hold ... (reboot).
 - name: Install ZFS packages
   apt:
-    name:
+    name: "{{ _apt_packages }}"
+    state: present
+  register: zfs_packages
+  vars:
+    _apt_packages:
       - zfsutils-linux
       - zfs-dkms
       - zfs-zed
-    state: present
-  register: zfs_packages
+  # skipped when all are installed (installed_packages: playbook pre_tasks)
+  when: _apt_packages | difference(installed_packages | default([])) | length > 0
 
 - name: Hold ZFS packages (upgrades are a manual step)
   ansible.builtin.dpkg_selections:
@@ -213,15 +219,19 @@
 
 - name: Install gitlab-runner and glab
   apt:
-    name:
-      - gitlab-runner
-      - glab
+    name: "{{ _apt_packages }}"
     # present + hold, not latest: upgrading gitlab-runner restarts the runner
     # that is executing this very deploy. Upgrade manually between pipelines
     # (apt-mark unhold gitlab-runner && apt install --only-upgrade
     # gitlab-runner && apt-mark hold gitlab-runner).
     state: present
     update_cache: yes
+  vars:
+    _apt_packages:
+      - gitlab-runner
+      - glab
+  # skipped when all are installed (installed_packages: playbook pre_tasks)
+  when: _apt_packages | difference(installed_packages | default([])) | length > 0
 
 - name: Hold gitlab-runner (upgrades are a manual step)
   ansible.builtin.dpkg_selections:
@@ -310,20 +320,28 @@
 
 - name: Install msmtp
   apt:
-    name:
+    name: "{{ _apt_packages }}"
+    state: present
+    update_cache: yes
+  vars:
+    _apt_packages:
       - msmtp
       - mailutils
       - bsd-mailx
       - msmtp-mta
-    state: present
-    update_cache: yes
+  # skipped when all are installed (installed_packages: playbook pre_tasks)
+  when: _apt_packages | difference(installed_packages | default([])) | length > 0
 
 - name: Install nfs
   apt:
-    name:
-      - nfs-kernel-server
+    name: "{{ _apt_packages }}"
     state: present
     update_cache: yes
+  vars:
+    _apt_packages:
+      - nfs-kernel-server
+  # skipped when all are installed (installed_packages: playbook pre_tasks)
+  when: _apt_packages | difference(installed_packages | default([])) | length > 0
 
 - name: Make sure nfs is started and enabled
   service:

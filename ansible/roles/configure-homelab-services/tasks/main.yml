@@ -69,7 +69,12 @@
 
 - name: Install Telegraf and hardware monitoring dependencies
   ansible.builtin.apt:
-    name:
+    name: "{{ _apt_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  vars:
+    _apt_packages:
       - telegraf
       - smartmontools
       - lm-sensors
@@ -77,10 +82,9 @@
       - snmp
       - snmp-mibs-downloader
       - nvme-cli
-    state: present
-    update_cache: true
-    cache_valid_time: 3600
-  when: "'router' in inventory_hostname"
+  when:
+    - "'router' in inventory_hostname"
+    - _apt_packages | difference(installed_packages | default([])) | length > 0
 
 - name: Grant Telegraf passwordless sudo for SMART collection
   # The telegraf user cannot open block devices, so [[inputs.smart]] returns
@@ -219,11 +223,25 @@
                         'mode': '0700'  }] }}"
   loop: "{{ nginx_config | default([]) }}"
 
+# All config files, used by the directory, cleanup and copy tasks below.
+- name: Collect docker config files
+  ansible.builtin.set_fact:
+    _docker_config_all: "{{ docker_config + (docker_config_nginx | default([])) }}"
+
+# One remote call for every config directory (a file-module loop over ~40
+# items took ~15s). mkdir -p fails on a path that exists as a file, as
+# file: state=directory does. In check mode nothing is created.
 - name: Create docker conf directories
-  ansible.builtin.file:
-    path: "{{ item.dest | dirname }}"
-    state: directory
-  loop: "{{ docker_config + (docker_config_nginx | default([])) }}"
+  ansible.builtin.shell: |
+    set -eu
+    for d in {{ _docker_config_all | map(attribute='dest') | map('dirname') | unique | map('quote') | join(' ') }}; do
+      [ -d "$d" ] && continue
+      {{ ':' if ansible_check_mode else '' }} mkdir -p "$d"
+      echo "created $d"
+    done
+  register: _docker_conf_dirs
+  changed_when: _docker_conf_dirs.stdout | length > 0
+  check_mode: false
 
 - name: Create docker data directories with specific ownership
   ansible.builtin.file:
@@ -250,20 +268,23 @@
     recursive: yes
   when: "'external' in (nginx_config | default([]) | map(attribute='network') | list)"
 
+# A config dest that is a directory (Docker creates one when it bind-mounts a
+# missing file) is removed so the file can be written. One remote call lists
+# them instead of a stat per file.
 - name: Check if config destinations are directories (cleanup stale state)
-  ansible.builtin.stat:
-    path: "{{ item.dest }}"
-  loop: "{{ docker_config + (docker_config_nginx | default([])) }}"
-  register: _config_dest_check
+  ansible.builtin.shell: |
+    for f in {{ _docker_config_all | map(attribute='dest') | map('quote') | join(' ') }}; do
+      if [ -d "$f" ] && [ ! -L "$f" ]; then echo "$f"; fi
+    done
+  register: _config_dest_dirs
+  changed_when: false
+  check_mode: false
 
 - name: Remove config dest that is a directory instead of a file
   ansible.builtin.file:
-    path: "{{ item.stat.path }}"
+    path: "{{ item }}"
     state: absent
-  loop: "{{ _config_dest_check.results | default([]) }}"
-  when: item.stat is defined and item.stat.exists and item.stat.isdir
-  loop_control:
-    label: "{{ item.stat.path | default('skip') }}"
+  loop: "{{ _config_dest_dirs.stdout_lines }}"
 
 # Pre-restart checks for rendered, secret-bearing configs. Used as the
 # `validate:` step of the template tasks below: a file that fails is never
@@ -278,6 +299,65 @@
     mode: '0755'
   when: "'router' in inventory_hostname"
 
+# Change detection for the copy task below. The template module costs a
+# remote round trip per file even when nothing changed (~40 files, ~34s).
+# Instead: render every file on the controller and hash it, read the hash,
+# owner, group and mode of every dest in one remote call, and pass to the
+# template task only the files that are missing or differ in content or in
+# the owner/group/mode the template task would set. A file that differs only
+# by a stale hash or an unreadable stat is written (when in doubt, write).
+# force: false files are written only when missing, as before.
+- name: Render docker configuration files on the controller (change detection)
+  ansible.builtin.set_fact:
+    _docker_config_sha1: "{{ lookup('template', lookup('env', 'CI_PROJECT_DIR') ~ '/' ~ item.src) | hash('sha1') }}"
+  loop: "{{ _docker_config_all }}"
+  loop_control:
+    label: "{{ item.dest }}"
+  register: _docker_config_rendered
+
+- name: Read current docker configuration files
+  ansible.builtin.shell: |
+    for f in {{ _docker_config_all | map(attribute='dest') | unique | map('quote') | join(' ') }}; do
+      if [ -f "$f" ] && [ ! -L "$f" ]; then
+        printf '%s\t%s\t%s\n' "$f" "$(sha1sum < "$f" | cut -d' ' -f1)" "$(stat -c '%U %G %u %g %a' "$f")"
+      fi
+    done
+  register: _docker_config_current
+  changed_when: false
+  check_mode: false
+
+- name: Select docker configuration files that need writing
+  ansible.builtin.set_fact:
+    _docker_config_to_write: >-
+      {%- set cur = {} -%}
+      {%- for line in _docker_config_current.stdout_lines -%}
+      {%-   set f = line.split('\t') -%}
+      {%-   if f | length == 3 -%}
+      {%-     set a = f[2].split(' ') -%}
+      {%-     set _ = cur.update({f[0]: {'sha1': f[1], 'owner': [a[0], a[2]], 'group': [a[1], a[3]], 'mode': a[4]}}) -%}
+      {%-   endif -%}
+      {%- endfor -%}
+      {%- set out = [] -%}
+      {%- for r in _docker_config_rendered.results -%}
+      {%-   set i = r.item -%}
+      {%-   set c = cur.get(i.dest) -%}
+      {%-   set owner = (i.owner | default('root')) | string -%}
+      {%-   set group = (i.group | default(i.owner | default('root'))) | string -%}
+      {%-   set mode = '%o' % ((i.mode | default('0640')) | string | int(base=8)) -%}
+      {%-   if c is none -%}
+      {%-     set _ = out.append(i.dest) -%}
+      {%-   elif (i.force | default(true) | bool)
+                and (c.sha1 != r.ansible_facts._docker_config_sha1
+                     or owner not in c.owner or group not in c.group or mode != c.mode) -%}
+      {%-     set _ = out.append(i.dest) -%}
+      {%-   endif -%}
+      {%- endfor -%}
+      {{ out }}
+
+- name: Show docker configuration files that need writing
+  ansible.builtin.debug:
+    msg: "{{ _docker_config_to_write | length }} of {{ _docker_config_all | length }} config files differ: {{ _docker_config_to_write | join(', ') }}"
+
 # Grafana provisioning YAML (datasources) gets a parse + non-empty-secret check.
 - name: Copy docker configuration files
   ansible.builtin.template:
@@ -291,7 +371,8 @@
       {{ '/usr/local/sbin/homelab-config-check yaml %s'
          if item.dest is search('/grafana/provisioning/.+[.]ya?ml$') else omit }}
   register: docker_config_copy
-  loop: "{{ docker_config + (docker_config_nginx | default([])) }}"
+  loop: "{{ _docker_config_all }}"
+  when: item.dest in _docker_config_to_write
 
 - name: Template Grafana alerting contact points (injects Vault secrets)
   ansible.builtin.template:
@@ -455,12 +536,16 @@
 
 - name: Install NUT packages
   ansible.builtin.apt:
-    name:
-      - nut
-      - nut-snmp
+    name: "{{ _apt_packages }}"
     state: present
     update_cache: true
-  when: "'router' in inventory_hostname"
+  vars:
+    _apt_packages:
+      - nut
+      - nut-snmp
+  when:
+    - "'router' in inventory_hostname"
+    - _apt_packages | difference(installed_packages | default([])) | length > 0
 
 - name: Set NUT mode to netserver
   ansible.builtin.copy:
@@ -584,7 +669,9 @@
     recreate: always
     remove_orphans: true
   timeout: 300
-  when: docker_conf.changed and not ansible_check_mode
+  # docker_conf is registered by configure-docker, which a partial
+  # (changed-only) deploy may skip.
+  when: docker_conf is defined and docker_conf is changed and not ansible_check_mode
 
 - name: Capture Nextcloud image ID after compose-up
   ansible.builtin.command:
