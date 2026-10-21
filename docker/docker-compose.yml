@@ -1651,9 +1651,13 @@ services:
       MQTT_TLS_CA_CERT: "/etc/ssl/certs/ca-certificates.crt"
       STORAGE_POLL_INTERVAL: 0
     healthcheck:
-      # Must exclude PID 1: the backoff wrapper's own argv contains the app
-      # path, so a bare `pgrep -f` matches the wrapper and can never fail.
-      test: ["CMD-SHELL", "pgrep -f /app/amcrest2mqtt.py | grep -qvx 1"]
+      # Healthy when the app is running, or when the entrypoint is idling
+      # because the camera is unreachable (it touches the flag file). Camera
+      # outages are reported by the IoT Device Unreachable alert, not here;
+      # a crash with the camera up exits the container instead.
+      # Must exclude PID 1: the wrapper's own argv contains the app path, so a
+      # bare `pgrep -f` matches the wrapper and can never fail.
+      test: ["CMD-SHELL", "test -e /tmp/amcrest-waiting-for-camera || pgrep -f /app/amcrest2mqtt.py | grep -qvx 1"]
       interval: 30s
       timeout: 10s
       retries: 3
