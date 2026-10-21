@@ -121,6 +121,35 @@ python3 ci/deploy-scope/deploy_scope.py select --playbook router --base origin/m
 python3 ci/deploy-scope/deploy_scope.py select --playbook zwave docker/daemon.json
 ```
 
+## SSH host keys
+
+Every CI job that SSHes to a host checks its host key strictly against
+`ansible/known_hosts`: Ansible (`ANSIBLE_HOST_KEY_CHECKING=True`, and
+`ansible_ssh_common_args` in `inventory.yml` sets `StrictHostKeyChecking=yes`
+with `UserKnownHostsFile` pointing at the repo file), and the direct `ssh`
+calls in `.gitlab-ci.yml`, `ci/` and `scripts/gitlab-settings.sh`. Do not turn
+this off (`StrictHostKeyChecking=no`, `UserKnownHostsFile=/dev/null`,
+`host_key_checking = False`); fix the pinned key instead.
+
+The file lists each host under its inventory name and its `ansible_host`
+address, which is what CI connects to. When a host is rebuilt, re-imaged or
+its SSH keys change, deploys to it fail with "Host key verification failed"
+until the file is updated:
+
+1. Read the new public keys on the host itself, over a session you already
+   trust (console, or an SSH session whose key you verified):
+   `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` (also ecdsa and rsa).
+2. Scan from inside the network and compare fingerprints with step 1:
+   `ssh-keyscan -t ed25519,ecdsa,rsa <ip> | ssh-keygen -lf -`.
+   Only continue if they match.
+3. Replace that host's lines in `ansible/known_hosts`
+   (`<name>,<ip> <type> <key>`), and add a line for any new name or address
+   CI uses. Remove lines for hosts CI no longer reaches.
+4. Check it: `ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile=ansible/known_hosts root@<ip> true`.
+
+`ansible/known_hosts` is in `shared.full`, so merging the change runs a full
+deploy of every host.
+
 ## Timing
 
 `profile_tasks` prints the 20 slowest tasks at the end of every run.

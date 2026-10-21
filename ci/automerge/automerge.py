@@ -53,6 +53,8 @@ PROJECT = os.environ.get("CI_PROJECT_ID", "4")
 PROJECT_PATH = os.environ.get("CI_PROJECT_PATH", "root/homelab")
 ROUTER_HOST = os.environ.get("AUTOMERGE_ROUTER_HOST", "10.4.0.1")
 SSH_KEY = os.environ.get("AUTOMERGE_SSH_KEY", str(REPO_ROOT / "tmp"))
+# Pinned host keys, checked strictly (docs/DEPLOY.md, "SSH host keys").
+KNOWN_HOSTS = str(REPO_ROOT / "ansible" / "known_hosts")
 
 
 def log(msg: str = "") -> None:
@@ -192,7 +194,7 @@ def gitlab_from_env(dry_run: bool) -> GitLab:
 def host_storage_ok(known: Optional[dict] = None) -> Tuple[bool, str]:
     """Fail closed: any error, or a pool outside policy.storage_verdict, blocks auto-merge."""
     cmd = ["ssh", "-i", SSH_KEY, "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes", "-o", "ConnectTimeout=15",
-           "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+           "-o", "StrictHostKeyChecking=yes", "-o", f"UserKnownHostsFile={KNOWN_HOSTS}",
            "-o", "LogLevel=ERROR", f"root@{ROUTER_HOST}",
            "zpool list -H -o name,health && echo --- && zpool status -p"]
     try:
@@ -622,7 +624,7 @@ def cmd_daily_report(args: argparse.Namespace) -> int:
         return 0
     subject = "Homelab auto-merge: " + (f"{len(rb_open)} rollback(s) open" if rb_open else f"{len(merged)} merged")
     cmd = ["ssh", "-i", SSH_KEY, "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes", "-o", "ConnectTimeout=15",
-           "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
+           "-o", "StrictHostKeyChecking=yes", "-o", f"UserKnownHostsFile={KNOWN_HOSTS}", "-o", "LogLevel=ERROR",
            f"root@{ROUTER_HOST}", f"mail -s '{subject}' root"]
     res = subprocess.run(cmd, input=body, text=True, capture_output=True, timeout=60)
     if res.returncode != 0:

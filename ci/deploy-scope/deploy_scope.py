@@ -173,10 +173,14 @@ def playbook_hosts(playbook: str, inventory: Path) -> List[dict]:
              "user": hostvars[h].get("ansible_user", "root")} for h in names]
 
 
+# Pinned host keys, checked strictly (docs/DEPLOY.md, "SSH host keys").
+KNOWN_HOSTS = Path(__file__).resolve().parents[2] / "ansible" / "known_hosts"
+
+
 def ssh(host: dict, key: str, command: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["ssh", "-i", key, "-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
-         "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+         "-o", "StrictHostKeyChecking=yes", "-o", f"UserKnownHostsFile={KNOWN_HOSTS}",
          "-o", "LogLevel=ERROR", f"{host['user']}@{host['host']}", command],
         capture_output=True, text=True, timeout=60)
 

@@ -28,7 +28,8 @@ ROOT = Path(os.environ.get("CI_PROJECT_DIR") or Path(__file__).resolve().parents
 HOST = os.environ.get("REPORT_HOST", "10.4.0.1")
 SSH_KEY = os.environ.get("REPORT_SSH_KEY", str(ROOT / "tmp"))
 SSH = ["ssh", "-i", SSH_KEY, "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes", "-o", "ConnectTimeout=15",
-       "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
+       "-o", "StrictHostKeyChecking=yes", "-o", f"UserKnownHostsFile={ROOT / 'ansible' / 'known_hosts'}",
+       "-o", "LogLevel=ERROR",
        "-o", "ServerAliveInterval=30", f"root@{HOST}"]
 
 

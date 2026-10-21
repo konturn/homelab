@@ -77,7 +77,8 @@ default:
 
 variables:
   GIT_DEPTH: 5
-  ANSIBLE_HOST_KEY_CHECKING: "False"
+  # Host keys are pinned in ansible/known_hosts (docs/DEPLOY.md, "SSH host keys").
+  ANSIBLE_HOST_KEY_CHECKING: "True"
   ANSIBLE_PIPELINING: "True"
   # Per-task timings at the end of every playbook run (top 20 slowest tasks).
   # SSH stays on Ansible's default ControlPersist=60s: with 600s the lingering
@@ -1148,7 +1149,7 @@ netgear:drift:
         [ -s netgear-drift.txt ] || echo "ngswitch drift exited with $rc before writing a report." > netgear-drift.txt
         printf '\nJob: %s\n' "$CI_JOB_URL" >> netgear-drift.txt
         ssh -i tmp -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 \
-          -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+          -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$CI_PROJECT_DIR/ansible/known_hosts" -o LogLevel=ERROR \
           root@10.4.0.1 "mail -s 'Homelab: NETGEAR switch drift' root" < netgear-drift.txt \
           || echo "WARN: sending mail failed"
         exit 1
@@ -1296,7 +1297,7 @@ aruba-iap:drift:
       if [ "$rc" -ne 0 ]; then
         printf '\nExit code: %s\nJob: %s\n' "$rc" "$CI_JOB_URL" >> aruba-iap-drift.txt
         ssh -i tmp -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 \
-          -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+          -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$CI_PROJECT_DIR/ansible/known_hosts" -o LogLevel=ERROR \
           root@10.4.0.1 "mail -s 'Homelab: Aruba AP config drift' root" < aruba-iap-drift.txt \
           || echo "WARN: sending mail failed"
         exit 1

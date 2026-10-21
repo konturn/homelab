@@ -305,6 +305,8 @@
           vars:
             ansible_user: "{{ switch_user }}"
             ansible_connection: ssh
+            # Exception to strict host key checking: this manual DR step targets
+            # the switch at its bootstrap address, whose key is not pinned.
             ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o ConnectTimeout=10"
           when: switch_reachable is succeeded
           register: switch_config
