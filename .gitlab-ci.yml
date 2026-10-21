@@ -79,6 +79,13 @@ variables:
   GIT_DEPTH: 5
   ANSIBLE_HOST_KEY_CHECKING: "False"
   ANSIBLE_PIPELINING: "True"
+  # Per-task timings at the end of every playbook run (top 20 slowest tasks),
+  # and one long-lived SSH master per host for the whole run (the default 60s
+  # lapses during long tasks such as compose-up). No -C: module payloads are
+  # already compressed and every target is on the LAN.
+  ANSIBLE_CALLBACKS_ENABLED: "ansible.posix.profile_tasks"
+  PROFILE_TASKS_TASK_OUTPUT_LIMIT: "20"
+  ANSIBLE_SSH_ARGS: "-o ControlMaster=auto -o ControlPersist=600s"
   PIP_CACHE_DIR: "/cache/pip"
   ANSIBLE_ROLES_PATH: "/cache/ansible-roles"
   MOLTBOT_IMAGE_TAG: "latest"
@@ -209,11 +216,15 @@ router:bootstrap:
     # the job container is throwaway, so installing into system site-packages is fine
     - pip3 install -q --break-system-packages --cache-dir /cache/pip -r requirements.txt
     # Clean corrupted role directories (ansible-galaxy --force doesn't handle this)
+    # Galaxy install only when ansible/requirements.yml lists something (it is
+    # `[]` while every role is vendored; the --force reinstall cost ~6s a job).
     - |
-      for d in /cache/ansible-roles/*/; do
-        [ -d "$d" ] && [ ! -f "${d}meta/main.yml" ] && [ ! -f "${d}tasks/main.yml" ] && rm -rf "$d" 2>/dev/null
-      done
-    - ansible-galaxy install -r ansible/requirements.yml -p /cache/ansible-roles --force 2>/dev/null || true
+      if grep -qvE '^[[:space:]]*(#.*|\[\][[:space:]]*|---[[:space:]]*)?$' ansible/requirements.yml; then
+        for d in /cache/ansible-roles/*/; do
+          [ -d "$d" ] && [ ! -f "${d}meta/main.yml" ] && [ ! -f "${d}tasks/main.yml" ] && rm -rf "$d" 2>/dev/null
+        done
+        ansible-galaxy install -r ansible/requirements.yml -p /cache/ansible-roles --force 2>/dev/null || true
+      fi
     - mkdir -p ~/.ssh
     - cp ansible/known_hosts ~/.ssh/known_hosts
     # Write SSH key from CI variable (protected — only available on main branch)
