@@ -152,6 +152,39 @@ def check_json_size(path, previous, min_ratio):
             )
 
 
+PAPERLESS_AI_REQUIRED = ("PAPERLESS_API_TOKEN", "API_KEY", "JWT_SECRET", "OLLAMA_MODEL")
+PAPERLESS_AI_FORBIDDEN = (
+    "OPENAI_API_KEY", "OPENAI_MODEL", "AZURE_API_KEY", "AZURE_ENDPOINT",
+    "AZURE_DEPLOYMENT_NAME", "CUSTOM_API_KEY", "CUSTOM_BASE_URL", "CUSTOM_MODEL",
+    "EXTERNAL_API_URL",
+)
+
+
+def check_paperless_ai_env(path):
+    env = {}
+    with open(path) as fh:
+        for n, line in enumerate(fh, 1):
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" not in line:
+                fail(f"{path}:{n}: not KEY=VALUE")
+            k, v = line.split("=", 1)
+            env[k.strip()] = v.strip()
+    if env.get("AI_PROVIDER") != "ollama":
+        fail(f"{path}: AI_PROVIDER must be ollama")
+    if env.get("OLLAMA_API_URL") != "http://ollama:11434":
+        fail(f"{path}: OLLAMA_API_URL must be http://ollama:11434")
+    for k in PAPERLESS_AI_REQUIRED:
+        if _is_empty(env.get(k)):
+            fail(f"{path}: {k} is missing or empty")
+    for k in PAPERLESS_AI_FORBIDDEN:
+        if not _is_empty(env.get(k)):
+            fail(f"{path}: {k} must not be set (local Ollama only)")
+    if env.get("EXTERNAL_API_ENABLED", "no").lower() in ("yes", "true", "1"):
+        fail(f"{path}: EXTERNAL_API_ENABLED must not be on")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -161,6 +194,7 @@ def main():
     js.add_argument("file")
     js.add_argument("previous", nargs="*")
     js.add_argument("--min-ratio", type=float, default=0.5)
+    sub.add_parser("paperless-ai-env").add_argument("file")
     args = ap.parse_args()
     if args.cmd == "yaml":
         check_yaml(args.file)
@@ -168,6 +202,8 @@ def main():
         check_nut_users(args.file)
     elif args.cmd == "nut-upsmon":
         check_nut_upsmon(args.file)
+    elif args.cmd == "paperless-ai-env":
+        check_paperless_ai_env(args.file)
     else:
         check_json_size(args.file, args.previous, args.min_ratio)
 

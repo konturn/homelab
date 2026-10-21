@@ -50,6 +50,14 @@ vault_secret_paths:
     fields:
       vault_excel_vm_admin_password: "admin_password"
 
+  # paperless-ai (docker/paperless-ai/paperless-ai.env). ui_password is the
+  # web UI login, set once by hand (docs/paperless-ai.md); not read here.
+  - path: "docker/paperless-ai"
+    fields:
+      vault_paperless_ai_paperless_token: "paperless_api_token"
+      vault_paperless_ai_api_key: "api_key"
+      vault_paperless_ai_jwt_secret: "jwt_secret"
+
   # JIT Approval Service secrets
   - path: "docker/jit-approval-svc"
     fields:

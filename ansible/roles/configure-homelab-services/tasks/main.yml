@@ -389,7 +389,9 @@
     force: "{{ item.force | default(true) }}"
     validate: >-
       {{ '/usr/local/sbin/homelab-config-check yaml %s'
-         if item.dest is search('/grafana/provisioning/.+[.]ya?ml$') else omit }}
+         if item.dest is search('/grafana/provisioning/.+[.]ya?ml$')
+         else '/usr/local/sbin/homelab-config-check paperless-ai-env %s'
+         if item.dest is search('/paperless-ai/paperless-ai[.]env$') else omit }}
   register: docker_config_copy
   loop: "{{ _docker_config_all }}"
   when: item.dest in _docker_config_to_write

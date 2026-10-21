@@ -117,6 +117,14 @@ networks:
     ipam:
       config:
         - subnet: 172.30.3.0/24
+  # paperless-ai <-> paperless-ngx (API) and lab_nginx (web UI). No egress and
+  # no VLAN: paperless-ai cannot reach anything but these two and ollama.
+  paperless-ai:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.4.0/24
 services:
   # Docker socket proxy - filtered access for CI builds
   # Only allows build/image operations, blocks exec/start/stop
@@ -436,6 +444,7 @@ services:
         ipv4_address: {{ lab_nginx_ip }}
       proxy-internal:
       loki-backend:
+      paperless-ai:
     restart: unless-stopped
     depends_on:
       docker-socket-proxy:
@@ -1917,6 +1926,7 @@ services:
       - DAC_OVERRIDE
     networks:
       internal:
+      paperless-ai:
     deploy:
       resources:
         limits:
@@ -1949,6 +1959,49 @@ services:
       timeout: 10s
       retries: 3
       start_period: 120s
+  # AI tagging for paperless-ngx with the local LLM (ollama). Review mode:
+  # only documents tagged paperless-ai-test are processed; see
+  # docs/paperless-ai.md. Not on any VLAN and no egress (networks above), so
+  # document text can only go to ollama. Config: docker/paperless-ai/
+  # paperless-ai.env, mounted read-only.
+  paperless-ai:
+    image: clusterzx/paperless-ai:3.0.9@sha256:2b65888163fd59716f1c8285b31c5bd0b30c9c3c192c42b516688e3887d4ba60
+    container_name: paperless-ai
+    security_opt:
+      - no-new-privileges=true
+    cap_drop:
+      - ALL
+    # Node app only. The image's start-services.sh also starts a Python RAG
+    # service that downloads embedding models from Hugging Face and indexes
+    # every document; it is not used.
+    command: ["pm2-runtime", "ecosystem.config.js"]
+    networks:
+      - paperless-ai
+      - llm-backend
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 128M
+    environment:
+      - TZ=America/New_York
+      - RAG_SERVICE_ENABLED=false
+    volumes:
+      - "{{ docker_persistent_data_path }}/paperless-ai/data:/app/data"
+      - "{{ docker_persistent_data_path }}/paperless-ai/paperless-ai.env:/app/data/.env:ro"
+    depends_on:
+      paperless-ngx:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "--max-time", "5", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
   mopidy:
     image: wernight/mopidy:latest@sha256:e3156f3da69d3e88b191c852d1fa60907c91e36668bca1f5afb5b57b74a8407d
     container_name: mopidy
