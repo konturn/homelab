@@ -1,6 +1,9 @@
 apiVersion: 1
 
 # Rules over the anomaly detector's output (docker/anomaly-detector).
+# Templates use .Labels.<name>, not $labels: provisioning expands $<name> as an
+# environment variable before Grafana sees the template.
+#
 # The detector rewrites the current state of every check each 5-minute cycle,
 # so `last()` over 10 minutes is the current state; a check that recovers
 # writes anomalous=0 and the rule resolves on the next evaluation.
@@ -47,10 +50,10 @@ groups:
         execErrState: KeepLast
         for: 5m
         annotations:
-          summary: "{{ if eq $labels.category \"test\" }}[TEST] {{ end }}Anomaly ({{ $labels.category }}): {{ $labels.signal }} {{ $labels.series }} [{{ $labels.check }}]"
+          summary: "{{ if eq .Labels.category \"test\" }}[TEST] {{ end }}Anomaly ({{ .Labels.category }}): {{ .Labels.signal }} {{ .Labels.series }} [{{ .Labels.check }}]"
           description: "Severe anomaly from the anomaly detector. Triage per skills/anomaly-triage/SKILL.md; current state at http://anomaly-detector:8080/status"
         labels:
-          severity: "{{ if eq $labels.category \"test\" }}test{{ else }}critical{{ end }}"
+          severity: "{{ if eq .Labels.category \"test\" }}test{{ else }}critical{{ end }}"
           source: anomaly-detector
 
       # The detector writes an anomaly_detector heartbeat point every cycle.
