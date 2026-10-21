@@ -1646,6 +1646,99 @@ groups:
           severity: warning
 
   # =========================================================================
+  # Document scanning pipeline (satellite-2 scanner -> NFS -> paperless)
+  # =========================================================================
+  # Scans are written over NFS into the router's paperless consume folder.
+  # When the mount was missing, scans landed on the Pi's SD card and sat there
+  # unseen for two years; these two rules cover both ends of that path.
+  # Both use pending periods >= 10m, so execErrState: Error (see the
+  # datasource-health note below); noDataState: OK because Host Metrics Stale
+  # and Critical Service Down already cover a silent host or container.
+  - orgId: 1
+    name: document-pipeline-alerts
+    folder: General Alerting
+    interval: 1m
+    rules:
+      # telegraf (satellite-telegraf.conf, satellite-2 only) reports
+      # scanner_nfs.mounted = 1 when /mnt is an NFS mount. /mnt is an
+      # x-systemd.automount; scanner-mnt-probe.timer touches it every 5 min,
+      # so 0 for 15 minutes means the router export is unreachable or the
+      # fstab entry is gone. scan.sh refuses to scan while this fires.
+      - uid: scanner-nfs-mount-missing
+        title: Scanner NFS Mount Missing
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -10m)
+                  |> filter(fn: (r) => r._measurement == "scanner_nfs")
+                  |> filter(fn: (r) => r._field == "mounted")
+                  |> group(columns: ["host", "mountpoint"])
+                  |> last()
+                  |> keep(columns: ["_time", "_value", "host", "mountpoint"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [1]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 15m
+        annotations:
+          summary: "{{ $labels.host }}: paperless consume NFS share is not mounted at {{ $labels.mountpoint }}"
+          description: "Scans will fail until it is back. On the Pi: systemctl status mnt.automount mnt.mount; ls /mnt; findmnt /mnt. On the router: systemctl status nfs-server; exportfs -v."
+        labels:
+          severity: warning
+
+      # telegraf (router telegraf.conf) counts files directly in the consume
+      # folder older than 60 minutes. Paperless consumes a new file within
+      # seconds to a few minutes, so any such file is stuck: paperless is not
+      # watching the folder, or it rejected the file (permissions, failed
+      # consume). Subfolders are not counted because paperless does not
+      # consume them.
+      - uid: paperless-consume-stuck
+        title: Paperless Consume Folder Stuck
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 1200, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -20m)
+                  |> filter(fn: (r) => r._measurement == "paperless_consume")
+                  |> filter(fn: (r) => r._field == "stuck_files")
+                  |> group(columns: ["host"])
+                  |> last()
+                  |> keep(columns: ["_time", "_value", "host"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        annotations:
+          summary: "{{ $values.B }} file(s) in the paperless consume folder for over an hour"
+          description: "Paperless has not consumed them. Check: docker logs --since 2h paperless-ngx | grep -iE 'consum|error'; ls -ln /mpool/nextcloud/paperless/consume (owner must be 1000:1000)."
+        labels:
+          severity: warning
+
+  # =========================================================================
   # Datasource health (meta-alerts)
   # =========================================================================
   # The short-pending rules above (for: 0s-2m) use execErrState: KeepLast, so

@@ -1,13 +1,11 @@
-# systemd service spec for pulseaudio running in system mode -- not recommended though!
-# on arch, put it under /etc/systemd/system/pulseaudio.service
-# start with: systemctl start pulseaudio.service
-# enable on boot: systemctl enable pulseaudio.service 
+# Scan trigger for Home Assistant (shell_command.scan_doc): GET/POST :8080/scan.
+# -cgi lets scan-http.sh set the HTTP status, so a failed scan returns 500.
 [Unit]
 Description=Shell2http server
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/shell2http /scan /root/scan.sh
+ExecStart=/usr/bin/shell2http -cgi -no-index /scan /root/scan-http.sh
 
 [Install]
 WantedBy=multi-user.target
