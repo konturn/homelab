@@ -73,6 +73,8 @@ COMMIT
 
 # Mark internal VLAN (10.3.x.x) internet-bound traffic
 # Purpose: Policy routing for internal network outbound traffic
+# excel-vm routes via WAN for client M365 sign-in (skips the Mullvad mark)
+-A PREROUTING -s {{ excel_vm_address }}/32 ! -d 10.0.0.0/8 -i vlan3-shim -j RETURN
 -A PREROUTING ! -d 10.0.0.0/8 -i vlan3-shim -j MARK --set-xmark 0x1/0xffffffff
 -A PREROUTING ! -d 10.0.0.0/8 -i {{ local_interface_name }}.3 -j MARK --set-xmark 0x1/0xffffffff
 
@@ -260,6 +262,9 @@ COMMIT
 # Marked traffic (VLANs 3/6/7, policy-routed to Mullvad via table 252) is
 # never forwarded out the WAN, independent of the routing-table fallback.
 -A FORWARD -m mark --mark 0x1 -o {{ inet_interface_name }} -j REJECT --reject-with icmp-net-prohibited
+
+# excel-vm (unmarked, see mangle PREROUTING) to internet via WAN
+-A FORWARD -s {{ excel_vm_address }}/32 -i vlan3-shim -o {{ inet_interface_name }} -j ACCEPT
 
 # All local VLANs to internet (outbound)
 -A FORWARD -i {{ local_interface_name }}+ -o {{ inet_interface_name }} -j ACCEPT

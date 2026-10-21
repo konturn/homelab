@@ -74,6 +74,8 @@ This document describes the iptables firewall configuration for the homelab infr
 
 All local VLANs can reach the internet. Some traffic is routed through Mullvad VPN for privacy.
 
+Exception: excel-vm (`excel_vm_address`, VLAN 3) routes via WAN for client M365 sign-in. A mangle `RETURN` skips the Mullvad mark for that one host and a FORWARD rule allows it out the WAN interface; every other VLAN 3 host stays marked and kill-switched.
+
 ### Inter-VLAN Traffic
 
 | Source | Destination | Policy |
@@ -305,3 +307,4 @@ iptables -A FORWARD -j LOG --log-prefix "FWD-DROPPED: "
 | 2022-07-03 | Original rules generated |
 | 2025-01 | Audit and documentation added |
 | 2026-03 | Document Docker iptables disabled on router |
+| 2026-10 | excel-vm routes via WAN for client M365 sign-in |
