@@ -624,7 +624,7 @@ restic backup --dry-run /persistent_data/application
 | `CLOUDFLARE_ZONE_ID` | DNS zone identifier | Ansible (cron job) |
 | `VAULT_UNSEAL_KEYS` | Unseal Vault (3 of 5, one per line) | Phase 4.5 (`bootstrap.yml`) |
 | `VAULT_TOKEN` | Vault root token — enable KV v2, apply Terraform | Phase 4.5, `vault:configure` |
-| `APPROLE_ROTATION_PAT` | Write rotated secret_ids back to CI variables | `vault:rotate-approles` |
+| `APPROLE_ROTATION_PAT` | Write rotated secret_ids back to CI variables; enforce resource group / deployment settings | `vault:rotate-approles`, `gitlab:settings` |
 
 ### Optional Secrets
 

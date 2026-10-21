@@ -39,6 +39,9 @@
 #   automerge:sweep / automerge:report (scheduled on main, AUTOMERGE_TASK=sweep|report)
 #   router:deploy-service (main, auto-merged commits only; replaces the full deploys)
 #
+#   GITLAB SETTINGS (see docs/GITLAB_SETTINGS.md)
+#   gitlab:settings (main: scheduled daily SCHEDULED_TASK=gitlab-settings, and on changes)
+#
 #   REPORTS (see ci/reports/README.md)
 #   report:cves / report:app-updates / report:os-patches / report:firmware
 #   (scheduled on main, SCHEDULED_TASK=trivy|app-report|os-report|firmware-report)
@@ -586,6 +589,7 @@ router:deploy:
   resource_group: deploy-router
   # environment: enables "prevent outdated deployment jobs"; with the
   # resource group in newest_ready_first mode, older queued deploys are skipped.
+  # Both settings live in GitLab, enforced by gitlab:settings.
   environment:
     name: router
   id_tokens:
@@ -609,6 +613,7 @@ zwave:deploy:
   resource_group: deploy-zwave
   # environment: enables "prevent outdated deployment jobs"; with the
   # resource group in newest_ready_first mode, older queued deploys are skipped.
+  # Both settings live in GitLab, enforced by gitlab:settings.
   environment:
     name: zwave
   id_tokens:
@@ -630,6 +635,7 @@ satellite-2:deploy:
   resource_group: deploy-satellite-2
   # environment: enables "prevent outdated deployment jobs"; with the
   # resource group in newest_ready_first mode, older queued deploys are skipped.
+  # Both settings live in GitLab, enforced by gitlab:settings.
   environment:
     name: satellite-2
   id_tokens:
@@ -668,6 +674,7 @@ macmini:deploy:
   resource_group: deploy-macmini
   # environment: enables "prevent outdated deployment jobs"; with the
   # resource group in newest_ready_first mode, older queued deploys are skipped.
+  # Both settings live in GitLab, enforced by gitlab:settings.
   environment:
     name: macmini
   id_tokens:
@@ -1403,6 +1410,7 @@ router:deploy-service:
   resource_group: deploy-router
   # environment: enables "prevent outdated deployment jobs"; with the
   # resource group in newest_ready_first mode, older queued deploys are skipped.
+  # Both settings live in GitLab, enforced by gitlab:settings.
   environment:
     name: router
   id_tokens:
@@ -1437,6 +1445,32 @@ router:deploy-service:
   rules:
     - !reference [.automerge_task_skip, rules]
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_MESSAGE =~ /Automerge-Policy: image-update/'
+
+# =============================================================================
+# GitLab project settings that .gitlab-ci.yml cannot express (see docs/GITLAB_SETTINGS.md)
+# =============================================================================
+# Deploy resource groups in newest_ready_first mode and "Prevent outdated
+# deployment jobs" on. Idempotent: only writes what differs. Scheduled daily on
+# main with SCHEDULED_TASK=gitlab-settings, and runs on main when the script or
+# this file changes. GITLAB_SETTINGS_TOKEN is the protected APPROLE_ROTATION_PAT
+# (Maintainer project access token), so only main's copy of the job sees it.
+gitlab:settings:
+  stage: deploy
+  image: alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
+  needs: []
+  variables:
+    GITLAB_SETTINGS_TOKEN: $APPROLE_ROTATION_PAT
+  before_script:
+    - apk add --no-cache bash curl jq
+  script:
+    - scripts/gitlab-settings.sh
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "gitlab-settings" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - scripts/gitlab-settings.sh
+        - .gitlab-ci.yml
 
 # =============================================================================
 # Renovate (self-hosted dependency updates, see docs/RENOVATE.md)
