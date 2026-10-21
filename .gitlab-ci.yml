@@ -13,10 +13,12 @@
 #   VALIDATE (parallel)
 #   ┌────────────────────────┬──────────────┬──────────────┬──────────────┬──────────────────┐
 #   router:val [id_tokens]  zwave:val  sat-2:val  vault:validate  jit-approval-svc:test
+#   anomaly-detector:test
 #
 #   BUILD (parallel, path-triggered)
 #   ┌──────────────┬──────────────┬──────────────┬──────────────────────┐
 #   openclaw:build  amcrest2mqtt:build  snapcast:build  snapclient:build  jit-approval-svc:build
+#   anomaly-detector:build
 #   main: <image>:build builds and pushes :latest and :<sha> (protected runner)
 #   MRs:  <image>:build-check builds with kaniko, no push (unprotected runner)
 #
@@ -352,6 +354,29 @@ jit-approval-svc:test:
       changes:
         - docker/jit-approval-svc/**/*
 
+# Unit tests (synthetic series: seasonality, spikes, stale, drift) plus a
+# strict parse of config.yml and suppressions.yml. See
+# docker/anomaly-detector/README.md.
+anomaly-detector:test:
+  extends: .interruptible
+  stage: validate
+  image: python:3.13-alpine3.22@sha256:e81548ac35b07a3bd4805f275107592ef458b1e893c0e04d45aedaa19416cca5
+  needs: []
+  script:
+    - apk add --no-cache tzdata
+    - cd docker/anomaly-detector
+    - pip install -q --root-user-action=ignore --disable-pip-version-check -r requirements.txt
+    - python -m unittest discover -s tests -t . -v
+    - python -m detector --config config.yml --suppressions suppressions.yml validate
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - docker/anomaly-detector/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - docker/anomaly-detector/**/*
+
 # Offline: runs fetch-vault-secrets against a fake Vault and checks that every
 # failure (timeout, 403, missing path/field, empty field, bad auth) stops the
 # play before anything is written. See ansible/tests/fetch-vault-secrets/.
@@ -571,6 +596,32 @@ snapclient:build-check:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - docker/images/snapclient/**/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
+
+anomaly-detector:build:
+  extends: .docker_build
+  variables:
+    IMAGE_NAME: anomaly-detector
+    BUILD_CONTEXT: docker/anomaly-detector
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - docker/anomaly-detector/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
+
+anomaly-detector:build-check:
+  extends: .kaniko_check
+  variables:
+    BUILD_CONTEXT: docker/anomaly-detector
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - docker/anomaly-detector/**/*
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       when: manual
       allow_failure: true

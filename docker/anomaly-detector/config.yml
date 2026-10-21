@@ -1,0 +1,438 @@
+# Anomaly detector signals. See docker/anomaly-detector/README.md.
+#
+# Deployed through docker_config (Jinja2-rendered, like every other config
+# file), so inventory variables can be used in `labels`.
+#
+# Adding a signal = one entry under `signals:`:
+#   name         lower_snake_case, unique (becomes sensor.anomaly_<name> in HA)
+#   description  one line; shown in alerts, the digest and HA
+#   owner        who cares about it (infra | house | network)
+#   category     gone_quiet | physical | infrastructure | pattern
+#   source       bucket/measurement/field/tags (+ agg, value_map, state_step,
+#                derivative, to_float), or raw `flux` with {start} {stop}
+#                {every} {fn} placeholders
+#   group_by     tag columns; one series per distinct value
+#   checks       list of {type: seasonal|rate|stale|drift|threshold, ...};
+#                max_severity, for_cycles, interval and when_hours work on any
+#
+# Severity: severe pages (Grafana -> OpenClaw triage + email); moderate only
+# shows up in the 08:00 digest and on the dashboard.
+
+defaults:
+  timezone: America/New_York
+  cycle: 5m
+  checks:
+    seasonal: {weeks: 4, min_weeks: 3, window: 1h}
+
+signals:
+  # ---------------------------------------------------------------- gone quiet
+  - name: telegraf_hosts
+    description: Telegraf host stopped reporting (router, satellite-2, zwave)
+    owner: infra
+    category: gone_quiet
+    source: {bucket: metrics, measurement: system, field: uptime}
+    group_by: [host]
+    checks:
+      - type: stale
+        lookback: 2d
+        max_age: {moderate: 10m, severe: 30m}
+
+  - name: network_devices
+    description: Mains-powered IoT appliance not answering ping (doorbell, camera, weather station, Zigbee radio, Z-Wave host, satellite)
+    owner: network
+    category: gone_quiet
+    source: {bucket: metrics, measurement: ping, field: percent_packet_loss, tags: {probe: device}}
+    group_by: [url]
+    labels:
+      "{{ zwave_address }}": zwave_host
+      "{{ doorbell_address }}": doorbell
+      "{{ satellite_2_address }}": satellite_2
+      "{{ back_camera_address }}": back_camera
+      "{{ weather_station_address }}": weather_station
+      "{{ zigbee_radio_address }}": zigbee_radio
+    checks:
+      - type: threshold
+        window: 15m
+        above: {moderate: 50, severe: 99}
+        for_cycles: 3
+
+  - name: zwave_dead_nodes
+    description: Z-Wave node marked dead by Z-Wave JS
+    owner: house
+    category: gone_quiet
+    max_severity: moderate
+    source:
+      bucket: homeassistant
+      measurement: '/^sensor\..*_node_status/'
+      field: state
+      agg: last
+      value_map: {dead: 1}
+    group_by: [_measurement]
+    checks:
+      - type: threshold
+        window: 30d
+        interval: 15m
+        above: {moderate: 1}
+        for_cycles: 1
+
+  - name: zwave_sensor_last_seen
+    description: Battery Z-Wave multisensor has not checked in (its own last-seen timestamp)
+    owner: house
+    category: gone_quiet
+    max_severity: moderate
+    source:
+      bucket: homeassistant
+      measurement: '/^sensor\..*_sensor_last_seen/'
+      field: state
+      to_float: false
+    group_by: [_measurement]
+    checks:
+      - type: stale
+        age_from: value
+        lookback: 30d
+        interval: 15m
+        max_age: {moderate: 36h}
+
+  - name: weather_station
+    description: Ambient weather station data stopped arriving
+    owner: house
+    category: gone_quiet
+    max_severity: moderate
+    source: {bucket: homeassistant, measurement: "°F", field: value, tags: {entity_id: temperatureoutdoor}}
+    checks:
+      - type: stale
+        lookback: 3d
+        max_age: {moderate: 45m}
+
+  # ------------------------------------------------------------ physical risk
+  - name: basement_humidity
+    description: Basement relative humidity (basement stairs multisensor)
+    owner: house
+    category: physical
+    source:
+      bucket: homeassistant
+      measurement: "%"
+      field: value
+      tags: {entity_id: basement_stairs_sensor_humidity}
+      state_step: 10m
+    checks:
+      - type: seasonal
+        direction: up
+        min_abs_delta: 8
+        max_severity: moderate
+      - type: threshold
+        window: 30m
+        above: {moderate: 65, severe: 75}
+
+  - name: basement_temperature
+    description: Basement air temperature (pipe-freeze risk)
+    owner: house
+    category: physical
+    source:
+      bucket: homeassistant
+      measurement: "°F"
+      field: value
+      tags: {entity_id: basement_stairs_sensor_air_temperature}
+      state_step: 10m
+    checks:
+      - type: threshold
+        window: 30m
+        below: {moderate: 50, severe: 45}
+
+  - name: indoor_temperature
+    description: Main thermostat temperature (heating failure / runaway)
+    owner: house
+    category: physical
+    source:
+      bucket: homeassistant
+      measurement: climate.main_thermostat
+      field: current_temperature
+      state_step: 10m
+    checks:
+      - type: threshold
+        window: 30m
+        below: {moderate: 60, severe: 55}
+        above: {moderate: 82, severe: 88}
+      - type: rate
+        every: 1h
+        lookback: 24h
+        min_points: 12
+        direction: down
+        min_scale: 0.5
+        z_moderate: 8
+        z_severe: 1000
+        max_change: {moderate: 4, severe: 7}
+
+  - name: furnace_runtime
+    description: Share of time the main thermostat is calling for heat (continuous = not keeping up)
+    owner: house
+    category: physical
+    max_severity: moderate
+    source:
+      bucket: homeassistant
+      measurement: climate.main_thermostat
+      field: hvac_action_str
+      value_map: {heating: 1}
+      state_step: 5m
+    checks:
+      - type: threshold
+        window: 3h
+        interval: 15m
+        above: {moderate: 0.9}
+
+  - name: fridge_power
+    description: Movie-room fridge outlet power (fridge off = mean power near zero for hours)
+    owner: house
+    category: physical
+    source:
+      bucket: homeassistant
+      measurement: W
+      field: value
+      tags: {entity_id: movie_room_fridge_outlet_electric_consumption_w_2}
+      state_step: 10m
+    checks:
+      - type: threshold
+        window: 12h
+        interval: 30m
+        below: {moderate: 1.0}
+        max_severity: moderate
+      - type: stale
+        lookback: 7d
+        max_age: {moderate: 6h}
+        max_severity: moderate
+
+  # ----------------------------------------------------------- infrastructure
+  - name: ups_status
+    description: UPS output status (2 = online; anything else = on battery / bypass / off)
+    owner: infra
+    category: infrastructure
+    source: {bucket: metrics, measurement: snmp, field: status, agg: max}
+    checks:
+      - type: threshold
+        window: 5m
+        above: {severe: 2.5}
+        below: {severe: 1.5}
+        for_cycles: 1
+
+  - name: ups_battery
+    description: UPS battery charge (%)
+    owner: infra
+    category: infrastructure
+    source: {bucket: metrics, measurement: snmp, field: percent_charge, agg: min}
+    checks:
+      - type: threshold
+        window: 10m
+        below: {moderate: 90, severe: 50}
+
+  - name: ups_load
+    description: UPS output load (%), i.e. rack power draw
+    owner: infra
+    category: infrastructure
+    source: {bucket: metrics, measurement: snmp, field: load}
+    checks:
+      - type: seasonal
+        direction: up
+        min_abs_delta: 15
+        max_severity: moderate
+      - type: threshold
+        window: 15m
+        above: {moderate: 75, severe: 90}
+
+  - name: smart_reallocated
+    description: SMART reallocated sectors creeping up (per disk)
+    owner: infra
+    category: infrastructure
+    source: {bucket: metrics, measurement: smart_device, field: reallocated_sectors_count, agg: max}
+    group_by: [device]
+    checks:
+      - type: drift
+        days: 14
+        min_points: 5
+        min_total_change: 1
+        slope: {moderate: 0.05, severe: 5}
+
+  - name: smart_pending
+    description: SMART pending / uncorrectable sectors present (per disk)
+    owner: infra
+    category: infrastructure
+    source: {bucket: metrics, measurement: smart_device, field: pending_sector_count, agg: max}
+    group_by: [device]
+    checks:
+      - type: threshold
+        window: 30m
+        interval: 15m
+        above: {moderate: 1, severe: 50}
+
+  - name: disk_usage
+    description: Filesystem usage on the router (mpool datasets, /persistent_data, /)
+    owner: infra
+    category: infrastructure
+    source:
+      bucket: metrics
+      measurement: disk
+      field: used_percent
+      tags: {host: router, path: '/^(\/|\/persistent_data|\/mpool|\/mpool\/plex|\/mpool\/backups|\/mpool\/nextcloud)$/'}
+      agg: max
+    group_by: [path]
+    checks:
+      - type: drift
+        days: 14
+        min_points: 7
+        slope: {moderate: 0.75, severe: 3}
+      - type: threshold
+        window: 15m
+        above: {moderate: 88, severe: 95}
+
+  - name: router_iowait
+    description: Router CPU iowait (%), disk contention
+    owner: infra
+    category: infrastructure
+    max_severity: moderate
+    source: {bucket: metrics, measurement: cpu, field: usage_iowait, tags: {host: router, cpu: cpu-total}}
+    checks:
+      - type: seasonal
+        direction: up
+        min_abs_delta: 5
+      - type: threshold
+        window: 30m
+        above: {moderate: 25}
+
+  - name: container_restarts
+    description: Container restarts per hour across all hosts
+    owner: infra
+    category: infrastructure
+    max_severity: moderate
+    source:
+      flux: |
+        from(bucket: "metrics")
+          |> range(start: {start}, stop: {stop})
+          |> filter(fn: (r) => r._measurement == "docker_container_status" and r._field == "restart_count")
+          |> aggregateWindow(every: 5m, fn: max, createEmpty: false)
+          |> difference(nonNegative: true)
+          |> group()
+          |> aggregateWindow(every: {every}, fn: sum, createEmpty: false)
+          |> keep(columns: ["_time", "_value"])
+    checks:
+      - type: threshold
+        window: 1h
+        interval: 15m
+        agg: sum
+        above: {moderate: 10}
+
+  - name: wan_latency
+    description: Internet round-trip time (ms) to public resolvers
+    owner: network
+    category: infrastructure
+    max_severity: moderate
+    source:
+      bucket: metrics
+      measurement: ping
+      field: average_response_ms
+      tags: {probe: internet, url: '/^(1\.1\.1\.1|8\.8\.8\.8)$/'}
+    group_by: [url]
+    checks:
+      - type: seasonal
+        direction: up
+        min_abs_delta: 15
+        rel_scale: 0.1
+
+  - name: wan_packet_loss
+    description: Internet packet loss (%) to public resolvers
+    owner: network
+    category: infrastructure
+    max_severity: moderate
+    source:
+      bucket: metrics
+      measurement: ping
+      field: percent_packet_loss
+      tags: {probe: internet, url: '/^(1\.1\.1\.1|8\.8\.8\.8)$/'}
+    checks:
+      - type: threshold
+        window: 15m
+        above: {moderate: 10}
+        for_cycles: 2
+
+  - name: wan_throughput
+    description: WAN download throughput (bytes/s on the uplink)
+    owner: network
+    category: infrastructure
+    max_severity: moderate
+    source:
+      bucket: metrics
+      measurement: net
+      field: bytes_recv
+      tags: {host: router, interface: enx6c1ff76b2ec9}
+      derivative: true
+    checks:
+      # Downloads make upward spikes routine; only a collapse at a normally
+      # busy hour is interesting.
+      - type: seasonal
+        direction: down
+        z_moderate: 8
+        rel_scale: 0.25
+
+  - name: mullvad_tunnel
+    description: Mullvad WireGuard tunnel receive rate (bytes/s); near zero = tunnel down
+    owner: network
+    category: infrastructure
+    max_severity: moderate
+    source:
+      bucket: metrics
+      measurement: net
+      field: bytes_recv
+      tags: {host: router, interface: wg-mullvad}
+      derivative: true
+    checks:
+      - type: threshold
+        window: 30m
+        below: {moderate: 1}
+
+  # ----------------------------------------------------------------- patterns
+  - name: door_lock_night
+    description: Front / garage-side door lock activity between 01:00 and 05:00
+    owner: house
+    category: pattern
+    max_severity: moderate
+    source:
+      flux: |
+        from(bucket: "homeassistant")
+          |> range(start: {start}, stop: {stop})
+          |> filter(fn: (r) => (r._measurement == "lock.front_door_lock_2" or r._measurement == "lock.garage_side_door") and r._field == "state")
+          |> group()
+          |> aggregateWindow(every: {every}, fn: count, createEmpty: false)
+          |> keep(columns: ["_time", "_value"])
+    checks:
+      - type: threshold
+        window: 1h
+        interval: 15m
+        agg: sum
+        above: {moderate: 1}
+        when_hours: [1, 5]
+        for_cycles: 1
+
+# Context for triage (GET /context): newest value or recent changes, read from
+# Influx so the agent needs no Home Assistant token.
+context:
+  - name: outdoor_weather
+    description: Weather station, newest values
+    lookback: 3h
+    source: {bucket: homeassistant, measurement: '/^(°F|%|mph|in|in\/h|inHg)$/', field: value,
+             tags: {entity_id: '/^(temperatureoutdoor|humidityoutdoor|windgust|raindaily|rainhourly|barometricpressurerelative)$/'}}
+    columns: [entity_id]
+  - name: indoor_climate
+    description: Main thermostat temperature, setpoint and HVAC action
+    lookback: 2d
+    source: {bucket: homeassistant, measurement: climate.main_thermostat,
+             field: '/^(current_temperature|temperature|hvac_action_str)$/'}
+    columns: [_field]
+  - name: presence
+    description: Household presence (person.noah)
+    lookback: 30d
+    source: {bucket: homeassistant, measurement: person.noah, field: state}
+  - name: recent_events
+    description: Recent lock, motion and garage-door state changes
+    mode: changes
+    limit: 25
+    lookback: 6h
+    source: {bucket: homeassistant,
+             measurement: '/^(lock\.|binary_sensor\..*motion|switch\.garage_door)/', field: state}

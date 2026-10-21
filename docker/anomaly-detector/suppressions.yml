@@ -1,0 +1,42 @@
+# Suppressions the detector respects. One entry per known/expected anomaly:
+#   signal   signal name from config.yml (glob allowed)
+#   series   optional series key (glob), default "*" (e.g. a host, a device)
+#   check    optional check id (glob), default "*"
+#   reason   why it is expected; required
+#   until    YYYY-MM-DD, inclusive; required, at most a year out
+# Expired entries are ignored (and listed under /status suppressions.expired).
+# Add entries by MR only; the OpenClaw agent proposes them that way when Noah
+# says an anomaly is expected. Rendered by Ansible: inventory variables work.
+suppressions:
+  - signal: network_devices
+    series: "{{ doorbell_address }}"
+    reason: doorbell unreachable since 2026-07-13 (issue 123); known at detector launch
+    until: 2026-11-30
+  - signal: network_devices
+    series: "{{ back_camera_address }}"
+    reason: back camera unreachable; known at detector launch
+    until: 2026-11-30
+  - signal: zwave_dead_nodes
+    series: "sensor.basement_sensor_node_status"
+    reason: dead before detector launch (last seen 2026-09-04); review or exclude the node
+    until: 2026-11-30
+  - signal: zwave_sensor_last_seen
+    series: "sensor.basement_sensor_last_seen"
+    reason: same node as zwave_dead_nodes basement_sensor
+    until: 2026-11-30
+  - signal: zwave_dead_nodes
+    series: "sensor.garage_door_opener_node_status"
+    reason: dead before detector launch (last seen 2026-09-11)
+    until: 2026-11-30
+  - signal: zwave_dead_nodes
+    series: "sensor.garage_outdoor_light_node_status"
+    reason: dead before detector launch (last seen 2026-09-16)
+    until: 2026-11-30
+  - signal: zwave_dead_nodes
+    series: "sensor.movie_room_outlet_node_status"
+    reason: dead since 2024-11; likely removed hardware still in the Z-Wave network
+    until: 2026-11-30
+  - signal: zwave_dead_nodes
+    series: "sensor.test_node_status"
+    reason: test node, not a real device
+    until: 2027-04-30
