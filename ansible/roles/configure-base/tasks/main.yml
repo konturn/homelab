@@ -7,12 +7,35 @@
     mode: '0755'
   check_mode: no
 
+# The keyserver re-sends the key on every request, with armor headers that
+# differ by the node that answered ("Comment: Hostname: ..."), so get_url
+# rewrote the keyring now and then with the same key. Fetch it (read-only),
+# and write the keyring only when the key itself differs.
 - name: Download OpenZFS PPA signing key
-  ansible.builtin.get_url:
+  ansible.builtin.uri:
     url: "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x71D641738AA0BEA26DA949516BA7349C5FD45AE1&options=mr"
-    dest: /etc/apt/keyrings/openzfs-ppa.asc
-    mode: '0644'
+    return_content: true
+  register: openzfs_ppa_key_dl
   check_mode: no
+
+- name: Read the installed OpenZFS PPA signing key
+  ansible.builtin.slurp:
+    src: /etc/apt/keyrings/openzfs-ppa.asc
+  register: openzfs_ppa_key_cur
+  failed_when: false
+  check_mode: no
+
+- name: Install OpenZFS PPA signing key
+  ansible.builtin.copy:
+    content: "{{ openzfs_ppa_key_dl.content }}"
+    dest: /etc/apt/keyrings/openzfs-ppa.asc
+    owner: root
+    group: root
+    mode: '0644'
+  when: >-
+    openzfs_ppa_key_cur.content is not defined
+    or (openzfs_ppa_key_cur.content | b64decode).splitlines() | reject('match', '^(Version|Comment):') | list
+       != openzfs_ppa_key_dl.content.splitlines() | reject('match', '^(Version|Comment):') | list
 
 - name: Add OpenZFS PPA repository
   apt_repository:

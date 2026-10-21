@@ -53,10 +53,19 @@
   when: "'router' in inventory_hostname"
   check_mode: no
 
+# Dearmor to a temp file and install it only if it differs from the keyring.
 - name: Dearmor and install InfluxData GPG key
   ansible.builtin.shell: |
-    gpg --batch --yes --dearmor -o /usr/share/keyrings/influxdata-archive-keyring.gpg /tmp/influxdata-archive.key
-  changed_when: true
+    set -eu
+    k=/usr/share/keyrings/influxdata-archive-keyring.gpg
+    tmp=$(mktemp)
+    trap 'rm -f "$tmp"' EXIT
+    gpg --batch --yes --dearmor -o "$tmp" /tmp/influxdata-archive.key
+    if [ -f "$k" ] && cmp -s "$tmp" "$k"; then exit 0; fi
+    install -m 0644 -o root -g root "$tmp" "$k"
+    echo changed
+  register: influxdata_keyring
+  changed_when: "'changed' in influxdata_keyring.stdout"
   when: "'router' in inventory_hostname"
 
 - name: Add InfluxData APT repository (signed-by)
@@ -150,10 +159,13 @@
 
 ### Generate Loki htpasswd file for push authentication
 # Promtail and Docker logging driver authenticate to Loki via nginx reverse proxy
+# A fixed salt per credential (derived from the host and file name, not from
+# the password) keeps the hash stable, so the file is only rewritten when the
+# username or password changes. A random salt changed it on every run.
 - name: Generate Loki htpasswd file
   ansible.builtin.shell: |
     printf '%s:%s\n' '{{ vault_loki_push_username }}' \
-      "$(openssl passwd -apr1 '{{ vault_loki_push_password }}')"
+      "$(openssl passwd -apr1 -salt '{{ ((inventory_hostname ~ ':loki.htpasswd') | hash('sha1'))[:8] }}' '{{ vault_loki_push_password }}')"
   register: loki_htpasswd_content
   delegate_to: localhost
   check_mode: no
@@ -175,7 +187,7 @@
 - name: Generate Loki IoT push htpasswd
   ansible.builtin.shell: |
     printf '%s:%s\n' '{{ vault_loki_iot_push_username }}' \
-      "$(openssl passwd -apr1 '{{ vault_loki_iot_push_password }}')"
+      "$(openssl passwd -apr1 -salt '{{ ((inventory_hostname ~ ':loki-iot.htpasswd') | hash('sha1'))[:8] }}' '{{ vault_loki_iot_push_password }}')"
   register: loki_iot_htpasswd_content
   delegate_to: localhost
   check_mode: no
@@ -266,6 +278,14 @@
     dest: "{{ docker_persistent_data_path }}/nginx/webroot/nkontur.com/"
     delete: yes
     recursive: yes
+    # By content, with fixed modes. The CI checkout (umask 0) has 0777/0666
+    # modes and new mtimes on every run: rsync copied both, so this task and
+    # the 0755 directory task above reported changes on every deploy, and the
+    # webroot was world-writable.
+    checksum: true
+    times: false
+    rsync_opts:
+      - "--chmod=D755,F644"
   when: "'external' in (nginx_config | default([]) | map(attribute='network') | list)"
 
 # A config dest that is a directory (Docker creates one when it bind-mounts a
@@ -636,11 +656,28 @@
   register: nut_configs
   when: "'router' in inventory_hostname"
 
-- name: Enable and start NUT driver
+# nut-driver-enumerator.service is a oneshot (no RemainAfterExit): it is
+# never "active", so state=started ran it on every deploy. It is enabled
+# here and run by its .path unit when ups.conf changes, and by the restart
+# task below when a NUT config changes. The drivers it creates belong to
+# nut-driver.target, which is kept started.
+- name: Enable NUT driver enumerator
   ansible.builtin.systemd:
     name: nut-driver-enumerator.service
     enabled: true
+  when:
+    - "'router' in inventory_hostname"
+    - not ansible_check_mode
+    - vault_nut_monitor_password | default('') | length > 0
+
+- name: Enable and start NUT driver units
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
     state: started
+  loop:
+    - nut-driver-enumerator.path
+    - nut-driver.target
   when:
     - "'router' in inventory_hostname"
     - not ansible_check_mode
@@ -708,6 +745,11 @@
     - "'router' in inventory_hostname"
     - not ansible_check_mode
 
+# compose up starts every exited container again, so the run-once init
+# containers below (no restart policy, exit 0 when there is nothing to do)
+# are re-run, in under a second, on every deploy. That alone is not reported
+# as a change; anything else is (create, recreate, start of any other
+# container, pull, an init container recreated for a new image or config).
 - name: Create and start Docker services
   community.docker.docker_compose_v2:
     project_name: "{{ docker_compose_project_name | default('docker') }}"
@@ -716,6 +758,23 @@
     state: present
     remove_orphans: true
   timeout: 300
+  register: _compose_up
+  changed_when: >-
+    _compose_up.actions is not defined and _compose_up is changed
+    or (_compose_up.actions | default([])
+        | rejectattr('id', 'in', _compose_oneshot_inits)
+        | list | length > 0)
+    or (_compose_up.actions | default([])
+        | selectattr('id', 'in', _compose_oneshot_inits)
+        | rejectattr('status', 'equalto', 'Starting')
+        | list | length > 0)
+  vars:
+    _compose_oneshot_inits:
+      - headway-frontend-init
+      - headway-travelmux-init
+      - pelias-config-init
+      - pelias-elasticsearch-init
+      - pelias-placeholder-init
   when: not ansible_check_mode
 
 - name: Force recreate containers after daemon config change
@@ -794,15 +853,21 @@
   timeout: 60
   when: (pihole_dnsmasq_d is changed or pihole_listening_mode is changed) and not ansible_check_mode
 
+# Set dns.hosts only when the current value differs. pihole-FTL prints the
+# array as "[ a, b ]"; any other format compares unequal and is just set.
 - name: Configure Pi-hole local DNS records via pihole-FTL
-  ansible.builtin.command:
-    cmd: >-
-      docker exec pihole pihole-FTL --config dns.hosts
-      '{{ pihole_dns_hosts | to_json }}'
+  ansible.builtin.shell: |
+    set -eu
+    want={{ ('[ ' ~ (pihole_dns_hosts | join(', ')) ~ ' ]') | quote }}
+    cur=$(docker exec pihole pihole-FTL --config dns.hosts)
+    [ "$cur" = "$want" ] && exit 0
+    docker exec pihole pihole-FTL --config dns.hosts {{ pihole_dns_hosts | to_json | quote }} >/dev/null
+    echo changed
+  register: pihole_dns_hosts_set
+  changed_when: "'changed' in pihole_dns_hosts_set.stdout"
   when:
     - pihole_dns_hosts is defined
     - not ansible_check_mode
-  changed_when: true
 
 # Deluge cache fix: reduce libtorrent disk cache to prevent excessive RAM usage.
 # Default cache_size of 512 pieces causes 28GB+ memory consumption with large torrents.

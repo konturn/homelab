@@ -262,10 +262,14 @@
     job: "{{ \"bash -c 'set -o pipefail; /bin/bash /root/cron/convert_isos.sh 2>&1 | logger -t iso-convert-cron'\" }}"
 
 
+# Compare by content, not mtime: every CI checkout gives the files new
+# mtimes, so rsync's default quick check (and -t) reported a change each run.
 - name: Sync systemd-networkd drop-in files
   ansible.posix.synchronize:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/networkd/' }}"
     dest: /etc/systemd/network
+    checksum: true
+    times: false
     rsync_opts:
     - "--chmod=D755,F644"
   register: networkd
