@@ -124,3 +124,15 @@ python3 ci/deploy-scope/deploy_scope.py select --playbook zwave docker/daemon.js
 ## Timing
 
 `profile_tasks` prints the 20 slowest tasks at the end of every run.
+
+Full deploys, job duration (2026-10-21):
+
+| job | before (job 25100 etc.) | after !846, !849, !850 |
+|---|---|---|
+| router:deploy | 366s | 222s |
+| zwave:deploy | 216s | 124s |
+| satellite-2:deploy | 195s | 104s |
+| macmini:deploy | 40s | 28s |
+
+Most of the gain came from collapsing per-item remote loops (Vault reads,
+config files, symlinks) and skipping apt calls when packages are present.
