@@ -1027,6 +1027,31 @@
     mode: "0644"
   when: "'router' in inventory_hostname"
 
+### OpenClaw repo-managed skills
+# Skills whose source of truth is the repo (docker/openclaw/workspace/skills/),
+# deployed root-owned like the lessons file so they change only through an
+# MR. Skills are read per session; no restart needed. The agent's own skills
+# in the same directory are not touched.
+- name: Ensure OpenClaw repo-managed skill directories exist
+  ansible.builtin.file:
+    path: "{{ docker_persistent_data_path }}/openclaw/workspace/skills/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop: [anomaly-triage]
+  when: "'router' in inventory_hostname"
+
+- name: Deploy OpenClaw repo-managed skills
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/openclaw/workspace/skills/{{ item }}/SKILL.md"
+    dest: "{{ docker_persistent_data_path }}/openclaw/workspace/skills/{{ item }}/SKILL.md"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: [anomaly-triage]
+  when: "'router' in inventory_hostname"
+
 ### Transcript credential scrubbing cron
 # Uses gitleaks (~160 rules) to detect and redact secrets from OpenClaw
 # session transcripts. Also purges archived sub-agent transcripts older
