@@ -30,13 +30,24 @@ module.exports = function transform(raw) {
   var anomaly = alerts.length > 0 && alerts.every(function(a) {
     return a.labels && a.labels.source === 'anomaly-detector';
   });
+  // A resolved anomaly needs no message (the firing one was the message, or
+  // triage decided it was not actionable). Without this the agent re-reported
+  // the [TEST] alert on resolve (2026-10-21).
+  var allResolved = alerts.every(function(a) { return a.status === 'resolved'; });
+  if (anomaly && allResolved) {
+    return {
+      message: '📈 Anomaly alert resolved:\n' + alertText + '\n\n' +
+        'No action and no message: your entire reply is NO_REPLY.',
+      mode: 'now'
+    };
+  }
   if (anomaly) {
     return {
       message: '📈 Anomaly alert (' + status + '):\n' + alertText + '\n\n' +
         'Follow skills/anomaly-triage/SKILL.md (not ALERTS.md): check /status, recent deploys and /context, ' +
         'then message Noah only if it is actionable (one line: why + suggested action). ' +
         'If it is not actionable, your entire reply is NO_REPLY. ' +
-        'If the summary starts with [TEST], send exactly one message prefixed [TEST].',
+        'If the summary starts with [TEST] (a firing test alert), send exactly one message prefixed [TEST].',
       mode: 'now'
     };
   }
