@@ -40,17 +40,6 @@ influxdb:
 automation: !include automations.yaml
 script: !include scripts.yaml
 scene: !include scenes.yaml
-http:
-  use_x_forwarded_for: true
-  trusted_proxies:
-    - {{ nginx_ip }}
-    - {{ lab_nginx_ip }}
-    - {{ iot_nginx_ip }}
-    - 127.0.0.1
-  # Ban a client IP (the X-Forwarded-For address behind the trusted proxies
-  # above) after 5 failed logins; bans are kept in ip_bans.yaml.
-  ip_ban_enabled: true
-  login_attempts_threshold: 5
 spotcast:
   sp_dc: "{{ vault_spotify_dc }}"
   sp_key: "{{ vault_spotify_key }}"
@@ -124,59 +113,72 @@ sensor:
     end: "{{ '{{' }} now() {{ '}}' }}"
 template:
   - sensor:
-      # Kitchen Awair Sensors (modern format)
+      # Kitchen Awair Sensors (modern format). The availability templates make
+      # these unavailable instead of unknown/None when the Awair is offline.
       - name: "Kitchen Sensor Quality Score"
         unique_id: awair_lr_score
         unit_of_measurement: '%'
+        availability: {{ '\'{{ is_number(state_attr("sensor.awair_kitchen_sensors", "score")) }}\'' }}
         state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "score") }}\'' }}
       - name: "Kitchen Sensor Temperature"
         unique_id: awair_lr_temp
         device_class: temperature
         unit_of_measurement: '°C'
+        availability: {{ '\'{{ is_number(state_attr("sensor.awair_kitchen_sensors", "temp")) }}\'' }}
         state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "temp") }}\'' }}
       - name: "Kitchen Sensor Relative Humidity"
         unique_id: awair_lr_humid
         device_class: humidity
         unit_of_measurement: '%'
+        availability: {{ '\'{{ is_number(state_attr("sensor.awair_kitchen_sensors", "humid")) }}\'' }}
         state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "humid") }}\'' }}
       - name: "Kitchen Sensor Carbon Dioxide"
         unique_id: awair_lr_co2
         unit_of_measurement: 'ppm'
+        availability: {{ '\'{{ is_number(state_attr("sensor.awair_kitchen_sensors", "co2")) }}\'' }}
         state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "co2") }}\'' }}
       - name: "Kitchen Sensor Total VOC"
         unique_id: awair_lr_voc
         unit_of_measurement: 'ppb'
+        availability: {{ '\'{{ is_number(state_attr("sensor.awair_kitchen_sensors", "voc")) }}\'' }}
         state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "voc") }}\'' }}
       - name: "Kitchen Sensor Particulate Matter 2.5"
         unique_id: awair_lr_pm25
         unit_of_measurement: 'μg/m³'
+        availability: {{ '\'{{ is_number(state_attr("sensor.awair_kitchen_sensors", "pm25")) }}\'' }}
         state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "pm25") }}\'' }}
       # Bedroom Awair Sensors (modern format)
       - name: "Bedroom Sensor Quality Score"
         unique_id: bedroom_awair_lr_score
         unit_of_measurement: '%'
+        availability: {{ '\'{{ is_number(state_attr("sensor.awair_bedroom_sensors", "score")) }}\'' }}
         state: {{ '\'{{ state_attr("sensor.awair_bedroom_sensors", "score") }}\'' }}
       - name: "Bedroom Sensor Temperature"
         unique_id: bedroom_awair_lr_temp
         device_class: temperature
         unit_of_measurement: '°C'
+        availability: {{ '\'{{ is_number(state_attr("sensor.awair_bedroom_sensors", "temp")) }}\'' }}
         state: {{ '\'{{ state_attr("sensor.awair_bedroom_sensors", "temp") }}\'' }}
       - name: "Bedroom Sensor Relative Humidity"
         unique_id: bedroom_awair_lr_humid
         device_class: humidity
         unit_of_measurement: '%'
+        availability: {{ '\'{{ is_number(state_attr("sensor.awair_bedroom_sensors", "humid")) }}\'' }}
         state: {{ '\'{{ state_attr("sensor.awair_bedroom_sensors", "humid") }}\'' }}
       - name: "Bedroom Sensor Carbon Dioxide"
         unique_id: bedroom_awair_lr_co2
         unit_of_measurement: 'ppm'
+        availability: {{ '\'{{ is_number(state_attr("sensor.awair_bedroom_sensors", "co2")) }}\'' }}
         state: {{ '\'{{ state_attr("sensor.awair_bedroom_sensors", "co2") }}\'' }}
       - name: "Bedroom Sensor Total VOC"
         unique_id: bedroom_awair_lr_voc
         unit_of_measurement: 'ppb'
+        availability: {{ '\'{{ is_number(state_attr("sensor.awair_bedroom_sensors", "voc")) }}\'' }}
         state: {{ '\'{{ state_attr("sensor.awair_bedroom_sensors", "voc") }}\'' }}
       - name: "Bedroom Sensor Particulate Matter 2.5"
         unique_id: bedroom_awair_lr_pm25
         unit_of_measurement: 'μg/m³'
+        availability: {{ '\'{{ is_number(state_attr("sensor.awair_bedroom_sensors", "pm25")) }}\'' }}
         state: {{ '\'{{ state_attr("sensor.awair_bedroom_sensors", "pm25") }}\'' }}
   - binary_sensor:
       - name: "Front Hallway Door Active"
