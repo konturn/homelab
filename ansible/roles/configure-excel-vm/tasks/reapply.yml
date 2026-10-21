@@ -1,0 +1,103 @@
+---
+# Re-apply the guest settings to the running VM: render excel-vm-setup.ps1,
+# copy it (plus the installers in excel_vm_reapply_installers) to the guest
+# over SSH and run it with -Reapply as the admin user, so HKCU settings land in
+# that user's hive. Only steps marked -Idempotent run; none of them reboots,
+# signs anyone out or touches running programs. Under --check the script gets
+# -Check and only reports what it would change.
+# Opt-in: -e excel_vm_reapply=true (README.md, "Re-applying settings").
+
+- name: Require the running VM
+  ansible.builtin.assert:
+    that:
+      - _excel_vm_domstate.stdout | trim == 'running'
+    fail_msg: "{{ excel_vm_name }} is not running ({{ _excel_vm_domstate.stdout | trim }}); start it first."
+    quiet: true
+
+- name: Create the re-apply installer cache
+  ansible.builtin.file:
+    path: "{{ excel_vm_dir }}/reapply-cache"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  check_mode: false
+
+- name: Fetch installers for the re-runnable steps
+  ansible.builtin.get_url:
+    url: "{{ item.url }}"
+    dest: "{{ excel_vm_dir }}/reapply-cache/{{ item.filename }}"
+    checksum: "sha256:{{ item.sha256 }}"
+    mode: "0600"
+    timeout: 120
+  loop: "{{ excel_vm_installers | selectattr('name', 'in', excel_vm_reapply_installers) | list }}"
+  loop_control:
+    label: "{{ item.filename }}"
+  check_mode: false
+
+- name: Re-apply guest settings
+  block:
+    - name: Create a local staging directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: excel-vm-reapply.
+      register: _excel_vm_stage
+      check_mode: false
+      changed_when: false
+
+    - name: Render the setup script
+      ansible.builtin.template:
+        src: excel-vm-setup.ps1.j2
+        dest: "{{ _excel_vm_stage.path }}/excel-vm-setup.ps1"
+        mode: "0600"
+      check_mode: false
+      changed_when: false
+      diff: false
+
+    # ControlPath=none: the host's ssh_config enables ControlMaster, and a
+    # stale master would outlive an sshd restart in the guest.
+    - name: Run the idempotent steps in the guest
+      ansible.builtin.shell:
+        executable: /bin/bash
+        cmd: |
+          set -uo pipefail
+          o=(-o BatchMode=yes -o ControlPath=none -o ConnectTimeout=30 -o ServerAliveInterval=15
+             -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile={{ excel_vm_ssh_known_hosts | quote }}
+             -i {{ excel_vm_ssh_identity | quote }})
+          t={{ (excel_vm_admin_user ~ '@' ~ excel_vm_address) | quote }}
+          d='C:\ProgramData\excel-vm-setup\reapply'
+          ssh "${o[@]}" "$t" "Remove-Item -Recurse -Force -ErrorAction SilentlyContinue '$d'; New-Item -ItemType Directory -Force '$d\installers' | Out-Null" || exit 1
+          scp -q "${o[@]}" {{ (_excel_vm_stage.path ~ '/excel-vm-setup.ps1') | quote }} "$t:/C:/ProgramData/excel-vm-setup/reapply/" || exit 1
+          {% for i in excel_vm_installers | selectattr('name', 'in', excel_vm_reapply_installers) %}
+          scp -q "${o[@]}" {{ (excel_vm_dir ~ '/reapply-cache/' ~ i.filename) | quote }} "$t:/C:/ProgramData/excel-vm-setup/reapply/installers/" || exit 1
+          {% endfor %}
+          ssh "${o[@]}" "$t" "powershell -NoProfile -ExecutionPolicy Bypass -File '$d\excel-vm-setup.ps1' -Reapply{{ ' -Check' if ansible_check_mode else '' }}; exit \$LASTEXITCODE"
+          rc=$?
+          ssh "${o[@]}" "$t" "Remove-Item -Recurse -Force -ErrorAction SilentlyContinue '$d'" || true
+          exit $rc
+      register: _excel_vm_reapply
+      check_mode: false
+      failed_when: false
+      changed_when:
+        - not ansible_check_mode
+        - "_excel_vm_reapply.stdout is search('^REAPPLY [^:]+: changed', multiline=true)"
+
+    - name: Re-apply result
+      ansible.builtin.debug:
+        msg: "{{ _excel_vm_reapply.stdout_lines | select('match', '^REAPPLY ') | list }}"
+
+    - name: Fail if a step failed
+      ansible.builtin.fail:
+        msg: >-
+          Re-apply exited {{ _excel_vm_reapply.rc }}.
+          {{ (_excel_vm_reapply.stdout_lines | select('match', '^(REAPPLY .*: failed|!!!!)') | list) or _excel_vm_reapply.stderr_lines[-5:] }}
+      when: _excel_vm_reapply.rc != 0
+  always:
+    - name: Remove the local staging directory
+      ansible.builtin.file:
+        path: "{{ _excel_vm_stage.path }}"
+        state: absent
+      when: _excel_vm_stage.path is defined
+      check_mode: false
+      changed_when: false
+      diff: false
