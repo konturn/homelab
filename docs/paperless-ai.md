@@ -84,6 +84,36 @@ existing document as well (all 159+ at once), not only new ones.
 
 To turn processing off entirely, set `DISABLE_AUTOMATIC_PROCESSING=yes`.
 
+## Review batch (2026-10-21)
+
+14 documents tagged `paperless-ai-test` (2 per document type and 3 untyped);
+1 has no OCR text and was skipped. Model `paperless-qwen3:14b`.
+
+| | first run (empty SYSTEM_PROMPT) | with the SYSTEM_PROMPT in the .env |
+|---|---|---|
+| titles useful | ~6/13, with placeholders (`xxxxx`, `a`) | 10/13 (3 left unchanged) |
+| correspondent set | 1/13 (a placeholder) | 9/13, ~7 right (one W-2 got the IRS, not the employer) |
+| tags | none | 10/13, 1-3 sensible tags each |
+| document type | 4 changed, mostly wrong | kept on 9; 1 plausible fix (contract to receipt), 3 questionable (`Certificate` on a check and on property papers) |
+| date | 2 placeholder dates (1990-01-01) | no placeholders; 4 receipts moved from scan date to the printed date |
+
+paperless-ai gets nothing useful without a system prompt: its built-in JSON
+skeleton contains example values (`xxxxx`), and the model copies them. Keep
+`SYSTEM_PROMPT` set.
+
+Known limits:
+- paperless-ai sizes `num_ctx` per document, and Ollama reloads the model
+  whenever `num_ctx` changes. A document therefore takes 15-65 s, mostly
+  model load, not ~5 s.
+- Document types: the 6 existing types are coarse. Restricting to existing
+  types (`RESTRICT_TO_EXISTING_DOCUMENT_TYPES=yes`) or adding types such as
+  `Bill`, `Tax form`, `Property` would help before automatic processing is
+  enabled.
+
+Revert of the batch: the original title, type, correspondent, date and tags
+of every batch document were saved before the run (on the router, root
+only). The paperless-ai UI History page can also reset each document.
+
 ## Model
 
 `OLLAMA_MODEL=paperless-qwen3:14b`: qwen3:14b with a template that disables
