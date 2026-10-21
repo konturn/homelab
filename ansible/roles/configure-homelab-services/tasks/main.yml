@@ -374,6 +374,63 @@
   loop: "{{ _docker_config_all }}"
   when: item.dest in _docker_config_to_write
 
+### Snapserver zone layout (server.json)
+# snapserver keeps its runtime state in server.json and rewrites it while
+# running: client connected flag, host/IP, lastSeen, volume and mute. Writing
+# the repo copy on every deploy therefore restarted snapserver every time.
+# The file is now seeded only when missing (force: false in the inventory),
+# and only the zone layout is enforced: the groups, the stream each group
+# plays and the clients in each group. If the live file differs in those, the
+# repo copy is written and snapserver restarted, as before.
+- name: Find the snapserver server.json entry
+  ansible.builtin.set_fact:
+    _snapserver_state: "{{ _docker_config_all | selectattr('name', 'equalto', 'snapserver') | selectattr('src', 'equalto', 'docker/snapserver/server.json') | first | default(none) }}"
+
+- name: Read the live snapserver server.json
+  ansible.builtin.slurp:
+    src: "{{ _snapserver_state.dest }}"
+  register: _snapserver_live
+  failed_when: false
+  check_mode: false
+  when: _snapserver_state is not none
+
+- name: Compare the snapserver zone layout with the repo
+  ansible.builtin.set_fact:
+    _snapserver_zones_drift: >-
+      {%- macro zones(d) -%}
+      {%-   set out = [] -%}
+      {%-   for g in (d.Groups | default([])) | sort(attribute='id') -%}
+      {%-     set _ = out.append({'id': g.id, 'stream_id': g.stream_id | default(''),
+                                 'clients': g.clients | default([]) | map(attribute='id') | sort | list}) -%}
+      {%-   endfor -%}
+      {{- out | to_json -}}
+      {%- endmacro -%}
+      {%- set want = lookup('template', lookup('env', 'CI_PROJECT_DIR') ~ '/' ~ _snapserver_state.src) | from_json -%}
+      {%- if _snapserver_live.content is not defined -%}
+      {#- missing or unreadable: the config copy above seeds it -#}
+      false
+      {%- else -%}
+      {%-   set live = _snapserver_live.content | b64decode | from_json -%}
+      {{ zones(want) != zones(live) }}
+      {%- endif -%}
+  when: _snapserver_state is not none
+
+- name: Show snapserver zone layout drift
+  ansible.builtin.debug:
+    msg: "snapserver groups/streams/clients differ from docker/snapserver/server.json; writing the repo copy"
+  when: _snapserver_zones_drift | default(false) | bool
+
+- name: Reset snapserver server.json to the repo zone layout
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/{{ _snapserver_state.src }}"
+    dest: "{{ _snapserver_state.dest }}"
+    owner: root
+    group: root
+    mode: "0640"
+    force: true
+  register: _snapserver_zones_reset
+  when: _snapserver_zones_drift | default(false) | bool
+
 - name: Template Grafana alerting contact points (injects Vault secrets)
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/grafana/provisioning/alerting/contactpoints.yml.j2"
@@ -441,7 +498,8 @@
 # *.lab.nkontur.com (Grafana's Loki datasource included).
 - name: Collect containers whose config changed
   ansible.builtin.set_fact:
-    _changed_config_containers: "{{ docker_config_copy.results | selectattr('changed') | map(attribute='item.name') | unique | list }}"
+    _changed_config_containers: "{{ (docker_config_copy.results | selectattr('changed') | map(attribute='item.name') | list
+                                     + (['snapserver'] if _snapserver_zones_reset is changed else [])) | unique | list }}"
     _nginx_container_names: "{{ nginx_config | default([]) | map(attribute='name') | list }}"
 
 # nginx mounts its whole conf dir, so the new files are already visible inside
