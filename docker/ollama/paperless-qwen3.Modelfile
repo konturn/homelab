@@ -1,0 +1,28 @@
+# paperless-qwen3:14b -- qwen3:14b without the thinking phase.
+# paperless-ai sends num_predict 256 and no `think` flag; qwen3 thinks by
+# default and spends all 256 tokens on reasoning, returning an empty answer.
+# This template always opens the answer with an empty <think></think> block
+# (what qwen3's own template does for think=false). See docs/ollama.md.
+FROM qwen3:14b-q4_K_M
+{% raw %}
+TEMPLATE """{{- if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{ end }}
+{{- range $i, $_ := .Messages }}
+{{- $last := eq (len (slice $.Messages $i)) 1 -}}
+{{- if eq .Role "user" }}<|im_start|>user
+{{ .Content }}<|im_end|>
+{{ else if eq .Role "assistant" }}<|im_start|>assistant
+{{ .Content }}{{ if not $last }}<|im_end|>
+{{ end }}
+{{- end }}
+{{- if and (ne .Role "assistant") $last }}<|im_start|>assistant
+<think>
+
+</think>
+
+{{ end }}
+{{- end }}"""
+{% endraw %}
+PARAMETER stop "<|im_end|>"
+PARAMETER stop "<|im_start|>"

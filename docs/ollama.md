@@ -53,13 +53,36 @@ they can be downloaded again).
 
 | model | file | VRAM (8k ctx) | generation | prompt (cold) | load from pool |
 |---|---|---|---|---|---|
+| `qwen3:8b-q4_K_M` | 5.2 GB | 6.2 GB | 33.6 tok/s | ~620 tok/s | ~5 s |
 | `qwen3.5:9b-q4_K_M` | 6.6 GB | 6.6 GB | 28.6 tok/s | ~645 tok/s | ~27 s |
 | `qwen3:14b-q4_K_M` | 9.3 GB | 10.2 GB | 18.6 tok/s | ~347 tok/s | ~38 s |
 
-Measured 2026-10-21 on the P5000 with a ~2k-token prompt, num_ctx 8192,
-`think: false`, during a pool resilver (load times will drop afterwards).
-paperless-ai uses `qwen3.5:9b-q4_K_M`: it is faster, and it leaves ~9 GB
-VRAM for Plex.
+Measured 2026-10-21 on the P5000: ~2k-token prompt, num_ctx 8192,
+`think: false`, while the pool was resilvering (the cold loads of the first two
+were from disk; qwen3:8b was still in page cache). All three run with
+`100% GPU`.
+
+**paperless-ai uses `paperless-qwen3:14b`** (qwen3:14b without thinking). For
+batch tagging in the background, accuracy matters more than speed. At 10 GB it
+still leaves ~6 GB for Plex, and it unloads after 10 idle minutes.
+
+### Thinking models and paperless-ai
+
+qwen3 and qwen3.5 think by default. paperless-ai 3.0.9 sends no `think` flag
+and caps answers at `num_predict: 256`, so the model spends all 256 tokens
+thinking and returns an empty answer. Ollama has no Modelfile parameter for
+`think`. `docker/ollama/paperless-qwen3.Modelfile` therefore gives qwen3:14b a
+ChatML template that always opens the answer with an empty
+`<think></think>` block, the same thing qwen3's own template does for
+`think=false`. qwen3.5 uses a built-in renderer that ignores a custom
+template, so it cannot be used this way.
+
+### Sharing the GPU with Plex
+
+Tested 2026-10-21 with qwen3:14b loaded (10.2 GB): a Plex 360p HLS transcode
+ran on the P5000 at the same time. `Plex Transcoder` used 135-207 MiB of VRAM,
+with NVENC at 9-12% and NVDEC at 18-21%. Total VRAM was about 10.3 of 16.4 GB.
+The model stayed at `100% GPU`.
 
 ### Pulling a model
 
