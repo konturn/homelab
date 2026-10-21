@@ -46,6 +46,7 @@ ok             ok    -
 missing-opt    ok    -
 timeout        fail  Fail on Vault read errors
 forbidden      fail  Fail on Vault read errors
+bad-json       fail  Fail on Vault read errors
 missing-path   fail  Fail on missing required Vault paths
 missing-field  fail  Assert all required secrets are present
 empty-field    fail  Assert all required secrets are present

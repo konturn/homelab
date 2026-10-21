@@ -10,7 +10,11 @@
 
 - name: Install dependencies
   apt:
-    name:
+    name: "{{ _apt_packages }}"
+    state: present
+    update_cache: yes
+  vars:
+    _apt_packages:
       - apt-transport-https
       - ca-certificates
       - curl
@@ -18,14 +22,19 @@
       - software-properties-common
       - python3-pip
       - git
-    state: present
-    update_cache: yes
+  # skipped when all are installed (installed_packages: playbook pre_tasks)
+  when: _apt_packages | difference(installed_packages | default([])) | length > 0
 
 - name: Install git
   apt:
-    name: git
+    name: "{{ _apt_packages }}"
     state: present
     update_cache: yes
+  vars:
+    _apt_packages:
+      - git
+  # skipped when all are installed (installed_packages: playbook pre_tasks)
+  when: _apt_packages | difference(installed_packages | default([])) | length > 0
 
 - name: Create keyrings directory
   ansible.builtin.file:
@@ -54,11 +63,7 @@
 
 - name: Install docker
   apt:
-    name:
-      - docker-ce
-      - docker-ce-cli
-      - containerd.io
-      - docker-compose-plugin
+    name: "{{ _apt_packages }}"
     # present + hold, not latest: a docker-ce/containerd upgrade restarts
     # dockerd and with it every container on the host (2026-10-18 deploy).
     # To upgrade deliberately:
@@ -67,6 +72,14 @@
     #   apt-mark hold docker-ce docker-ce-cli containerd.io
     state: present
     update_cache: yes
+  vars:
+    _apt_packages:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+  # skipped when all are installed (installed_packages: playbook pre_tasks)
+  when: _apt_packages | difference(installed_packages | default([])) | length > 0
 
 - name: Hold docker engine packages (upgrades are a manual step)
   ansible.builtin.dpkg_selections:
@@ -94,14 +107,22 @@
 - name: Update APT cache
   ansible.builtin.apt:
     update_cache: yes
-  when: nvidia_container_runtime
+  when:
+    - nvidia_container_runtime
+    # only needed when the install below has something to do
+    - "['nvidia-container-toolkit'] | difference(installed_packages | default([])) | length > 0"
 
 - name: Install NVIDIA Container Toolkit
   apt:
-    name: nvidia-container-toolkit
+    name: "{{ _apt_packages }}"
     state: present
     update_cache: yes
-  when: nvidia_container_runtime
+  vars:
+    _apt_packages:
+      - nvidia-container-toolkit
+  when:
+    - nvidia_container_runtime
+    - _apt_packages | difference(installed_packages | default([])) | length > 0
 
 - name: Make sure docker is started and enabled
   service:

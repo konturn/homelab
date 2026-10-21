@@ -4,14 +4,18 @@
 # via unattended-upgrades.
 - name: Ensure proper packages are installed
   apt:
-    name:
+    name: "{{ _apt_packages }}"
+    state: present
+    update_cache: yes
+  vars:
+    _apt_packages:
       - dnsmasq
       - isc-dhcp-server
       - wireguard
       - netfilter-persistent
       - iptables-persistent
-    state: present
-    update_cache: yes
+  # skipped when all are installed (installed_packages: playbook pre_tasks)
+  when: _apt_packages | difference(installed_packages | default([])) | length > 0
 
 - name: Populate route table list
   ansible.builtin.copy:

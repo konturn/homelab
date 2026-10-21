@@ -1,4 +1,19 @@
 - hosts: zwave.lab.nkontur.com
+  pre_tasks:
+    # Installed package names, so the apt `state: present` tasks in the roles
+    # can skip without a remote apt run (~2-6s each) when nothing is missing.
+    # Where installed_packages is undefined (other playbooks) they run as before.
+    - name: List installed packages
+      ansible.builtin.command:
+        argv: [dpkg-query, -W, "-f=${db:Status-Abbrev}\\t${Package}\\n"]
+      register: _dpkg_installed
+      changed_when: false
+      check_mode: false
+      tags: [always]
+    - name: Record installed packages
+      ansible.builtin.set_fact:
+        installed_packages: "{{ _dpkg_installed.stdout_lines | select('match', '^.i \t') | map('regex_replace', '^...\t', '') | list }}"
+      tags: [always]
   roles:
   - role: fetch-vault-secrets
     vars:

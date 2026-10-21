@@ -26,9 +26,9 @@
   no_log: true
 
 # Every Vault request runs on the controller (delegate_to: localhost), not on
-# the target: a uri call there is one local module run instead of an SSH round
-# trip, and the 40-odd reads below took 25s on the router and 45s on the Pis.
-# The token and the responses only ever lived in controller memory anyway.
+# the target, so no secret-bearing response crosses an SSH session and the
+# reads do not depend on the target's resolver. The token and the responses
+# only ever lived in controller memory anyway.
 
 # ---------------------------------------------------------------------------
 # Step 1: Authenticate to Vault
@@ -113,31 +113,47 @@
 # ---------------------------------------------------------------------------
 # Step 2: Fetch secrets from Vault KV v2
 # ---------------------------------------------------------------------------
-# The read task itself never fails (failed_when: false) so that the next task
-# can name the failing paths; the response bodies stay no_log. Any status
-# other than 200/404 after the retries (timeout = -1, 403, 5xx) fails the
-# play there. 404 is checked against `optional` after that.
-
+# The read task itself never fails on a bad status, so that the next task can
+# name the failing paths; the response bodies stay no_log. Any status other
+# than 200/404 after the retries (timeout = -1, 403, 5xx) fails the play there.
+# 404 is checked against `optional` after that.
+#
+# files/vault_read.py does every read in one controller process (a uri task
+# per path cost 25-50s per deploy) and returns, per path, the same
+# status/json a uri task would; the results are reshaped below into the
+# per-entry list the checks use. The token goes in on stdin, not argv. If the
+# script itself fails, the task fails and the play stops.
 - name: Read each secret path from Vault
-  ansible.builtin.uri:
-    url: "{{ _vault_url }}/{{ vault_kv_mount }}/data/{{ item.path }}"
-    method: GET
-    headers:
-      X-Vault-Token: "{{ _vault_token }}"
-    validate_certs: "{{ not vault_skip_verify }}"
-    timeout: "{{ vault_timeout }}"
-    status_code: [200, 404]
-  register: _vault_raw_responses
+  ansible.builtin.command:
+    argv: ["{{ ansible_playbook_python }}", "{{ role_path }}/files/vault_read.py"]
+    stdin: "{{ {'url': _vault_url ~ '/' ~ vault_kv_mount ~ '/data/',
+                'token': _vault_token,
+                'paths': vault_secret_paths | map(attribute='path') | list,
+                'timeout': vault_timeout | int,
+                'retries': vault_fetch_retries | int,
+                'delay': vault_fetch_delay | int,
+                'skip_verify': vault_skip_verify | bool} | to_json }}"
+  register: _vault_read
+  changed_when: false
+  check_mode: false  # read-only; needed for --check runs
   delegate_to: localhost  # see the note above Step 1
   become: false  # plays may set become; nothing to escalate on the controller
-  check_mode: false
-  until: _vault_raw_responses.status | default(-1) in [200, 404]
-  retries: "{{ vault_fetch_retries }}"
-  delay: "{{ vault_fetch_delay }}"
-  failed_when: false
-  loop: "{{ vault_secret_paths }}"
-  loop_control:
-    label: "{{ item.path }}"
+  no_log: true
+
+- name: Collect Vault read results
+  ansible.builtin.set_fact:
+    _vault_raw_responses:
+      results: >-
+        {%- set by_path = {} -%}
+        {%- for r in (_vault_read.stdout | from_json) -%}
+        {%-   set _ = by_path.update({r.path: r}) -%}
+        {%- endfor -%}
+        {%- set out = [] -%}
+        {%- for e in vault_secret_paths -%}
+        {%-   set r = by_path.get(e.path, {'status': -1}) -%}
+        {%-   set _ = out.append({'item': e, 'status': r.status, 'json': r.json | default({})}) -%}
+        {%- endfor -%}
+        {{ out }}
   no_log: true
 
 - name: Fail on Vault read errors
