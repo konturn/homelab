@@ -35,52 +35,60 @@
     owner: "{{ claude_user_name }}"
     group: "{{ claude_user_group }}"
 
-# Not every host ships every binary (satellite-2 has no `file` or `dig`).
-# Stat first and link only what exists, instead of ignore_errors, which also
-# swallowed real failures in this loop.
-- name: Check which allowed commands exist on this host
-  stat:
-    path: "{{ item.src }}"
-  register: claude_allowed_cmds
-  loop:
-    - { src: /usr/bin/cat, name: cat }
-    - { src: /usr/bin/ls, name: ls }
-    - { src: /usr/bin/head, name: head }
-    - { src: /usr/bin/tail, name: tail }
-    - { src: /usr/bin/grep, name: grep }
-    - { src: /usr/bin/find, name: find }
-    - { src: /usr/bin/df, name: df }
-    - { src: /usr/bin/du, name: du }
-    - { src: /usr/bin/ps, name: ps }
-    - { src: /usr/bin/uptime, name: uptime }
-    - { src: /usr/bin/free, name: free }
-    - { src: /usr/bin/id, name: id }
-    - { src: /usr/bin/whoami, name: whoami }
-    - { src: /usr/bin/hostname, name: hostname }
-    - { src: /usr/bin/date, name: date }
-    - { src: /usr/bin/wc, name: wc }
-    - { src: /usr/bin/sort, name: sort }
-    - { src: /usr/bin/uniq, name: uniq }
-    - { src: /usr/bin/less, name: less }
-    - { src: /usr/bin/stat, name: stat }
-    - { src: /usr/bin/file, name: file }
-    - { src: /usr/bin/journalctl, name: journalctl }
-    - { src: /usr/bin/systemctl, name: systemctl }
-    - { src: /usr/bin/ip, name: ip }
-    - { src: /usr/bin/ss, name: ss }
-    - { src: /usr/bin/dig, name: dig }
-    - { src: /usr/bin/ping, name: ping }
-    - { src: /usr/bin/traceroute, name: traceroute }
-
+# One remote call instead of a stat and a file task per command: the two
+# 28-item loops took ~20s on the router and ~40s on each Pi. Not every host
+# ships every binary (satellite-2 has no `file` or `dig`), so only commands
+# that exist are linked, as <bin>/<basename>. A dest that exists and is not a
+# symlink fails the task (as file: state=link would without force). In check
+# mode nothing is written; the task only reports what it would link.
 - name: Symlink allowed commands into restricted PATH
-  file:
-    src: "{{ item.item.src }}"
-    dest: "/home/{{ claude_user_name }}/bin/{{ item.item.name }}"
-    state: link
-  loop: "{{ claude_allowed_cmds.results }}"
-  loop_control:
-    label: "{{ item.item.name }}"
-  when: item.stat.exists
+  ansible.builtin.shell: |
+    set -eu
+    bin=/home/{{ claude_user_name }}/bin
+    for src in {{ claude_allowed_command_paths | map('quote') | join(' ') }}; do
+      [ -e "$src" ] || continue
+      dest="$bin/$(basename "$src")"
+      [ "$(readlink "$dest" 2>/dev/null || true)" = "$src" ] && continue
+      if [ -e "$dest" ] && [ ! -L "$dest" ]; then
+        echo "$dest exists and is not a symlink" >&2
+        exit 1
+      fi
+      {{ ':' if ansible_check_mode else '' }} ln -sfn "$src" "$dest"
+      echo "link $dest -> $src"
+    done
+  vars:
+    claude_allowed_command_paths:
+      - /usr/bin/cat
+      - /usr/bin/ls
+      - /usr/bin/head
+      - /usr/bin/tail
+      - /usr/bin/grep
+      - /usr/bin/find
+      - /usr/bin/df
+      - /usr/bin/du
+      - /usr/bin/ps
+      - /usr/bin/uptime
+      - /usr/bin/free
+      - /usr/bin/id
+      - /usr/bin/whoami
+      - /usr/bin/hostname
+      - /usr/bin/date
+      - /usr/bin/wc
+      - /usr/bin/sort
+      - /usr/bin/uniq
+      - /usr/bin/less
+      - /usr/bin/stat
+      - /usr/bin/file
+      - /usr/bin/journalctl
+      - /usr/bin/systemctl
+      - /usr/bin/ip
+      - /usr/bin/ss
+      - /usr/bin/dig
+      - /usr/bin/ping
+      - /usr/bin/traceroute
+  register: claude_allowed_links
+  changed_when: claude_allowed_links.stdout | length > 0
+  check_mode: false
 
 - name: Configure restricted .bashrc
   copy:

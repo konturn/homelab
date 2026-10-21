@@ -25,6 +25,11 @@
     vault_secrets_verified: false
   no_log: true
 
+# Every Vault request runs on the controller (delegate_to: localhost), not on
+# the target: a uri call there is one local module run instead of an SSH round
+# trip, and the 40-odd reads below took 25s on the router and 45s on the Pis.
+# The token and the responses only ever lived in controller memory anyway.
+
 # ---------------------------------------------------------------------------
 # Step 1: Authenticate to Vault
 # ---------------------------------------------------------------------------
@@ -44,6 +49,8 @@
         timeout: "{{ vault_timeout }}"
         status_code: [200]
       register: _vault_jwt_response
+      delegate_to: localhost  # see the note above Step 1
+      become: false  # plays may set become; nothing to escalate on the controller
       check_mode: false  # read-only login; needed for --check runs
       until: _vault_jwt_response.status | default(-1) != -1
       retries: "{{ vault_fetch_retries }}"
@@ -79,6 +86,8 @@
         timeout: "{{ vault_timeout }}"
         status_code: [200]
       register: _vault_approle_response
+      delegate_to: localhost  # see the note above Step 1
+      become: false  # plays may set become; nothing to escalate on the controller
       check_mode: false
       until: _vault_approle_response.status | default(-1) != -1
       retries: "{{ vault_fetch_retries }}"
@@ -119,6 +128,8 @@
     timeout: "{{ vault_timeout }}"
     status_code: [200, 404]
   register: _vault_raw_responses
+  delegate_to: localhost  # see the note above Step 1
+  become: false  # plays may set become; nothing to escalate on the controller
   check_mode: false
   until: _vault_raw_responses.status | default(-1) in [200, 404]
   retries: "{{ vault_fetch_retries }}"
@@ -167,19 +178,28 @@
   loop_control:
     label: "{{ item.item.path }}"
 
-- name: Set empty values for missing optional Vault paths
-  ansible.builtin.include_tasks: default_missing_secret.yml
-  loop: "{{ _vault_raw_responses.results | selectattr('status', 'equalto', 404) | list }}"
-  loop_control:
-    loop_var: _vault_missing
-    label: "{{ _vault_missing.item.path }}"
-
+# One controller-side set_fact loop over every (variable, value) pair, instead
+# of an include per path. Optional paths that are missing (404) resolve to "";
+# a field missing from a 200 response resolves to "" here and is rejected by
+# the required-secret assert below unless it is declared optional. Values are
+# trimmed: Vault KV v2 may keep trailing newlines, which break cron jobs, HTTP
+# headers and CLI arguments.
 - name: Map Vault responses to Ansible variable names
-  ansible.builtin.include_tasks: extract_secret.yml
-  loop: "{{ _vault_raw_responses.results | selectattr('status', 'equalto', 200) | list }}"
+  ansible.builtin.set_fact:
+    "{{ item.key }}": "{{ item.value }}"
+  loop: >-
+    {%- set out = [] -%}
+    {%- for r in _vault_raw_responses.results if r.status in [200, 404] -%}
+    {%-   set data = (r.json.data.data | default({}, true)) if r.status == 200 else {} -%}
+    {%-   for var, field in r.item.fields.items() -%}
+    {%-     set _ = out.append({'key': var,
+                                'value': ((data[field] if field in data else '') | string | trim)}) -%}
+    {%-   endfor -%}
+    {%- endfor -%}
+    {{ out }}
   loop_control:
-    loop_var: _vault_response
-    label: "{{ _vault_response.item.path }}"
+    label: "{{ item.key }}"
+  no_log: true
 
 # ---------------------------------------------------------------------------
 # Step 3: Every required secret must be defined and non-empty
@@ -226,6 +246,8 @@
         timeout: "{{ vault_timeout }}"
         status_code: [200]
       register: _vault_ssh_ca_response
+      delegate_to: localhost  # see the note above Step 1
+      become: false  # plays may set become; nothing to escalate on the controller
       check_mode: false
       until: _vault_ssh_ca_response.status | default(-1) == 200
       retries: "{{ vault_fetch_retries }}"
