@@ -17,9 +17,23 @@ LOG_DIR="/var/log/scrub-transcripts"
 LOG_FILE="${LOG_DIR}/scrub.log"
 GITLEAKS_BIN="/usr/local/bin/gitleaks"
 GITLEAKS_CONFIG="/etc/scrub-transcripts/gitleaks-transcripts.toml"
-REPORT_FILE="/tmp/gitleaks-report.json"
 
 mkdir -p "$LOG_DIR"
+
+# One run per directory at a time, and one report file per run. The report used
+# to be a fixed /tmp/gitleaks-report.json shared by every invocation. The
+# openclaw and legacy moltbot cron entries fire at the same minute, so one run
+# read the other's report and then deleted it, and the second run died with
+# `jq: Could not open file` at the TOTAL_FILES line (scrub_aborted exit_code=2,
+# ~200/day from 2026-10-19).
+LOCK_FILE="/run/lock/scrub-transcripts.$(printf '%s' "$TRANSCRIPT_DIR" | md5sum | cut -c1-12).lock"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  echo "scrub already running for $TRANSCRIPT_DIR, skipping" >&2
+  exit 0
+fi
+REPORT_FILE=$(mktemp /tmp/gitleaks-report.XXXXXX.json)
+trap 'rm -f "$REPORT_FILE"' EXIT
 
 if [[ ! -d "$TRANSCRIPT_DIR" ]]; then
   echo "ERROR: Directory does not exist: $TRANSCRIPT_DIR" >&2
@@ -112,27 +126,40 @@ if [[ -f "$REPORT_FILE" ]] && [[ -s "$REPORT_FILE" ]]; then
     # subshell, so every TOTAL_REDACTED increment was discarded and
     # scrub_complete reported secrets_redacted=0 even on a successful redaction.
     # That is the one number anyone would read to decide this thing works.
-    while IFS=$'\t' read -r filepath secret; do
-      if [[ -z "$secret" ]] || [[ -z "$filepath" ]]; then
+    #
+    # The secret travels base64-encoded because @tsv rewrites backslashes, and
+    # JSONL transcripts are full of them. It is replaced as a literal string
+    # (perl \Q...\E), never as a regex. The old sed path escaped + ( ) { ? |
+    # into GNU BRE operators, so any base64 or JSON-escaped secret never matched,
+    # sed -i still exited 0, and the same secrets were "redacted" every 10
+    # minutes (secrets_redacted=34 on every run) while staying in the file.
+    # Rewriting files that did not change also reset their mtime, so the
+    # *.deleted.* purge below never saw anything older than 10 minutes.
+    while IFS=$'\t' read -r filepath secret_b64; do
+      if [[ -z "$secret_b64" ]] || [[ -z "$filepath" ]] || [[ ! -f "$filepath" ]]; then
         continue
       fi
+      secret=$(printf '%s' "$secret_b64" | base64 -d)
+      [[ -n "$secret" ]] || continue
 
-      # Escape special characters for sed
-      escaped_secret=$(printf '%s\n' "$secret" | sed 's/[&/\]/\\&/g; s/[[\.*^$()+?{|]/\\&/g')
-      escaped_redacted='[REDACTED]'
+      # Only touch files that contain the secret, so mtime keeps meaning
+      # "last written by openclaw".
+      grep -qF -- "$secret" "$filepath" || continue
 
-      if sed -i "s|${escaped_secret}|${escaped_redacted}|g" "$filepath" 2>/dev/null; then
+      if SCRUB_SECRET="$secret" perl -pi -e 's/\Q$ENV{SCRUB_SECRET}\E/[REDACTED]/g' "$filepath" \
+        && ! grep -qF -- "$secret" "$filepath"; then
         log_event "SCRUB" "secret_redacted" "file=$(basename "$filepath")"
         TOTAL_REDACTED=$((TOTAL_REDACTED + 1))
+      else
+        log_event "WARN" "redact_failed" "file=$(basename "$filepath")"
       fi
-    done < <(jq -r "$FILTER | .[] | [.File, .Secret] | @tsv" "$REPORT_FILE" | sort -u)
+    done < <(jq -r "$FILTER | .[] | [.File, (.Secret | @base64)] | @tsv" "$REPORT_FILE" | sort -u)
 
     TOTAL_FILES=$(jq -r '[.[].File] | unique | length' "$REPORT_FILE")
   else
     log_event "WARN" "jq_unavailable" "cannot parse gitleaks report without jq"
   fi
 
-  rm -f "$REPORT_FILE"
 fi
 
 log_event "INFO" "scrub_complete" "files=${TOTAL_FILES},secrets_redacted=${TOTAL_REDACTED}"
