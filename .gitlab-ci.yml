@@ -807,7 +807,7 @@ macmini:deploy:
 # =============================================================================
 vault:configure:
   stage: deploy
-  image: alpine:3.19
+  image: alpine:3.24
   environment: admin
   needs: []
   variables:
@@ -841,7 +841,7 @@ vault:configure:
 
 vault:rotate-approles:
   stage: deploy
-  image: alpine:3.19
+  image: alpine:3.24
   environment: admin
   needs:
     - job: router:deploy
@@ -1061,7 +1061,7 @@ vault:rotate-approles:
 vault:validate:
   extends: .interruptible
   stage: validate
-  image: alpine:3.19
+  image: alpine:3.24
   needs: []
   id_tokens:
     VAULT_ID_TOKEN:
@@ -1568,7 +1568,7 @@ router:deploy-service:
 # (Maintainer project access token), so only main's copy of the job sees it.
 gitlab:settings:
   stage: deploy
-  image: alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
+  image: alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
   needs: []
   variables:
     GITLAB_SETTINGS_TOKEN: $APPROLE_ROTATION_PAT
