@@ -2190,7 +2190,7 @@ services:
       retries: 3
       start_period: 30s
   lidarr:
-    image: lscr.io/linuxserver/lidarr:0.8.0.1896-ls5@sha256:37a3df74f4c2a6f10eead66f4d8034362ebf2866f935026b4a71dd888b9e7f08
+    image: lscr.io/linuxserver/lidarr:3.1.0.4875-ls45@sha256:d8549ff9ea29b4015c32257360652c1000c31ea471a2b3f0835ae77292faf35b
     container_name: lidarr
     security_opt:
       - no-new-privileges=true
