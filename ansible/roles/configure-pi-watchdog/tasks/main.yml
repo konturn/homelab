@@ -32,7 +32,8 @@
     # every board; appended after e.g. [cm4] it would only apply to that one.
     insertbefore: '^\['
     firstmatch: true
-    backup: true
+    # No backup: true. The boot partition is FAT, which rejects the ":" in
+    # the backup file name lineinfile uses (EINVAL). The change is one line.
   when: _pi_boot_config | length > 0
   notify: Report that the watchdog dtparam needs a reboot
 
