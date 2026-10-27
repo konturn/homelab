@@ -1,0 +1,10 @@
+# BCM2835 hardware watchdog, petted by systemd (PID 1). No userspace
+# `watchdog` daemon: systemd already does the job and has nothing to misconfigure.
+#
+# RuntimeWatchdogSec: if PID 1 stops petting /dev/watchdog for this long
+# (kernel or systemd hung), the SoC resets the board. The BCM2835 driver's
+# maximum timeout is 15s.
+pi_watchdog_runtime_sec: 15s
+# RebootWatchdogSec: a reboot that stalls in the final stage after this long
+# is forced by the watchdog.
+pi_watchdog_reboot_sec: 2min

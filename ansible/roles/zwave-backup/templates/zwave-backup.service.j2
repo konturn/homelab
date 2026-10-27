@@ -1,0 +1,20 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Pull the zwave-js-ui store from {{ zwave_backup_host }} (ansible/roles/zwave-backup)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=ZWAVE_HOST={{ zwave_backup_host }}
+Environment=ZWAVE_USER={{ zwave_backup_ssh_user }}
+Environment=ZWAVE_VOLUME={{ zwave_backup_volume }}
+Environment=BACKUP_DIR={{ zwave_backup_dir }}
+Environment=STATE_DIR={{ zwave_backup_state_dir }}
+Environment=KEEP={{ zwave_backup_keep }}
+ExecStart=/usr/local/sbin/zwave-backup
+# Small archive, but keep it out of the way of everything else on the router.
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=30min
+SyslogIdentifier=zwave-backup

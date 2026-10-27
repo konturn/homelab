@@ -1,0 +1,16 @@
+# Copy the zwave-js-ui S0/S2 security keys from the store's settings.json to
+# Vault (KV v2 mount vault_kv_mount, i.e. homelab/). Written only when they
+# differ; values are never logged. See docs/DISASTER_RECOVERY.md, "Z-Wave Pi".
+zwave_security_keys_volume: zwave-config
+zwave_security_keys_vault_path: docker/zwave-js-ui
+
+# Vault field <- settings.json key, for zwave.securityKeys and
+# zwave.securityKeysLongRange. Missing or empty keys are left out.
+zwave_security_keys_fields:
+  s0_legacy: S0_Legacy
+  s2_unauthenticated: S2_Unauthenticated
+  s2_authenticated: S2_Authenticated
+  s2_access_control: S2_AccessControl
+zwave_security_keys_lr_fields:
+  s2_authenticated_lr: S2_Authenticated
+  s2_access_control_lr: S2_AccessControl

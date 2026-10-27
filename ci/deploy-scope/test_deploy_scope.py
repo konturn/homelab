@@ -247,5 +247,50 @@ class Coverage(unittest.TestCase):
             ds.select(pb, files)
 
 
+class Unreachable(unittest.TestCase):
+    def test_closed_port_is_unreachable(self):
+        # Bind and close a socket to get a local port nothing listens on.
+        import socket
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+        ok, why = ds.reachable({"host": "127.0.0.1"}, port=port, timeout=2)
+        self.assertFalse(ok)
+        self.assertTrue(why)
+
+    def test_listening_port_is_reachable(self):
+        import socket
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            s.listen(1)
+            ok, why = ds.reachable({"host": "127.0.0.1"}, port=s.getsockname()[1], timeout=2)
+        self.assertTrue(ok, why)
+
+    def test_run_skips_unreachable_host(self):
+        orig_hosts, orig_reach = ds.playbook_hosts, ds.reachable
+        ds.playbook_hosts = lambda pb, inv: [{"name": "h", "host": "192.0.2.1", "user": "root"}]
+        ds.reachable = lambda h, **kw: (False, "No route to host")
+        saved_sha = ds.os.environ.get("CI_COMMIT_SHA")
+        ds.os.environ["CI_COMMIT_SHA"] = "0" * 40
+        try:
+            args = ds.argparse.Namespace(playbook="zwave", private_key="tmp", ansible_args=[])
+            self.assertEqual(ds.cmd_run(args), ds.EXIT_UNREACHABLE)
+        finally:
+            ds.playbook_hosts, ds.reachable = orig_hosts, orig_reach
+            if saved_sha is None:
+                del ds.os.environ["CI_COMMIT_SHA"]
+            else:
+                ds.os.environ["CI_COMMIT_SHA"] = saved_sha
+
+    def test_ci_tolerates_unreachable_exit_code(self):
+        # .gitlab-ci.yml uses !reference, which safe_load rejects: read the job
+        # block as text (up to the next top-level key).
+        text = (ds.REPO / ".gitlab-ci.yml").read_text()
+        for job in ("zwave:deploy",):
+            m = re.search(rf"^{re.escape(job)}:\n((?:[ #].*\n|\n)*)", text, re.M)
+            self.assertIsNotNone(m, job)
+            self.assertRegex(m.group(1), rf"exit_codes: \[{ds.EXIT_UNREACHABLE}\]", job)
+
+
 if __name__ == "__main__":
     unittest.main()

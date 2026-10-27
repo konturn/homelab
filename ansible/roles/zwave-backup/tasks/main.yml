@@ -1,0 +1,62 @@
+# Nightly pull of the zwave-js-ui store from the Z-Wave Pi (router side).
+# The router connects out to the Pi over SSH; nothing on the IoT VLAN needs
+# access to the router. See README.md in this role and docs/backups.md.
+
+- name: Create the zwave backup directory
+  ansible.builtin.file:
+    path: "{{ zwave_backup_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Create the zwave backup state directory (timestamps for telegraf)
+  ansible.builtin.file:
+    path: "{{ zwave_backup_state_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# Seed last_ok once, so the zwave_backup signal starts counting from the
+# first deploy instead of reporting "no data" until the first timer run.
+# force: false never overwrites a timestamp the backup wrote.
+- name: Seed the last_ok timestamp
+  ansible.builtin.copy:
+    dest: "{{ zwave_backup_state_dir }}/last_ok"
+    content: "{{ now(utc=true).strftime('%Y-%m-%dT%H:%M:%SZ') }}\n"
+    force: false
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install the zwave backup script
+  ansible.builtin.copy:
+    src: zwave-backup.sh
+    dest: /usr/local/sbin/zwave-backup
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the zwave backup units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - zwave-backup.service
+    - zwave-backup.timer
+  notify: Reload systemd for zwave-backup
+
+- name: Flush handlers (units must be loaded before the timer is enabled)
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable the zwave backup timer
+  ansible.builtin.systemd:
+    name: zwave-backup.timer
+    state: started
+    enabled: true
+  # In check mode the unit file was not written, so systemd cannot find it.
+  when: not ansible_check_mode

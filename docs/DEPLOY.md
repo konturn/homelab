@@ -93,6 +93,23 @@ runs a full deploy of every host. This corrects drift in roles that
 changed-only deploys skipped. The schedule runs only the deploy jobs: the
 other jobs skip scheduled task pipelines.
 
+## Unreachable hosts
+
+Before reading the marker, `deploy_scope.py run` opens a TCP connection to
+port 22 of each host the playbook targets. If a host does not answer, the job
+prints `=== host unreachable: ...`, runs nothing, leaves the marker alone and
+exits **75**. Because the marker still points at the last successful deploy,
+the first deploy after the host comes back diffs from there and applies every
+change it missed.
+
+`zwave:deploy` lists `allow_failure: exit_codes: [75]`: the Z-Wave Pi is on
+the IoT VLAN and can be offline for hardware reasons, so an offline Pi shows
+as a warning (the pipeline passes with warnings) and does not affect the other
+hosts' deploys, which run in their own jobs anyway. Any other failure,
+including a host that drops mid-run (Ansible's own exit code 4), still fails
+the job. To give another host the same treatment, add the same
+`allow_failure` to its deploy job (and to `test_ci_tolerates_unreachable_exit_code`).
+
 ## Keeping scope.yml correct
 
 `deploy-scope:test` (MR and main, whenever ansible/, docker/, base/,

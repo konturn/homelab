@@ -1,0 +1,7 @@
+# {{ ansible_managed }}
+# Hardware watchdog (bcm2835-wdt) driven by systemd; see
+# ansible/roles/configure-pi-watchdog. Takes effect on `systemctl daemon-reexec`
+# or the next boot.
+[Manager]
+RuntimeWatchdogSec={{ pi_watchdog_runtime_sec }}
+RebootWatchdogSec={{ pi_watchdog_reboot_sec }}

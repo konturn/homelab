@@ -193,6 +193,41 @@ The homelab runs containerized services with data stored on ZFS (mpool) with aut
 4. Start container: `docker start zigbee2mqtt`
 5. Verify all devices are accessible
 
+### Z-Wave (zwave-js-ui on the Z-Wave Pi)
+**Data locations (on the Pi, `zwave.lab.nkontur.com`, 10.6.128.6):**
+- Store: Docker named volume `zwave-config`, mounted at `/usr/src/app/store`
+  (`docker/docker-compose-zwave.yml`), on the Pi's SD card
+- `settings.json` holds the zwave-js-ui settings, including the S0/S2 network
+  security keys; `cache/` holds the Z-Wave JS network cache (`<homeid>.jsonl`)
+  with node interviews and names; `backups/` holds zwave-js-ui's own
+  NVM/store backups when they are enabled in its settings
+
+**Backup (router pulls, nothing on the IoT VLAN connects to the router):**
+- `zwave-backup.timer` on the router, daily at 02:15 (+ up to 10 min random
+  delay), runs `/usr/local/sbin/zwave-backup` (role `ansible/roles/zwave-backup`)
+- It SSHes to the Pi as root, tars the volume (excluding `logs/` and the
+  re-downloadable `.config-db/`) and writes
+  `/persistent_data/application/zwave-backup/zwave-store-<YYYYmmdd-HHMMSS>.tar.gz`
+  (mode 0600; the archive contains the security keys)
+- **Local retention: the newest 7 archives.** Longer history comes from restic:
+  the archives sit under `/persistent_data/application`, which is in
+  `restic_folders`, and the pull finishes before `restic-backup.timer` (03:00),
+  so each night's archive is in that night's B2 snapshot and kept for restic's
+  90 days. Restic is not installed on the Pi.
+- The S0/S2 keys are also copied to Vault on every zwave deploy (nightly full
+  deploy included): `homelab/docker/zwave-js-ui` (role
+  `ansible/roles/zwave-security-keys`, written only when they change)
+
+**Monitoring:** each good run writes `/var/lib/zwave-backup/last_ok`; telegraf
+sends it as measurement `zwave_backup`, and the anomaly detector's
+`zwave_backup` signal goes moderate at 26h and severe at 36h. A night when the
+Pi does not answer ping counts as good (logged as "skipped"): the host-down
+signals (`network_devices`, `telegraf_hosts`, `zwave_influx_data`) already
+alert on that, so a known-down Pi does not alert twice. While the Pi is down
+no new archive is written; the last 7 archives (and restic's history) remain.
+
+**Restore:** see `docs/DISASTER_RECOVERY.md`, "Z-Wave Pi".
+
 ### Additional Services
 
 **Grafana:**
@@ -529,6 +564,6 @@ what surfaces it. Details and remediation: `ansible/roles/restic/README.md`.
 
 ---
 
-**Last updated:** 2026-10-10  
+**Last updated:** 2026-10-27  
 **Review schedule:** Quarterly  
 **Owner:** Infrastructure Team

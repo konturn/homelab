@@ -22,12 +22,17 @@
     tags: [always]
     vars:
       fetch_ssh_ca_key: true
+  # Directly after fetch-vault-secrets: it reuses that role's 5-minute token.
+  - role: zwave-security-keys
+    tags: [zwave-security-keys]
   - role: claude-user
     tags: [claude-user]
     vars:
       claude_user_principal: claude-zwave
   - role: configure-zwave
     tags: [configure-zwave]
+  - role: configure-pi-watchdog
+    tags: [configure-pi-watchdog]
   - role: configure-snapclient
     tags: [configure-snapclient]
   - role: configure-docker

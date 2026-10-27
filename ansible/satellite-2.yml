@@ -28,6 +28,8 @@
         claude_user_principal: claude-satellite
     - role: configure-scanner
       tags: [configure-scanner]
+    - role: configure-pi-watchdog
+      tags: [configure-pi-watchdog]
     - role: configure-docker
       tags: [configure-docker]
     - role: deploy-compose

@@ -117,6 +117,7 @@ variables:
         - ansible/roles/fetch-vault-secrets/**/*
         - ansible/roles/restic/**/*
         - ansible/roles/configure-excel-vm/**/*
+        - ansible/roles/zwave-backup/**/*
         - docker/docker-compose.yml
         - docker/**/*
         - networking/**/*
@@ -133,6 +134,8 @@ variables:
         - ansible/inventory.yml
         - ansible/roles/configure-zwave/**/*
         - ansible/roles/configure-snapclient/**/*
+        - ansible/roles/zwave-security-keys/**/*
+        - ansible/roles/configure-pi-watchdog/**/*
         - ansible/roles/deploy-compose/**/*
         - docker/docker-compose-zwave.yml
         - docker/docker-compose-observability.yml
@@ -150,6 +153,7 @@ variables:
         - ansible/satellite-2.yml
         - ansible/inventory.yml
         - ansible/roles/configure-satellite/**/*
+        - ansible/roles/configure-pi-watchdog/**/*
         - ansible/roles/deploy-compose/**/*
         - docker/docker-compose-observability.yml
         - docker/docker-compose-satellite.yml
@@ -725,6 +729,16 @@ zwave:deploy:
   needs:
     - job: zwave:validate
       optional: true
+    # The zwave-security-keys role writes to Vault under a path the ci-deploy
+    # policy (terraform/vault) grants; apply a policy change first.
+    - job: vault:configure
+      optional: true
+  # The Z-Wave Pi sits on the IoT VLAN and can be offline (hardware). When
+  # port 22 does not answer, deploy_scope.py deploys nothing, keeps the marker
+  # and exits 75: a warning, not a failed pipeline. The next deploy after the
+  # host returns applies everything it missed. Real deploy failures still fail.
+  allow_failure:
+    exit_codes: [75]
   script:
     # Runs only the roles whose inputs changed since the last successful
     # deploy to the host (full deploy when in doubt); see docs/DEPLOY.md.

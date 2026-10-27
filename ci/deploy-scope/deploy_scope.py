@@ -20,6 +20,14 @@ Full deploy when: DEPLOY_FULL is set; the pipeline was not started by a push
 or unreadable; the base commit cannot be fetched; a changed path is a shared
 file (inventory, CI, fetch-vault-secrets, base/validate, this directory, the
 playbook itself...) or matches no rule in scope.yml.
+
+Unreachable host: before anything else, `run` opens a TCP connection to
+port 22 of every host the playbook targets. If one does not answer, it
+prints why and exits EXIT_UNREACHABLE (75) without running Ansible or
+touching any marker, so the next deploy after the host returns diffs from
+its last successful deploy and applies everything it missed. CI jobs for
+hosts that may be offline list 75 under allow_failure:exit_codes, so an
+offline host shows as a warning instead of failing the pipeline.
 """
 from __future__ import annotations
 
@@ -29,6 +37,7 @@ import json
 import os
 import re
 import shlex
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -42,6 +51,8 @@ SCOPE_FILE = HERE / "scope.yml"
 ANSIBLE_DIR = REPO / "ansible"
 MARKER_DIR = "/var/lib/homelab-deploy"
 ALWAYS_ROLES = ("fetch-vault-secrets",)
+# EX_TEMPFAIL: a target host does not accept connections on port 22.
+EXIT_UNREACHABLE = 75
 
 FULL = "FULL"
 
@@ -185,6 +196,15 @@ def ssh(host: dict, key: str, command: str) -> subprocess.CompletedProcess:
         capture_output=True, text=True, timeout=60)
 
 
+def reachable(host: dict, port: int = 22, timeout: float = 10.0) -> Tuple[bool, str]:
+    """(True, "") if a TCP connection to host:port opens, else (False, reason)."""
+    try:
+        with socket.create_connection((host["host"], port), timeout=timeout):
+            return True, ""
+    except OSError as e:
+        return False, str(e) or e.__class__.__name__
+
+
 def read_marker(host: dict, key: str, playbook: str) -> Optional[str]:
     try:
         r = ssh(host, key, f"cat {MARKER_DIR}/{playbook}.sha 2>/dev/null || true")
@@ -258,6 +278,16 @@ def cmd_run(args) -> int:
     hosts = playbook_hosts(pb, inventory)
 
     print(f"=== deploy scope: {pb}.yml at {head[:12]} on {', '.join(h['name'] for h in hosts)}")
+    down = []
+    for h in hosts:
+        ok, why = reachable(h)
+        if not ok:
+            down.append(f"{h['name']} ({h['host']}:22: {why})")
+    if down:
+        print(f"=== host unreachable: {'; '.join(down)}")
+        print("=== nothing deployed and no marker changed; the next deploy after the "
+              "host is back diffs from its last successful deploy")
+        return EXIT_UNREACHABLE
     decision, explain, reason = None, [], forced_full_reason(env)
     if reason is None:
         changed: set = set()

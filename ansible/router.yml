@@ -48,6 +48,8 @@
     tags: [configure-notifications]
   - role: configure-excel-vm
     tags: [excel-vm, configure-excel-vm]
+  - role: zwave-backup
+    tags: [zwave-backup]
   - role: restic
     tags: [restic]
     vars:

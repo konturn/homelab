@@ -1,0 +1,12 @@
+# No handler here reboots the host. The systemd settings apply on
+# daemon-reexec (PID 1 re-executes in place; services keep running). The
+# dtparam only applies at the next boot; that is reported, not acted on.
+- name: Re-exec systemd for the watchdog settings
+  ansible.builtin.systemd:
+    daemon_reexec: true
+
+- name: Report that the watchdog dtparam needs a reboot
+  ansible.builtin.debug:
+    msg: >-
+      dtparam=watchdog=on was added to {{ _pi_boot_config }}. It takes effect
+      at the next reboot of {{ inventory_hostname }}; nothing was rebooted.

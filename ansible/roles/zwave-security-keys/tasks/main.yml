@@ -1,0 +1,134 @@
+# Copy the zwave-js-ui S0/S2 keys from <store>/settings.json on the Z-Wave Pi
+# to Vault at {{ vault_kv_mount }}/{{ zwave_security_keys_vault_path }}.
+#
+# Runs right after fetch-vault-secrets in ansible/zwave.yml and reuses its
+# token (ci-deploy, 5-minute TTL; the policy allows read/create/update on this
+# one path, terraform/vault/policies.tf). Every task that touches the values
+# is no_log. Vault requests run on the controller, like fetch-vault-secrets.
+#
+# Nothing to copy (no volume or no settings.json, e.g. a fresh SD card before
+# the store is restored): note it and carry on. The deploy must not fail
+# because zwave-js-ui has not been set up yet.
+
+- name: Find the zwave-js-ui store volume
+  ansible.builtin.command:
+    argv: [docker, volume, inspect, -f, "{{ '{{' }}.Mountpoint{{ '}}' }}", "{{ zwave_security_keys_volume }}"]
+  register: _zwk_volume
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Check for settings.json in the store
+  ansible.builtin.stat:
+    path: "{{ _zwk_volume.stdout | trim }}/settings.json"
+  register: _zwk_settings_stat
+  when: _zwk_volume.rc == 0
+
+- name: Note that there are no keys to copy
+  ansible.builtin.debug:
+    msg: >-
+      No {{ zwave_security_keys_volume }} volume or no settings.json in it;
+      Z-Wave security keys not copied to Vault.
+  when: _zwk_volume.rc != 0 or not (_zwk_settings_stat.stat.exists | default(false))
+
+- name: Copy the Z-Wave security keys to Vault
+  when:
+    - _zwk_volume.rc == 0
+    - _zwk_settings_stat.stat.exists | default(false)
+  block:
+    - name: Read settings.json
+      ansible.builtin.slurp:
+        src: "{{ _zwk_volume.stdout | trim }}/settings.json"
+      register: _zwk_settings
+      no_log: true
+
+    - name: Extract the security keys
+      ansible.builtin.set_fact:
+        _zwk_keys: >-
+          {%- set z = (_zwk_settings.content | b64decode | from_json).zwave | default({}) -%}
+          {%- set out = {} -%}
+          {%- for field, key in zwave_security_keys_fields.items() -%}
+          {%-   set v = (z.securityKeys | default({}, true)).get(key, '') | string | trim -%}
+          {%-   if v | length > 0 -%}{%- set _ = out.update({field: v}) -%}{%- endif -%}
+          {%- endfor -%}
+          {%- for field, key in zwave_security_keys_lr_fields.items() -%}
+          {%-   set v = (z.securityKeysLongRange | default({}, true)).get(key, '') | string | trim -%}
+          {%-   if v | length > 0 -%}{%- set _ = out.update({field: v}) -%}{%- endif -%}
+          {%- endfor -%}
+          {{ out }}
+      no_log: true
+
+    - name: Note that settings.json has no security keys
+      ansible.builtin.debug:
+        msg: "settings.json has no S0/S2 security keys; nothing copied to Vault."
+      when: _zwk_keys | length == 0
+
+    - name: Read the stored keys from Vault
+      ansible.builtin.uri:
+        url: "{{ _vault_url }}/{{ vault_kv_mount }}/data/{{ zwave_security_keys_vault_path }}"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ _vault_token }}"
+        validate_certs: "{{ not vault_skip_verify }}"
+        timeout: "{{ vault_timeout }}"
+        status_code: [200, 404]
+      register: _zwk_vault
+      delegate_to: localhost
+      become: false
+      check_mode: false  # read-only
+      when: _zwk_keys | length > 0
+      no_log: true
+
+    # Merge onto what is stored so fields added by hand are kept.
+    - name: Compare with Vault
+      ansible.builtin.set_fact:
+        _zwk_current: "{{ _zwk_current_v }}"
+        _zwk_wanted: "{{ _zwk_current_v | combine(_zwk_keys) }}"
+      vars:
+        _zwk_current_v: >-
+          {{ ((_zwk_vault.json | default({})).data | default({})).data | default({}, true)
+             if _zwk_vault.status | default(0) == 200 else {} }}
+      when: _zwk_keys | length > 0
+      no_log: true
+
+    - name: Write the security keys to Vault
+      ansible.builtin.uri:
+        url: "{{ _vault_url }}/{{ vault_kv_mount }}/data/{{ zwave_security_keys_vault_path }}"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ _vault_token }}"
+        body_format: json
+        body:
+          data: "{{ _zwk_wanted }}"
+        validate_certs: "{{ not vault_skip_verify }}"
+        timeout: "{{ vault_timeout }}"
+        status_code: [200, 204]
+      register: _zwk_write
+      changed_when: true
+      delegate_to: localhost
+      become: false
+      when:
+        - _zwk_keys | length > 0
+        - _zwk_wanted != _zwk_current
+      no_log: true
+
+    # KV v2 keeps earlier versions: if keys that were already stored changed
+    # (for example a fresh zwave-js-ui generated new ones before the store was
+    # restored), the old ones are still readable as the previous version.
+    - name: Report the Vault update
+      ansible.builtin.debug:
+        msg: >-
+          Z-Wave security keys
+          {{ 'written to' if _zwk_write is changed
+             else ('would be written to (check mode)' if _zwk_wanted != _zwk_current
+                   else 'unchanged at') }}
+          {{ vault_kv_mount }}/{{ zwave_security_keys_vault_path }}
+          (fields: {{ _zwk_keys.keys() | sort | join(', ') }}).
+          {% if _zwk_write is changed and _zwk_prev_version | int > 0 %}
+          Stored keys differed; the previous ones are version {{ _zwk_prev_version }}
+          of that secret.{% endif %}
+      vars:
+        _zwk_prev_version: >-
+          {{ (((_zwk_vault.json | default({})).data | default({})).metadata | default({}, true)).version | default(0)
+             if _zwk_vault.status | default(0) == 200 and _zwk_current | length > 0 else 0 }}
+      when: _zwk_keys | length > 0
