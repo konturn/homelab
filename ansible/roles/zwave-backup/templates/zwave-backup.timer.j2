@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Nightly zwave-js-ui store backup (before restic-backup.timer)
+
+[Timer]
+OnCalendar={{ zwave_backup_on_calendar }}
+RandomizedDelaySec={{ zwave_backup_randomized_delay }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

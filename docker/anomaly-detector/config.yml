@@ -322,6 +322,24 @@ signals:
         window: 30m
         above: {moderate: 25}
 
+  # Nightly zwave-js-ui store pull (ansible/roles/zwave-backup). The value is
+  # the time of the last good run, written by the backup into
+  # /var/lib/zwave-backup/last_ok and read by telegraf. A night when the Pi
+  # does not answer ping also counts as good: network_devices, telegraf_hosts
+  # and zwave_influx_data already page for that, so this only fires when the
+  # Pi is up and the backup fails or stops running.
+  - name: zwave_backup
+    description: Nightly Z-Wave store backup to the router has not succeeded (Pi up, backup failing or not running)
+    owner: infra
+    category: infrastructure
+    source: {bucket: metrics, measurement: zwave_backup, field: value, to_float: false}
+    checks:
+      - type: stale
+        age_from: value
+        lookback: 7d
+        interval: 15m
+        max_age: {moderate: 26h, severe: 36h}
+
   - name: container_restarts
     description: Container restarts per hour across all hosts
     owner: infra

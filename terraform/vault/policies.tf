@@ -1,7 +1,8 @@
 # =============================================================================
 # Policy: ci-deploy
 # =============================================================================
-# Full read access to all secrets in the homelab KV v2 engine.
+# Full read access to all secrets in the homelab KV v2 engine, plus write on
+# one path (Z-Wave security keys, see below).
 # Used by CI/CD pipelines to pull configuration during deployment.
 
 resource "vault_policy" "ci_deploy" {
@@ -21,6 +22,13 @@ resource "vault_policy" "ci_deploy" {
     # SSH CA public key (for TrustedUserCAKeys on target hosts)
     path "ssh-client-signer/config/ca" {
       capabilities = ["read"]
+    }
+
+    # zwave-js-ui S0/S2 keys, copied from the Z-Wave Pi's store on deploy
+    # (ansible/roles/zwave-security-keys). The only path ci-deploy writes.
+    # An exact path overrides the homelab/data/* glob, so read is repeated.
+    path "homelab/data/docker/zwave-js-ui" {
+      capabilities = ["read", "create", "update"]
     }
   EOT
 }

@@ -212,6 +212,65 @@ Restart services after restoring: `cd /persistent_data/application/ansible_state
 
 ---
 
+## Z-Wave Pi (new SD card or SSD)
+
+The Z-Wave network lives in the USB stick (Zooz ZST10 700) and in
+zwave-js-ui's store. The store is backed up nightly to the router
+(`docs/backups.md`, "Z-Wave"); the S0/S2 keys are also in Vault at
+`homelab/docker/zwave-js-ui` (fields `s0_legacy`, `s2_unauthenticated`,
+`s2_authenticated`, `s2_access_control`, and `s2_authenticated_lr` /
+`s2_access_control_lr` when Long Range keys exist). Without the keys, secure
+devices (locks, garage) have to be excluded and re-included.
+
+1. Flash Raspberry Pi OS Lite onto the new card or SSD and boot the Pi with
+   the Z-Wave stick plugged in. It gets 10.6.128.6 from the router's DHCP
+   (`zwave_mac` in the inventory).
+2. Enable root SSH with the router's key, then update the pinned host keys:
+   the new install has new ones, so both `ansible/known_hosts` (CI,
+   `docs/DEPLOY.md` "SSH host keys") and the router's `/root/.ssh/known_hosts`
+   (used by `zwave-backup.service`) need the new entries
+   (`ssh-keygen -R 10.6.128.6; ssh-keygen -R zwave.lab.nkontur.com`, then
+   connect once from the router and check the fingerprint).
+3. Run a full zwave deploy (*Run pipeline* on `main`, or let the nightly full
+   deploy do it). This installs Docker, creates the empty `zwave-config`
+   volume and starts zwave-js-ui. Then stop the container straight away:
+   `docker stop zwavejs2mqtt`.
+   A fresh zwave-js-ui may generate new security keys. If a deploy copies them
+   to Vault before the store is restored (the deploy log says "Stored keys
+   differed; the previous ones are version N"), the real keys are still in
+   Vault as that earlier version of `homelab/docker/zwave-js-ui`
+   (`vault kv get -version=N homelab/docker/zwave-js-ui`). Once the restored
+   store is running, the next deploy writes the restored keys back.
+4. Copy the newest archive from the router and unpack it into the volume:
+   ```bash
+   # on the router
+   ls -t /persistent_data/application/zwave-backup/   # newest first
+   scp /persistent_data/application/zwave-backup/zwave-store-<ts>.tar.gz root@10.6.128.6:/root/
+   # on the Pi
+   mp=$(docker volume inspect -f '{{.Mountpoint}}' zwave-config)
+   rm -rf "${mp:?}"/* "${mp:?}"/.[!.]*
+   tar -C "$mp" -xzf /root/zwave-store-<ts>.tar.gz
+   docker start zwavejs2mqtt
+   ```
+   Older archives: restic snapshots of the router (`restic restore latest
+   --target /tmp/zw --include /persistent_data/application/zwave-backup`).
+5. Check in the zwave-js-ui UI (http://10.6.128.6:8091) that the controller
+   comes up with the old home ID and that the nodes keep their names.
+   If `settings.json` was lost but the network cache was not, enter the keys
+   from Vault under *Settings → Z-Wave → Security keys* (read them with a
+   Vault token that can read `homelab/docker/zwave-js-ui`; do not paste them
+   anywhere else).
+6. Home Assistant reconnects through the Z-Wave JS websocket on port 3000.
+7. Reboot once so the hardware watchdog dtparam (`configure-pi-watchdog`)
+   takes effect.
+
+If the stick itself is lost, the store alone does not bring the network back:
+restore the controller NVM from a zwave-js-ui NVM backup (in the archive under
+`backups/nvm/`, when NVM backups are enabled) onto a replacement stick with
+*Advanced actions → NVM management → Restore*.
+
+---
+
 ## Verification
 
 ```bash

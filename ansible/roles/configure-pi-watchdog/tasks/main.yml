@@ -1,0 +1,54 @@
+# Enable the Raspberry Pi hardware watchdog and let systemd pet it.
+#   1. dtparam=watchdog=on in the firmware config (next boot);
+#   2. RuntimeWatchdogSec / RebootWatchdogSec drop-in (daemon-reexec).
+# Never reboots on its own; see handlers/main.yml.
+
+# Bookworm and later: /boot/firmware/config.txt (/boot/config.txt is then a
+# stub that says not to edit it). Bullseye and earlier: /boot/config.txt.
+- name: Look for the firmware config
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /boot/firmware/config.txt
+    - /boot/config.txt
+  register: _pi_boot_config_stat
+
+- name: Pick the firmware config file
+  ansible.builtin.set_fact:
+    _pi_boot_config: >-
+      {{ (_pi_boot_config_stat.results | selectattr('stat.exists') | map(attribute='item') | list + [''])[0] }}
+
+- name: Note a host without a Raspberry Pi firmware config
+  ansible.builtin.debug:
+    msg: "No /boot/firmware/config.txt or /boot/config.txt on {{ inventory_hostname }}; dtparam not set."
+  when: _pi_boot_config | length == 0
+
+- name: Enable the watchdog in the firmware config
+  ansible.builtin.lineinfile:
+    path: "{{ _pi_boot_config }}"
+    regexp: '^\s*#?\s*dtparam=watchdog='
+    line: dtparam=watchdog=on
+    # A new line goes above the first [filter] section, where it applies to
+    # every board; appended after e.g. [cm4] it would only apply to that one.
+    insertbefore: '^\['
+    firstmatch: true
+    backup: true
+  when: _pi_boot_config | length > 0
+  notify: Report that the watchdog dtparam needs a reboot
+
+- name: Create the systemd manager drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configure the systemd hardware watchdog
+  ansible.builtin.template:
+    src: watchdog.conf.j2
+    dest: /etc/systemd/system.conf.d/watchdog.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Re-exec systemd for the watchdog settings

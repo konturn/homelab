@@ -1,0 +1,20 @@
+# Nightly pull of the zwave-js-ui store from the Z-Wave Pi to the router.
+# See ansible/roles/zwave-backup/README.md and docs/backups.md.
+
+zwave_backup_host: "{{ zwave_address }}"
+zwave_backup_ssh_user: root
+# Docker named volume mounted at /usr/src/app/store (docker/docker-compose-zwave.yml)
+zwave_backup_volume: zwave-config
+# Under /persistent_data/application, which restic-backup.service already
+# sends to B2 (ansible/router.yml restic_folders), so each archive rides the
+# next 03:00 offsite snapshot and restic's 90-day retention keeps history.
+zwave_backup_dir: "{{ docker_persistent_data_path }}/zwave-backup"
+# Local copies only; history lives in restic.
+zwave_backup_keep: 7
+# Before restic-backup.timer (03:00) so the archive is in that night's snapshot.
+zwave_backup_on_calendar: "*-*-* 02:15:00"
+zwave_backup_randomized_delay: 10min
+# Timestamp files read by telegraf (no archive contents): last_ok is written
+# after a successful backup, or when the host does not answer ping (host-down
+# alerts already cover that case), and feeds the zwave_backup anomaly signal.
+zwave_backup_state_dir: /var/lib/zwave-backup
