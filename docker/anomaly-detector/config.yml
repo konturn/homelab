@@ -118,6 +118,23 @@ signals:
         lookback: 2d
         max_age: {moderate: 15m, severe: 1h}
 
+  # miniDSP 2x4HD units on the Z-Wave Pi (docs/minidsp.md). telegraf on the Pi
+  # polls minidspd per serial every minute; a unit that drops off USB (or a
+  # stopped minidspd) stops writing points. Pi-down is covered by
+  # telegraf_hosts, so this stays moderate.
+  - name: minidsp_units
+    description: miniDSP 2x4HD unit not readable through minidspd on the Z-Wave Pi (unit off USB, powered off, or minidspd down)
+    owner: house
+    category: gone_quiet
+    max_severity: moderate
+    source: {bucket: metrics, measurement: minidsp, field: preset}
+    group_by: [serial]
+    checks:
+      - type: stale
+        lookback: 7d
+        interval: 15m
+        max_age: {moderate: 15m}
+
   - name: weather_station
     description: Ambient weather station data stopped arriving
     owner: house

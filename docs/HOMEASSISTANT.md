@@ -7,6 +7,26 @@ Home Assistant runs as the `homeassistant` container on the router. Only
 `scripts.yaml`, `custom_components/`) lives only on the live volume and is
 covered by the normal backups, not by git.
 
+Automations are deliberately not in git: they are edited in the UI and stay
+in `automations.yaml` on the volume. Only the pieces they call (REST
+commands, sensors) are in `configuration.yaml`.
+
+## miniDSP (bass boost)
+
+The two miniDSP 2x4HD units on the Z-Wave Pi are described in
+`docs/minidsp.md`, including the rule that nothing may write to them except
+the existing bass-boost automation.
+
+- `rest_command.bass_boost` and `rest_command.bass_boost_2` set the preset on
+  units 919619 and 921284 (`/devices/<serial>/config`, addressed by serial so
+  USB re-enumeration cannot swap them): 0 = normal when
+  `input_boolean.bass_boost` is off, 1 = bass boost when it is on.
+- The automation "Change Minidsp on base boost" (live volume) calls both on
+  every off -> on / on -> off change of `input_boolean.bass_boost`.
+- Read-only status per unit: `sensor.minidsp_<serial>_preset`, `_source`,
+  `_volume` and `binary_sensor.minidsp_<serial>_mute`. Levels are in InfluxDB
+  (`metrics` bucket, measurement `minidsp`).
+
 ## HTTP settings (not in YAML)
 
 Since 2026.10, Home Assistant imports the `http:` YAML block into
