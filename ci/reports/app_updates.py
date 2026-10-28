@@ -151,6 +151,10 @@ def _wp_items(kind: str) -> List[Tuple[str, Optional[str]]]:
 
 
 def check_wordpress() -> dict:
+    # The blog is static now; WordPress only runs during an edit session.
+    running = common.run(["docker", "inspect", "-f", "{{.State.Running}}", "wordpress"]).stdout.strip()
+    if running != "true":
+        return {}
     r = docker_exec("wordpress", ["php", "-r", "include '/var/www/html/wp-includes/version.php'; echo $wp_version;"])
     if r.returncode != 0:
         return {"error": common.clip(r.stderr or f"rc={r.returncode}", 80)}

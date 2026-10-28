@@ -102,7 +102,7 @@ Internet-facing services proxied through nginx:
 | Plex | `plex` | Media streaming |
 | Bitwarden | `bitwarden` | Password manager |
 | Nextcloud | `nextcloud` | File sync/share |
-| WordPress | `wordpress` | Blog |
+| ~~WordPress~~ | `wordpress` | Retired: blog is static files on nginx (docker/wordpress/README.md) |
 | Ombi | `ombi` | Plex requests |
 | AudioServe | `audioserve` | Audiobook streaming |
 | Home Assistant | `homeassistant` | Smart home (also on internal/iot) |

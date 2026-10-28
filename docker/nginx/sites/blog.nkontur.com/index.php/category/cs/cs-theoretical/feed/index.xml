@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"
+	xmlns:content="http://purl.org/rss/1.0/modules/content/"
+	xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+	xmlns:dc="http://purl.org/dc/elements/1.1/"
+	xmlns:atom="http://www.w3.org/2005/Atom"
+	xmlns:sy="http://purl.org/rss/1.0/modules/syndication/"
+	xmlns:slash="http://purl.org/rss/1.0/modules/slash/"
+	>
+
+<channel>
+	<title>Computer Science (Theoretical) &#8211; Jack of All Trades</title>
+	<atom:link href="https://blog.nkontur.com/index.php/category/cs/cs-theoretical/feed/" rel="self" type="application/rss+xml" />
+	<link>https://blog.nkontur.com</link>
+	<description>(Master of Some)</description>
+	<lastBuildDate>Mon, 19 Oct 2026 14:24:27 +0000</lastBuildDate>
+	<language>en-US</language>
+	<sy:updatePeriod>
+	hourly	</sy:updatePeriod>
+	<sy:updateFrequency>
+	1	</sy:updateFrequency>
+	<generator>https://wordpress.org/?v=7.1.3</generator>
+	<item>
+		<title>Formula-Game: Using Game Theory to Analyze the Probabilistic Features of True Quantified Boolean Formulas</title>
+		<link>https://blog.nkontur.com/index.php/2021/01/25/formula-game-using-game-theory-to-analyze-the-probabilistic-features-of-true-quantified-boolean-formulas/</link>
+					<comments>https://blog.nkontur.com/index.php/2021/01/25/formula-game-using-game-theory-to-analyze-the-probabilistic-features-of-true-quantified-boolean-formulas/#respond</comments>
+		
+		<dc:creator><![CDATA[Noah Kontur]]></dc:creator>
+		<pubDate>Mon, 25 Jan 2021 18:45:32 +0000</pubDate>
+				<category><![CDATA[Computer Science (Theoretical)]]></category>
+		<guid isPermaLink="false">https://nkontur.com/blog/?p=68</guid>
+
+					<description><![CDATA[Note: I&#8217;ve written some code which I used to verify some of the results presented in this post&#8211;you can access it here. Last semester, I took a class on the theory of computation, where I learned about computational complexity and the so-called Complexity Zoo. One of the complexity classes we considered was PSPACE, the class [&#8230;]]]></description>
+										<content:encoded><![CDATA[
+<p class="has-medium-font-size wp-block-paragraph">Note: I&#8217;ve written some code which I used to verify some of the results presented in this post&#8211;you can access it <a href="https://github.com/konturn/Minimax-Formula-Game">here</a>.</p>
+
+
+
+<p class="has-normal-font-size wp-block-paragraph">Last semester, I took a class on the theory of computation, where I learned about computational complexity and the so-called <a href="https://complexityzoo.net/Complexity_Zoo">Complexity Zoo</a>. One of the complexity classes we considered was PSPACE, the class of all problems solvable in polynomial space. Within this class, there are some problems that are PSPACE-Complete; roughly speaking, these problems are at least as hard to solve as any other problem in PSPACE. As Sipster shows in his <em>Introduction to the Theory of Computation</em>, the problem of determining the truth value of a True Quantified Boolean Formula (TQBF for short) is PSPACE-Complete. As a recap, a boolean formula is an expression consisting of variables which may be true or false, along with the set of logical connectives (not ($\not$), and ($\land$), and ($\lor$), usually) which establish a relationship between these variables. Here is an example of one: </p>
+
+
+
+<p class="wp-block-paragraph">$(x_1 \land \neg x_2 \land x_3) \lor \neg x_1$</p>
+
+
+
+<p class="has-normal-font-size wp-block-paragraph">For this formula to be true, either $x_1$ must be true AND $x_2$ must be false AND $x_3$ must be true, OR $x_1$ must be false. While oblique to this particular discussion, there are many interesting and computationally difficult problems involving boolean formulas. For instance, the problem of determining whether an arbitrary boolean formula is satisfiable&#8211;that is, if there is some assignment of values to variables that make the whole formula true&#8211;is NP-Complete.</p>
+
+
+
+<p class="wp-block-paragraph">Quantified boolean formulas are just like boolean formulas, except the variables within the boolean expressions are optionally bound by quantifiers. The two quantifiers we consider today are existential ($\exists$) and universal ($\forall$). A formula with a variable bound by an existential quantifier is true if there is some assignment of the bound variable for which the entire formula true. A formula with a variable bound by an existential quantifier is true if  each assignment of the bound variable makes the entire formula true. A true quantified boolean formula is a quantified formula for which every variable is bound. For instance, we can modify the first example to get an instance of TQBF:</p>
+
+
+
+<p class="wp-block-paragraph">$\exists x_1 \forall x_2 \exists x_3 [(x_1 \land \neg x_2 \land x_3) \lor \neg x_1]$</p>
+
+
+
+<p class="wp-block-paragraph">In English, this formula translates to, &#8220;There is a choice of $x_1$ so that for any choice of $x_2$, there is a  choice of $x_3$ for which the formula is true&#8221;. Therefore, this instance of TQBF is true, since assigning $x_1$ false will always make the inner boolean formula true no matter what. </p>
+
+
+
+<p class="wp-block-paragraph">What I&#8217;d like to do here is briefly investigate the probabilistic properties of Truly Quantified Boolean Formulas. Without loss of generality, we can convert any TQBF instance to prenex normal form, which basically means pulling the quantifiers to the very outer parentheses of the boolean formula as shown in the example above. As a warmup, it is easy to show that determining the satisfiability of a regular boolean formula is equivalent to determining the truth value of the analogous TQBF instance where all the quantifiers are existential. For example, finding whether the formula $(x_1 \land \neg x_2 \land x_3) \lor \neg x_1$ has a satisfying assignment is the same as finding whether $\exists x_1 \exists x_2 \exists x_3[(x_1 \land \neg x_2 \land x_3) \lor \neg x_1]$ is true. From a probabilistic perspective, one might want to consider the chance that a random boolean formula is satisfiable. We first define a template for random selection of boolean formulas. We could certainly define randomness with respect to the formula&#8217;s symbols and variables, but this quickly becomes unwieldy. Furthermore, since there can be an arbitrary amount of variables appearing in a boolean formula, we couldn&#8217;t just uniformly select the number of variables appearing in the formula at random (how does one uniformly select a random number between 0 and infinity?). We instead opt to fix the number of variables N and randomly select outputs in the  formula&#8217;s <em>truth table</em>. For any given formula $\phi$ with N variables, there are $2^N$ entries in the truth table. For $\phi$ to not be satisfiable, we would thus require that every entry in the truth variable evaluates to false, which occurs with probability $2^{-N}$. So the probability of a random boolean formula $\phi$ being satisfiable is $1-2^{-N}$.</p>
+
+
+
+<p class="wp-block-paragraph">What about the probability that a general TQBF instance $\psi$ with underlying boolean formula $\phi$ is true? Again, we define randomness with respect to the truth table, and we also randomize whether each quantifier is existential or universal and the order in which the quantifiers appear. It actually comes out to be exactly .5. To see this, note that we can form a pretty trivial bijection between true and false instances of TQBF by mapping $\psi$ to $\neg \psi$. When the negation sign propagates through the quantifiers, it switches existential quantifiers to universal and vice versa and ends up being applied to the underlying boolean formula. Therefore, we still have a TQBF instance, and it obviously has the negated truth value of its pre-image under our negation map. The map is clearly bijective, so the probability of TQBF truth is .5 as proposed.</p>
+
+
+
+<p class="wp-block-paragraph">The final case I would like to consider is related to Formula-Game, which is described in Sipster as follows. Suppose we are given a TQBF instance $\psi$ in prenex of the form $\exists x_1 \forall x_2 &#8230; \exists x_n [\phi]$, where $\phi$ is some boolean formula. Two players play against each other. Player 1 gets to choose whether $x_1$ is true or false, and Player 2 gets to choose the truth value of $x_2$, and alternating down to n, where Player 1 gets the final assignment. Player 1 wins if the assignment is true under $\phi$, and Player 2 wins otherwise. We note that $\psi$ is true precisely when Player 1 has a winning strategy; that is, given optimal play by Player 2, Player 1 always has a way to win. This follows from the fact that Player 1&#8217;s winning strategy implies that there is a way to select $x_1$ so that, for any choice of $x_2$, Player 1 has a choice of $x_3$&#8230; and so and so forth inductively until Player 1 has a choice of $x_n$ to satisfy $\phi$. Moreover, any TQBF instance can be converted to this particular form by adding dummy variables/quantifiers, so Formula-Game is actually PSPACE-Complete as well. As a matter of curiosity, I consider the probability that Player 1 has a winning strategy for an instance of Formula-Game. The crucial insight is that Formula-Game can be modeled by a game tree, and if play is optimal for both players, then the game itself can be modeled via the <a href="https://en.wikipedia.org/wiki/Minimax">Minimax</a> algorithm. To illustrate, I convert the TQBF example above into game tree form:</p>
+
+
+
+<figure class="wp-block-image size-large"><img fetchpriority="high" decoding="async" width="1024" height="493" src="https://nkontur.com/blog/wp-content/uploads/2021/01/Blank-diagram2-1024x493.jpeg" alt="" class="wp-image-102" srcset="https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram2-1024x493.jpeg 1024w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram2-300x144.jpeg 300w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram2-768x369.jpeg 768w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram2-1536x739.jpeg 1536w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram2.jpeg 1580w" sizes="(max-width: 1024px) 100vw, 1024px" /><figcaption>Game tree representation of TQBF instance given above</figcaption></figure>
+
+
+
+<p class="wp-block-paragraph">Taking a right branch at any vertex in the tree corresponds to assigning a variable true, and the left false. Leaf vertices have value 1 if the formula is true given the corresponding assignment, and 0 otherwise. Player 1 gets to choose which way to go at every odd branch, and Player 2 gets to choose which way to go at every even branch. Assuming that Player 2 is playing optimally, Player 1&#8217;s optimal strategy is to choose the branch which maximizes the end leaf value which gameplay eventually arrives at. Since Player 2 is playing optimally as well, they will minimize the utility, so that Player 1&#8217;s optimal strategy is given by the output of minimax. In this case, Player 1 clearly wins, since going left will give utility 1 no matter what Player 2 chooses.</p>
+
+
+
+<p class="wp-block-paragraph">As a base case, we consider a random instance of Formula-Game with three variables (with one variable, the probability is clearly .5). This instance will have the same structure as the example above, except the values at the leaves will be randomly chosen from {0,1}. To determine the probability that Player 1 has a winning strategy, we can alternatively compute one minus the probability that Player 2 does by <a href="https://en.wikipedia.org/wiki/Zermelo%27s_theorem_(game_theory)">Zermelo&#8217;s Theorem</a>. For Player 2 to have a winning strategy, they must have a winning strategy both in the case where play arrives at node B and node C, since Player 1 gets to choose this. If play arrives at node B, this must mean that the leaves attached to node D are both 0 or the leaves attached to node E are both zero; otherwise, Player 1 could assign a value to $x_3$ to get a value of 1. Using the inclusion exclusion principle, we note that player 2 has a winning strategy with probability $\frac{1}{4}+\frac{1}{4}-\frac{1}{16}=\frac{7}{16}$. We can use this to recursively solve for all Formula-Game instances featuring an odd number of variables. To see this, consider a game tree of depth 5. Since this game is deterministic, we can actually view this tree as having depth 3. To do so, start by taking the depth-5 tree and trunking off the final two layers. Then, make it so that each leaf of this tree will have value 1 if Player 1 has a winning strategy from this point on in the full depth-5 game tree. Give the leaf node value 0 otherwise. Note that in the base case, the probability that a leaf node had value 0 was .5 by construction.  Now, however, the value of the leaf nodes is a function of uniform random variables. To determine the probability, we consider what happens when game play reaches one of these faux leaf nodes. It will be Player 2&#8217;s move next, and they will have a winning strategy from this point on precisely when one of the two subtrees they can choose to go down has both leaves as zero. Just like above, this occurs with probability $\frac{7}{16}$. So Player 2 has a winning strategy on depth-5 subtrees with probability $2*(\frac{7}{16})^2-(\frac{7}{16})^4$. In general, it isn&#8217;t hard to extrapolate on this example to derive the recursion formula $P_n=(2*P_{n-2}-(P_{n-2})^2)^2$, where P_n is the probability that Player 2 has a winning strategy on Formula-Game instances with n variables. Furthermore, on game trees of depth 2, Player 2 has a winning strategy with probability $\frac{9}{16}$. This is because Player 1 is forced to get double 1&#8217;s in one of the two subtrees. The recursion formula works the same for even-depth subtrees, so we have derived the probabilities as desired. Examination of these probabilities reveals a rapid convergence to zero in the case where n is odd, and 1 where n is even. To show this rigorously, we formally define the map $f(x)=x^{4}-4x^{3}+4x^{2}$. Iterative applications of this map to the initial probabilities at depths 2 (or 3) yield the probability at depth 4 (or 5), 6 (or 7), and so forth. The steady states of this map occur at 0, 1, and .382. Since the derivative of f is positive at .382, we know that applying our recursive relation starting with values less than this will yield a lesser value, and vice versa. Since f is continuous, we have that each sequence consisting of iterative applications of our recursive map converges to the fixed points of f. Since $\frac{49}{256}&lt;.382$, we must have convergence to zero for odd depth. Since $\frac{9}{16}&gt;.382$, we must have convergence to 1 for even depth. It seems that whatever player goes last has the advantage. This holds even though Player 1 always goes first.</p>
+
+
+
+<p class="wp-block-paragraph">Another question to ask is: for Player 1 to have a winning strategy, what kind of configuration of leaves must exist at the bottom? To answer this, we make the claim that for Player 1 to have a winning strategy on an N-variable instance of TQBF, the underlying boolean formula $\phi$ must have at least $2^{\lfloor \frac{N}{2}\rfloor}$ satisfying assignments. Depth 1 is trivial. For depth 2, we note that one subtree must have double 1&#8217;s, so we need at least 2 ones. For depth 3, we can consider the truncated tree of depth 2 similar to how we did in proof above. In this depth 2 tree, we need double 1&#8217;s in one of the subtrees. Once gameplay in the larger depth 3 tree hits the leaves of this depth 2 tree, victory must be guaranteed for Player 1. Since Player 1 gets to play last, this means that we only need to make sure one of the leaves below each 1 in the pair in the truncated tree is also 1 (see my diagram below).</p>
+
+
+
+<figure class="wp-block-image size-large"><img decoding="async" width="1024" height="493" src="https://nkontur.com/blog/wp-content/uploads/2021/01/Blank-diagram4-1-1024x493.jpeg" alt="" class="wp-image-107" srcset="https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram4-1-1024x493.jpeg 1024w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram4-1-300x144.jpeg 300w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram4-1-768x369.jpeg 768w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram4-1-1536x739.jpeg 1536w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram4-1.jpeg 1580w" sizes="(max-width: 1024px) 100vw, 1024px" /><figcaption>A depth-3 game tree minimal with respect to amount of 1&#8217;s at the leaves while still providing Player 1 a winning strategy. For each 1 appearing in corresponding minimal depth-2 tree, we only need one 1.</figcaption></figure>
+
+
+
+<p class="wp-block-paragraph">In essence, we are using our minimal game tree of depth 2 to construct a game tree of depth 3 also minimal with respect to 1&#8217;s at the leaves. By symmetry, we know that there is no such depth-3 tree with less 1&#8217;s at the leaves&#8211;this would contradict the fact that Player 1 has a winning strategy, since we would have three 0&#8217;s at the second layer. We can again use the same process to extend to depth 4. This time, since Player 2 moves last, we need to put two 1&#8217;s at the leaves of each subtree with a 1 as its root. In total, there are thus 4 1&#8217;s in this minimal game tree. We note that this extension process only doubles the amount of 1&#8217;s required every other time. Basically, we have to double the amount of 1&#8217;s every time we end up at a depth where Player 2 moves last. In any case, this proves our claim.</p>
+
+
+
+<p class="wp-block-paragraph">We establish a similar necessary condition for the existence of a winning strategy for Player 2. Namely, we claim that for Player 2 to have a winning strategy in Formula-Game with N variables where N is even, there can be at most $2^N(1-2^{-\frac{N}{2}})$ satisfying assignments to the underlying Boolean formula $\phi$. For depth 2, none of the bottom subtrees can have double 1&#8217;s, so we can therefore have at most 2 satisfying assignments. As above, we can use this base case to extend outwards. Wherever 1&#8217;s appear in the base tree, we are allowed to add all 1&#8217;s below it, since Player 2 is basically able to prevent play from reaching the subtree with the 1 at its root. However, we cannot add any 1&#8217;s off the subtrees with 0 at their roots, since Player 1 gets the final play. We therefore end up with at most 4 satisfying assignments to $\phi$ as shown below.</p>
+
+
+
+<figure class="wp-block-image size-large"><img decoding="async" width="1024" height="493" src="https://nkontur.com/blog/wp-content/uploads/2021/01/Blank-diagram5-1024x493.jpeg" alt="" class="wp-image-108" srcset="https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram5-1024x493.jpeg 1024w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram5-300x144.jpeg 300w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram5-768x369.jpeg 768w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram5-1536x739.jpeg 1536w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram5.jpeg 1580w" sizes="(max-width: 1024px) 100vw, 1024px" /><figcaption>A depth-3 game tree maximal with respect to amount of 1&#8217;s at the leaves while providing Player 2 a winning strategy. For each 1 appearing in corresponding minimal depth-2 tree, we can have two 1&#8217;s in the depth-3 tree.</figcaption></figure>
+
+
+
+<p class="wp-block-paragraph">When we extend to depth 4, however, the fact Player 2 gets the final pick means that each appearance of 0 at the leaves can yield a 1 below it. Depth 4 will thus have 8+4=12 satisfying assignments. Every extension of depth doubles the existing satisfying assignments, and when the depth becomes even some leaves which were 0 yield a leaf which is 1&#8211;we denote this process as flipping. The amount of these leaves which &#8216;flip&#8217; from 0 to 1 doubles each cycle, since when we extend to an odd depth the 0 leaves multiply. With this in mind, we yield the summation $\sum_{i=1}^{\frac{N}{2}}2^i 2^{N-2i}$. The first term in the summation represents the group of 1&#8217;s that were there since depth 2 and have multiplied N-2i times since then. The second term represents the groups of 0&#8217;s that &#8216;flipped&#8217; and yielded ones when extending to depth 4, and so on and so forth. Some basic algebra (and application of the formula for partial geometric sums) yields a final solution of $2^N(1-2^{-\frac{N}{2}})$ . Note that we can use this to get the maximal amount of satisfying assignments for N odd with $2^{N+1}(1-2^{-\lfloor \frac{N}{2}\rfloor})$ since the amount of assignments are doubling but no 0&#8217;s have flipped between the last depth and the current one. </p>
+
+
+
+<p class="wp-block-paragraph">We conclude this discussion by noting two properties of TQBF which also follow from the game tree perspective. The first is that if Player 1 has a winning strategy for some TQBF instance with formula $\phi$, we cannot say anything about how they will do in the case where $\phi$ is negated. This can easily be seen by looking at the first game tree diagram. Negating the underlying formula is equivalent to swapping the 0&#8217;s and 1&#8217;s, but if we do this Player 1 still as a winning strategy, since they can take the right branch by setting $x_1$ true. However, the modified TQBF instance where each input in the truth table for $\phi$ has its value flipped leads to an equivalent game. In fact, this modification constitutes a reflection of the tree across the center line, so that the new dominant strategy for Player 1 will essentially be the opposite of what it was before. For instance, the first TQBF example which we used to illustrate the game tree approach had formula $\exists x_1 \forall x_2 \exists x_3 [(x_1 \land \neg x_2 \land x_3) \lor \neg x_1]$. The modified formula would be $\exists x_1 \forall x_2 \exists x_3 [(\neg x_1 \land x_2 \land \neg x_3) \lor  x_1]$ and has the following game tree:</p>
+
+
+
+<figure class="wp-block-image size-large"><img loading="lazy" decoding="async" width="1024" height="493" src="https://nkontur.com/blog/wp-content/uploads/2021/01/Blank-diagram6-1024x493.jpeg" alt="" class="wp-image-110" srcset="https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram6-1024x493.jpeg 1024w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram6-300x144.jpeg 300w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram6-768x369.jpeg 768w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram6-1536x739.jpeg 1536w, https://blog.nkontur.com/wp-content/uploads/2021/01/Blank-diagram6.jpeg 1580w" sizes="auto, (max-width: 1024px) 100vw, 1024px" /><figcaption>Note that Player 1&#8217;s winning strategy is simply a reflection of their old one.</figcaption></figure>
+
+
+
+<p class="wp-block-paragraph">As I said, this modification does not change the outcome of the game.</p>
+
+
+
+<p class="wp-block-paragraph">While this investigation relates only tangentially to questions of computational complexity, it provides valuable insight into the link between game theoretic concepts and probabilistic properties of first-order boolean formulas. As mentioned in a note above, I&#8217;ve written up some Python code which verifies some of my results&#8211;I&#8217;ve provided a <a href="https://github.com/konturn/Minimax-Formula-Game">link</a> to the repository if you want to check it out.</p>
+
+]]></content:encoded>
+					
+					<wfw:commentRss>https://blog.nkontur.com/index.php/2021/01/25/formula-game-using-game-theory-to-analyze-the-probabilistic-features-of-true-quantified-boolean-formulas/feed/</wfw:commentRss>
+			<slash:comments>0</slash:comments>
+		
+		
+			</item>
+	</channel>
+</rss>
