@@ -1257,7 +1257,7 @@ services:
       - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
     ports:
       - "443:8112"
-    image: 'lscr.io/linuxserver/deluge:2.2.0@sha256:dddd1f95b4fcea607813b12bd821396519e5fcc250e5ce138eb7e0dbf147e995'
+    image: 'lscr.io/linuxserver/deluge:2.2.0@sha256:1dbf9663387f85bb5805fcb1418a246f877e01374bb2a6cd9e632c72fb2e1ebc'
     restart: unless-stopped
     networks:
       internal:
