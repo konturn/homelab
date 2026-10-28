@@ -5,8 +5,11 @@ Subcommands
   mr-check      Informational check inside an MR pipeline (local git only, no token).
   evaluate      Read-only evaluation of one MR via the API (dry run; any state).
   sweep         Scheduled on main: label eligible MRs, merge at most one ready MR.
+                AUTOMERGE_DRY_RUN=1 dry-runs the general class only (fast track
+                stays live); AUTOMERGE_DRY_RUN=all or --dry-run dry-runs both.
   plan-deploy   main pipeline: verify an auto-merged commit, write the deploy plan.
-  deploy-report main pipeline: record the deploy outcome (note / issue / revert MR).
+  deploy-report main pipeline: record the deploy outcome (note / issue / revert MR / mail).
+  notify        Mail root from a CI job (used when a deploy fails before deploy-report).
   daily-report  Scheduled on main: mail a summary of the last 24h.
 
 Code in this file runs from `main` for every command that holds credentials;
@@ -19,6 +22,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import shlex
 import socket
 import subprocess
 import sys
@@ -46,7 +50,9 @@ LABEL_ELIGIBLE = "automerge-eligible"
 LABEL_MERGED = "automerged"
 LABEL_ROLLBACK = "automerge-rollback"
 LABEL_SECURITY = "security"
+LABEL_FAST_TRACK = "automerge-fast-track"
 TRAILER = "Automerge-Policy: image-update"
+CLASS_TRAILER = "Automerge-Class: fast-track"
 
 API = os.environ.get("CI_API_V4_URL", "https://gitlab.lab.nkontur.com/api/v4").rstrip("/")
 PROJECT = os.environ.get("CI_PROJECT_ID", "4")
@@ -73,6 +79,18 @@ def parse_ts(s: Optional[str]) -> Optional[dt.datetime]:
 
 def truthy(v: Optional[str]) -> bool:
     return (v or "").strip().lower() not in ("", "0", "false", "no", "off")
+
+
+def dry_modes(cli_dry_run: bool = False) -> Tuple[bool, bool]:
+    """(general class dry, fast-track class dry).
+
+    AUTOMERGE_DRY_RUN=1 (or any other true value) dry-runs the general class
+    only; the fast-track class stays live. AUTOMERGE_DRY_RUN=all, or --dry-run,
+    dry-runs both."""
+    env = (os.environ.get("AUTOMERGE_DRY_RUN") or "").strip().lower()
+    if cli_dry_run or env == "all":
+        return True, True
+    return truthy(env), False
 
 
 def load_allowlist() -> dict:
@@ -165,6 +183,7 @@ class GitLab:
             LABEL_ELIGIBLE: ("#2da160", "Passes the auto-merge policy (set by CI)"),
             LABEL_MERGED: ("#1f75cb", "Merged by the auto-merge policy"),
             LABEL_ROLLBACK: ("#dd2b0e", "Auto-merged deploy failed health checks and was rolled back"),
+            LABEL_FAST_TRACK: ("#6699cc", "Merged under the fast-track class (docs/AUTOMERGE.md)"),
             "freeze": ("#808080", "Block auto-merge for this MR"),
         }
         existing = {l["name"] for l in self.get_all(f"projects/{PROJECT}/labels")}
@@ -217,15 +236,24 @@ def global_gates(gl: GitLab, allow: dict, host_check: bool = True) -> List[str]:
     open_rb = gl.get(f"projects/{PROJECT}/issues", state="opened", labels=LABEL_ROLLBACK, per_page=20)
     if open_rb:
         reasons.append("open rollback issue(s): " + ", ".join(f"#{i['iid']}" for i in open_rb))
-    recent = recent_automerges(gl)
-    limit = int(allow.get("max_per_24h", 3))
-    if len(recent) >= limit:
-        reasons.append(f"rate limit: {len(recent)} auto-merges in the last 24h (max {limit})")
     if host_check:
         ok, msg = host_storage_ok(allow.get("storage_known_state"))
         if not ok:
             reasons.append(msg)
     return reasons
+
+
+def rate_gate(recent: List[dict], allow: dict, fast_track: bool) -> Optional[str]:
+    """Each class has its own rolling-24h budget: `fast_track.max_per_24h` for
+    fast-track merges, `max_per_24h` for all others."""
+    ft = [m for m in recent if LABEL_FAST_TRACK in (m.get("labels") or [])]
+    if fast_track:
+        n, limit, what = len(ft), policy.fast_track_config(allow)["max_per_24h"], "fast-track auto-merges"
+    else:
+        n, limit, what = len(recent) - len(ft), int(allow.get("max_per_24h", 3)), "auto-merges"
+    if n >= limit:
+        return f"rate limit: {n} {what} in the last 24h (max {limit})"
+    return None
 
 
 def recent_automerges(gl: GitLab, hours: int = 24) -> List[dict]:
@@ -360,12 +388,15 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
 
 
 def cmd_sweep(args: argparse.Namespace) -> int:
-    dry = args.dry_run or truthy(os.environ.get("AUTOMERGE_DRY_RUN"))
-    gl = gitlab_from_env(dry_run=dry)
+    dry, ft_dry = dry_modes(args.dry_run)
+    gl = gitlab_from_env(dry_run=dry)            # writes for the general class
+    gl_ft = GitLab(gl.token, dry_run=ft_dry)     # writes for fast-track MRs
     allow = load_allowlist()
-    gl.ensure_labels()
+    (gl_ft if dry else gl).ensure_labels()
     merger = token_user(gl)
-    log(f"Merging identity: {merger}{' (dry run: no labels, approvals or merges)' if dry else ''}")
+    log(f"Merging identity: {merger}")
+    log(f"General class: {'DRY RUN (no labels, approvals or merges)' if dry else 'live'}; "
+        f"fast track: {'DRY RUN' if ft_dry else 'live'}")
 
     candidates: Dict[int, dict] = {}
     for author in allow.get("authors") or []:
@@ -385,11 +416,17 @@ def cmd_sweep(args: argparse.Namespace) -> int:
         verdicts[iid] = evaluate_api(gl, mr, allow, merger=merger)
 
     gates: List[str] = []
+    rate: Dict[bool, Optional[str]] = {False: None, True: None}
     if any(v.eligible for v in verdicts.values()):
         gates = global_gates(gl, allow, host_check=not args.no_host_check)
         log("Global gates: " + ("open" if not gates else "CLOSED"))
         for g in gates:
             log(f"  - {g}")
+        recent = recent_automerges(gl)
+        rate = {ft: rate_gate(recent, allow, ft) for ft in (False, True)}
+        for ft, r in rate.items():
+            if r:
+                log(f"  - {'fast track' if ft else 'general class'}: {r}")
     log()
 
     # MRs labelled `security` (e.g. by the running-image CVE scan) go first.
@@ -397,13 +434,20 @@ def cmd_sweep(args: argparse.Namespace) -> int:
     merged_one = False
     for iid in order:
         mr, v = candidates[iid], verdicts[iid]
-        eligible = v.eligible and not gates
-        print_verdict(mr, v, gates if v.eligible else [])
+        mr_gates = gates + ([rate[v.fast_track]] if rate[v.fast_track] else [])
+        eligible = v.eligible and not mr_gates
+        print_verdict(mr, v, mr_gates if v.eligible else [])
+        if v.eligible:
+            log(f"  class: {'fast track' if v.fast_track else 'general'}"
+                f"{' (dry run)' if (ft_dry if v.fast_track else dry) else ''}")
+        writer = gl_ft if v.fast_track else gl
         has_label = LABEL_ELIGIBLE in (mr.get("labels") or [])
         if eligible and not has_label:
-            gl.write("PUT", f"projects/{PROJECT}/merge_requests/{iid}", {"add_labels": LABEL_ELIGIBLE})
+            writer.write("PUT", f"projects/{PROJECT}/merge_requests/{iid}", {"add_labels": LABEL_ELIGIBLE})
         elif not eligible and has_label:
-            gl.write("PUT", f"projects/{PROJECT}/merge_requests/{iid}", {"remove_labels": LABEL_ELIGIBLE})
+            # remove a stale label with whichever client is live
+            (gl if not dry else gl_ft).write("PUT", f"projects/{PROJECT}/merge_requests/{iid}",
+                                             {"remove_labels": LABEL_ELIGIBLE})
         if not eligible:
             continue
         blockers = readiness(mr)
@@ -413,19 +457,24 @@ def cmd_sweep(args: argparse.Namespace) -> int:
         if merged_one:
             log("  ready, deferred: one auto-merge per run")
             continue
-        merged_one = do_merge(gl, mr, v)
+        merged_one = do_merge(writer, mr, v)
     return 0
 
 
 def do_merge(gl: GitLab, mr: dict, v: policy.Verdict) -> bool:
     iid, sha = mr["iid"], mr["sha"]
     services = ", ".join(c.service for c in v.changes)
+    trailers = (CLASS_TRAILER + "\n" if v.fast_track else "") + TRAILER
     message = (f"Merge branch '{mr['source_branch']}' into '{mr['target_branch']}'\n\n"
                f"Image update: {services}\n\n"
-               f"See merge request {PROJECT_PATH}!{iid}\n\n{TRAILER}\n")
-    log(f"  merging !{iid} at {sha[:12]} ({services})")
+               f"See merge request {PROJECT_PATH}!{iid}\n\n{trailers}\n")
+    labels = LABEL_MERGED + ("," + LABEL_FAST_TRACK if v.fast_track else "")
+    if gl.dry_run:
+        log(f"  [dry-run] would merge !{iid} at {sha[:12]} ({services})")
+    else:
+        log(f"  merging !{iid} at {sha[:12]} ({services}){' [fast track]' if v.fast_track else ''}")
     # Label first so the main pipeline can verify provenance as soon as it starts.
-    gl.write("PUT", f"projects/{PROJECT}/merge_requests/{iid}", {"add_labels": LABEL_MERGED})
+    gl.write("PUT", f"projects/{PROJECT}/merge_requests/{iid}", {"add_labels": labels})
     approved = False
     try:
         if mr.get("detailed_merge_status") == "not_approved":
@@ -438,11 +487,12 @@ def do_merge(gl: GitLab, mr: dict, v: policy.Verdict) -> bool:
         try:
             if approved:
                 gl.write("POST", f"projects/{PROJECT}/merge_requests/{iid}/unapprove")
-            gl.write("PUT", f"projects/{PROJECT}/merge_requests/{iid}", {"remove_labels": LABEL_MERGED})
+            gl.write("PUT", f"projects/{PROJECT}/merge_requests/{iid}", {"remove_labels": labels})
         except RuntimeError as e2:
             log(f"  could not remove {LABEL_MERGED} label: {e2}")
         return False
-    lines = [f"Merged by the auto-merge policy (pipeline {os.environ.get('CI_PIPELINE_URL', 'n/a')}).", ""]
+    cls = " under the fast-track class" if v.fast_track else ""
+    lines = [f"Merged by the auto-merge policy{cls} (pipeline {os.environ.get('CI_PIPELINE_URL', 'n/a')}).", ""]
     lines += [f"- `{c.service}`: {c.kind} `{c.old}` -> `{c.new}`" for c in v.changes]
     lines += ["", "The main pipeline deploys only these services, waits for them to become healthy, "
                   "and rolls back automatically on failure."]
@@ -486,9 +536,18 @@ def cmd_plan_deploy(args: argparse.Namespace) -> int:
     except policy.PolicyError as e:
         return abort(f"merged compose change is outside the policy: {e}")
     services = allow["services"]
-    off = [c.service for c in changes if c.service not in services]
-    if off or not changes:
-        return abort("services not on the allowlist: " + ", ".join(off) if off else "no image changes")
+    if not changes:
+        return abort("no image changes")
+    off = policy.change_kind_reasons(changes, allow)
+    if off:
+        return abort("merged change is outside the allowlist: " + "; ".join(off))
+    if LABEL_FAST_TRACK in (mr.get("labels") or []):
+        try:
+            ok, why = policy.fast_track_verdict(mr["author"]["username"], changes, allow)
+        except policy.PolicyError as e:
+            ok, why = False, str(e)
+        if not ok:
+            return abort(f"!{mr['iid']} is labelled {LABEL_FAST_TRACK} but does not qualify: {why}")
 
     out = Path(args.out)
     prev_dir = out.parent / "prev"
@@ -502,6 +561,7 @@ def cmd_plan_deploy(args: argparse.Namespace) -> int:
             "service": c.service, "kind": c.kind, "old": str(c.old), "new": str(c.new),
             "old_digest": c.old.digest or "", "new_digest": c.new.digest or "",
             "probe": services[c.service].get("probe") or "",
+            "probe_via": services[c.service].get("probe_via") or "",
             "timeout": int(services[c.service].get("timeout") or timeout_default),
         } for c in changes],
     }
@@ -563,6 +623,9 @@ def cmd_deploy_report(args: argparse.Namespace) -> int:
     gl.write("PUT", f"projects/{PROJECT}/merge_requests/{iid}", {"add_labels": LABEL_ROLLBACK})
     gl.write("POST", f"projects/{PROJECT}/merge_requests/{iid}/notes",
              {"body": f"Deploy failed health checks; {rb_text}. See {job}."})
+    issue_ref = f"#{issue['iid']}" if issue else "(see job)"
+    mail_root(f"Homelab auto-merge ROLLBACK: {svc_list} (!{iid})",
+              "\n".join(body + ["", f"Issue: {issue_ref}", f"MR: {plan['mr_url']}"]) + "\n")
     return 0
 
 
@@ -607,7 +670,8 @@ def cmd_daily_report(args: argparse.Namespace) -> int:
     eligible_open = gl.get_all(f"projects/{PROJECT}/merge_requests", state="opened", labels=LABEL_ELIGIBLE)
     lines = [f"Auto-merge summary for the 24h ending {now():%Y-%m-%d %H:%M} UTC", ""]
     lines.append(f"Auto-merged: {len(merged)}")
-    lines += [f"  !{m['iid']} {m['title']}  {m['web_url']}" for m in merged]
+    lines += [f"  !{m['iid']} {m['title']}  {m['web_url']}"
+              f"{'  [fast track]' if LABEL_FAST_TRACK in (m.get('labels') or []) else ''}" for m in merged]
     lines.append(f"Rollbacks (new): {len(rb_new)}")
     lines += [f"  #{i['iid']} {i['title']}  {i['web_url']}" for i in rb_new]
     lines.append(f"Rollback issues still open (auto-merge paused while any are open): {len(rb_open)}")
@@ -623,15 +687,35 @@ def cmd_daily_report(args: argparse.Namespace) -> int:
         log("[dry-run] not sending mail")
         return 0
     subject = "Homelab auto-merge: " + (f"{len(rb_open)} rollback(s) open" if rb_open else f"{len(merged)} merged")
-    cmd = ["ssh", "-i", SSH_KEY, "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes", "-o", "ConnectTimeout=15",
-           "-o", "StrictHostKeyChecking=yes", "-o", f"UserKnownHostsFile={KNOWN_HOSTS}", "-o", "LogLevel=ERROR",
-           f"root@{ROUTER_HOST}", f"mail -s '{subject}' root"]
-    res = subprocess.run(cmd, input=body, text=True, capture_output=True, timeout=60)
-    if res.returncode != 0:
-        log(f"ERROR: sending mail failed: {res.stderr.strip()[:300]}")
+    if not mail_root(subject, body):
         return 1
     log("Summary mailed.")
     return 0
+
+
+def mail_root(subject: str, body: str) -> bool:
+    """Mail root through the router's msmtp. Never raises: alerting must not
+    turn a recorded failure into a different one."""
+    cmd = ["ssh", "-i", SSH_KEY, "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes", "-o", "ConnectTimeout=15",
+           "-o", "StrictHostKeyChecking=yes", "-o", f"UserKnownHostsFile={KNOWN_HOSTS}", "-o", "LogLevel=ERROR",
+           f"root@{ROUTER_HOST}", f"mail -s {shlex.quote(subject)} root"]
+    try:
+        res = subprocess.run(cmd, input=body, text=True, capture_output=True, timeout=60)
+    except Exception as e:  # noqa: BLE001
+        log(f"ERROR: sending mail failed: {e}")
+        return False
+    if res.returncode != 0:
+        log(f"ERROR: sending mail failed: {res.stderr.strip()[:300]}")
+        return False
+    log(f"Mailed root: {subject}")
+    return True
+
+
+def cmd_notify(args: argparse.Namespace) -> int:
+    """Alert root from a CI job (e.g. router:deploy-service failing before deploy-report)."""
+    body = args.message + "\n\n" + f"Job: {os.environ.get('CI_JOB_URL', 'n/a')}\n" + \
+        f"Commit: {os.environ.get('CI_COMMIT_SHA', 'n/a')}\n"
+    return 0 if mail_root(args.subject, body) else 1
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -666,13 +750,19 @@ def main(argv: Optional[List[str]] = None) -> int:
     s.add_argument("--status", choices=["success", "failed"], required=True)
     s.set_defaults(fn=cmd_deploy_report)
 
+    s = sub.add_parser("notify")
+    s.add_argument("--subject", required=True)
+    s.add_argument("--message", required=True)
+    s.set_defaults(fn=cmd_notify)
+
     s = sub.add_parser("daily-report")
     s.add_argument("--dry-run", action="store_true")
     s.set_defaults(fn=cmd_daily_report)
 
     args = p.parse_args(argv)
-    if getattr(args, "no_host_check", False) and not (args.dry_run or truthy(os.environ.get("AUTOMERGE_DRY_RUN"))):
-        p.error("--no-host-check is only allowed with --dry-run")
+    # Fully dry only: with AUTOMERGE_DRY_RUN=1 the fast-track class still merges.
+    if getattr(args, "no_host_check", False) and not all(dry_modes(args.dry_run)):
+        p.error("--no-host-check is only allowed with --dry-run or AUTOMERGE_DRY_RUN=all")
     return args.fn(args)
 
 

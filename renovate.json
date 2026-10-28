@@ -208,6 +208,56 @@
       "prBodyNotes": [
         "Pascal GPU check before merging (docs/ollama.md): the new image must still ship `/usr/lib/ollama/cuda_v12`, and with `OLLAMA_DEBUG=1` the log must show `inference compute ... library=CUDA compute=6.1` and `ollama ps` must show `100% GPU`."
       ]
+    },
+    {
+      "description": "Fast track (docs/AUTOMERGE.md): patch releases of these images get their own MR even when a minor release is also available, so the patch does not wait for the minor's review",
+      "matchFileNames": [
+        "docker/docker-compose.yml"
+      ],
+      "matchPackageNames": [
+        "nginx",
+        "plexinc/pms-docker",
+        "linuxserver/ombi",
+        "homeassistant/home-assistant",
+        "lscr.io/linuxserver/deluge",
+        "izderadicka/audioserve",
+        "nextcloud",
+        "vaultwarden/server",
+        "wordpress"
+      ],
+      "separateMinorPatch": true
+    },
+    {
+      "description": "Fast track (docs/AUTOMERGE.md): digest refreshes and patch releases of these images are proposed at any hour and outside the MR limits; the auto-merge sweep merges them once the MR pipeline passes. Keep this list identical to fast_track.images in ci/automerge-allowlist.yml (checked by ci/automerge/test_fast_track.py)",
+      "matchFileNames": [
+        "docker/docker-compose.yml"
+      ],
+      "matchPackageNames": [
+        "nginx",
+        "plexinc/pms-docker",
+        "linuxserver/ombi",
+        "homeassistant/home-assistant",
+        "lscr.io/linuxserver/deluge",
+        "izderadicka/audioserve",
+        "nextcloud",
+        "vaultwarden/server",
+        "wordpress"
+      ],
+      "matchUpdateTypes": [
+        "digest",
+        "patch",
+        "pinDigest"
+      ],
+      "schedule": [
+        "at any time"
+      ],
+      "prConcurrentLimit": 0,
+      "branchConcurrentLimit": 0,
+      "prHourlyLimit": 0,
+      "prPriority": 10,
+      "addLabels": [
+        "fast-track"
+      ]
     }
   ]
 }

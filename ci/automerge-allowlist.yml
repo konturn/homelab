@@ -44,11 +44,16 @@ default_health_timeout: 600
 #   probe:   optional URL that must return 2xx/3xx after deploy. Requests are
 #            sent to the internal reverse proxy (lab_nginx_ip) with SNI/Host set
 #            from the URL, so they do not depend on DNS.
+#   probe_via: `external` sends the probe to the external reverse proxy
+#            (nginx_ip) instead, for hostnames only it serves.
 #   timeout: optional override of default_health_timeout.
+#   updates: optional subset of [digest, patch, minor] (default: all three).
 # The container's own healthcheck (if it has one) must also report healthy.
 services:
   # media
-  plex: {}
+  plex:
+    probe: https://nkontur.com/plex/identity
+    probe_via: external
   tautulli:
     probe: https://tautulli.lab.nkontur.com/status
   radarr:
@@ -60,7 +65,9 @@ services:
     probe: https://prowlarr.lab.nkontur.com/ping
   jackett:
     probe: https://jackett.lab.nkontur.com/UI/Login
-  ombi: {}
+  ombi:
+    probe: https://nkontur.com/plex-requests/
+    probe_via: external
   nzbget: {}
   deluge:
     probe: https://deluge.lab.nkontur.com/
@@ -78,11 +85,64 @@ services:
     probe: https://tempo.lab.nkontur.com/ready
   otel-collector: {}
   # reverse proxies
-  nginx: {}
+  nginx:
+    probe: https://nkontur.com/
+    probe_via: external
   lab_nginx:
     probe: https://grafana.lab.nkontur.com/api/health
   iot_nginx: {}
-  # Not listed: nextcloud. Its image upgrades run a one-way schema migration
-  # on start, so rolling back the image does not restore the previous state;
-  # those updates go through a normal reviewed merge and full deploy (which
-  # also runs `occ upgrade`).
+  bluebubbles-relay: {}  # same image as nginx; must be listed so nginx MRs can qualify
+  # Digest-only services. A new version of these runs a one-way migration on
+  # start (nextcloud: `occ upgrade`; vaultwarden and wordpress: their database
+  # schema), so rolling back the image would not restore the previous state.
+  # A digest refresh of the same tag keeps the version and rolls back cleanly;
+  # version updates go through a reviewed merge and the full deploy (which also
+  # runs `occ upgrade`). The deploy refuses a nextcloud digest whose packaged
+  # version differs from the installed one (ansible/router-service-update.yml).
+  nextcloud:
+    updates: [digest]
+    probe: https://nextcloud.nkontur.com/status.php
+    probe_via: external
+    timeout: 900
+  bitwarden:
+    updates: [digest]
+    probe: https://bitwarden.nkontur.com/alive
+    probe_via: external
+  blog:
+    updates: [digest]
+    probe: https://blog.nkontur.com/
+    probe_via: external
+  # Not listed: databases (nextcloud_db, wordpress_db, influxdb, paperless-redis).
+
+# Fast track: images of services published through the external reverse proxy
+# (docker/nginx/router.lab.nkontur.com/external_*.conf) or a WAN port forward
+# (networking/iptables/rules.v4). Their digest refreshes and patch releases
+# merge as soon as the MR pipeline passes, all other checks above included,
+# even while the sweep schedule runs with AUTOMERGE_DRY_RUN=1 (only
+# AUTOMERGE_DRY_RUN=all stops them). Their minor and major updates always need
+# a human, in every mode. See docs/AUTOMERGE.md ("Fast track").
+#
+# An MR qualifies only if it changes exactly one of these images (on one or
+# more allowlisted services) and was opened by an author listed here. Keep the
+# image list identical to the "Fast track" packageRule in renovate.json
+# (checked by ci/automerge/test_fast_track.py).
+fast_track:
+  enabled: true
+  authors:
+    # Renovate only: it derives the new digest from the registry itself.
+    - project_4_bot_af78a2ea227eba9e10006515fbde375e
+  max_per_24h: 4
+  images:
+    nginx: {}                                   # nginx (external), lab_nginx, iot_nginx, bluebubbles-relay
+    plexinc/pms-docker: {}                      # plex
+    linuxserver/ombi: {}                        # ombi
+    homeassistant/home-assistant: {}            # homeassistant
+    lscr.io/linuxserver/deluge: {}              # deluge (peer port)
+    izderadicka/audioserve: {}                  # booksonic (floating tag: digest only in practice)
+    nextcloud: {updates: [digest]}              # nextcloud
+    vaultwarden/server: {updates: [digest]}     # bitwarden
+    wordpress: {updates: [digest]}              # blog
+  # Not listed: database images. nextcloud_db and wordpress_db are reachable
+  # only from their application's internal network, restarting one interrupts
+  # its application, and a database image is the hardest one to roll back.
+  # Their updates (digest refreshes included) keep the reviewed path.
