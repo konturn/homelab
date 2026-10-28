@@ -53,3 +53,49 @@
     name: minidsp
     state: restarted
   when: minidsp.changed
+
+# Stable ALSA card ids (minidsp_<serial>) for the two miniDSP 2x4HDs, keyed by
+# USB port (minidsp_units in the inventory; docs/minidsp.md). Only the rules
+# are reloaded here; the new ids take effect at the next boot (or replug).
+# Nothing in this role triggers udev "add" events, because those re-run
+# alsa-restore against the units.
+- name: Template out miniDSP ALSA id udev rule
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/minidsp/85-minidsp-alsa-ids.rules' }}"
+    dest: /etc/udev/rules.d/85-minidsp-alsa-ids.rules
+    owner: root
+    group: root
+    mode: '0644'
+  register: minidsp_udev
+
+- name: Reload udev rules (no trigger)
+  ansible.builtin.command: udevadm control --reload-rules
+  when: minidsp_udev.changed
+
+# alsa-restore looks mixer state up by card id. Without a state.minidsp_<serial>
+# section it would fall back to `alsactl init` for the renamed cards, so seed
+# one with the exact values the units already get at every boot. Skipped once
+# the sections exist without the marker (an `alsactl store` rewrote the file),
+# so they are never duplicated or overwritten. This writes a file on the Pi
+# only; nothing is sent to the units until the next boot, and what is sent then
+# is unchanged.
+- name: Read ALSA state file
+  ansible.builtin.slurp:
+    src: /var/lib/alsa/asound.state
+  register: _asound_state
+  failed_when: false
+
+- name: Seed ALSA state for the stable miniDSP card ids
+  ansible.builtin.blockinfile:
+    path: /var/lib/alsa/asound.state
+    create: true
+    owner: root
+    group: root
+    mode: '0644'
+    marker: "# {mark} ANSIBLE MANAGED BLOCK minidsp stable card ids"
+    block: "{{ lookup('template', lookup('env', 'CI_PROJECT_DIR') + '/base/minidsp/asound-state-minidsp.conf') }}"
+  vars:
+    _asound_text: "{{ (_asound_state.content | default('')) | b64decode }}"
+  when: >-
+    'ANSIBLE MANAGED BLOCK minidsp stable card ids' in _asound_text
+    or 'state.minidsp_' not in _asound_text

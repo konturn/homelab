@@ -1,0 +1,21 @@
+# Managed by ansible (configure-zwave role). Do not edit on the Pi.
+#
+# Stable ALSA card ids for the miniDSP 2x4HD units: minidsp_<serial>, instead
+# of m2x4HD / m2x4HD_1, which follow USB enumeration order and can swap.
+# The units report no USB serial descriptor, so the rule matches the USB port
+# (KERNELS == usb_path); the port -> serial map is minidsp_units in
+# ansible/inventory.yml, read from minidspd's /devices list (docs/minidsp.md).
+#
+# Renaming a card only changes the kernel's name for it; nothing is sent to the
+# unit. The rule runs on the card's "add" event, i.e. at boot or on replug.
+# Do not apply it with `udevadm trigger --action=add`: that add event also
+# re-runs 90-alsa-restore.rules, which writes mixer values to the units.
+SUBSYSTEM!="sound", GOTO="minidsp_alsa_ids_end"
+ACTION!="add", GOTO="minidsp_alsa_ids_end"
+KERNEL!="card*", GOTO="minidsp_alsa_ids_end"
+
+{% for unit in minidsp_units %}
+KERNELS=="{{ unit.usb_path }}", ATTRS{idVendor}=="2752", ATTRS{idProduct}=="0011", ATTR{id}="minidsp_{{ unit.serial }}"
+{% endfor %}
+
+LABEL="minidsp_alsa_ids_end"

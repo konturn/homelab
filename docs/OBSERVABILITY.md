@@ -97,7 +97,8 @@ denominator.
 **Telegraf** collects system and service metrics via plugins and writes to **InfluxDB v2**.
 
 - Config: `docker/telegraf/telegraf.conf`
-- Satellite config: `docker/telegraf/satellite-telegraf.conf`
+- Satellite config: `docker/telegraf/satellite-telegraf.conf` (on zwave it also
+  reads the miniDSP units, measurement `minidsp`; see `docs/minidsp.md`)
 - Org: `homelab`, Bucket: `metrics`
 - ~77 input plugin instances covering Docker, system, SNMP, services, etc.
 - Query via Grafana dashboards with Flux

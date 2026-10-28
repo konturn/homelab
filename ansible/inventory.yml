@@ -49,6 +49,17 @@ all:
     shield_address: 10.6.128.5
     zwave_mac: dc:a6:32:74:9e:bf
     zwave_address: 10.6.128.6
+    # miniDSP 2x4HD units on the Z-Wave Pi's USB (docs/minidsp.md). The serial
+    # is the stable key: minidspd's HTTP API accepts it in place of the device
+    # index (/devices/<serial>), and the ALSA card gets the id minidsp_<serial>
+    # from a udev rule matching usb_path. The units have no USB serial
+    # descriptor, so the physical port is all udev can match on: moving a
+    # unit to another USB port means updating usb_path here.
+    minidsp_units:
+      - serial: 919619
+        usb_path: "1-1.3"
+      - serial: 921284
+        usb_path: "1-1.2"
     amp_mac: 40:d6:3c:28:81:95
     amp_address: 10.6.128.7
     doorbell_mac: 9c:8e:cd:3c:de:33
@@ -373,7 +384,12 @@ all:
               # USB sound card "b1" not detected since the 2026-10-18 reboot
               # (only bcm2835 Headphones in /proc/asound/cards), so the unit
               # failed on every deploy. false = unit stopped and disabled.
-              # Re-enable: set true once the card is back in /proc/asound/cards.
+              # "b1" no longer exists: the only USB cards are the two miniDSP
+              # 2x4HDs. Before re-enabling, point soundcard at the stable id
+              # of the unit that carries the movie-room speakers, either
+              # plughw:CARD=minidsp_919619,DEV=0 or
+              # plughw:CARD=minidsp_921284,DEV=0 (docs/minidsp.md). Which
+              # unit that is has not been confirmed yet.
               enabled: false
         satellite-2.lab.nkontur.com:
           ansible_host: 10.6.128.11
