@@ -61,7 +61,9 @@ if [ "$rc" -ne 0 ]; then
 fi
 
 # Sanity: a readable gzip/tar stream that contains the settings file.
-if ! tar -tzf "$part" | grep -qx './settings.json'; then
+# grep -c reads the whole listing: grep -q would exit on the first match and,
+# under pipefail, the SIGPIPE it gives tar would fail the check.
+if [ "$(tar -tzf "$part" | grep -cx './settings.json')" -lt 1 ]; then
     log "archive from $ZWAVE_HOST is unreadable or has no settings.json"
     exit 1
 fi
