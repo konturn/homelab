@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/nkontur/jit-approval-svc/internal/actions"
 	"github.com/nkontur/jit-approval-svc/internal/backend"
 	"github.com/nkontur/jit-approval-svc/internal/config"
 	"github.com/nkontur/jit-approval-svc/internal/handler"
@@ -88,6 +89,32 @@ func main() {
 	// Initialize handler
 	h := handler.New(cfg, reqStore, vaultClient, tgClient, backends)
 
+	// Action prompts for host-side clients, on a Unix socket only
+	var actionsSrv *http.Server
+	if cfg.ActionsSocket != "" {
+		svc := actions.New(tgClient)
+		h.SetActions(svc)
+		l, err := actions.Listen(cfg.ActionsSocket)
+		if err != nil {
+			logger.Error("actions_socket_failed", logger.Fields{"error": err.Error(), "socket": cfg.ActionsSocket})
+		} else {
+			actionsSrv = svc.Server()
+			go func() {
+				if err := actionsSrv.Serve(l); err != nil && err != http.ErrServerClosed {
+					logger.Error("actions_server_error", logger.Fields{"error": err.Error()})
+				}
+			}()
+			go func() {
+				t := time.NewTicker(time.Minute)
+				defer t.Stop()
+				for range t.C {
+					svc.Sweep()
+				}
+			}()
+			logger.Info("actions_socket_listening", logger.Fields{"socket": cfg.ActionsSocket})
+		}
+	}
+
 	// Setup HTTP routes
 	mux := http.NewServeMux()
 	mux.HandleFunc("/request", h.HandleRequest)
@@ -120,6 +147,9 @@ func main() {
 		cancel()
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer shutdownCancel()
+		if actionsSrv != nil {
+			_ = actionsSrv.Shutdown(shutdownCtx)
+		}
 		if err := server.Shutdown(shutdownCtx); err != nil {
 			logger.Error("shutdown_error", logger.Fields{
 				"error": err.Error(),

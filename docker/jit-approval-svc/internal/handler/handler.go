@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nkontur/jit-approval-svc/internal/actions"
 	"github.com/nkontur/jit-approval-svc/internal/backend"
 	"github.com/nkontur/jit-approval-svc/internal/config"
 	"github.com/nkontur/jit-approval-svc/internal/logger"
@@ -26,6 +27,13 @@ type Handler struct {
 	backends          *backend.Registry
 	limiter           *ratelimit.Limiter
 	lastWebhookRefresh time.Time
+	actions           *actions.Service
+}
+
+// SetActions enables routing of "act:" button callbacks to the action-prompt
+// service (see internal/actions).
+func (h *Handler) SetActions(a *actions.Service) {
+	h.actions = a
 }
 
 // New creates a new Handler.
@@ -655,6 +663,11 @@ func (h *Handler) sendApprovalMessage(req *store.Request, tierCfg config.TierCon
 // processCallback handles an approve or deny callback from Telegram.
 func (h *Handler) processCallback(cb *CallbackQuery) {
 	data := cb.Data
+
+	// Action prompts (internal/actions): "act:<action>:<prompt-id>"
+	if h.actions != nil && h.actions.HandleCallback(cb.ID, data) {
+		return
+	}
 
 	// Parse callback data: "jit:approve:req-xxx" or "jit:deny:req-xxx"
 	parts := strings.SplitN(data, ":", 3)

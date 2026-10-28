@@ -28,6 +28,10 @@ type Config struct {
 
 	JITAPIKey string
 
+	// ActionsSocket, when set, serves the action-prompt API (internal/actions)
+	// on this Unix socket. Host-side clients reach it through a bind mount.
+	ActionsSocket string
+
 	ListenAddr     string
 	RequestTimeout time.Duration
 
@@ -92,6 +96,8 @@ func Load() (*Config, error) {
 		TelegramWebhookURL:    os.Getenv("TELEGRAM_WEBHOOK_URL"),
 
 		JITAPIKey: os.Getenv("JIT_API_KEY"),
+
+		ActionsSocket: os.Getenv("ACTIONS_SOCKET"),
 
 		ListenAddr:     getEnv("LISTEN_ADDR", ":8080"),
 		RequestTimeout: time.Duration(timeoutSec) * time.Second,
