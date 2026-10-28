@@ -1,0 +1,27 @@
+---
+# Models the ollama container should have. Set per host in the inventory.
+# Registry models, pulled when missing:
+ollama_models: []
+# Models built with `ollama create` from a Modelfile in docker/ollama/:
+#   - name: my-model:tag
+#     modelfile: my-model.Modelfile
+# A custom model is (re)created when it is missing or its rendered Modelfile
+# or base model changed. Its FROM model must be listed in ollama_models.
+ollama_custom_models: []
+# Remove installed models that are declared in neither list.
+ollama_prune_undeclared: false
+
+ollama_container: ollama
+# Host path of the container's /root/.ollama (compose volume).
+ollama_data_path: /mpool/ollama
+ollama_container_data_path: /root/.ollama
+# Network that gives the container egress for a pull (it is otherwise only on
+# the internal llm-backend network). Connected for the pull, then removed.
+ollama_pull_network: bridge
+
+# Seconds. Pulls are multi-GB, so they get a long limit; they only run when
+# a declared model is missing.
+ollama_list_timeout: 30
+ollama_pull_timeout: 3600
+ollama_create_timeout: 900
+ollama_rm_timeout: 120

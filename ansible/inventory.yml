@@ -116,6 +116,15 @@ all:
       # missing from /proc/asound/cards (checked 2026-10-21).
       # Re-enable a zone: once its card is plugged in and listed under its
       # udev name in /proc/asound/cards, delete its line here and deploy.
+      # Ollama models, applied on deploy by configure-ollama-models
+      # (docs/ollama.md). paperless-ai uses paperless-qwen3:14b.
+      ollama_models:
+        - qwen3:14b-q4_K_M
+      ollama_custom_models:
+        - name: paperless-qwen3:14b
+          modelfile: paperless-qwen3.Modelfile
+      # Remove any other installed model (e.g. one pulled by hand to test).
+      ollama_prune_undeclared: true
       snapclient_disabled_zones:
         - office
         - kitchen
@@ -271,10 +280,6 @@ all:
           dest: "{{ docker_persistent_data_path }}/paperless-ai/paperless-ai.env"
           name: "paperless-ai"
           mode: "0600"
-        - src: "docker/ollama/paperless-qwen3.Modelfile"
-          dest: "/mpool/ollama/modelfiles/paperless-qwen3.Modelfile"
-          name: "ollama"
-          mode: "0644"
         - src: "docker/telegraf/telegraf.conf"
           dest: "/etc/telegraf/telegraf.conf"
           name: "telegraf"

@@ -86,6 +86,8 @@ playbooks:
         - docker/promtail/satellite-config.yml
         - docker/telegraf/satellite-telegraf.conf
       roles: []
+    - match: [docker/ollama/**]
+      roles: [configure-ollama-models]
     - match: [docker/**]
       roles: [configure-homelab-services]
     - match: [scripts/grafana-token-cleanup.sh, base/nut/**]

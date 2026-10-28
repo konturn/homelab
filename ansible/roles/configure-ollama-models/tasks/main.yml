@@ -1,0 +1,224 @@
+---
+# Declared Ollama models: pull the missing ones, (re)create custom models
+# from their Modelfiles, optionally remove undeclared ones. See docs/ollama.md.
+#
+# Nothing here fails the deploy because Ollama is down or slow: if the
+# container is not running or `ollama list` does not answer, the role warns
+# and skips. A pull or create that runs and fails does fail the role, since a
+# missing model breaks its clients. The role is last in router.yml, so that
+# cannot hold up any other role.
+
+- name: Render custom Modelfiles on the controller
+  ansible.builtin.set_fact:
+    _ollama_custom: >-
+      {%- set out = [] -%}
+      {%- for m in ollama_custom_models -%}
+      {%-   set text = lookup('template', lookup('env', 'CI_PROJECT_DIR') + '/docker/ollama/' + m.modelfile) -%}
+      {%-   set base = text | regex_search('(?m)^FROM\\s+(\\S+)', '\\1') -%}
+      {%-   set _ = out.append({'name': m.name, 'modelfile': m.modelfile,
+                                'base': (base | first) if base else '',
+                                'sha256': text | hash('sha256')}) -%}
+      {%- endfor -%}
+      {{ out }}
+
+# Names are compared with `ollama list` output, which always shows the tag.
+- name: Check the declared Ollama models
+  ansible.builtin.assert:
+    that:
+      - (ollama_models + (_ollama_custom | map(attribute='name') | list)) | reject('search', ':') | list | length == 0
+      - _ollama_custom | map(attribute='base') | difference(ollama_models) | length == 0
+    fail_msg: >-
+      Every model in ollama_models and ollama_custom_models needs an explicit
+      tag (name:tag), and every custom Modelfile's FROM model must be listed in
+      ollama_models so it is pulled. FROM models:
+      {{ _ollama_custom | map(attribute='base') | list }}.
+    quiet: true
+
+- name: Create the Modelfile directory
+  ansible.builtin.file:
+    path: "{{ ollama_data_path }}/modelfiles"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy custom Modelfiles
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/ollama/' + item.modelfile }}"
+    dest: "{{ ollama_data_path }}/modelfiles/{{ item.modelfile }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ ollama_custom_models }}"
+  loop_control:
+    label: "{{ item.modelfile }}"
+
+- name: Inspect the ollama container
+  ansible.builtin.command:
+    argv: [docker, inspect, "{{ ollama_container }}"]
+  register: _ollama_inspect
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Read installed Ollama models
+  ansible.builtin.command:
+    argv: [timeout, "{{ ollama_list_timeout }}", docker, exec, "{{ ollama_container }}", ollama, list]
+  register: _ollama_list
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  # Just after compose has (re)started the container the server may not
+  # answer yet.
+  retries: 4
+  delay: 5
+  until: _ollama_list.rc == 0
+  when:
+    - _ollama_inspect.rc == 0
+    - (_ollama_inspect.stdout | from_json)[0].State.Running
+
+- name: Warn that Ollama models are not managed this run
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: {{ ollama_container }} is not running or `ollama list` did not
+      answer ({{ (_ollama_list.stderr if _ollama_list is not skipped else _ollama_inspect.stderr | default(_ollama_inspect.msg | default(''))) | trim }}).
+      Skipping model management; re-run the deploy once Ollama is up.
+  when: _ollama_list is skipped or _ollama_list.rc != 0
+
+- name: Manage Ollama models
+  when:
+    - _ollama_list is not skipped
+    - _ollama_list.rc == 0
+  vars:
+    # name -> ID from `ollama list` (header line dropped)
+    _ollama_parse: >-
+      {%- set d = {} -%}
+      {%- for line in _ollama_list_out.stdout_lines[1:] if line | trim -%}
+      {%-   set f = line.split() -%}
+      {%-   set _ = d.update({f[0]: f[1]}) -%}
+      {%- endfor -%}
+      {{ d }}
+    _ollama_list_out: "{{ _ollama_list2 if (_ollama_list2 is defined and _ollama_list2 is not skipped) else _ollama_list }}"
+    _ollama_want_all: "{{ ollama_models + (_ollama_custom | map(attribute='name') | list) }}"
+    _ollama_networks: "{{ (_ollama_inspect.stdout | from_json)[0].NetworkSettings.Networks.keys() | list }}"
+  block:
+    - name: Select missing Ollama models
+      ansible.builtin.set_fact:
+        _ollama_missing: "{{ ollama_models | difference(_ollama_parse.keys() | list) }}"
+
+    - name: Pull missing Ollama models
+      when: _ollama_missing | length > 0
+      block:
+        - name: Give ollama egress for the pull
+          ansible.builtin.command:
+            argv: [docker, network, connect, "{{ ollama_pull_network }}", "{{ ollama_container }}"]
+          when: ollama_pull_network not in _ollama_networks
+          register: _ollama_connected
+
+        - name: Pull Ollama model
+          # Keep only the end of the progress output.
+          ansible.builtin.shell: |
+            out=$(timeout {{ ollama_pull_timeout }} docker exec {{ ollama_container | quote }} ollama pull {{ item | quote }} 2>&1)
+            rc=$?
+            printf '%s\n' "$out" | tail -n 3
+            exit $rc
+          loop: "{{ _ollama_missing }}"
+          async: "{{ ollama_pull_timeout | int + 60 }}"
+          poll: 15
+      always:
+        - name: Remove ollama's egress again
+          ansible.builtin.command:
+            argv: [docker, network, disconnect, "{{ ollama_pull_network }}", "{{ ollama_container }}"]
+          when: _ollama_connected is changed
+
+    - name: Re-read installed Ollama models after the pull
+      ansible.builtin.command:
+        argv: [timeout, "{{ ollama_list_timeout }}", docker, exec, "{{ ollama_container }}", ollama, list]
+      register: _ollama_list2
+      changed_when: false
+      check_mode: false
+      when: _ollama_missing | length > 0 and not ansible_check_mode
+
+    # The marker records what each custom model was built from: the rendered
+    # Modelfile's sha256 and the base model's ID. A different marker, or no
+    # model, means create.
+    - name: Read custom model markers
+      ansible.builtin.slurp:
+        src: "{{ ollama_data_path }}/modelfiles/.created/{{ item.name | regex_replace('[^A-Za-z0-9._-]', '_') }}"
+      loop: "{{ _ollama_custom }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: _ollama_markers
+      failed_when: false
+
+    - name: Select custom models to create
+      ansible.builtin.set_fact:
+        _ollama_create: >-
+          {%- set out = [] -%}
+          {%- for r in _ollama_markers.results -%}
+          {%-   set m = r.item -%}
+          {%-   set want = 'modelfile=' ~ m.sha256 ~ ' base=' ~ _ollama_parse.get(m.base, 'missing') -%}
+          {%-   set have = (r.content | b64decode) if r.content is defined else '' -%}
+          {%-   if m.name not in _ollama_parse or have != want -%}
+          {%-     set _ = out.append(m | combine({'marker': want})) -%}
+          {%-   endif -%}
+          {%- endfor -%}
+          {{ out }}
+
+    - name: Select undeclared Ollama models
+      ansible.builtin.set_fact:
+        # Never prune everything because the declared lists came out empty.
+        _ollama_prune: >-
+          {{ (_ollama_parse.keys() | list | difference(_ollama_want_all) | sort)
+             if (ollama_prune_undeclared | bool and _ollama_want_all | length > 0) else [] }}
+
+    - name: Show Ollama model changes
+      ansible.builtin.debug:
+        msg: >-
+          pull: {{ _ollama_missing }};
+          create: {{ _ollama_create | map(attribute='name') | list }};
+          remove: {{ _ollama_prune }}
+
+    - name: Create custom Ollama model
+      ansible.builtin.command:
+        argv:
+          - timeout
+          - "{{ ollama_create_timeout }}"
+          - docker
+          - exec
+          - "{{ ollama_container }}"
+          - ollama
+          - create
+          - "{{ item.name }}"
+          - -f
+          - "{{ ollama_container_data_path }}/modelfiles/{{ item.modelfile }}"
+      loop: "{{ _ollama_create }}"
+      loop_control:
+        label: "{{ item.name }}"
+      async: "{{ ollama_create_timeout | int + 60 }}"
+      poll: 5
+
+    - name: Create the custom model marker directory
+      ansible.builtin.file:
+        path: "{{ ollama_data_path }}/modelfiles/.created"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      when: _ollama_create | length > 0
+
+    - name: Write custom model markers
+      ansible.builtin.copy:
+        content: "{{ item.marker }}"
+        dest: "{{ ollama_data_path }}/modelfiles/.created/{{ item.name | regex_replace('[^A-Za-z0-9._-]', '_') }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop: "{{ _ollama_create }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Remove undeclared Ollama models
+      ansible.builtin.command:
+        argv: [timeout, "{{ ollama_rm_timeout }}", docker, exec, "{{ ollama_container }}", ollama, rm, "{{ item }}"]
+      loop: "{{ _ollama_prune }}"
