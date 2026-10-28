@@ -1,0 +1,46 @@
+#!/bin/sh
+# nginx-safe-reload CONTAINER - graceful nginx reload that fails loudly.
+#
+# Used by the deploy (configure-homelab-services) and by edge-quarantine.
+# nginx mounts its whole conf dir, so new files are already visible inside the
+# container. nginx -t runs first: a bad config fails here while the old config
+# keeps serving.
+#
+# `nginx -s reload` only signals the master and returns 0 either way. If the
+# master then rejects the config, it logs [emerg] and keeps serving the old
+# one. So after the reload this fails if the error log gained an [emerg] line,
+# or if the master started no new worker processes within 15s (a successful
+# reload always replaces its workers).
+#
+# A container that is not running is skipped (exit 0): compose-up starts it
+# with the new config.
+set -eu
+c=${1:?usage: nginx-safe-reload CONTAINER}
+if [ "$(docker inspect -f '{{.State.Running}}' "$c" 2>/dev/null)" != "true" ]; then
+  echo "$c not running, compose-up will start it"
+  exit 0
+fi
+docker exec "$c" nginx -t
+log=/data/log/error.log
+before=" $(docker exec "$c" pgrep -P 1 | tr '\n' ' ') "
+off=$(docker exec "$c" sh -c "wc -c < $log" 2>/dev/null || echo 0)
+docker exec "$c" nginx -s reload
+i=0
+while [ "$i" -lt 30 ]; do
+  sleep 0.5
+  i=$((i + 1))
+  emerg=$(docker exec "$c" sh -c "tail -c +$((off + 1)) $log 2>/dev/null | grep -F '[emerg]'" || true)
+  if [ -n "$emerg" ]; then
+    echo "$c rejected the new config, still running the old one:" >&2
+    echo "$emerg" >&2
+    exit 1
+  fi
+  for p in $(docker exec "$c" pgrep -P 1); do
+    case "$before" in
+      *" $p "*) ;;
+      *) echo "$c reloaded (new worker $p)"; exit 0 ;;
+    esac
+  done
+done
+echo "$c started no new workers within 15s of reload; new config not applied" >&2
+exit 1

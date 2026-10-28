@@ -4,10 +4,11 @@ that other daemons own.
 
 `netfilter-persistent reload` is a plain `iptables-restore < rules.v4`: it
 flushes every table in the file and deletes every user-defined chain, which
-silently removes the rules Docker (DOCKER*), libvirt (LIBVIRT_*) and Tailscale
-(ts-*) installed at runtime. The deploy used to paper over the Docker half of
-that by restarting dockerd, which restarts all ~60 containers and still left
-Tailscale and libvirt without their rules.
+silently removes the rules Docker (DOCKER*), libvirt (LIBVIRT_*), Tailscale
+(ts-*) and edge-quarantine (EDGE-QUARANTINE) installed at runtime. The
+deploy used to paper over the Docker half of that by restarting dockerd,
+which restarts all ~60 containers and still left Tailscale and libvirt
+without their rules.
 
 Instead, this script:
   1. dumps the live ruleset (and keeps a copy under /var/backups/fw-apply/),
@@ -41,7 +42,9 @@ import re
 import subprocess
 import sys
 
-FOREIGN_CHAIN = re.compile(r"^(DOCKER(-[A-Z-]+)?|LIBVIRT_[A-Z]+|ts-[a-z-]+)$")
+# EDGE-QUARANTINE: port rules of docker/nginx/edge-quarantine (state-driven,
+# re-applied by `edge-quarantine render`).
+FOREIGN_CHAIN = re.compile(r"^(DOCKER(-[A-Z-]+)?|LIBVIRT_[A-Z]+|ts-[a-z-]+|EDGE-QUARANTINE)$")
 FOREIGN_IFACE = re.compile(r"(^|\s)-[io]\s+(docker0|br-[0-9a-f]{12}|virbr\d+)(\s|$)")
 # Tailscale's connmark save/restore rules in mangle (it owns mark bits 0xff0000)
 FOREIGN_RULE = re.compile(r"-j CONNMARK .*--nfmask 0xff0000 --ctmask 0xff0000")

@@ -232,7 +232,10 @@
                         'name': item.name,
                         'owner': 'systemd-resolve',
                         'group': 'systemd-journal',
-                        'mode': '0700'  }] }}"
+                        'mode': '0700'  },
+                        {'src': 'docker/nginx/edge_quarantine',
+                        'dest': item.dest + '/conf/edge_quarantine',
+                        'name': item.name }] }}"
   loop: "{{ nginx_config | default([]) }}"
 
 # All config files, used by the directory, cleanup and copy tasks below.
@@ -540,52 +543,95 @@
                                      + (['snapserver'] if _snapserver_zones_reset is changed else [])) | unique | list }}"
     _nginx_container_names: "{{ nginx_config | default([]) | map(attribute='name') | list }}"
 
+### Edge quarantine + safe nginx reload (docker/nginx/edge-quarantine/README.md)
+# nginx-safe-reload: nginx -t, graceful reload, then fail if the master logged
+# [emerg] or started no new workers (it keeps serving the old config either
+# way, which a plain `nginx -s reload` exit code does not show). The deploy
+# and edge-quarantine both use it.
+- name: Install nginx-safe-reload and edge-quarantine
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/edge-quarantine/{{ item }}"
+    dest: "/usr/local/sbin/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - nginx-safe-reload
+    - edge-quarantine
+  when: "'router' in inventory_hostname"
+
+- name: Create edge-quarantine config and state directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: /etc/edge-quarantine, mode: "0755"}
+    - {path: /var/lib/edge-quarantine, mode: "0700"}
+    - {path: "{{ docker_persistent_data_path }}/nginx/conf/edge-quarantine", mode: "0700"}
+  when: "'router' in inventory_hostname"
+
+- name: Configure edge-quarantine
+  ansible.builtin.copy:
+    dest: /etc/edge-quarantine/config.json
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      {
+        "nginx_container": "nginx",
+        "map_dir": "{{ docker_persistent_data_path }}/nginx/conf/edge-quarantine",
+        "state_dir": "/var/lib/edge-quarantine",
+        "verify_addr": "{{ nginx_ip }}"
+      }
+  when: "'router' in inventory_hostname"
+
+# Re-applies quarantine state at boot (firewall rules are not in rules.v4,
+# and fw-apply only preserves them across reloads, not reboots).
+- name: Install edge-quarantine restore unit
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/edge-quarantine/edge-quarantine-restore.service"
+    dest: /etc/systemd/system/edge-quarantine-restore.service
+    owner: root
+    group: root
+    mode: "0644"
+  register: _edge_quarantine_unit
+  when: "'router' in inventory_hostname"
+
+- name: Enable edge-quarantine restore unit
+  ansible.builtin.systemd:
+    name: edge-quarantine-restore.service
+    enabled: true
+    daemon_reload: "{{ _edge_quarantine_unit is changed }}"
+  when:
+    - "'router' in inventory_hostname"
+    - not ansible_check_mode
+
 # nginx mounts its whole conf dir, so the new files are already visible inside
-# the container and a graceful reload applies them with no downtime. nginx -t
-# runs first: a bad config fails the deploy while the old config keeps serving,
+# the container and a graceful reload applies them with no downtime. A config
+# that fails nginx -t fails the deploy while the old config keeps serving,
 # where a restart would have left nginx dead. A container that is not running
 # is skipped; compose-up below starts it with the new config.
-#
-# `nginx -s reload` only signals the master and returns 0 either way. If the
-# master then rejects the config, it logs [emerg] and keeps serving the old
-# one, and the deploy used to pass. After the reload, fail if the error log
-# gained an [emerg] line, or if the master started no new worker processes
-# (a successful reload always replaces its workers).
 - name: Reload nginx containers if config changed
-  ansible.builtin.shell: |
-    set -eu
-    c={{ item }}
-    if [ "$(docker inspect -f '{{ '{{' }}.State.Running{{ '}}' }}' "$c" 2>/dev/null)" != "true" ]; then
-      echo "$c not running, compose-up will start it"
-      exit 0
-    fi
-    docker exec "$c" nginx -t
-    log=/data/log/error.log
-    before=" $(docker exec "$c" pgrep -P 1 | tr '\n' ' ') "
-    off=$(docker exec "$c" sh -c "wc -c < $log" 2>/dev/null || echo 0)
-    docker exec "$c" nginx -s reload
-    i=0
-    while [ "$i" -lt 30 ]; do
-      sleep 0.5
-      i=$((i + 1))
-      emerg=$(docker exec "$c" sh -c "tail -c +$((off + 1)) $log 2>/dev/null | grep -F '[emerg]'" || true)
-      if [ -n "$emerg" ]; then
-        echo "$c rejected the new config, still running the old one:" >&2
-        echo "$emerg" >&2
-        exit 1
-      fi
-      for p in $(docker exec "$c" pgrep -P 1); do
-        case "$before" in
-          *" $p "*) ;;
-          *) echo "$c reloaded (new worker $p)"; exit 0 ;;
-        esac
-      done
-    done
-    echo "$c started no new workers within 15s of reload; new config not applied" >&2
-    exit 1
+  ansible.builtin.command:
+    cmd: "/usr/local/sbin/nginx-safe-reload {{ item }}"
   timeout: 60
   when: not ansible_check_mode
   loop: "{{ _changed_config_containers | intersect(_nginx_container_names) }}"
+
+# The quarantine map and firewall rules live outside the deployed files, so a
+# deploy never clears them; this re-renders both from the state file in case
+# the conf dir or the chain was recreated (no-op otherwise).
+- name: Re-apply edge-quarantine state
+  ansible.builtin.command:
+    cmd: /usr/local/sbin/edge-quarantine --json render
+  register: _edge_quarantine_render
+  changed_when: (_edge_quarantine_render.stdout | from_json).changed | default(false)
+  when:
+    - "'router' in inventory_hostname"
+    - not ansible_check_mode
 
 - name: Restart containers if config change
   ansible.builtin.command:

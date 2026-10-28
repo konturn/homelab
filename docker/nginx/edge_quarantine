@@ -1,0 +1,16 @@
+# Edge quarantine (see docker/nginx/edge-quarantine/README.md).
+# Include at server level, before anything else that returns: while this
+# host (or host + path prefix) is listed in /etc/nginx/edge-quarantine/*.map,
+# every request gets a static 503 maintenance page and never reaches the
+# backend. Toggle it with `edge-quarantine on|off NAME` on the host.
+if ($edge_quarantine) {
+    return 503;
+}
+error_page 503 @edge_maintenance;
+location @edge_maintenance {
+    default_type text/html;
+    add_header Retry-After 3600 always;
+    add_header Cache-Control "no-store" always;
+    add_header X-Edge-Quarantine 1 always;
+    return 503 "<!doctype html><html><head><meta charset=utf-8><title>Down for maintenance</title></head><body><h1>Down for maintenance</h1><p>This service is temporarily unavailable. Please try again later.</p></body></html>\n";
+}
