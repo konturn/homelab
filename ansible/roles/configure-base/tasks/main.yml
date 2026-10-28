@@ -401,6 +401,29 @@
     state: stopped
     enabled: false
 
+# Logrotate stanzas left behind by packages that are gone. Each one makes
+# logrotate.service exit 1 (wok: "stat of /var/log/wok failed" every night,
+# mumble-server: postrotate can't find murmurd weekly), which trips the
+# Systemd Unit Failure alert. Only remove a stanza while its target is missing.
+- name: Check targets of orphaned logrotate stanzas
+  ansible.builtin.stat:
+    path: "{{ item.target }}"
+  loop:
+    - { conf: wok, target: /var/log/wok }
+    - { conf: mumble-server, target: /usr/sbin/murmurd }
+  loop_control:
+    label: "{{ item.conf }}"
+  register: orphaned_logrotate
+
+- name: Remove logrotate stanzas whose target is missing
+  ansible.builtin.file:
+    path: "/etc/logrotate.d/{{ item.item.conf }}"
+    state: absent
+  loop: "{{ orphaned_logrotate.results }}"
+  loop_control:
+    label: "{{ item.item.conf }}"
+  when: not item.stat.exists
+
 - name: Add loopback alsa module
   ansible.builtin.lineinfile:
     path: /etc/modules
