@@ -328,6 +328,23 @@ To rotate a secret:
 
 **Complexity:** 🟢-🟡 Easy to Medium
 
+### OpenClaw git credentials
+
+OpenClaw's git remotes are plain `https://gitlab.lab.nkontur.com/...` URLs with
+no credentials in them. `docker/openclaw/git-credential-gitlab.sh` is installed
+as the container's global git credential helper (by `entrypoint-wrapper.sh`)
+and looks the token up each time git needs it:
+
+| Repo | Token source |
+|------|--------------|
+| `moltbot/clawd-memory` (workspace sync) | project access token `openclaw-memory-sync` (`write_repository`): Vault `homelab/openclaw/tokens` field `clawd_memory_token`, else `/home/node/.openclaw/credentials/gitlab-clawd-memory.token` (0600, uid 1000) |
+| everything else | `$GITLAB_TOKEN`, else Vault `homelab/openclaw/tokens` field `gitlab_token` |
+
+**How to rotate the clawd-memory token:** create a new project access token on
+`moltbot/clawd-memory` (role Maintainer, `master` is protected; scope
+`write_repository`), write it to `clawd_memory_token` in Vault, then revoke the
+old one. No redeploy is needed; the helper reads Vault per use.
+
 ---
 
 ### ROUTER_PRIVATE_KEY_BASE64
