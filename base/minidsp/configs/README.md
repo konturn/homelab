@@ -1,8 +1,11 @@
 # miniDSP DSP configurations
 
 This directory is for the DSP tuning (filters, crossovers, delays, routing,
-gains) of the two miniDSP 2x4HD units on the Z-Wave Pi. It holds no
-configurations yet. See `docs/minidsp.md` for the device map and safety rules.
+gains) of the two miniDSP 2x4HD units on the Z-Wave Pi. The original plugin
+exports (2022) were recovered on 2026-10-28 and are stored here unmodified.
+Each unit directory has a NOTES.md with a decoded summary; decode any file
+with `scripts/minidsp/decode.py <file>`. See `docs/minidsp.md` for the device
+map and safety rules.
 
 ## The tuning exists only on the devices
 
@@ -11,9 +14,8 @@ configurations yet. See `docs/minidsp.md` for the device map and safety rules.
   way to back up what is loaded now.
 - If a unit is reset, replaced or overwritten, its tuning is lost unless the
   original files turn up.
-- The original miniDSP plugin configuration files (`.xml`, saved from the
-  2x4HD plugin) are being searched for. Until they are found, treat the units
-  as the only copy.
+- These files are the only copy outside the devices. When a unit is
+  retuned, export the new preset from the plugin and replace the file here.
 
 ## Layout
 
