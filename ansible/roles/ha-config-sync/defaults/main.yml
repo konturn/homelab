@@ -1,0 +1,19 @@
+# Deploy target for the private Home Assistant config repo (root/homeassistant).
+# See README.md in this role and docs/HOMEASSISTANT.md.
+
+ha_config_sync_user: ha-config
+# Certificate principal Vault's ha-config-deploy SSH role signs for
+# (terraform/vault/ssh.tf). Only certificates carrying it can log in as
+# ha_config_sync_user, and only to run the forced command.
+ha_config_sync_principal: ha-config-deploy
+ha_config_sync_config_dir: "{{ docker_persistent_data_path }}/homeassistant"
+# Directories loaded by the `automation manual:` / `script manual:` /
+# `scene manual:` includes in docker/homeassistant/configuration.yaml.
+ha_config_sync_managed_dirs:
+  - automations
+  - scripts
+  - scenes
+ha_config_sync_state_dir: /var/lib/ha-config-sync
+# Pre-deploy archives of the managed and UI files (last 30 kept). /var/backups
+# is not in restic; the HA volume itself is.
+ha_config_sync_backup_dir: /var/backups/ha-config-sync

@@ -113,3 +113,52 @@ resource "vault_jwt_auth_backend_role" "vault_read" {
   token_ttl      = 300
   token_max_ttl  = 300
 }
+
+# =============================================================================
+# JWT Roles: ha-config-ci / ha-config-deploy
+# =============================================================================
+# CI of the private Home Assistant config repo (root/homeassistant, project
+# ID 14). See docs/HOMEASSISTANT.md.
+#
+# ha-config-ci: any ref (MR pipelines). Reads the Home Assistant API token
+# for the read-only lint (entity, service and device lists).
+# ha-config-deploy: protected main only. Also signs a 5-minute SSH
+# certificate for the ha-config forced-command user and reads the GitLab
+# token the drift job uses to open MRs in that project.
+
+resource "vault_jwt_auth_backend_role" "ha_config_ci" {
+  backend   = vault_jwt_auth_backend.gitlab.path
+  role_name = "ha-config-ci"
+  role_type = "jwt"
+
+  bound_audiences = ["https://vault.lab.nkontur.com:8200"]
+
+  bound_claims = {
+    project_id = "14"
+  }
+
+  user_claim     = "user_email"
+  token_policies = ["ha-config-ci"]
+  token_ttl      = 300
+  token_max_ttl  = 300
+}
+
+resource "vault_jwt_auth_backend_role" "ha_config_deploy" {
+  backend   = vault_jwt_auth_backend.gitlab.path
+  role_name = "ha-config-deploy"
+  role_type = "jwt"
+
+  bound_audiences = ["https://vault.lab.nkontur.com:8200"]
+
+  bound_claims = {
+    project_id    = "14"
+    ref           = "main"
+    ref_type      = "branch"
+    ref_protected = "true"
+  }
+
+  user_claim     = "user_email"
+  token_policies = ["ha-config-deploy"]
+  token_ttl      = 600
+  token_max_ttl  = 600
+}

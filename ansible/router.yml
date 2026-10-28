@@ -29,6 +29,10 @@
     vars:
       claude_docker_access: false
       claude_user_principal: claude-router
+  # Before configure-homelab-services: creates the directories that
+  # configuration.yaml includes (automations/, scripts/, scenes/).
+  - role: ha-config-sync
+    tags: [ha-config-sync]
   - role: configure-router-network
     tags: [configure-router-network]
   - role: configure-tailscale

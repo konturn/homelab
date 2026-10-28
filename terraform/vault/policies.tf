@@ -417,3 +417,40 @@ resource "vault_policy" "jit_tier2_infra" {
     }
   EOT
 }
+
+# =============================================================================
+# Policies: ha-config-ci / ha-config-deploy
+# =============================================================================
+# CI of the private Home Assistant config repo (JWT roles in roles.tf).
+
+resource "vault_policy" "ha_config_ci" {
+  name = "ha-config-ci"
+
+  policy = <<-EOT
+    # Home Assistant API token (the job uses the `token` field only)
+    path "homelab/data/docker/homeassistant" {
+      capabilities = ["read"]
+    }
+  EOT
+}
+
+resource "vault_policy" "ha_config_deploy" {
+  name = "ha-config-deploy"
+
+  policy = <<-EOT
+    # Home Assistant API token: reload services, counts, read-only checks
+    path "homelab/data/docker/homeassistant" {
+      capabilities = ["read"]
+    }
+
+    # Project access token of the drift job (opens MRs, cannot push main)
+    path "homelab/data/gitlab/ha-config-bot" {
+      capabilities = ["read"]
+    }
+
+    # 5-minute certificate for the ha-config forced-command user
+    path "ssh-client-signer/sign/ha-config-deploy" {
+      capabilities = ["update"]
+    }
+  EOT
+}
