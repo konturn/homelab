@@ -512,7 +512,7 @@ services:
       - /var/log/iot_nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   ombi:
-    image: linuxserver/ombi:4.53.10@sha256:a6f76ac521ba01eee2e9f0c23a3fed22e56630d97a04d5eeaeaa36c1e681640d
+    image: linuxserver/ombi:4.53.10@sha256:19d4f86713e7203d910b4aa431d7176e7a9a22f641beb1047da45aa989296509
     container_name: ombi
     security_opt:
       - no-new-privileges=true
