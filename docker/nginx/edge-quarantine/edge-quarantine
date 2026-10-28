@@ -1,0 +1,487 @@
+#!/usr/bin/env python3
+"""edge-quarantine - reversible per-vhost "down for maintenance" switch for the
+external nginx, plus optional closing of port forwards.
+
+    edge-quarantine on NAME --host H [--host H2] [--path HOST:/prefix/]
+                            [--port IFACE:tcp:PORT] --reason TEXT --actor WHO
+    edge-quarantine off NAME --actor WHO [--reason TEXT]
+    edge-quarantine status [--json]
+    edge-quarantine verify [NAME]
+    edge-quarantine render [--no-reload]      (deploy / boot: re-apply state)
+
+What it does:
+  - keeps the desired state in STATE_DIR/state.json (root-only);
+  - renders it into MAP_DIR/active.map, which the external nginx includes in
+    `map "$host$uri" $edge_quarantine`; every vhost that includes the
+    `edge_quarantine` snippet answers 503 with a static maintenance page
+    while its host (or host + path prefix) is listed;
+  - reloads nginx through nginx-safe-reload (nginx -t, reload, and the
+    deploy's post-reload check); a rejected reload puts the old map back;
+  - optionally rejects new inbound connections to a forwarded port, from a
+    given interface, in the EDGE-QUARANTINE iptables chain (hooked at the top
+    of FORWARD; fw-apply treats the chain as foreign and keeps it);
+  - verifies the result over HTTPS against the nginx address;
+  - appends every change to AUDIT_LOG (JSON lines) and to the journal.
+
+It never stops containers and never touches application data. Re-running a
+command with the same arguments changes nothing (idempotent). `render` is what
+the deploy and the boot unit call, so a quarantine survives deploys, nginx
+recreation and reboots until it is turned off.
+
+Exit codes: 0 ok (or nothing to do), 1 error (nothing changed),
+2 applied but verification failed, 3 usage error.
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import fcntl
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+from contextlib import contextmanager
+from typing import Dict, List, Optional, Tuple
+
+CONFIG = os.environ.get("EDGE_QUARANTINE_CONFIG", "/etc/edge-quarantine/config.json")
+DEFAULTS = {
+    "state_dir": "/var/lib/edge-quarantine",
+    "map_dir": "/persistent_data/application/nginx/conf/edge-quarantine",
+    "nginx_container": "nginx",
+    "reload_cmd": ["/usr/local/sbin/nginx-safe-reload"],
+    "verify_addr": "",
+    "verify_timeout": 6,
+    "audit_log": "/var/log/edge-quarantine.log",
+    "chain": "EDGE-QUARANTINE",
+    "iptables": "iptables",
+}
+MAP_NAME = "active.map"
+MARK_HEADER = "x-edge-quarantine"
+
+NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
+HOST_RE = re.compile(r"^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$")
+PREFIX_RE = re.compile(r"^/[A-Za-z0-9._~/-]{0,100}$")
+IFACE_RE = re.compile(r"^[A-Za-z0-9_.@-]{1,15}$")
+TEXT_MAX = 300
+
+
+class UsageError(Exception):
+    pass
+
+
+def load_config() -> dict:
+    cfg = dict(DEFAULTS)
+    try:
+        with open(CONFIG) as f:
+            cfg.update(json.load(f) or {})
+    except FileNotFoundError:
+        pass
+    return cfg
+
+
+def utc_now() -> str:
+    return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def run(cmd: List[str], timeout: int = 60) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(cmd, 124, "", f"timeout after {timeout}s")
+    except FileNotFoundError as e:
+        return subprocess.CompletedProcess(cmd, 127, "", str(e))
+
+
+# --------------------------------------------------------------------------- spec
+
+def clean_text(s: Optional[str]) -> str:
+    s = " ".join((s or "").split())
+    return "".join(ch for ch in s if ch.isprintable())[:TEXT_MAX]
+
+
+def parse_spec(hosts: List[str], paths: List[str], ports: List[str]) -> dict:
+    """Validate and normalise the CLI targets of one entry."""
+    out = {"hosts": [], "paths": [], "ports": []}
+    for h in hosts or []:
+        h = h.strip().lower().rstrip(".")
+        if not HOST_RE.match(h):
+            raise UsageError(f"invalid host: {h!r}")
+        if h not in out["hosts"]:
+            out["hosts"].append(h)
+    for p in paths or []:
+        host, sep, prefix = p.partition(":")
+        host = host.strip().lower().rstrip(".")
+        if not sep or not HOST_RE.match(host) or not PREFIX_RE.match(prefix) or prefix == "/":
+            raise UsageError(f"invalid path (want HOST:/prefix/, not the whole site): {p!r}")
+        if [host, prefix] not in out["paths"]:
+            out["paths"].append([host, prefix])
+    for p in ports or []:
+        parts = p.split(":")
+        if len(parts) != 3 or not IFACE_RE.match(parts[0]) or parts[1] not in ("tcp", "udp") \
+                or not parts[2].isdigit() or not 0 < int(parts[2]) < 65536:
+            raise UsageError(f"invalid port (want IFACE:tcp|udp:PORT): {p!r}")
+        e = [parts[0], parts[1], int(parts[2])]
+        if e not in out["ports"]:
+            out["ports"].append(e)
+    if not (out["hosts"] or out["paths"] or out["ports"]):
+        raise UsageError("nothing to quarantine: give at least one --host, --path or --port")
+    for k in out:
+        out[k].sort()
+    return out
+
+
+def targets(entry: dict) -> dict:
+    return {k: entry.get(k) or [] for k in ("hosts", "paths", "ports")}
+
+
+# --------------------------------------------------------------------------- render
+
+def map_key(host: str, prefix: str = "/") -> str:
+    """nginx map key (PCRE) matching "$host$uri" for this host and URI prefix."""
+    return "~^" + re.escape(host) + re.escape(prefix).replace("\\/", "/")
+
+
+def render_map(state: dict) -> str:
+    lines = ["# Managed by edge-quarantine; do not edit. Use `edge-quarantine on|off NAME`."]
+    for name in sorted(state.get("entries") or {}):
+        e = state["entries"][name]
+        keys = [map_key(h) for h in e.get("hosts") or []] + [map_key(h, p) for h, p in e.get("paths") or []]
+        if not keys:
+            continue
+        lines.append(f"# {name} (since {e.get('since', '?')})")
+        lines += [f"{k} 1;" for k in keys]
+    return "\n".join(lines) + "\n"
+
+
+def fw_rules(state: dict, chain: str) -> List[List[str]]:
+    rules = []
+    for name in sorted(state.get("entries") or {}):
+        for iface, proto, port in state["entries"][name].get("ports") or []:
+            reject = "tcp-reset" if proto == "tcp" else "icmp-port-unreachable"
+            rules.append(["-A", chain, "-i", iface, "-p", proto, "-m", proto, "--dport", str(port),
+                          "-m", "conntrack", "--ctstate", "NEW", "-m", "comment", "--comment",
+                          f"edge-quarantine:{name}", "-j", "REJECT", "--reject-with", reject])
+    return rules
+
+
+# --------------------------------------------------------------------------- io
+
+def atomic_write(path: str, text: str, mode: int) -> None:
+    d = os.path.dirname(path)
+    os.makedirs(d, mode=0o700, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".tmp-")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(text)
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def read_text(path: str) -> Optional[str]:
+    try:
+        with open(path) as f:
+            return f.read()
+    except FileNotFoundError:
+        return None
+
+
+def load_state(cfg: dict) -> dict:
+    raw = read_text(os.path.join(cfg["state_dir"], "state.json"))
+    if raw is None:
+        return {"version": 1, "entries": {}}
+    st = json.loads(raw)
+    st.setdefault("entries", {})
+    return st
+
+
+def save_state(cfg: dict, st: dict) -> None:
+    os.makedirs(cfg["state_dir"], mode=0o700, exist_ok=True)
+    os.chmod(cfg["state_dir"], 0o700)
+    atomic_write(os.path.join(cfg["state_dir"], "state.json"), json.dumps(st, indent=1, sort_keys=True) + "\n", 0o600)
+
+
+@contextmanager
+def lock(cfg: dict):
+    os.makedirs(cfg["state_dir"], mode=0o700, exist_ok=True)
+    f = open(os.path.join(cfg["state_dir"], ".lock"), "w")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(f, fcntl.LOCK_UN)
+        f.close()
+
+
+def audit(cfg: dict, rec: dict) -> None:
+    rec = {"ts": utc_now(), **rec}
+    try:
+        fd = os.open(cfg["audit_log"], os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        with os.fdopen(fd, "a") as f:
+            f.write(json.dumps(rec, sort_keys=True) + "\n")
+    except OSError as e:
+        print(f"edge-quarantine: audit log write failed: {e}", file=sys.stderr)
+    msg = f"{rec.get('action')} {rec.get('name', '-')} by {rec.get('actor', '-')}: {rec.get('result')}"
+    run(["logger", "-t", "edge-quarantine", "--", msg], timeout=5)
+
+
+# --------------------------------------------------------------------------- apply
+
+def nginx_reload(cfg: dict) -> Tuple[bool, str]:
+    r = run(list(cfg["reload_cmd"]) + [cfg["nginx_container"]], timeout=60)
+    return r.returncode == 0, (r.stdout + r.stderr).strip()[-400:]
+
+
+def write_map(cfg: dict, text: str) -> bool:
+    """Write the map if it differs. Returns True when the file changed."""
+    path = os.path.join(cfg["map_dir"], MAP_NAME)
+    if read_text(path) == text:
+        return False
+    atomic_write(path, text, 0o640)
+    return True
+
+
+def apply_map(cfg: dict, new_text: str, reload: bool = True) -> Tuple[bool, bool, str]:
+    """-> (ok, changed, detail). On a rejected reload the previous map is restored."""
+    path = os.path.join(cfg["map_dir"], MAP_NAME)
+    old = read_text(path)
+    if not write_map(cfg, new_text):
+        return True, False, "map unchanged"
+    if not reload:
+        return True, True, "map written (no reload)"
+    ok, detail = nginx_reload(cfg)
+    if ok:
+        return True, True, detail
+    if old is None:
+        os.unlink(path)
+    else:
+        atomic_write(path, old, 0o640)
+    ok2, detail2 = nginx_reload(cfg)
+    return False, False, f"reload rejected, previous map restored (reload {'ok' if ok2 else 'FAILED'}): {detail}"
+
+
+def ipt(cfg: dict, *args: str) -> subprocess.CompletedProcess:
+    return run([cfg["iptables"], "-w"] + list(args), timeout=20)
+
+
+def apply_firewall(cfg: dict, st: dict) -> Tuple[bool, bool, str]:
+    """Make the chain hold exactly the state's port rules. -> (ok, changed, detail)"""
+    chain = cfg["chain"]
+    want = fw_rules(st, chain)
+    exists = ipt(cfg, "-S", chain)
+    if exists.returncode != 0 and not want:
+        return True, False, "no port rules"
+    have = [l for l in exists.stdout.splitlines() if l.startswith("-A ")] if exists.returncode == 0 else []
+    hooked = ipt(cfg, "-C", "FORWARD", "-j", chain).returncode == 0
+    if exists.returncode == 0 and hooked and [_norm(l) for l in have] == [_norm(" ".join(r)) for r in want]:
+        return True, False, "firewall unchanged"
+    if exists.returncode != 0:
+        r = ipt(cfg, "-N", chain)
+        if r.returncode != 0:
+            return False, False, f"iptables -N failed: {r.stderr.strip()}"
+    r = ipt(cfg, "-F", chain)
+    if r.returncode != 0:
+        return False, False, f"iptables -F failed: {r.stderr.strip()}"
+    for rule in want:
+        r = ipt(cfg, *rule)
+        if r.returncode != 0:
+            return False, True, f"iptables {' '.join(rule)} failed: {r.stderr.strip()}"
+    if not hooked:
+        r = ipt(cfg, "-I", "FORWARD", "1", "-j", chain)
+        if r.returncode != 0:
+            return False, True, f"hooking {chain} into FORWARD failed: {r.stderr.strip()}"
+    return True, True, f"{len(want)} port rule(s)"
+
+
+def _norm(rule: str) -> str:
+    # iptables -S prints --comment values quoted only when needed
+    return " ".join(rule.replace('"', "").split())
+
+
+def probe(cfg: dict, host: str, path: str = "/") -> Tuple[Optional[int], bool]:
+    """(HTTP status, maintenance header present) for https://host/path via verify_addr."""
+    r = run(["curl", "-sk", "-o", "/dev/null", "-D", "-", "--max-time", str(cfg["verify_timeout"]),
+             "--resolve", f"{host}:443:{cfg['verify_addr']}", f"https://{host}{path}"],
+            timeout=int(cfg["verify_timeout"]) + 5)
+    status, marked = None, False
+    for line in r.stdout.splitlines():
+        if line.startswith("HTTP/"):
+            parts = line.split()
+            status = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
+            marked = False  # only the final response counts
+        elif line.lower().startswith(MARK_HEADER + ":"):
+            marked = True
+    return status, marked
+
+
+def verify_entry(cfg: dict, entry: dict, quarantined: bool) -> List[dict]:
+    if not cfg.get("verify_addr"):
+        return [{"skipped": "no verify_addr configured"}]
+    out = []
+    checks = [(h, "/") for h in entry.get("hosts") or []] + [tuple(p) for p in entry.get("paths") or []]
+    for host, path in checks:
+        status, marked = probe(cfg, host, path)
+        ok = (status == 503 and marked) if quarantined else (status is not None and not marked)
+        out.append({"url": f"https://{host}{path}", "status": status, "maintenance": marked, "ok": ok})
+    return out
+
+
+# --------------------------------------------------------------------------- commands
+
+def result(ok: bool, **kw) -> dict:
+    return {"ok": ok, **kw}
+
+
+def cmd_on(cfg: dict, name: str, spec: dict, reason: str, actor: str, verify: bool = True) -> Tuple[int, dict]:
+    with lock(cfg):
+        st = load_state(cfg)
+        cur = st["entries"].get(name)
+        if cur and targets(cur) == spec and read_text(os.path.join(cfg["map_dir"], MAP_NAME)) == render_map(st):
+            fw_ok, fw_changed, fw_detail = apply_firewall(cfg, st)
+            v = verify_entry(cfg, cur, True) if verify else []
+            ok = fw_ok and all(x.get("ok", True) for x in v)
+            return (0 if ok else 2), result(ok, changed=fw_changed, action="on", name=name,
+                                            detail="already quarantined", verify=v)
+        new = json.loads(json.dumps(st))
+        new["entries"][name] = {**spec, "since": (cur or {}).get("since") or utc_now(), "updated": utc_now(),
+                                "reason": reason, "actor": actor}
+        ok, changed, detail = apply_map(cfg, render_map(new))
+        if not ok:
+            audit(cfg, {"action": "on", "name": name, "actor": actor, "reason": reason, "result": "failed",
+                        "detail": detail})
+            return 1, result(False, changed=False, action="on", name=name, error=detail)
+        save_state(cfg, new)
+        fw_ok, _, fw_detail = apply_firewall(cfg, new)
+        v = verify_entry(cfg, new["entries"][name], True) if verify else []
+        good = fw_ok and all(x.get("ok", True) for x in v)
+        audit(cfg, {"action": "on", "name": name, "actor": actor, "reason": reason, **spec,
+                    "result": "ok" if good else "applied, verification failed",
+                    "firewall": fw_detail, "verify": v})
+        return (0 if good else 2), result(good, changed=True, action="on", name=name, detail=detail,
+                                          firewall=fw_detail, verify=v)
+
+
+def cmd_off(cfg: dict, name: str, reason: str, actor: str, verify: bool = True) -> Tuple[int, dict]:
+    with lock(cfg):
+        st = load_state(cfg)
+        cur = st["entries"].get(name)
+        if cur is None:
+            return 0, result(True, changed=False, action="off", name=name, detail="not quarantined")
+        new = json.loads(json.dumps(st))
+        del new["entries"][name]
+        ok, changed, detail = apply_map(cfg, render_map(new))
+        if not ok:
+            audit(cfg, {"action": "off", "name": name, "actor": actor, "reason": reason, "result": "failed",
+                        "detail": detail})
+            return 1, result(False, changed=False, action="off", name=name, error=detail)
+        save_state(cfg, new)
+        fw_ok, _, fw_detail = apply_firewall(cfg, new)
+        v = verify_entry(cfg, cur, False) if verify else []
+        good = fw_ok and all(x.get("ok", True) for x in v)
+        audit(cfg, {"action": "off", "name": name, "actor": actor, "reason": reason,
+                    "result": "ok" if good else "applied, verification failed",
+                    "firewall": fw_detail, "verify": v, "was": targets(cur), "since": cur.get("since")})
+        return (0 if good else 2), result(good, changed=True, action="off", name=name, detail=detail,
+                                          firewall=fw_detail, verify=v)
+
+
+def cmd_render(cfg: dict, reload: bool = True) -> Tuple[int, dict]:
+    with lock(cfg):
+        st = load_state(cfg)
+        running = run(["docker", "inspect", "-f", "{{.State.Running}}", cfg["nginx_container"]],
+                      timeout=15).stdout.strip() == "true"
+        ok, changed, detail = apply_map(cfg, render_map(st), reload=reload and running)
+        fw_ok, fw_changed, fw_detail = apply_firewall(cfg, st)
+        if changed or fw_changed or not (ok and fw_ok):
+            audit(cfg, {"action": "render", "actor": "system", "result": "ok" if ok and fw_ok else "failed",
+                        "detail": detail, "firewall": fw_detail, "entries": sorted(st["entries"])})
+        return (0 if ok and fw_ok else 1), result(ok and fw_ok, changed=changed or fw_changed, action="render",
+                                                  entries=sorted(st["entries"]), detail=detail, firewall=fw_detail)
+
+
+def cmd_status(cfg: dict) -> Tuple[int, dict]:
+    st = load_state(cfg)
+    current = read_text(os.path.join(cfg["map_dir"], MAP_NAME))
+    in_sync = current == render_map(st) or (not st["entries"] and current is None)
+    return 0, result(True, entries=st["entries"], map_in_sync=in_sync)
+
+
+def cmd_verify(cfg: dict, name: Optional[str]) -> Tuple[int, dict]:
+    st = load_state(cfg)
+    names = [name] if name else sorted(st["entries"])
+    out = {}
+    for n in names:
+        if n not in st["entries"]:
+            return 1, result(False, error=f"{n} is not quarantined")
+        out[n] = verify_entry(cfg, st["entries"][n], True)
+    ok = all(x.get("ok", True) for v in out.values() for x in v)
+    return (0 if ok else 2), result(ok, verify=out)
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    p = argparse.ArgumentParser(prog="edge-quarantine", description=__doc__.split("\n\n")[0])
+    p.add_argument("--json", action="store_true", help="machine-readable output")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    on = sub.add_parser("on")
+    on.add_argument("name")
+    on.add_argument("--host", action="append", default=[])
+    on.add_argument("--path", action="append", default=[])
+    on.add_argument("--port", action="append", default=[])
+    on.add_argument("--reason", required=True)
+    on.add_argument("--actor", required=True)
+    on.add_argument("--no-verify", action="store_true")
+    off = sub.add_parser("off")
+    off.add_argument("name")
+    off.add_argument("--reason", default="")
+    off.add_argument("--actor", required=True)
+    off.add_argument("--no-verify", action="store_true")
+    sub.add_parser("status")
+    ve = sub.add_parser("verify")
+    ve.add_argument("name", nargs="?")
+    re_ = sub.add_parser("render")
+    re_.add_argument("--no-reload", action="store_true")
+    a = p.parse_args(argv)
+    cfg = load_config()
+    try:
+        if a.cmd in ("on", "off", "verify") and a.name and not NAME_RE.match(a.name):
+            raise UsageError(f"invalid name: {a.name!r}")
+        if a.cmd == "on":
+            rc, res = cmd_on(cfg, a.name, parse_spec(a.host, a.path, a.port), clean_text(a.reason),
+                             clean_text(a.actor), verify=not a.no_verify)
+        elif a.cmd == "off":
+            rc, res = cmd_off(cfg, a.name, clean_text(a.reason), clean_text(a.actor), verify=not a.no_verify)
+        elif a.cmd == "render":
+            rc, res = cmd_render(cfg, reload=not a.no_reload)
+        elif a.cmd == "verify":
+            rc, res = cmd_verify(cfg, a.name)
+        else:
+            rc, res = cmd_status(cfg)
+    except UsageError as e:
+        rc, res = 3, result(False, error=str(e))
+    if a.json:
+        print(json.dumps(res, sort_keys=True))
+    else:
+        if a.cmd == "status":
+            if not res["entries"]:
+                print("no services quarantined")
+            for n, e in sorted(res["entries"].items()):
+                t = ", ".join(e.get("hosts", []) + [h + pp for h, pp in e.get("paths", [])] +
+                              [f"{i}:{pr}/{po}" for i, pr, po in e.get("ports", [])])
+                print(f"{n}: {t} since {e.get('since')} by {e.get('actor')} ({e.get('reason')})")
+            if not res.get("map_in_sync"):
+                print("WARNING: nginx map out of sync with state; run `edge-quarantine render`")
+        else:
+            print(json.dumps(res, indent=1, sort_keys=True))
+    return rc
+
+
+if __name__ == "__main__":
+    sys.exit(main())

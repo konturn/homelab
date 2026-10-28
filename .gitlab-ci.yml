@@ -1467,6 +1467,21 @@ reports:test:
         - ci/reports/**/*
         - ansible/os-patch-report.yml
 
+# Offline: edge-quarantine state/map/firewall logic (docker/nginx/edge-quarantine).
+edge-quarantine:test:
+  extends:
+    - .ansible
+    - .interruptible
+  stage: validate
+  needs: []
+  before_script: []
+  script:
+    - python3 -m unittest discover -s docker/nginx/edge-quarantine -p 'test_*.py' -v
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - docker/nginx/edge-quarantine/**/*
+
 # Daily: Trivy scan of the images of running containers (DB cached on the
 # router), then labels matching open image-update MRs `security`.
 report:cves:

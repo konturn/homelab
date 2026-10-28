@@ -53,6 +53,16 @@ done < "$OUT"
 # validate the image's stock default.conf instead.
 cp "$NGINX_DIR/nginx.conf" /etc/nginx/nginx.conf
 cp "$NGINX_DIR/ssl_config" /etc/nginx/ssl_config
+cp "$NGINX_DIR/edge_quarantine" /etc/nginx/edge_quarantine
+# A populated edge-quarantine map, in the format edge-quarantine renders, so the
+# configs that include it are checked with entries present (no file at all is
+# the normal, empty case and is always valid).
+mkdir -p /etc/nginx/edge-quarantine
+cat > /etc/nginx/edge-quarantine/active.map <<'MAP'
+# validate
+~^validate\.invalid/ 1;
+~^www\.validate\.invalid/media/ 1;
+MAP
 
 rc=0
 found=0

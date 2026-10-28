@@ -156,6 +156,7 @@ all:
       pihole_dns_hosts:
         - "{{ nginx_ip }} nkontur.com"
         - "{{ nginx_ip }} www.nkontur.com"
+        - "{{ nginx_ip }} edge-canary.lab.nkontur.com"
         - "{{ movie_switch_address }} movie-switch.lab.nkontur.com"
         - "{{ office_switch_address }} office-switch.lab.nkontur.com"
         - "{{ ipmi_address }} ipmi.lab.nkontur.com"
