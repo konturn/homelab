@@ -42,9 +42,15 @@ influxdb:
       - device_tracker
       - input_boolean
 
-automation: !include automations.yaml
-script: !include scripts.yaml
-scene: !include scenes.yaml
+# Two sources each (docs/HOMEASSISTANT.md): the *manual* directories are
+# written by the deploy of a separate config repo (one file per item); the
+# *ui* files are what the UI editors write.
+automation manual: !include_dir_merge_list automations/
+automation ui: !include automations.yaml
+script manual: !include_dir_merge_named scripts/
+script ui: !include scripts.yaml
+scene manual: !include_dir_merge_list scenes/
+scene ui: !include scenes.yaml
 spotcast:
   sp_dc: "{{ vault_spotify_dc }}"
   sp_key: "{{ vault_spotify_key }}"

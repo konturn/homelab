@@ -1,0 +1,75 @@
+# Deploy target for the private Home Assistant config repo: a locked-down
+# SSH user whose only command is ha-config-sync (run as root through sudo).
+# CI in that repo signs a short-lived certificate with Vault (JWT login, role
+# ha-config-deploy) and pipes a tarball to it. See README.md.
+
+- name: Create the ha-config group
+  ansible.builtin.group:
+    name: "{{ ha_config_sync_user }}"
+    system: true
+    state: present
+
+- name: Create the ha-config user (forced-command SSH only)
+  ansible.builtin.user:
+    name: "{{ ha_config_sync_user }}"
+    group: "{{ ha_config_sync_user }}"
+    system: true
+    shell: /bin/sh
+    home: "/var/lib/{{ ha_config_sync_user }}"
+    create_home: true
+    password: "!"
+    comment: "Home Assistant config deploys (forced command)"
+
+- name: Install ha-config-sync
+  ansible.builtin.copy:
+    src: ha-config-sync
+    dest: /usr/local/sbin/ha-config-sync
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create the ha-config-sync state and backup directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  loop:
+    - "{{ ha_config_sync_state_dir }}"
+    - "{{ ha_config_sync_backup_dir }}"
+
+# Must exist before Home Assistant starts with the include_dir lines in
+# configuration.yaml. state=directory never touches their contents.
+- name: Create the managed Home Assistant config directories
+  ansible.builtin.file:
+    path: "{{ ha_config_sync_config_dir }}/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ ha_config_sync_managed_dirs }}"
+
+# sudo resets the environment; SSH_ORIGINAL_COMMAND carries the subcommand.
+- name: Allow ha-config to run ha-config-sync as root
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/{{ ha_config_sync_user }}"
+    content: |
+      Defaults!/usr/local/sbin/ha-config-sync env_keep += "SSH_ORIGINAL_COMMAND"
+      {{ ha_config_sync_user }} ALL=(root) NOPASSWD: /usr/local/sbin/ha-config-sync
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "visudo -cf %s"
+
+# TrustedUserCAKeys and AuthorizedPrincipalsFile are set by the claude-user
+# role (which runs first). sshd reads the principals file on every login, so
+# no restart is needed. `restrict` turns off forwarding, pty and rc files.
+- name: Pin the ha-config principal to the forced command
+  ansible.builtin.copy:
+    dest: "/etc/ssh/auth_principals/{{ ha_config_sync_user }}"
+    content: |
+      command="/usr/bin/sudo -n /usr/local/sbin/ha-config-sync",restrict {{ ha_config_sync_principal }}
+    owner: root
+    group: root
+    mode: "0644"

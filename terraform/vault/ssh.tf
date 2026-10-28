@@ -187,3 +187,23 @@ resource "vault_ssh_secret_backend_role" "macmini_elevated" {
   }
   allowed_extensions = "permit-pty"
 }
+
+# =============================================================================
+# ha-config-deploy: CI of the private Home Assistant config repo
+# =============================================================================
+# Principal ha-config-deploy is accepted only for the ha-config user, whose
+# principals line forces the ha-config-sync command
+# (ansible/roles/ha-config-sync). No pty, no extensions.
+
+resource "vault_ssh_secret_backend_role" "ha_config_deploy" {
+  name                    = "ha-config-deploy"
+  backend                 = vault_mount.ssh.path
+  key_type                = "ca"
+  default_user            = "ha-config-deploy"
+  allowed_users           = "ha-config-deploy"
+  ttl                     = "300"
+  max_ttl                 = "300"
+  allow_user_certificates = true
+  default_extensions      = {}
+  allowed_extensions      = ""
+}

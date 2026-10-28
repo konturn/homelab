@@ -3,14 +3,54 @@
 Home Assistant runs as the `homeassistant` container on the router. Two
 things are templated from this repo: `configuration.yaml`
 (`docker/homeassistant/configuration.yaml`) and the packages in
-`docker/homeassistant/packages/` (to `/config/packages/`). Everything else under
-`/persistent_data/application/homeassistant/` (`.storage`, `automations.yaml`,
-`scripts.yaml`, `custom_components/`) lives only on the live volume and is
-covered by the normal backups, not by git.
+`docker/homeassistant/packages/` (to `/config/packages/`). Automations,
+scripts, scenes and blueprints live in a separate private repo (below).
+Everything else under `/persistent_data/application/homeassistant/`
+(`.storage`, `custom_components/`, `www/`) lives only on the live volume and
+is covered by the normal backups, not by git.
 
-Most automations are deliberately not in git: they are edited in the UI and
-stay in `automations.yaml` on the volume. Only the pieces they call (REST
-commands, sensors) are in `configuration.yaml`.
+## Automations, scripts and scenes (separate private repo)
+
+The automations, scripts, scenes and the blueprints they use are kept in a
+separate private GitLab project, `root/homeassistant`. It has no mirror, so
+they never reach the public mirror of this repo. Its README has the file
+conventions and the CI details. This repo provides the include lines and
+the deploy plumbing:
+
+- `configuration.yaml` loads two sources per domain:
+
+  ```yaml
+  automation manual: !include_dir_merge_list automations/
+  automation ui: !include automations.yaml
+  script manual: !include_dir_merge_named scripts/
+  script ui: !include scripts.yaml
+  scene manual: !include_dir_merge_list scenes/
+  scene ui: !include scenes.yaml
+  ```
+
+  The directories (one file per item) are written only by the private
+  repo's deploy. The UI files are where the UI editors save. Repo-managed
+  items open read-only in the editors; new items made in the UI go to the UI
+  files, and a scheduled job in the private repo turns them into an MR there.
+  After that MR merges, the deploy moves them out of the UI files, so an id is
+  never loaded twice. Turning automations on/off, running them and traces
+  work for every item.
+- Deploy target: the `ha-config-sync` role (`ansible/roles/ha-config-sync/`)
+  creates the three directories, the `ha-config` user and
+  `/usr/local/sbin/ha-config-sync`. CI in the private repo logs in to Vault
+  with its GitLab `id_token` (JWT roles `ha-config-ci` and `ha-config-deploy`,
+  `terraform/vault/roles.tf`). It gets a 5-minute SSH certificate (SSH role
+  `ha-config-deploy`) whose only possible command is `ha-config-sync`, pipes
+  the files to it, and then calls `automation.reload`, `script.reload` and
+  `scene.reload` over the API. It never restarts Home Assistant. Pre-deploy
+  archives are kept in `/var/backups/ha-config-sync/` on the router.
+- `ha-config-sync` refuses an id that is also defined in `/config/packages/`.
+  Packages stay in this repo. To move a package automation to the private
+  repo, delete it here and add it there in the same change window.
+- Don't edit the managed directories on the volume by hand: the next deploy
+  overwrites them, and the drift job reports the difference.
+- By hand: `sudo ha-config-sync status` (item counts per source) on the
+  router.
 
 ## Packages (repo-managed automations)
 
@@ -131,7 +171,7 @@ log for custom integrations that fail to import. Upgrade them in HACS
   this TV refuses to favourite uploaded photos. A rotation over a subset of
   uploads therefore has to be driven from Home Assistant with
   `art_select_image` (`wake: false` so it never powers the TV on).
-- Scripts (UI script storage, `scripts.yaml` on the live volume):
+- Scripts (in the private config repo, see above):
   - `script.frame_halloween_party_on`: Art Mode on, TV slideshow off, shows the
     first image of the Halloween album, starts `script.frame_halloween_rotate`.
   - `script.frame_halloween_rotate`: helper loop, a random album image every

@@ -1,0 +1,482 @@
+#!/usr/bin/env python3
+"""ha-config-sync: deploy repo-managed Home Assistant automations, scripts,
+scenes and blueprints into the HA config directory, and export the live state.
+
+Runs as root through sudo, as the forced command of the `ha-config` SSH user
+(ansible/roles/ha-config-sync, docs/HOMEASSISTANT.md). The subcommand comes
+from SSH_ORIGINAL_COMMAND (or argv when run by hand):
+
+  deploy    stdin: tar.gz of automations/ scripts/ scenes/ blueprints/.
+            Checks it, absorbs identical items out of the UI files, backs up,
+            then replaces the managed directories. Prints a JSON summary.
+            Does not reload Home Assistant (the CI job does, over the API).
+  check     like deploy, but writes nothing.
+  export    stdout: tar.gz of the UI files, the managed directories, the
+            managed blueprints and meta.json (image, package ids, counts).
+  status    JSON: item counts per domain and source.
+  log SINCE JSON: automation/script/scene/blueprint ERROR and WARNING lines in
+            home-assistant.log at or after SINCE (unix seconds).
+
+Nothing here talks to Home Assistant or reads secrets.yaml.
+"""
+import datetime as dt
+import io
+import json
+import os
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+
+import yaml
+
+CONFIG = os.environ.get("HA_CONFIG_DIR", "/persistent_data/application/homeassistant")
+STATE = os.environ.get("HA_SYNC_STATE_DIR", "/var/lib/ha-config-sync")
+BACKUPS = os.environ.get("HA_SYNC_BACKUP_DIR", "/var/backups/ha-config-sync")
+KEEP_BACKUPS = 30
+MAX_INPUT = 20 * 1024 * 1024
+DOMAINS = {
+    # domain: (managed dir, UI file, kind)
+    "automation": ("automations", "automations.yaml", "list"),
+    "script": ("scripts", "scripts.yaml", "dict"),
+    "scene": ("scenes", "scenes.yaml", "list"),
+}
+BLUEPRINTS = "blueprints"
+# Blueprints HA ships and recreates itself; never managed.
+BLUEPRINT_SKIP = re.compile(r"^[^/]+/homeassistant/")
+
+
+class Fail(Exception):
+    def __init__(self, msg, code=2):
+        super().__init__(msg)
+        self.code = code
+
+
+# --- YAML (tolerant of HA tags; same value semantics as HA's loader) ------
+class _Tagged(str):
+    tag = ""
+
+
+class Loader(yaml.SafeLoader):
+    pass
+
+
+def _tagged(loader, node):
+    if isinstance(node, yaml.ScalarNode):
+        v = _Tagged(loader.construct_scalar(node))
+    else:
+        v = _Tagged(json.dumps(loader.construct_object(node, deep=True), sort_keys=True))
+    v.tag = node.tag
+    return v
+
+
+Loader.add_multi_constructor("!", lambda loader, suffix, node: _tagged(loader, node))
+
+
+class Dumper(yaml.SafeDumper):
+    def increase_indent(self, flow=False, indentless=False):
+        return super().increase_indent(flow, False)
+
+
+def _str(dumper, data):
+    if isinstance(data, _Tagged):
+        return dumper.represent_scalar(data.tag, str(data))
+    return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|" if "\n" in data else None)
+
+
+Dumper.add_representer(str, _str)
+Dumper.add_representer(_Tagged, _str)
+
+
+def yload(path):
+    with open(path, encoding="utf-8") as f:
+        return yaml.load(f, Loader=Loader)
+
+
+def ydump(data):
+    return yaml.dump(data, Dumper=Dumper, sort_keys=False, allow_unicode=True,
+                     default_flow_style=False, width=4096)
+
+
+# --- reading the sources ---------------------------------------------------
+def read_managed(root):
+    """{domain: {key: (relpath, cfg)}} from a managed tree; Fail on problems."""
+    out, errors = {d: {} for d in DOMAINS}, []
+    for domain, (sub, _ui, kind) in DOMAINS.items():
+        base = os.path.join(root, sub)
+        for dirpath, dirnames, files in os.walk(base):
+            dirnames.sort()
+            for fn in sorted(files):
+                rel = os.path.relpath(os.path.join(dirpath, fn), root)
+                if not fn.endswith(".yaml"):
+                    continue
+                try:
+                    data = yload(os.path.join(dirpath, fn))
+                except yaml.YAMLError as e:
+                    errors.append(f"{rel}: {e}")
+                    continue
+                if kind == "list":
+                    if not isinstance(data, list) or len(data) != 1 or not isinstance(data[0], dict):
+                        errors.append(f"{rel}: must be a list with exactly one item")
+                        continue
+                    key = data[0].get("id")
+                    if key in (None, ""):
+                        errors.append(f"{rel}: missing id")
+                        continue
+                    key, cfg = str(key), data[0]
+                else:
+                    if not isinstance(data, dict) or len(data) != 1:
+                        errors.append(f"{rel}: must be a mapping with exactly one script")
+                        continue
+                    (key, cfg), = data.items()
+                    key = str(key)
+                if key in out[domain]:
+                    errors.append(f"{rel}: duplicate {domain} id {key} (also {out[domain][key][0]})")
+                    continue
+                out[domain][key] = (rel, cfg)
+    if errors:
+        raise Fail("managed files:\n  " + "\n  ".join(errors))
+    return out
+
+
+def read_ui():
+    """{domain: (raw data, [(key, cfg)])} for the UI files in CONFIG."""
+    out = {}
+    for domain, (_sub, ui, kind) in DOMAINS.items():
+        path = os.path.join(CONFIG, ui)
+        data = yload(path) if os.path.exists(path) else None
+        if kind == "list":
+            data = data or []
+            items = [(str(c.get("id")) if isinstance(c, dict) and c.get("id") is not None else None, c)
+                     for c in data]
+        else:
+            data = data or {}
+            items = [(str(k), v) for k, v in data.items()]
+        out[domain] = (data, items)
+    return out
+
+
+def read_packages():
+    """{domain: {key: package file}} for items defined in packages/."""
+    out = {d: {} for d in DOMAINS}
+    pdir = os.path.join(CONFIG, "packages")
+    for dirpath, dirnames, files in os.walk(pdir):
+        dirnames.sort()
+        for fn in sorted(files):
+            if not fn.endswith(".yaml"):
+                continue
+            rel = os.path.relpath(os.path.join(dirpath, fn), CONFIG)
+            try:
+                pkg = yload(os.path.join(dirpath, fn)) or {}
+            except yaml.YAMLError as e:
+                raise Fail(f"{rel}: {e}")
+            if not isinstance(pkg, dict):
+                continue
+            for k, v in pkg.items():
+                domain = str(k).split(" ")[0]
+                if domain not in DOMAINS:
+                    continue
+                if DOMAINS[domain][2] == "list":
+                    for i, c in enumerate(v if isinstance(v, list) else [v]):
+                        key = c.get("id") if isinstance(c, dict) else None
+                        out[domain][str(key) if key is not None else f"<no id #{i} in {rel}>"] = rel
+                elif isinstance(v, dict):
+                    for key in v:
+                        out[domain][str(key)] = rel
+    return out
+
+
+def managed_blueprints(root):
+    base = os.path.join(root, BLUEPRINTS)
+    files = {}
+    for dirpath, dirnames, fns in os.walk(base):
+        dirnames.sort()
+        for fn in sorted(fns):
+            rel = os.path.relpath(os.path.join(dirpath, fn), base)
+            if fn.endswith(".yaml") and not BLUEPRINT_SKIP.match(rel):
+                with open(os.path.join(dirpath, fn), "rb") as f:
+                    files[rel] = f.read()
+    return files
+
+
+# --- helpers ---------------------------------------------------------------
+def safe_extract(data, dest):
+    allowed_top = {d[0] for d in DOMAINS.values()} | {BLUEPRINTS}
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:*") as tar:
+        members = []
+        for m in tar.getmembers():
+            name = m.name[2:] if m.name.startswith("./") else m.name
+            name = name.rstrip("/")
+            if name in ("", "."):
+                continue
+            parts = name.split("/")
+            if (os.path.isabs(m.name) or ".." in parts or parts[0] not in allowed_top
+                    or not (m.isfile() or m.isdir())):
+                raise Fail(f"refusing tar member {m.name!r}")
+            if m.isfile() and not name.endswith(".yaml") and parts[-1] not in (".gitkeep", "README.md"):
+                raise Fail(f"refusing non-.yaml file {m.name!r}")
+            members.append(m)
+        tar.extractall(dest, members=members, filter="data")
+
+
+def counts(managed, ui, packages):
+    res = {}
+    for d in DOMAINS:
+        ui_keys = [k for k, _c in ui[d][1]]
+        res[d] = {"managed": len(managed[d]), "ui": len(ui_keys), "packages": len(packages[d]),
+                  "total": len(managed[d]) + len(ui_keys) + len(packages[d])}
+    return res
+
+
+def write_atomic(path, text):
+    d = os.path.dirname(path)
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".ha-config-sync.")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(text)
+    st = os.stat(path) if os.path.exists(path) else None
+    os.chmod(tmp, st.st_mode & 0o7777 if st else 0o644)
+    os.replace(tmp, path)
+
+
+def backup(stamp):
+    os.makedirs(BACKUPS, mode=0o700, exist_ok=True)
+    path = os.path.join(BACKUPS, f"{stamp}.tar.gz")
+    with tarfile.open(path, "w:gz") as tar:
+        for d, (sub, ui, _k) in DOMAINS.items():
+            for name in (sub, ui):
+                p = os.path.join(CONFIG, name)
+                if os.path.exists(p):
+                    tar.add(p, arcname=name)
+        bp = os.path.join(CONFIG, BLUEPRINTS)
+        if os.path.isdir(bp):
+            tar.add(bp, arcname=BLUEPRINTS)
+    os.chmod(path, 0o600)
+    old = sorted(f for f in os.listdir(BACKUPS) if f.endswith(".tar.gz"))
+    for f in old[:-KEEP_BACKUPS]:
+        os.unlink(os.path.join(BACKUPS, f))
+    return path
+
+
+def replace_dir(staged, name):
+    dest = os.path.join(CONFIG, name)
+    new, old = os.path.join(CONFIG, f".{name}.new"), os.path.join(CONFIG, f".{name}.old")
+    for p in (new, old):
+        shutil.rmtree(p, ignore_errors=True)
+    if os.path.isdir(staged):
+        shutil.copytree(staged, new)
+    else:
+        os.mkdir(new)
+    for dirpath, dirnames, files in os.walk(new):
+        os.chmod(dirpath, 0o755)
+        for fn in files:
+            os.chmod(os.path.join(dirpath, fn), 0o644)
+    if os.path.exists(dest):
+        os.rename(dest, old)
+    os.rename(new, dest)
+    shutil.rmtree(old, ignore_errors=True)
+
+
+def tree_equal(a, b):
+    def snap(root):
+        res = {}
+        for dirpath, _dn, files in os.walk(root):
+            for fn in files:
+                p = os.path.join(dirpath, fn)
+                with open(p, "rb") as f:
+                    res[os.path.relpath(p, root)] = f.read()
+        return res
+    return snap(a) == snap(b)  # a missing directory is the same as an empty one
+
+
+# --- commands --------------------------------------------------------------
+def cmd_deploy(dry_run):
+    data = sys.stdin.buffer.read(MAX_INPUT + 1)
+    if len(data) > MAX_INPUT:
+        raise Fail("input too large")
+    stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    with tempfile.TemporaryDirectory(prefix="ha-config-sync.") as stage:
+        safe_extract(data, stage)
+        managed = read_managed(stage)
+        ui = read_ui()
+        packages = read_packages()
+
+        errors, absorb = [], {d: [] for d in DOMAINS}
+        for d in DOMAINS:
+            for key in managed[d]:
+                if key in packages[d]:
+                    errors.append(f"{d} {key}: also defined in {packages[d][key]} (duplicate id)")
+            seen_ui = set()
+            for key, cfg in ui[d][1]:
+                if key is None or key not in managed[d]:
+                    continue
+                if key in seen_ui:
+                    errors.append(f"{d} {key}: listed twice in {DOMAINS[d][1]}")
+                seen_ui.add(key)
+                if cfg == managed[d][key][1]:
+                    absorb[d].append(key)
+                else:
+                    errors.append(
+                        f"{d} {key}: {DOMAINS[d][1]} has a different version (edited in the UI?). "
+                        f"Capture it into {managed[d][key][0]} (the sync-ui MR) or delete it in the UI, then redeploy.")
+        if errors:
+            raise Fail("refusing to deploy:\n  " + "\n  ".join(errors), code=3)
+
+        new_bp = managed_blueprints(stage)
+        manifest_path = os.path.join(STATE, "blueprints.json")
+        old_bp = set(json.load(open(manifest_path))) if os.path.exists(manifest_path) else set()
+
+        ui_after = {}
+        for d, (raw, items) in ui.items():
+            keep = [(k, c) for k, c in items if k not in absorb[d]]
+            ui_after[d] = (raw, keep)
+        summary = {
+            "dry_run": dry_run,
+            "absorbed_from_ui": {d: v for d, v in absorb.items() if v},
+            "expected": counts(managed, ui_after, packages),
+            "managed_ids": {d: sorted(managed[d]) for d in DOMAINS},
+            "changed": {},
+            "blueprints": {"managed": sorted(new_bp), "removed": sorted(old_bp - set(new_bp))},
+        }
+        for d, (sub, _ui, _k) in DOMAINS.items():
+            summary["changed"][d] = bool(absorb[d]) or not tree_equal(
+                os.path.join(stage, sub), os.path.join(CONFIG, sub))
+        bp_live = managed_blueprints(CONFIG)
+        summary["changed"]["blueprints"] = (any(bp_live.get(k) != v for k, v in new_bp.items())
+                                            or bool(old_bp - set(new_bp)))
+        if dry_run:
+            print(json.dumps(summary, indent=2))
+            return 0
+
+        summary["backup"] = backup(stamp)
+        for d, (sub, ui_name, kind) in DOMAINS.items():
+            replace_dir(os.path.join(stage, sub), sub)
+        for d, (sub, ui_name, kind) in DOMAINS.items():
+            if not absorb[d]:
+                continue
+            raw = ui[d][0]
+            if kind == "list":
+                new = [c for c in raw if not (isinstance(c, dict) and str(c.get("id")) in absorb[d])]
+                text = ydump(new) if new else "[]\n"
+            else:
+                new = {k: v for k, v in raw.items() if str(k) not in absorb[d]}
+                text = ydump(new) if new else "{}\n"
+            write_atomic(os.path.join(CONFIG, ui_name), text)
+        bpdir = os.path.join(CONFIG, BLUEPRINTS)
+        for rel, content in new_bp.items():
+            p = os.path.join(bpdir, rel)
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            if not os.path.exists(p) or open(p, "rb").read() != content:
+                fd, tmp = tempfile.mkstemp(dir=os.path.dirname(p), prefix=".ha-config-sync.")
+                with os.fdopen(fd, "wb") as f:
+                    f.write(content)
+                os.chmod(tmp, 0o644)
+                os.replace(tmp, p)
+        for rel in old_bp - set(new_bp):
+            p = os.path.join(bpdir, rel)
+            if os.path.exists(p):
+                os.unlink(p)
+        os.makedirs(STATE, mode=0o700, exist_ok=True)
+        write_json = json.dumps(sorted(new_bp))
+        with open(manifest_path + ".tmp", "w") as f:
+            f.write(write_json)
+        os.replace(manifest_path + ".tmp", manifest_path)
+        print(json.dumps(summary, indent=2))
+    return 0
+
+
+def ha_image():
+    try:
+        out = subprocess.run(["docker", "inspect", "homeassistant", "--format",
+                              "{{.Config.Image}}"], capture_output=True, text=True, timeout=30)
+        return out.stdout.strip() or None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def cmd_status():
+    managed = read_managed(CONFIG)
+    ui = read_ui()
+    packages = read_packages()
+    return {
+        "counts": counts(managed, ui, packages),
+        "ui_ids": {d: [k for k, _c in ui[d][1]] for d in DOMAINS},
+        "package_ids": {d: sorted(packages[d]) for d in DOMAINS},
+        "image": ha_image(),
+    }
+
+
+def cmd_export():
+    meta = cmd_status()
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        for d, (sub, ui, _k) in DOMAINS.items():
+            for name in (ui, sub):
+                p = os.path.join(CONFIG, name)
+                if os.path.exists(p):
+                    tar.add(p, arcname=f"live/{name}")
+        for rel, content in managed_blueprints(CONFIG).items():
+            ti = tarfile.TarInfo(f"live/{BLUEPRINTS}/{rel}")
+            ti.size, ti.mode = len(content), 0o644
+            tar.addfile(ti, io.BytesIO(content))
+        m = json.dumps(meta, indent=2).encode()
+        ti = tarfile.TarInfo("meta.json")
+        ti.size, ti.mode = len(m), 0o644
+        tar.addfile(ti, io.BytesIO(m))
+    sys.stdout.buffer.write(buf.getvalue())
+    return 0
+
+
+LOG_LINE = re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)(?:\.\d+)? (ERROR|WARNING) \(\S+\) \[([^\]]+)\] (.*)")
+LOG_COMPONENTS = re.compile(r"homeassistant\.(components\.(automation|script|scene|blueprint|homeassistant\.scene)"
+                            r"|helpers\.(script|entity_platform|config_validation)|config)\b")
+
+
+def cmd_log(since):
+    since_dt = dt.datetime.fromtimestamp(since)  # the log is in the router's local time
+    hits = []
+    path = os.path.join(CONFIG, "home-assistant.log")
+    with open(path, encoding="utf-8", errors="replace") as f:
+        cur = None
+        for line in f:
+            m = LOG_LINE.match(line)
+            if m:
+                cur = None
+                ts = dt.datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S")
+                if ts >= since_dt and LOG_COMPONENTS.match(m.group(3)):
+                    cur = {"time": m.group(1), "level": m.group(2), "logger": m.group(3),
+                           "message": m.group(4)[:2000]}
+                    hits.append(cur)
+    print(json.dumps(hits, indent=2))
+    return 0
+
+
+def main():
+    argv = shlex.split(os.environ["SSH_ORIGINAL_COMMAND"]) if os.environ.get("SSH_ORIGINAL_COMMAND") else sys.argv[1:]
+    if not argv:
+        print(__doc__, file=sys.stderr)
+        return 64
+    cmd, args = argv[0], argv[1:]
+    try:
+        if cmd == "deploy" and not args:
+            return cmd_deploy(dry_run=False)
+        if cmd == "check" and not args:
+            return cmd_deploy(dry_run=True)
+        if cmd == "export" and not args:
+            return cmd_export()
+        if cmd == "status" and not args:
+            print(json.dumps(cmd_status(), indent=2))
+            return 0
+        if cmd == "log" and len(args) == 1 and args[0].isdigit():
+            return cmd_log(int(args[0]))
+    except Fail as e:
+        print(f"ha-config-sync: {e}", file=sys.stderr)
+        return e.code
+    print(f"ha-config-sync: unknown command {' '.join(argv)!r}", file=sys.stderr)
+    return 64
+
+
+if __name__ == "__main__":
+    sys.exit(main())
