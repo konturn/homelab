@@ -34,6 +34,7 @@ not from this repo:
 | osrm_travel_time | `edekeijzer/osrm_travel_time` | |
 | mopidy | `bushvin/hass-integrations` | Replaces the `mopidy` integration removed from HA core. Still configured by the `media_player: platform: mopidy` block in `configuration.yaml`; the night-mode automation plays white noise on `media_player.mopidy_3` |
 | hacs | `hacs/integration` | |
+| samsungtv_smart | `TheFab21/ha-samsungtv-smart` | Samsung Frame TV (local only). See below |
 
 After a Home Assistant upgrade, check *Settings -> System -> Repairs* and the
 log for custom integrations that fail to import. Upgrade them in HACS
@@ -55,6 +56,38 @@ log for custom integrations that fail to import. Upgrade them in HACS
   contents or lock codes to this repo.
 - The admin-only `lock-codes` dashboard uses the `custom:keymaster` Lovelace
   strategy.
+
+### samsungtv_smart (Frame TV)
+
+- Installed from HACS (`TheFab21/ha-samsungtv-smart`, which adds
+  Frame Art Mode services). Configured
+  local only: no SmartThings OAuth and no keys for the optional art
+  identification (Google Vision / LLM) features.
+- Entities: `media_player.frame_tv`, `switch.frame_tv_art_mode`,
+  `select.frame_tv_matte_type`, `select.frame_tv_matte_color` and
+  `sensor.frame_tv_frame_art` (current artwork, matte and slideshow state as
+  attributes).
+- Art is managed with the `samsungtv_smart.art_*` services. `art_upload_batch`
+  takes a folder Home Assistant can read (for example
+  `/config/www/frame/<album>/`) and records what it uploaded in a hidden
+  `.samsungtv_upload.json` sidecar, so re-running it only uploads new files.
+  Matte ids are `type_color` (e.g. `shadowbox_black`); `art_get_matte_list`
+  shows what the TV supports.
+- The TV's own slideshow (`art_set_slideshow`) can only target a whole
+  category (2 = My Photos, 4 = Favorites, 8 = Store), not a list of images, and
+  this TV refuses to favourite uploaded photos. A rotation over a subset of
+  uploads therefore has to be driven from Home Assistant with
+  `art_select_image` (`wake: false` so it never powers the TV on).
+- Scripts (UI script storage, `scripts.yaml` on the live volume):
+  - `script.frame_halloween_party_on`: Art Mode on, TV slideshow off, shows the
+    first image of the Halloween album, starts `script.frame_halloween_rotate`.
+  - `script.frame_halloween_rotate`: helper loop, a random album image every
+    3 minutes. It stops on an HA restart; run the "on" script again.
+  - `script.frame_halloween_party_off`: stops the loop and the TV slideshow
+    and shows the Art Store piece that was on before.
+  The album images are public-domain scans kept only on the live volume
+  (`www/frame/halloween/`, with a `manifest.csv` of sources and licences),
+  not in git.
 
 ## Frontend cards (HACS)
 
