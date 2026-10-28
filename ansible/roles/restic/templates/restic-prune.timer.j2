@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodic restic prune
+
+[Timer]
+OnCalendar={{ restic_prune_timer_on_calendar }}
+RandomizedDelaySec=1800
+Persistent=true
+
+[Install]
+WantedBy=timers.target

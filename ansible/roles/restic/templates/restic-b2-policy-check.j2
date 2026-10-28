@@ -1,0 +1,105 @@
+#!/bin/bash
+# {{ ansible_managed }}
+#
+# Verifies that the B2 application key restic uses cannot destroy offsite
+# history, and that the bucket keeps hidden file versions long enough to
+# recover from a compromised host. See docs/backups.md "Deletion resistance".
+#
+# What it checks, using the same key restic uses (from {{ restic_user_home }}/.restic_env):
+#   1. the key is scoped to bucket {{ restic_b2_bucket }} and holds none of the
+#      capabilities in restic_b2_forbidden_capabilities (deleteFiles above all);
+#   2. the bucket's lifecycle rules never delete a hidden or superseded
+#      version sooner than {{ restic_b2_min_hidden_retention_days }} days, and never auto-hide;
+#   3. live probe: upload a tiny object, try to permanently delete that exact
+#      version, and expect B2 to refuse; then confirm the version still exists.
+#
+# Prints one summary line, "restic-b2-policy: OK ..." or
+# "restic-b2-policy: FAIL <reason>", and exits 1 on FAIL. Secrets and auth
+# tokens are never printed.
+set -uo pipefail
+
+BUCKET="{{ restic_b2_bucket }}"
+MIN_DAYS={{ restic_b2_min_hidden_retention_days }}
+PROBE="{{ restic_b2_probe_object }}"
+FORBIDDEN='{{ restic_b2_forbidden_capabilities | to_json }}'
+API=https://api.backblazeb2.com/b2api/v3
+
+fail() {
+  echo "restic-b2-policy: FAIL $*"
+  exit 1
+}
+
+set -a
+# shellcheck disable=SC1091
+. "{{ restic_user_home }}/.restic_env" || fail "cannot read restic env"
+set +a
+[ -n "${AWS_ACCESS_KEY_ID:-}" ] && [ -n "${AWS_SECRET_ACCESS_KEY:-}" ] || fail "no B2 key in restic env"
+
+TMP=$(mktemp -d) || fail "mktemp"
+chmod 700 "$TMP"
+trap 'rm -rf "$TMP"' EXIT
+
+# Credentials go to curl through a 0600 config file, not argv.
+printf 'user = "%s:%s"\n' "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" > "$TMP/auth.curlrc"
+code=$(curl -sS -m 30 -K "$TMP/auth.curlrc" -o "$TMP/auth.json" -w '%{http_code}' "$API/b2_authorize_account") \
+  || fail "b2_authorize_account: network error"
+[ "$code" = 200 ] || fail "b2_authorize_account: HTTP $code"
+
+jq -r .authorizationToken "$TMP/auth.json" > "$TMP/token"
+printf 'header = "Authorization: %s"\n' "$(cat "$TMP/token")" > "$TMP/api.curlrc"
+URL=$(jq -r .apiInfo.storageApi.apiUrl "$TMP/auth.json")
+ACC=$(jq -r .accountId "$TMP/auth.json")
+BID=$(jq -r '.apiInfo.storageApi.bucketId // empty' "$TMP/auth.json")
+KBUCKET=$(jq -r '.apiInfo.storageApi.bucketName // empty' "$TMP/auth.json")
+
+# 1. Key scope and capabilities
+[ "$KBUCKET" = "$BUCKET" ] || fail "key is not restricted to bucket $BUCKET (scope: ${KBUCKET:-all buckets})"
+bad=$(jq -er --argjson f "$FORBIDDEN" '[.apiInfo.storageApi.capabilities[] | select(. as $c | $f | index($c))] | join(",")' "$TMP/auth.json") \
+  || fail "cannot evaluate key capabilities"
+[ -z "$bad" ] || fail "key holds forbidden capabilities: $bad"
+
+api() { # api <call> <json-body> -> body in $TMP/out.json, prints HTTP code
+  curl -sS -m 30 -K "$TMP/api.curlrc" -o "$TMP/out.json" -w '%{http_code}' \
+    -H 'Content-Type: application/json' -d "$2" "$URL/b2api/v3/$1"
+}
+
+# 2. Lifecycle rules
+code=$(api b2_list_buckets "{\"accountId\":\"$ACC\",\"bucketId\":\"$BID\"}") || fail "b2_list_buckets: network error"
+[ "$code" = 200 ] || fail "b2_list_buckets: HTTP $code"
+rules=$(jq -ec '.buckets[0].lifecycleRules' "$TMP/out.json") || fail "bucket $BUCKET not visible to key"
+# No rules at all means B2 keeps every version forever: safe, only costly.
+lc=$(jq -r --argjson min "$MIN_DAYS" '
+  .buckets[0].lifecycleRules as $r
+  | if ($r | map(select(.daysFromUploadingToHiding != null)) | length) > 0
+      then "a rule auto-hides live files (daysFromUploadingToHiding is set)"
+    elif ($r | map(select(.daysFromHidingToDeleting != null and .daysFromHidingToDeleting < $min)) | length) > 0
+      then "hidden versions are deleted after fewer than \($min) days"
+    else "" end' "$TMP/out.json") || fail "cannot evaluate lifecycle rules"
+[ -z "$lc" ] || fail "lifecycle: $lc (rules: $rules)"
+
+# 3. Live probe: a delete of a specific version must be refused.
+code=$(api b2_get_upload_url "{\"bucketId\":\"$BID\"}") || fail "b2_get_upload_url: network error"
+[ "$code" = 200 ] || fail "b2_get_upload_url: HTTP $code"
+UPURL=$(jq -r .uploadUrl "$TMP/out.json")
+printf 'header = "Authorization: %s"\n' "$(jq -r .authorizationToken "$TMP/out.json")" > "$TMP/up.curlrc"
+date -u +%FT%TZ > "$TMP/probe"
+sha=$(sha1sum "$TMP/probe" | cut -d' ' -f1)
+code=$(curl -sS -m 60 -K "$TMP/up.curlrc" -o "$TMP/up.json" -w '%{http_code}' \
+  -H "X-Bz-File-Name: $PROBE" -H 'Content-Type: text/plain' -H "X-Bz-Content-Sha1: $sha" \
+  --data-binary @"$TMP/probe" "$UPURL") || fail "probe upload: network error"
+[ "$code" = 200 ] || fail "probe upload: HTTP $code (key cannot write?)"
+FID=$(jq -r .fileId "$TMP/up.json")
+
+code=$(api b2_delete_file_version "{\"fileName\":\"$PROBE\",\"fileId\":\"$FID\"}") || fail "probe delete: network error"
+if [ "$code" = 200 ]; then
+  fail "key permanently deleted a file version (probe $PROBE)"
+fi
+[ "$code" = 401 ] || fail "probe delete: expected HTTP 401, got $code ($(jq -r .code "$TMP/out.json" 2>/dev/null))"
+
+code=$(api b2_list_file_versions "{\"bucketId\":\"$BID\",\"startFileName\":\"$PROBE\",\"startFileId\":\"$FID\",\"maxFileCount\":1}") \
+  || fail "probe list: network error"
+[ "$code" = 200 ] || fail "probe list: HTTP $code"
+[ "$(jq -r '.files[0].fileId // empty' "$TMP/out.json")" = "$FID" ] || fail "probe version missing after refused delete"
+
+days=$(jq -r '[.[] | .daysFromHidingToDeleting | select(. != null)] | min // "forever"' <<<"$rules")
+echo "restic-b2-policy: OK key cannot delete versions; hidden versions kept ${days} days (min ${MIN_DAYS})"

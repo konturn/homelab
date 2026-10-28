@@ -41,6 +41,14 @@ restic_dump_compression_enabled: false
 restic_forget: true
 restic_forget_keep_within: 30d
 restic_prune: true
+# Empty: prune runs as ExecStartPost of every backup (the original behaviour).
+# A systemd OnCalendar expression: prune moves to its own restic-prune.service
+# and restic-prune.timer. On a bucket that keeps hidden versions (see
+# restic_b2_policy_check below) every pruned pack is still billed until the
+# lifecycle rule expires it, so pruning less often means less repacking churn.
+restic_prune_timer_on_calendar: ""
+# prune takes an exclusive lock; wait for an overrunning backup or check.
+restic_prune_retry_lock: "2h"
 restic_check: true
 restic_check_timer_on_calendar: "Sun *-*-* 09:00:00"
 restic_check_read_data_subset: "5%"
@@ -48,6 +56,31 @@ restic_check_read_data_subset: "5%"
 # The daily backup holds the lock for hours, so with the restic default of
 # 0s an overlapping check fails immediately instead of waiting its turn.
 restic_check_retry_lock: "2h"
+
+# Deletion resistance on Backblaze B2 (docs/backups.md, "Deletion resistance").
+# The design relies on two B2 properties: a key without deleteFiles can only
+# *hide* a file (restic's forget/prune "deletes" become hide markers), and the
+# bucket lifecycle rule keeps hidden or superseded versions for
+# daysFromHidingToDeleting days. When enabled, restic-b2-policy-check runs
+# before every backup and logs "restic-b2-policy: OK" only if the key restic
+# uses is bucket-scoped, holds none of the capabilities below, the lifecycle
+# rules keep hidden versions at least restic_b2_min_hidden_retention_days, and
+# a live probe confirms B2 refuses to delete a specific file version.
+restic_b2_policy_check: false
+restic_b2_bucket: ""
+restic_b2_min_hidden_retention_days: 30
+restic_b2_probe_object: ".restic-b2-policy-probe"
+restic_b2_forbidden_capabilities:
+  - deleteFiles
+  - writeBuckets
+  - deleteBuckets
+  - writeKeys
+  - deleteKeys
+  - bypassGovernance
+  - writeBucketRetentions
+  - writeFileRetentions
+  - writeFileLegalHolds
+  - writeBucketReplications
 
 restic_ssh_enabled: true
 restic_ssh_host: backup
