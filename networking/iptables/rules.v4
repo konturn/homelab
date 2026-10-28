@@ -102,10 +102,6 @@ COMMIT
 # DNAT - Inbound port forwarding from internet
 # -----------------------------------------------------------------------------
 
-# Minecraft server (Java Edition)
-# Forwards to nginx reverse proxy which routes to actual MC server
--A PREROUTING -i {{ inet_interface_name }} -p tcp -m tcp --dport 25565 -j DNAT --to-destination {{ nginx_ip }}:25565
-
 # HTTPS - Primary web traffic
 # All external HTTPS goes to nginx for SSL termination and reverse proxying
 -A PREROUTING -i {{ inet_interface_name }} -p tcp -m tcp --dport 443 -j DNAT --to-destination {{ nginx_ip }}:443
@@ -123,9 +119,6 @@ COMMIT
 -A PREROUTING -s 10.6.0.0/16 -p tcp -m set --match-set wan_ip dst -m tcp -j DNAT --to-destination {{ nginx_ip }}
 -A PREROUTING -s 10.3.0.0/16 -p tcp -m set --match-set wan_ip dst -m tcp -j DNAT --to-destination {{ nginx_ip }}
 -A PREROUTING -s 10.4.0.0/16 -p tcp -m set --match-set wan_ip dst -m tcp -j DNAT --to-destination {{ nginx_ip }}
-
-# Minecraft Bedrock Edition (or secondary Java server)
--A PREROUTING -i {{ inet_interface_name }} -p tcp -m tcp --dport 25564 -j DNAT --to-destination {{ nginx_ip }}:25564
 
 # -----------------------------------------------------------------------------
 # SNAT/MASQUERADE - Outbound NAT
@@ -284,9 +277,10 @@ COMMIT
 -A FORWARD -i {{ local_interface_name }}+ -o {{ mullvad_interface_name }} -j ACCEPT
 
 # Inbound from internet to external VLAN (vlan2-shim)
-# Allowed ports: SSH(22), Plex(32400), Minecraft(25564-25566), HTTPS(443)
+# Allowed ports: Plex(32400), HTTPS(443) -- the only DNATs from the WAN
+# (game-server forwards 25564-25566 and port 22 removed: no listener behind them)
 # Only NEW SYN packets to prevent stealth scans
--A FORWARD -i {{ inet_interface_name }} -o vlan2-shim -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -m multiport --dports 22,32400,25564,25565,25566,443 -m conntrack --ctstate NEW -j ACCEPT
+-A FORWARD -i {{ inet_interface_name }} -o vlan2-shim -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -m multiport --dports 32400,443 -m conntrack --ctstate NEW -j ACCEPT
 
 # Inbound from Mullvad VPN to internal (for Deluge BitTorrent)
 -A FORWARD -i {{ mullvad_interface_name }} -o vlan3-shim -p tcp -m multiport --dports 62941 -j ACCEPT

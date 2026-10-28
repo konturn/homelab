@@ -64,11 +64,22 @@ This document describes the iptables firewall configuration for the homelab infr
 | Port | Protocol | Destination | Service |
 |------|----------|-------------|---------|
 | 22   | TCP      | router      | SSH (rate-limited: max 4 new conns / 60s per source IP) |
-| 443  | TCP      | nginx       | HTTPS (reverse proxy) |
+| 443  | TCP      | nginx       | HTTPS (reverse proxy; some vhosts LAN + tailnet only, below) |
 | 32400| TCP      | nginx       | Plex Media Server |
-| 25564| TCP      | nginx       | Minecraft (Bedrock/secondary) |
-| 25565| TCP      | nginx       | Minecraft (Java) |
 | 62941| TCP      | deluge (via Mullvad) | BitTorrent |
+
+The game-server forwards (25564-25566) were removed: nothing listened behind them.
+Game servers, if any come back, are reached over Tailscale (friends need the node
+shared with them) rather than a port forward.
+
+**Public vs. LAN + tailnet only** (nginx `allow 10.0.0.0/8; allow 100.64.0.0/10; deny all;`):
+
+| Public | LAN + tailnet only |
+|--------|--------------------|
+| Nextcloud, Plex (`:32400`, `/plex/`), blog, `nkontur.com` site, Telegram webhook (Telegram ranges only) | Vaultwarden (`bitwarden.`), Audioserve (`booksonic.`), Home Assistant (`homeassistant.`), Ombi (`/plex-requests/`) |
+
+WAN SSH to the router stays (key-only, rate-limited) as the out-of-band path for when
+Tailscale itself is down; tailscaled runs on the router, so it cannot be its own fallback.
 
 ### Outbound (Internal → Internet)
 
@@ -96,16 +107,16 @@ Exception: excel-vm (`excel_vm_address`, VLAN 3) routes via WAN for client M365 
 
 Internet-facing services proxied through nginx:
 
-| Service | Container | Purpose |
-|---------|-----------|---------|
-| nginx | `nginx` | Reverse proxy, SSL termination |
-| Plex | `plex` | Media streaming |
-| Bitwarden | `bitwarden` | Password manager |
-| Nextcloud | `nextcloud` | File sync/share |
-| ~~WordPress~~ | `wordpress` | Retired: blog is static files on nginx (docker/wordpress/README.md) |
-| Ombi | `ombi` | Plex requests |
-| AudioServe | `audioserve` | Audiobook streaming |
-| Home Assistant | `homeassistant` | Smart home (also on internal/iot) |
+| Service | Container | Purpose | Reachable from |
+|---------|-----------|---------|----------------|
+| nginx | `nginx` | Reverse proxy, SSL termination | internet |
+| Plex | `plex` | Media streaming | internet |
+| Bitwarden | `bitwarden` | Password manager | LAN + tailnet |
+| Nextcloud | `nextcloud` | File sync/share | internet |
+| ~~WordPress~~ | `wordpress` | Retired: blog is static files on nginx (docker/wordpress/README.md) | internet (blog) |
+| Ombi | `ombi` | Plex requests | LAN + tailnet |
+| AudioServe | `audioserve` | Audiobook streaming | LAN + tailnet |
+| Home Assistant | `homeassistant` | Smart home (also on internal/iot) | LAN + tailnet |
 
 ### Internal Network (10.3.x.x)
 
@@ -332,3 +343,4 @@ iptables -A FORWARD -j LOG --log-prefix "FWD-DROPPED: "
 | 2026-03 | Document Docker iptables disabled on router |
 | 2026-10 | excel-vm routes via WAN for client M365 sign-in |
 | 2026-10 | Tailscale: role installs from the pinned apt repo; tailnet → nginx:443 rule; ts-* hooks documented |
+| 2026-10 | Vaultwarden, Audioserve, Home Assistant, Ombi restricted to LAN + tailnet; game-server and port 22 forwards removed |

@@ -54,10 +54,10 @@ All VLANs use macvlan Docker networks, allowing containers to have their own IP 
 - **nginx** (10.2.32.1) — Main reverse proxy for all external traffic
 - **Plex** — Media streaming (also on internal for LAN access)
 - **Nextcloud** — File sync and sharing
-- **Bitwarden** (Vaultwarden) — Password manager
-- **Audioserve** — Audiobook streaming
+- **Bitwarden** (Vaultwarden) — Password manager (LAN + tailnet only)
+- **Audioserve** — Audiobook streaming (LAN + tailnet only)
 - **Blog** — static files served by nginx (WordPress retired, see docker/wordpress/README.md)
-- **Ombi** — Media request management
+- **Ombi** — Media request management (LAN + tailnet only)
 
 **Egress:** Direct to WAN (not through Mullvad VPN).
 
@@ -249,7 +249,9 @@ Internet
 **Port Forwarding Rules (iptables PREROUTING):**
 - Port 443 → nginx (10.2.32.1):443
 - Port 32400 → nginx (10.2.32.1):32400 (Plex direct)
-- Port 25564/25565 → nginx (for Minecraft servers)
+
+Behind 443, Vaultwarden, Audioserve, Home Assistant and Ombi answer only LAN and
+tailnet sources (see "Services restricted to LAN + tailnet" below).
 
 ### Internal Service → Internet (via Mullvad)
 
@@ -377,7 +379,11 @@ names, certificates or client reconfiguration.
 Nextcloud, Plex, the blog, the `nkontur.com` site and the Telegram webhook (already
 limited to Telegram's address ranges) stay public. The nginx `allow 10.0.0.0/8;
 allow 100.64.0.0/10; deny all;` restriction and the removal of unused port forwards
-are a separate change, made once client devices are confirmed working over Tailscale.
+were applied once client devices were confirmed working over Tailscale.
+
+Off-tailnet clients get `403` from those vhosts. Hairpinned LAN clients (VLAN 3/4/6 via
+the WAN address) keep their real 10.x source and are allowed; the guest VLAN has no
+hairpin and no access.
 
 ---
 
