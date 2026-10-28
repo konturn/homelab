@@ -44,6 +44,25 @@
             name: configure-homelab-services
             tasks_from: render_compose
 
+        # A same-tag digest refresh must not change the packaged Nextcloud
+        # version: a new version upgrades the installed code and database on
+        # start, which rolling back the image cannot undo. Checked before
+        # anything is recreated, so a refusal leaves the running container as is.
+        - name: Nextcloud - refuse an image whose packaged version differs from the installed one
+          ansible.builtin.shell:
+            cmd: |
+              set -euo pipefail
+              img={{ (automerge_plan.services | selectattr('service', 'equalto', 'nextcloud') | first).new | quote }}
+              docker pull -q "$img" >/dev/null
+              ver='include $argv[1]; echo implode(".", $OC_Version);'
+              want=$(docker run --rm --entrypoint php "$img" -r "$ver" /usr/src/nextcloud/version.php)
+              have=$(docker exec nextcloud php -r "$ver" /var/www/html/version.php)
+              echo "installed ${have}, image ${want}"
+              [ -n "$want" ] && [ "$want" = "$have" ]
+            executable: /bin/bash
+          changed_when: false
+          when: "'nextcloud' in automerge_services"
+
         - name: Pull and recreate only the target services
           community.docker.docker_compose_v2:
             project_name: "{{ automerge_project }}"
@@ -65,7 +84,7 @@
               --service {{ item.service | quote }}
               --expect-digest {{ item.new_digest | quote }}
               --timeout {{ item.timeout | int }}
-              {% if item.probe %}--probe {{ item.probe | quote }} --probe-ip {{ lab_nginx_ip | quote }}{% endif %}
+              {% if item.probe %}--probe {{ item.probe | quote }} --probe-ip {{ (nginx_ip if item.probe_via | default('') == 'external' else lab_nginx_ip) | quote }}{% endif %}
             executable: /bin/bash
           loop: "{{ automerge_plan.services }}"
           loop_control:
@@ -76,6 +95,20 @@
         - name: Health gate output
           ansible.builtin.debug:
             msg: "{{ automerge_health.results | map(attribute='stdout_lines') | list }}"
+
+        - name: Nextcloud - must not be in maintenance mode or need a database upgrade
+          ansible.builtin.command:
+            cmd: docker exec -u www-data nextcloud php occ status --output=json
+          register: automerge_nc_status
+          changed_when: false
+          retries: 5
+          delay: 10
+          until: >-
+            automerge_nc_status.rc == 0
+            and (automerge_nc_status.stdout | from_json).installed
+            and not (automerge_nc_status.stdout | from_json).maintenance
+            and not (automerge_nc_status.stdout | from_json).needsDbUpgrade
+          when: "'nextcloud' in automerge_services"
 
       rescue:
         - name: Record failure
@@ -122,7 +155,7 @@
               --service {{ item.service | quote }}
               --expect-digest {{ item.old_digest | quote }}
               --timeout {{ item.timeout | int }}
-              {% if item.probe %}--probe {{ item.probe | quote }} --probe-ip {{ lab_nginx_ip | quote }}{% endif %}
+              {% if item.probe %}--probe {{ item.probe | quote }} --probe-ip {{ (nginx_ip if item.probe_via | default('') == 'external' else lab_nginx_ip) | quote }}{% endif %}
             executable: /bin/bash
           loop: "{{ automerge_plan.services }}"
           loop_control:

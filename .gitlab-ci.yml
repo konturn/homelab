@@ -1622,18 +1622,39 @@ router:deploy-service:
     - job: vault:configure
       optional: true
   script:
-    - python3 ci/automerge/automerge.py plan-deploy --out "$AUTOMERGE_PLAN"
+    - mkdir -p .automerge
+    - |
+      if ! python3 ci/automerge/automerge.py plan-deploy --out "$AUTOMERGE_PLAN"; then
+        python3 ci/automerge/automerge.py notify \
+          --subject "Homelab auto-merge: deploy refused (${CI_COMMIT_SHORT_SHA})" \
+          --message "plan-deploy refused this auto-merged commit, so nothing was deployed and main references an image that is not running. Run the manual router:deploy job if a full deploy is wanted." \
+          && touch .automerge/alerted
+        exit 1
+      fi
     - |
       if ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router-service-update.yml; then
         python3 ci/automerge/automerge.py deploy-report --plan "$AUTOMERGE_PLAN" --result "$AUTOMERGE_RESULT" --status success || true
       else
-        python3 ci/automerge/automerge.py deploy-report --plan "$AUTOMERGE_PLAN" --result "$AUTOMERGE_RESULT" --status failed || true
+        # deploy-report opens the rollback issue and revert MR and mails root
+        python3 ci/automerge/automerge.py deploy-report --plan "$AUTOMERGE_PLAN" --result "$AUTOMERGE_RESULT" --status failed \
+          && touch .automerge/alerted
         echo "=================================================================="
         echo "AUTO-MERGE DEPLOY FAILED - services rolled back (see above);"
         echo "a rollback issue and revert MR were opened and auto-merge is paused."
         echo "=================================================================="
         exit 1
       fi
+  # Any other failure (timeout, cancellation, a crash before deploy-report)
+  # still mails root (over SSH with the key in `tmp`). This replaces .ansible's
+  # after_script, so it removes the key itself.
+  after_script:
+    - |
+      if [ "$CI_JOB_STATUS" != success ] && [ ! -e .automerge/alerted ]; then
+        python3 ci/automerge/automerge.py notify \
+          --subject "Homelab auto-merge: router:deploy-service ${CI_JOB_STATUS} (${CI_COMMIT_SHORT_SHA})" \
+          --message "The per-service deploy ended (${CI_JOB_STATUS}) without recording an outcome. The target services may be on either image: check the host and the job log." || true
+      fi
+    - rm -f tmp
   artifacts:
     when: always
     paths:
@@ -1718,7 +1739,10 @@ renovate:validate:
   image: *renovate_image
   needs: []
   script:
-    - renovate-config-validator renovate.json
+    # No path argument: given a path the validator checks the file as global
+    # config; from the repo root it finds renovate.json and checks it as
+    # repository config.
+    - renovate-config-validator
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:

@@ -294,6 +294,88 @@ def protected_paths(paths: List[str], codeowners_text: str) -> List[str]:
 
 
 # ---------------------------------------------------------------------------
+# Update types and the fast-track class
+# ---------------------------------------------------------------------------
+# Every allowlisted service may take these update kinds unless its entry sets
+# `updates:` to fewer. A fast-track image (allowlist `fast_track.images`) is
+# further limited to digest/patch on every service that uses it, in every mode:
+# its minor and major updates always go to a human.
+
+UPDATE_KINDS = ("digest", "patch", "minor")
+FAST_TRACK_KINDS = ("digest", "patch")
+
+
+def _kinds(value, allowed: Tuple[str, ...], where: str) -> Tuple[str, ...]:
+    if value is None:
+        return allowed
+    if isinstance(value, str) or not isinstance(value, (list, tuple)) or not value:
+        raise PolicyError(f"{where}: `updates` must be a non-empty list")
+    bad = [k for k in value if k not in allowed]
+    if bad:
+        raise PolicyError(f"{where}: update kinds {bad} are not allowed here (allowed: {list(allowed)})")
+    return tuple(value)
+
+
+def fast_track_config(allowlist: dict) -> dict:
+    """Validated `fast_track` section: {enabled, authors, max_per_24h, images: {name: kinds}}.
+    Raises PolicyError on a malformed section, so a typo fails closed."""
+    ft = allowlist.get("fast_track") or {}
+    images = {}
+    for name, opts in (ft.get("images") or {}).items():
+        if opts is not None and not isinstance(opts, dict):
+            raise PolicyError(f"fast_track image {name}: options must be a mapping")
+        images[name] = _kinds((opts or {}).get("updates"), FAST_TRACK_KINDS, f"fast_track image {name}")
+    return {
+        "enabled": ft.get("enabled") is True,
+        "authors": list(ft.get("authors") or []),
+        "max_per_24h": int(ft.get("max_per_24h", 4)),
+        "images": images,
+    }
+
+
+def allowed_kinds(service: str, image: str, allowlist: dict) -> Tuple[str, ...]:
+    """Update kinds an allowlisted service may take for this image (empty: none)."""
+    svc = (allowlist.get("services") or {}).get(service)
+    if svc is None:
+        return ()
+    kinds = _kinds((svc or {}).get("updates"), UPDATE_KINDS, f"service {service}")
+    ft = fast_track_config(allowlist)["images"].get(image)
+    if ft is not None:
+        kinds = tuple(k for k in kinds if k in ft)
+    return kinds
+
+
+def fast_track_verdict(author: str, changes: List["ImageChange"], allowlist: dict) -> Tuple[bool, str]:
+    """Does an (otherwise eligible) MR fall in the fast-track class?
+
+    All of: the class is enabled; the author is a fast-track author; the MR
+    changes exactly one image (one name, one old and one new reference, on
+    one or more services); that image is listed; and every change is a kind
+    the listed image allows. Returns (qualifies, explanation)."""
+    ft = fast_track_config(allowlist)
+    if not ft["enabled"]:
+        return False, "fast track is disabled"
+    if author not in ft["authors"]:
+        return False, f"author {author!r} is not a fast-track author"
+    if not changes:
+        return False, "no image changes"
+    names = {c.new.name for c in changes}
+    if len(names) != 1:
+        return False, "changes more than one image: " + ", ".join(sorted(names))
+    name = names.pop()
+    if {(str(c.old), str(c.new)) for c in changes} != {(str(changes[0].old), str(changes[0].new))}:
+        return False, f"{name}: services move between different references"
+    kinds = ft["images"].get(name)
+    if kinds is None:
+        return False, f"{name} is not a fast-track image"
+    off = sorted({c.kind for c in changes} - set(kinds))
+    if off:
+        return False, f"{name}: {', '.join(off)} update is not fast-tracked (allowed: {', '.join(kinds)})"
+    return True, (f"fast-track: {changes[0].kind} update of {name} on "
+                  + ", ".join(c.service for c in changes))
+
+
+# ---------------------------------------------------------------------------
 # Whole-MR evaluation (MR-local checks; global gates are added by the caller)
 # ---------------------------------------------------------------------------
 
@@ -303,14 +385,16 @@ class Verdict:
     reasons: List[str] = field(default_factory=list)   # why NOT eligible
     notes: List[str] = field(default_factory=list)     # informational
     changes: List[ImageChange] = field(default_factory=list)
+    fast_track: bool = False                           # eligible AND in the fast-track class
 
     def reject(self, reason: str) -> None:
         self.eligible = False
+        self.fast_track = False
         self.reasons.append(reason)
 
     def as_dict(self) -> dict:
-        return {"eligible": self.eligible, "reasons": self.reasons, "notes": self.notes,
-                "changes": [c.as_dict() for c in self.changes]}
+        return {"eligible": self.eligible, "fast_track": self.fast_track, "reasons": self.reasons,
+                "notes": self.notes, "changes": [c.as_dict() for c in self.changes]}
 
 
 @dataclass
@@ -366,18 +450,43 @@ def evaluate_mr(*, author: str, target_branch: str, labels: List[str],
                 v.changes = diff_compose(base_compose, head_compose)
             except PolicyError as e:
                 v.reject(f"compose: {e}")
-            services = allowlist.get("services") or {}
+            for r in change_kind_reasons(v.changes, allowlist):
+                v.reject(r)
             for c in v.changes:
-                if c.service not in services:
-                    v.reject(f"service {c.service!r} is not on the auto-merge allowlist")
-                else:
-                    v.notes.append(f"{c.service}: {c.kind} update {c.old.tag or ''} -> {c.new.tag or ''}"
-                                   f" ({(c.new.digest or '')[:19]})")
+                v.notes.append(f"{c.service}: {c.kind} update {c.old.tag or ''} -> {c.new.tag or ''}"
+                               f" ({(c.new.digest or '')[:19]})")
             if not v.changes and v.eligible:
                 v.reject("compose file changed but no image updates were found")
     elif v.eligible:
         v.reject("MR does not change the compose file")
+
+    if v.eligible:
+        try:
+            v.fast_track, why = fast_track_verdict(author, v.changes, allowlist)
+        except PolicyError as e:
+            v.fast_track, why = False, f"fast track: {e}"
+        v.notes.append(why if v.fast_track else f"not fast-track: {why}")
     return v
+
+
+def change_kind_reasons(changes: List[ImageChange], allowlist: dict) -> List[str]:
+    """Per-change allowlist check (service listed, update kind allowed). Used by
+    evaluate_mr and again by plan-deploy on the merged commit."""
+    reasons = []
+    services = allowlist.get("services") or {}
+    for c in changes:
+        if c.service not in services:
+            reasons.append(f"service {c.service!r} is not on the auto-merge allowlist")
+            continue
+        try:
+            kinds = allowed_kinds(c.service, c.new.name, allowlist)
+        except PolicyError as e:
+            reasons.append(f"allowlist: {e}")
+            continue
+        if c.kind not in kinds:
+            reasons.append(f"{c.service}: {c.kind} update of {c.new.name} is not allowed "
+                           f"(allowed: {', '.join(kinds) or 'none'})")
+    return reasons
 
 
 # ---------------------------------------------------------------------------
