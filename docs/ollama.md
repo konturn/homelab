@@ -30,7 +30,7 @@ docker run -d --name ollama-test --gpus all -e OLLAMA_DEBUG=1 \
   -v /mpool/ollama:/root/.ollama ollama/ollama:<new>
 docker logs ollama-test 2>&1 | grep -E 'inference compute|skipping CUDA'
 #   want: library=CUDA compute=6.1
-docker exec ollama-test ollama run qwen3.5:9b-q4_K_M "hi" >/dev/null
+docker exec ollama-test ollama run qwen3:14b-q4_K_M "hi" >/dev/null
 docker exec ollama-test ollama ps                                       # want: 100% GPU
 nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv
 docker rm -f ollama-test
@@ -51,6 +51,50 @@ them to `llm-backend` as well. Do not publish the port.
 Stored in `/mpool/ollama` (outside every restic folder, so not backed up;
 they can be downloaded again).
 
+### Declared in the inventory, applied on deploy
+
+The models are declared on the router host in `ansible/inventory.yml`:
+
+```yaml
+ollama_models:                 # pulled when missing
+  - qwen3:14b-q4_K_M
+ollama_custom_models:          # built with `ollama create`
+  - name: paperless-qwen3:14b
+    modelfile: paperless-qwen3.Modelfile   # in docker/ollama/
+ollama_prune_undeclared: true  # remove every other model
+```
+
+The `configure-ollama-models` role (last role in `ansible/router.yml`) applies
+them on every deploy that touches the inventory, `docker/ollama/**` or the
+role (ci/deploy-scope/scope.yml), and on every full deploy:
+
+- It templates each Modelfile to `/mpool/ollama/modelfiles/` (the container's
+  `/root/.ollama/modelfiles/`).
+- It pulls each model in `ollama_models` that `ollama list` does not show.
+  The container has no egress, so the role attaches it to the default
+  `bridge` network for the pull and detaches it afterwards, also when the pull
+  fails. A pull may take up to an hour (`ollama_pull_timeout`).
+- It (re)creates a custom model when the model is missing or its marker
+  `/mpool/ollama/modelfiles/.created/<name>` does not match: the marker holds
+  the rendered Modelfile's sha256 and the base model's ID. So editing the
+  Modelfile, or a re-pulled base, rebuilds the model on the next deploy.
+- With `ollama_prune_undeclared`, it runs `ollama rm` on every installed
+  model that is in neither list. A model pulled by hand to try it out is
+  therefore removed by the next deploy; declare it to keep it.
+- Each custom model's `FROM` model must be in `ollama_models` (the role
+  asserts it), and names need an explicit tag, as `ollama list` shows them.
+
+When nothing is missing or stale the role only runs `ollama list` and reports
+no changes. If the container is not running or `ollama list` does not answer
+within 30 s, it prints a warning and skips; it never waits on a busy model.
+A pull or create that runs and fails does fail the deploy.
+
+To add a model, add it to `ollama_models` and merge. To change the
+paperless-ai model, edit the Modelfile (or add another custom model and
+point `OLLAMA_MODEL` at it).
+
+### Benchmarks
+
 | model | file | VRAM (8k ctx) | generation | prompt (cold) | load from pool |
 |---|---|---|---|---|---|
 | `qwen3:8b-q4_K_M` | 5.2 GB | 6.2 GB | 33.6 tok/s | ~620 tok/s | ~5 s |
@@ -60,7 +104,8 @@ they can be downloaded again).
 Measured 2026-10-21 on the P5000: ~2k-token prompt, num_ctx 8192,
 `think: false`, while the pool was resilvering (the cold loads of the first two
 were from disk; qwen3:8b was still in page cache). All three run with
-`100% GPU`.
+`100% GPU`. Only qwen3:14b is still installed; the other two were removed
+after the benchmark (declare them again to bring them back).
 
 **paperless-ai uses `paperless-qwen3:14b`** (qwen3:14b without thinking). For
 batch tagging in the background, accuracy matters more than speed. At 10 GB it
@@ -84,9 +129,10 @@ ran on the P5000 at the same time. `Plex Transcoder` used 135-207 MiB of VRAM,
 with NVENC at 9-12% and NVDEC at 18-21%. Total VRAM was about 10.3 of 16.4 GB.
 The model stayed at `100% GPU`.
 
-### Pulling a model
+### Pulling a model by hand
 
-The container has no egress, so attach it to the default bridge for the pull:
+Normally not needed: declare the model and deploy. To try a model without a
+deploy (the next deploy removes it again unless it is declared):
 
 ```sh
 docker network connect bridge ollama

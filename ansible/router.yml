@@ -72,3 +72,7 @@
         - {path: "/var/log"}
         - {path: "/root"}
       restic_password: "{{ vault_restic_password | trim }}"
+  # Last: pulls can take long on a fresh host, and a failed pull or create
+  # must not hold up the other roles.
+  - role: configure-ollama-models
+    tags: [configure-ollama-models]

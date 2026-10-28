@@ -48,6 +48,7 @@ inputs changed.
 | `docker/daemon.json` | configure-docker, configure-homelab-services |
 | `docker/plex/convert_isos_makemkv.sh` | configure-router-network |
 | satellite compose files, `docker/promtail/satellite-config.yml`, `docker/telegraf/satellite-telegraf.conf` | none |
+| `docker/ollama/**` | configure-ollama-models |
 | everything else under `docker/**` | configure-homelab-services |
 | `base/nut/**`, `scripts/grafana-token-cleanup.sh` | configure-homelab-services |
 | `base/disk/**`, `base/gitlab-runner/**`, `base/systemd/zpool-scrub.*`, `base/udev/**`, `networking/nfs/**` | configure-base |

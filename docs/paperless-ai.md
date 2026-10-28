@@ -117,13 +117,15 @@ only). The paperless-ai UI History page can also reset each document.
 ## Model
 
 `OLLAMA_MODEL=paperless-qwen3:14b`: qwen3:14b with a template that disables
-thinking (`docker/ollama/paperless-qwen3.Modelfile`, deployed to
-`/mpool/ollama/modelfiles/`). See docs/ollama.md for why, and the
-benchmarks. After changing the Modelfile, or on a new host:
+thinking (`docker/ollama/paperless-qwen3.Modelfile`). See docs/ollama.md for
+why, and the benchmarks.
 
-```sh
-docker exec ollama ollama create paperless-qwen3:14b -f /root/.ollama/modelfiles/paperless-qwen3.Modelfile
-```
+The model and its base `qwen3:14b-q4_K_M` are declared in the inventory
+(`ollama_models`, `ollama_custom_models`) and applied on deploy by the
+`configure-ollama-models` role: a new host pulls the base and creates
+`paperless-qwen3:14b`, and a changed Modelfile recreates it. No manual
+`ollama pull` or `ollama create` is needed (docs/ollama.md, "Declared in the
+inventory").
 
 `TOKEN_LIMIT=8192` caps `num_ctx` (paperless-ai sizes it to the prompt) and
 `CONTENT_MAX_LENGTH=16000` truncates long documents, so VRAM stays around

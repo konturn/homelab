@@ -47,6 +47,14 @@ class SampleDiffs(unittest.TestCase):
         self.assertEqual(sel("router", "docker/nginx/router.lab.nkontur.com/internal_http.conf"),
                          ["configure-homelab-services"])
 
+    def test_ollama_modelfile_selects_ollama_models(self):
+        f = "docker/ollama/paperless-qwen3.Modelfile"
+        self.assertEqual(sel("router", f), ["configure-ollama-models"])
+        self.assertEqual(sel("router", "ansible/roles/configure-ollama-models/tasks/main.yml"),
+                         ["configure-ollama-models"])
+        for pb in ("zwave", "satellite-2", "macmini"):
+            self.assertEqual(sel(pb, f), [], pb)
+
     def test_dhcpd_change_selects_router_network(self):
         self.assertEqual(sel("router", "networking/dhcp/dhcpd.conf"),
                          ["configure-router-network"])
