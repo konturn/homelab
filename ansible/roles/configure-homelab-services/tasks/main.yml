@@ -818,8 +818,14 @@
   when: "'router' in inventory_hostname"
 
 - name: Run Nextcloud occ upgrade after image change
-  ansible.builtin.command:
-    cmd: docker exec -u www-data nextcloud php occ upgrade
+  # The image entrypoint syncs the code and runs its own `occ upgrade` while
+  # holding /var/www/html/nextcloud-init-sync.lock. Wait for that lock first so
+  # the two upgrades never run concurrently. The lock file is root-owned, so the
+  # wait runs as root and occ itself as www-data.
+  ansible.builtin.shell:
+    cmd: >-
+      docker exec nextcloud flock -w 1800 /var/www/html/nextcloud-init-sync.lock true &&
+      docker exec -u www-data nextcloud php occ upgrade
   register: nextcloud_occ_upgrade
   retries: 5
   delay: 15
