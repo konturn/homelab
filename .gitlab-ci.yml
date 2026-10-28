@@ -36,6 +36,9 @@
 #   aruba-iap:test (MR + main, offline) -> aruba-iap:apply (main, on changes)
 #   aruba-iap:apply-protected (main, manual), aruba-iap:drift (scheduled, IAP_TASK=drift)
 #
+#   DENON AVR (see docs/denon.md; read-only, CI never changes the receiver)
+#   denon:test (MR + main, offline), denon:drift (scheduled, DENON_TASK=drift)
+#
 #   AUTO-MERGE (see docs/AUTOMERGE.md)
 #   automerge:test + automerge:eligibility (MR, informational)
 #   automerge:sweep / automerge:report (scheduled on main, AUTOMERGE_TASK=sweep|report)
@@ -182,12 +185,13 @@ variables:
   interruptible: true
 
 # Auto-merge rule fragments (used via !reference).
-# Scheduled pipelines that set AUTOMERGE_TASK, NETGEAR_TASK, IAP_TASK or
-# SCHEDULED_TASK run only their own jobs (automerge:* / netgear:drift /
-# aruba-iap:drift / the job whose rule names that SCHEDULED_TASK, e.g. renovate).
+# Scheduled pipelines that set AUTOMERGE_TASK, NETGEAR_TASK, IAP_TASK,
+# DENON_TASK or SCHEDULED_TASK run only their own jobs (automerge:* /
+# netgear:drift / aruba-iap:drift / denon:drift / the job whose rule names that
+# SCHEDULED_TASK, e.g. renovate).
 .automerge_task_skip:
   rules:
-    - if: $AUTOMERGE_TASK || $NETGEAR_TASK || $IAP_TASK || $SCHEDULED_TASK
+    - if: $AUTOMERGE_TASK || $NETGEAR_TASK || $IAP_TASK || $DENON_TASK || $SCHEDULED_TASK
       when: never
 
 # Nightly full deploy of every host (pipeline schedule with
@@ -1374,6 +1378,59 @@ aruba-iap:drift:
     expire_in: 30 days
   rules:
     - if: $CI_COMMIT_BRANCH == "main" && $IAP_TASK == "drift" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+
+# =============================================================================
+# Denon AVR-X6700H (networking/denon, see docs/denon.md)
+# =============================================================================
+# Read-only. No job sends anything but queries to the receiver; denonctl.py
+# apply refuses to send under CI.
+
+denon:test:
+  extends: .interruptible
+  stage: validate
+  image: willhallonline/ansible:latest
+  needs: []
+  script:
+    - python3 -m unittest discover -s networking/denon -p 'test_*.py' -v
+    - python3 networking/denon/denonctl.py check
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - networking/denon/**/*
+        - .gitlab-ci.yml
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - networking/denon/**/*
+
+# Scheduled daily with DENON_TASK=drift (protected runner, host network, so it
+# reaches the IoT VLAN): fails and mails the report to root via the router's
+# mail when the receiver differs from denon-x6700h.yaml. A receiver in standby
+# is skipped (exit 0): it does not report its settings then.
+denon:drift:
+  extends: .ansible
+  stage: deploy
+  needs: []
+  resource_group: denon
+  script:
+    - rc=0; python3 networking/denon/denonctl.py drift > denon-drift.txt 2>&1 || rc=$?
+    - cat denon-drift.txt
+    - |
+      if [ "$rc" -ne 0 ]; then
+        printf '\nExit code: %s\nJob: %s\n' "$rc" "$CI_JOB_URL" >> denon-drift.txt
+        ssh -i tmp -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 \
+          -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$CI_PROJECT_DIR/ansible/known_hosts" -o LogLevel=ERROR \
+          root@10.4.0.1 "mail -s 'Homelab: Denon AVR settings drift' root" < denon-drift.txt \
+          || echo "WARN: sending mail failed"
+        exit 1
+      fi
+  artifacts:
+    when: always
+    paths:
+      - denon-drift.txt
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $DENON_TASK == "drift" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
 
 # =============================================================================
 # Scheduled read-only reports for the OpenClaw Morning Digest (ci/reports/README.md)
