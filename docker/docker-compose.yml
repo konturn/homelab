@@ -1,5 +1,9 @@
 volumes:
+  # Datadir of the old MariaDB 13.0 server. Not mounted; kept for rollback
+  # after the move to the 12.3 LTS series (2026-10-28). Remove after 2026-11-11.
   nextcloud_db:
+  # Nextcloud MariaDB datadir (12.3 LTS series)
+  nextcloud_db_lts:
   wordpress_db:
   ombi:
   fifos:
@@ -2040,7 +2044,11 @@ services:
     # crashes on this host with "Fatal glibc error: CPU does not support
     # x86-64-v3". Stay on the Debian-based default variant. Do not switch to
     # any -ubi*/-ubi10* tag.
-    image: mariadb:13.0.2@sha256:0e4bb0f339feba125d1154fbacd36c16ec8518f52e44e1f82ecec7d6771caf39
+    # LTS series only (12.3, supported until 2029-06). Renovate is limited to
+    # 12.3.x (renovate.json). Moving to another series is a deliberate change:
+    # upgrades to a newer LTS run in place (MARIADB_AUTO_UPGRADE), downgrades
+    # need a dump and restore into a fresh volume.
+    image: mariadb:12.3.3@sha256:d46e102fa8b9b72bfcdeb56f9dd538742092119dc8b11f31fe662605cd234cd9
     container_name: nextcloud_database
     security_opt:
       - no-new-privileges=true
@@ -2065,12 +2073,14 @@ services:
         reservations:
           memory: 256M
     volumes:
-      - nextcloud_db:/var/lib/mysql
+      - nextcloud_db_lts:/var/lib/mysql
     environment:
       - MYSQL_ROOT_PASSWORD={{ vault_nextcloud_db_password | trim | replace("$", "$$") }}
       - MYSQL_PASSWORD={{ vault_nextcloud_db_password | trim | replace("$", "$$") }}
       - MYSQL_DATABASE=nextcloud
       - MYSQL_USER=nextcloud
+      # Run mariadb-upgrade (system tables) automatically after a version change
+      - MARIADB_AUTO_UPGRADE=1
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 30s
