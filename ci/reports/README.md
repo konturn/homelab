@@ -29,6 +29,13 @@ summary: <one line, at most 120 characters>
 
 Report contents are host-specific and stay on the router; they never go into git.
 
+`report:cves` scans each image once at every severity and also exports the
+result, one compact row per finding (id, package, installed/fixed version,
+severity, CVSS vector, CWEs), to `/var/lib/trivy-reports/images/<image-id>.json`
+on the router (root-only, 0700/0600; exports of images that stopped running are
+removed). Other local tools read these instead of scanning the images again.
+`SCAN_EXPORT_DIR=""` turns the export off.
+
 `report:cves` also adds the `security` label to open image-update MRs (Renovate
 or moltbot) for images with fixable HIGH/CRITICAL findings, using
 `AUTOMERGE_TOKEN`. It only adds labels.

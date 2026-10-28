@@ -53,6 +53,49 @@ class TrivyTest(unittest.TestCase):
         {"VulnerabilityID": "CVE-3", "PkgName": "zlib", "Severity": "HIGH", "FixedVersion": ""},
     ]}]}
 
+    def test_export_rows_and_prune(self):
+        result = {"Results": [{"Class": "os-pkgs", "Type": "debian", "Vulnerabilities": [
+            {"VulnerabilityID": "CVE-1", "PkgName": "openssl", "InstalledVersion": "3.0.1", "FixedVersion": "3.0.2",
+             "Severity": "HIGH", "Status": "fixed", "CweIDs": ["CWE-787"], "Title": "t" * 300,
+             "CVSS": {"ghsa": {"V3Vector": "CVSS:3.1/AV:L", "V3Score": 5.0},
+                      "nvd": {"V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", "V3Score": 9.8}}},
+            {"VulnerabilityID": "CVE-1", "PkgName": "openssl", "InstalledVersion": "3.0.1"},
+            {"VulnerabilityID": "CVE-9", "PkgName": "zlib", "InstalledVersion": "1", "Severity": "LOW"},
+        ]}]}
+        rows = trivy_scan.export_rows(result)
+        self.assertEqual([r["id"] for r in rows], ["CVE-1", "CVE-9"])
+        self.assertEqual(rows[0]["vector"], "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
+        self.assertEqual(rows[0]["score"], 9.8)
+        self.assertLessEqual(len(rows[0]["title"]), 120)
+        self.assertEqual(rows[1]["status"], "affected")
+        self.assertEqual(rows[1]["fixed"], "")
+        with tempfile.TemporaryDirectory() as d:
+            old = trivy_scan.SCAN_EXPORT_DIR
+            trivy_scan.SCAN_EXPORT_DIR = os.path.join(d, "x", "images")
+            try:
+                base = {"image_id": "sha256:" + "a" * 64, "ref": "r", "repo": "r", "services": ["s"], "containers": ["c"]}
+                trivy_scan.write_export(base, result)
+                trivy_scan.write_export({**base, "image_id": "sha256:" + "b" * 64}, result)
+                path = os.path.join(trivy_scan.SCAN_EXPORT_DIR, "a" * 64 + ".json")
+                with open(path) as f:
+                    doc = json.load(f)
+                self.assertEqual(len(doc["vulns"]), 2)
+                self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+                self.assertEqual(os.stat(os.path.join(d, "x")).st_mode & 0o777, 0o700)
+                self.assertEqual(trivy_scan.prune_exports(["sha256:" + "a" * 64]), 1)
+                self.assertEqual(os.listdir(trivy_scan.SCAN_EXPORT_DIR), ["a" * 64 + ".json"])
+            finally:
+                trivy_scan.SCAN_EXPORT_DIR = old
+
+    def test_summarise_ignores_unfixed_and_low(self):
+        r = {"Results": [{"Vulnerabilities": [
+            {"VulnerabilityID": "CVE-5", "PkgName": "a", "Severity": "LOW", "FixedVersion": "2"},
+            {"VulnerabilityID": "CVE-6", "PkgName": "b", "Severity": "CRITICAL", "FixedVersion": ""},
+            {"VulnerabilityID": "CVE-7", "PkgName": "c", "Severity": "MEDIUM", "FixedVersion": "1"},
+        ]}]}
+        s = trivy_scan.summarise_scan(r)
+        self.assertEqual((s["critical"], s["high"], s["top"]), (0, 0, []))
+
     def test_summarise(self):
         s = trivy_scan.summarise_scan(self.RESULT)
         self.assertEqual((s["critical"], s["high"]), (1, 1))

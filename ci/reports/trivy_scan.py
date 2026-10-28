@@ -4,6 +4,12 @@
 Only HIGH/CRITICAL findings that have a fixed version are counted. The Trivy
 vulnerability DB is cached under TRIVY_CACHE and refreshed once per run.
 Writes reports/updates/cves.{md,json}.
+
+Each image is scanned once at every severity, fixed or not; the report filters
+afterwards. The full result is also exported, reduced to one compact row per
+finding, to SCAN_EXPORT_DIR (root-only, on the router), so other local tools
+can reuse this scan instead of scanning every image again. Set
+SCAN_EXPORT_DIR="" to disable the export.
 """
 
 from __future__ import annotations
@@ -13,6 +19,7 @@ import concurrent.futures as cf
 import json
 import os
 import sys
+import tempfile
 from collections import defaultdict
 from typing import Dict, List
 
@@ -23,6 +30,7 @@ TRIVY_IMAGE = os.environ.get(
     "TRIVY_IMAGE",
     "aquasec/trivy:0.76.0@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222")
 TRIVY_CACHE = os.environ.get("TRIVY_CACHE", "/persistent_data/application/trivy/cache")
+SCAN_EXPORT_DIR = os.environ.get("SCAN_EXPORT_DIR", "/var/lib/trivy-reports/images")
 # Trivy holds an exclusive lock on its cache, so scans run one at a time.
 PARALLEL = int(os.environ.get("TRIVY_PARALLEL", "1"))
 SEV_ORDER = {"CRITICAL": 0, "HIGH": 1}
@@ -127,18 +135,96 @@ def build_report(images: List[dict], errors: List[dict]):
     return summary, lines
 
 
+def _cvss(v: dict):
+    """(vector, score) preferring NVD, then GHSA, then any other source."""
+    cv = v.get("CVSS") or {}
+    for src in ["nvd", "ghsa"] + sorted(k for k in cv if k not in ("nvd", "ghsa")):
+        c = cv.get(src) or {}
+        if c.get("V3Vector") or c.get("V40Vector"):
+            return c.get("V3Vector") or c.get("V40Vector"), c.get("V3Score") or c.get("V40Score")
+    return None, None
+
+
+def export_rows(result: dict) -> List[dict]:
+    """Trivy JSON -> one compact row per (id, package, installed version)."""
+    rows: Dict[tuple, dict] = {}
+    for r in result.get("Results") or []:
+        for v in r.get("Vulnerabilities") or []:
+            key = (v.get("VulnerabilityID"), v.get("PkgName"), v.get("InstalledVersion"))
+            if key in rows:
+                continue
+            vector, score = _cvss(v)
+            rows[key] = {
+                "id": v.get("VulnerabilityID"), "aliases": v.get("VendorIDs") or [],
+                "pkg": v.get("PkgName"), "installed": v.get("InstalledVersion") or "",
+                "fixed": v.get("FixedVersion") or "",
+                "status": v.get("Status") or ("fixed" if v.get("FixedVersion") else "affected"),
+                "severity": v.get("Severity") or "UNKNOWN", "vector": vector, "score": score,
+                "cwes": v.get("CweIDs") or [], "title": common.clip(v.get("Title") or "", 120),
+                "published": (v.get("PublishedDate") or "")[:10],
+                "class": r.get("Class"), "type": r.get("Type"),
+            }
+    return list(rows.values())
+
+
+def export_dir() -> str:
+    """The export dir and its parent, created root-only (0700)."""
+    if SCAN_EXPORT_DIR:
+        parent = os.path.dirname(SCAN_EXPORT_DIR.rstrip("/"))
+        for d in (parent, SCAN_EXPORT_DIR):
+            os.makedirs(d, mode=0o700, exist_ok=True)
+    return SCAN_EXPORT_DIR
+
+
+def export_name(img_id: str) -> str:
+    return img_id.replace("sha256:", "")[:64] + ".json"
+
+
+def write_export(base: dict, result: dict) -> None:
+    d = export_dir()
+    if not d:
+        return
+    doc = {**base, "generated": common.utc_now(), "trivy_image": TRIVY_IMAGE, "vulns": export_rows(result)}
+    path = os.path.join(d, export_name(base["image_id"]))
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".tmp-")
+    with os.fdopen(fd, "w") as f:
+        json.dump(doc, f, separators=(",", ":"), sort_keys=True)
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
+
+
+def prune_exports(keep_ids) -> int:
+    """Remove exports of images that are no longer running."""
+    d = SCAN_EXPORT_DIR
+    if not d or not os.path.isdir(d):
+        return 0
+    keep = {export_name(i) for i in keep_ids}
+    n = 0
+    for f in os.listdir(d):
+        if f.endswith(".json") and f not in keep:
+            os.unlink(os.path.join(d, f))
+            n += 1
+    return n
+
+
 def scan_one(img_id: str, meta: dict) -> dict:
+    # All severities, fixed or not: the export needs them, and summarise_scan
+    # filters to fixable HIGH/CRITICAL for the report itself.
     r = trivy(["image", "--image-src", "docker", "--skip-db-update", "--skip-java-db-update",
-               "--scanners", "vuln", "--severity", "HIGH,CRITICAL", "--ignore-unfixed",
-               "--format", "json", "--quiet", "--timeout", "30m", img_id], timeout=2400)
+               "--scanners", "vuln", "--format", "json", "--quiet", "--timeout", "30m", img_id], timeout=2400)
     base = {"image_id": img_id, "ref": meta["ref"], "repo": repo_of(meta["ref"]),
             "services": sorted(meta["services"]), "containers": sorted(meta["containers"])}
     if r.returncode != 0:
         return {**base, "error": common.clip(r.stderr.strip().splitlines()[-1] if r.stderr.strip() else f"rc={r.returncode}", 80)}
     try:
-        return {**base, **summarise_scan(json.loads(r.stdout))}
+        result = json.loads(r.stdout)
     except ValueError:
         return {**base, "error": "unparseable trivy output"}
+    try:
+        write_export(base, result)
+    except OSError as e:
+        common.log(f"export failed for {display_ref(meta['ref'])}: {e}")
+    return {**base, **summarise_scan(result)}
 
 
 def main() -> int:
@@ -164,6 +250,9 @@ def main() -> int:
                                                            f"{res['critical']}C/{res['high']}H"))
     ok = [r for r in results if "error" not in r]
     errors = [r for r in results if "error" in r]
+    pruned = prune_exports(imgs.keys())
+    if pruned:
+        common.log(f"removed {pruned} exports of images no longer running")
     for r in ok:
         r["services"] = set(r["services"])
     summary, lines = build_report(ok, errors)
