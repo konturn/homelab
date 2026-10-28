@@ -2477,6 +2477,7 @@ services:
       - {{ docker_persistent_data_path }}/openclaw/claude.json:/home/node/.claude.json
       - {{ docker_persistent_data_path }}/chromium-browser/uploads:/uploads
       - {{ docker_persistent_data_path }}/openclaw/entrypoint-wrapper.sh:/usr/local/bin/entrypoint-wrapper.sh:ro
+      - {{ docker_persistent_data_path }}/openclaw/git-credential-gitlab:/usr/local/bin/git-credential-gitlab:ro
     entrypoint: ["entrypoint-wrapper.sh"]
     command: ["node", "/app/dist/index.js", "gateway", "--port", "18789"]
 
