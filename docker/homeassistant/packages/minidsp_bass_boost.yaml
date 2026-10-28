@@ -1,0 +1,289 @@
+# miniDSP bass boost: switching, sync check and mismatch sensors.
+# See docs/minidsp.md and docs/HOMEASSISTANT.md.
+#
+# Templated by Ansible (docker_config) to /config/packages/ and loaded through
+# `homeassistant: packages:` in configuration.yaml. The unit list comes from
+# minidsp_units in ansible/inventory.yml; Home Assistant templates are inside
+# raw blocks so Ansible leaves them alone.
+#
+# The only writes to the units are rest_command.bass_boost (first unit in
+# minidsp_units) and rest_command.bass_boost_2 (second unit), defined in
+# configuration.yaml. Both select the preset that matches
+# input_boolean.bass_boost at call time: 0 when off, 1 when on. Nothing in
+# this file sends any other preset or any other DSP setting.
+
+rest_command:
+  # Read-only: GET /devices/<serial> (preset, source, volume, mute, levels).
+  # Used to read a unit's preset back right after a write instead of waiting
+  # for the 60 s REST sensor poll.
+  minidsp_status:
+    url: "http://zwave.lab.nkontur.com:5380/devices/{% raw %}{{ serial }}{% endraw %}"
+    method: GET
+    timeout: 10
+
+template:
+  - binary_sensor:
+      # Per unit: on when the unit's preset has not matched
+      # input_boolean.bass_boost for 2 minutes. The preset sensor polls every
+      # 60 s, so a normal switch can look mismatched for up to about a minute.
+      # Unavailable while the unit or the boolean has no valid state (unit off
+      # USB, HA starting).
+{% for unit in minidsp_units %}
+      - name: "miniDSP {{ unit.serial }} Preset Mismatch"
+        unique_id: minidsp_{{ unit.serial }}_preset_mismatch
+        device_class: problem
+        icon: mdi:tune-vertical-variant
+        availability: >-
+          {% raw %}{{{% endraw %} states('sensor.minidsp_{{ unit.serial }}_preset') in ['0', '1']
+             and states('input_boolean.bass_boost') in ['on', 'off'] {% raw %}}}{% endraw %}
+
+        state: >-
+          {% raw %}{{{% endraw %} states('sensor.minidsp_{{ unit.serial }}_preset')
+             != ('1' if is_state('input_boolean.bass_boost', 'on') else '0') {% raw %}}}{% endraw %}
+
+        delay_on: "00:02:00"
+{% endfor %}
+      # On when either unit has been mismatched for 10 minutes, i.e. the sync
+      # check below has not been able to fix it. Off (not unavailable) when a
+      # unit is unreadable; that case is the anomaly detector's minidsp_units
+      # signal. Feeds the anomaly detector's minidsp_preset_mismatch signal.
+      - name: "miniDSP Preset Mismatch"
+        unique_id: minidsp_preset_mismatch
+        device_class: problem
+        icon: mdi:tune-vertical-variant
+        state: >-
+          {% raw %}{% set want = '1' if is_state('input_boolean.bass_boost', 'on') else '0' %}
+          {{ states('input_boolean.bass_boost') in ['on', 'off'] and ({% endraw %}
+
+{% for unit in minidsp_units %}
+             (states('sensor.minidsp_{{ unit.serial }}_preset') in ['0', '1']
+              and states('sensor.minidsp_{{ unit.serial }}_preset') != want){{ ' or' if not loop.last else '' }}
+{% endfor %}
+          {% raw %}) }}{% endraw %}
+
+        delay_on: "00:10:00"
+
+script:
+  # One attempt: write through the unit's rest_command, then read the preset
+  # back. Returns {ok, write_status, preset, expected}. ok is based on the
+  # read-back only: rest_command raises on timeouts and connection errors but
+  # only logs a warning for HTTP errors (e.g. 500 DeviceIndexOutOfRange when
+  # the unit is not connected), and a write that decoded badly may still have
+  # been applied.
+  minidsp_bass_boost_attempt:
+    alias: miniDSP bass boost attempt (one unit)
+    description: Internal helper for script.minidsp_apply_bass_boost_preset.
+    mode: parallel
+    max: 4
+    fields:
+      serial:
+        description: Unit serial
+        required: true
+      command:
+        description: rest_command service of that unit
+        required: true
+      expected:
+        description: Preset the unit should end up on (0 or 1)
+        required: true
+    sequence:
+{% raw %}
+      - action: "{{ command }}"
+        continue_on_error: true
+        response_variable: write
+      - action: rest_command.minidsp_status
+        data:
+          serial: "{{ serial }}"
+        continue_on_error: true
+        response_variable: status
+      # Refresh the polled sensors now (read-only GET), so the mismatch
+      # sensors see the new preset without waiting for the 60 s poll.
+      - action: homeassistant.update_entity
+        target:
+          entity_id: "sensor.minidsp_{{ serial }}_preset"
+        continue_on_error: true
+      - variables:
+          result:
+            write_status: "{{ write.status if write is defined and write is mapping else 'error' }}"
+            preset: >-
+              {{ status.content.master.preset
+                 if status is defined and status is mapping and status.status == 200
+                    and status.content is mapping and status.content.master is defined
+                 else none }}
+            expected: "{{ expected | int }}"
+            ok: >-
+              {{ status is defined and status is mapping and status.status == 200
+                 and status.content is mapping and status.content.master is defined
+                 and (status.content.master.preset | int(-1)) == (expected | int) }}
+      - stop: attempt finished
+        response_variable: result
+{% endraw %}
+
+  # Select the preset that matches input_boolean.bass_boost on one unit, with
+  # one retry after 5 s. On failure it logs an error and raises a persistent
+  # notification (cleared on the next success). Never raises itself.
+  minidsp_apply_bass_boost_preset:
+    alias: miniDSP apply bass boost preset (one unit)
+    description: >-
+      Selects preset 0 (input_boolean.bass_boost off) or 1 (on) on one miniDSP
+      unit and verifies it by reading the preset back.
+    mode: parallel
+    max: 4
+    fields:
+      serial:
+        description: Unit serial (one of minidsp_units)
+        required: true
+        example: "{{ minidsp_units[0].serial }}"
+    sequence:
+      - variables:
+          commands:
+{% for unit in minidsp_units %}
+            "{{ unit.serial }}": rest_command.bass_boost{{ '' if loop.first else '_' ~ loop.index }}
+{% endfor %}
+{% raw %}
+          command: "{{ commands.get(serial | string, '') }}"
+          boost: "{{ states('input_boolean.bass_boost') }}"
+          expected: "{{ 1 if boost == 'on' else 0 }}"
+      - if:
+          - "{{ command == '' or boost not in ['on', 'off'] }}"
+        then:
+          - action: system_log.write
+            data:
+              logger: homeassistant.minidsp_bass_boost
+              level: warning
+              message: >-
+                miniDSP {{ serial }}: not sent (unknown serial or
+                input_boolean.bass_boost is {{ boost }})
+          - stop: nothing to do
+      - action: script.minidsp_bass_boost_attempt
+        data:
+          serial: "{{ serial }}"
+          command: "{{ command }}"
+          expected: "{{ expected }}"
+        response_variable: first
+      - if:
+          - "{{ not first.ok }}"
+        then:
+          - delay: 5
+          - action: script.minidsp_bass_boost_attempt
+            data:
+              serial: "{{ serial }}"
+              command: "{{ command }}"
+              expected: "{{ expected }}"
+            response_variable: second
+          - if:
+              - "{{ not second.ok }}"
+            then:
+              - action: system_log.write
+                data:
+                  logger: homeassistant.minidsp_bass_boost
+                  level: error
+                  message: >-
+                    miniDSP {{ serial }}: preset {{ expected }} not confirmed after 2
+                    attempts (write {{ first.write_status }}/{{ second.write_status }},
+                    read back {{ second.preset }})
+              - action: persistent_notification.create
+                data:
+                  notification_id: "minidsp_{{ serial }}_preset"
+                  title: "miniDSP {{ serial }}: bass boost preset not applied"
+                  message: >-
+                    Preset {{ expected }} (bass boost {{ boost }}) could not be
+                    confirmed on unit {{ serial }} after 2 attempts (write
+                    {{ second.write_status }}, read back {{ second.preset }}).
+                    The sync check retries every 10 minutes.
+              - stop: failed
+      - action: persistent_notification.dismiss
+        data:
+          notification_id: "minidsp_{{ serial }}_preset"
+{% endraw %}
+
+automation:
+  # Replaces the UI automation of the same id (formerly in automations.yaml),
+  # which called the two units one after the other: a failure on the first
+  # unit stopped the second. Both units are now set independently.
+  # queued: a toggle during a run is applied after it instead of dropped; each
+  # run sends the boolean's state at that moment.
+  - id: "1665111219536"
+    alias: Change Minidsp on base boost
+    description: >-
+      Select preset 1 (on) or 0 (off) on both miniDSP units, independently,
+      when input_boolean.bass_boost changes. Repo-managed
+      (docker/homeassistant/packages/minidsp_bass_boost.yaml).
+    mode: queued
+    max: 5
+    triggers:
+      - trigger: state
+        entity_id: input_boolean.bass_boost
+        from: "off"
+        to: "on"
+      - trigger: state
+        entity_id: input_boolean.bass_boost
+        from: "on"
+        to: "off"
+    actions:
+      - parallel:
+{% for unit in minidsp_units %}
+          - action: script.minidsp_apply_bass_boost_preset
+            data:
+              serial: "{{ unit.serial }}"
+            continue_on_error: true
+{% endfor %}
+
+  # Re-sends the matching preset to a unit whose preset sensor has not matched
+  # input_boolean.bass_boost for 2 minutes (the per-unit mismatch sensors'
+  # delay_on). Unavailable/unknown sensors are never "mismatched". Only the
+  # mismatched unit is written. At most one run per 10 minutes: the cooldown is
+  # a condition, so last_triggered only moves when something is re-sent.
+  - id: minidsp_bass_boost_sync
+    alias: miniDSP bass boost sync check
+    description: >-
+      Re-send the preset matching input_boolean.bass_boost to a miniDSP unit
+      that has been on the wrong preset for over 2 minutes. Repo-managed
+      (docker/homeassistant/packages/minidsp_bass_boost.yaml).
+    mode: single
+    max_exceeded: silent
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id:
+{% for unit in minidsp_units %}
+          - sensor.minidsp_{{ unit.serial }}_preset
+{% endfor %}
+      - trigger: state
+        entity_id:
+{% for unit in minidsp_units %}
+          - binary_sensor.minidsp_{{ unit.serial }}_preset_mismatch
+{% endfor %}
+        to: "on"
+      - trigger: time_pattern
+        minutes: /5
+    conditions:
+      - condition: or
+        conditions:
+{% for unit in minidsp_units %}
+          - condition: state
+            entity_id: binary_sensor.minidsp_{{ unit.serial }}_preset_mismatch
+            state: "on"
+{% endfor %}
+{% raw %}
+      - "{{ state_attr(this.entity_id, 'last_triggered') is none
+            or (now() - state_attr(this.entity_id, 'last_triggered')).total_seconds() > 600 }}"
+{% endraw %}
+    actions:
+      - parallel:
+{% for unit in minidsp_units %}
+          - if:
+              - condition: state
+                entity_id: binary_sensor.minidsp_{{ unit.serial }}_preset_mismatch
+                state: "on"
+            then:
+              - action: system_log.write
+                data:
+                  logger: homeassistant.minidsp_bass_boost
+                  level: warning
+                  message: "miniDSP {{ unit.serial }}: preset {% raw %}{{{% endraw %} states('sensor.minidsp_{{ unit.serial }}_preset') {% raw %}}}{% endraw %} does not match bass boost {% raw %}{{ states('input_boolean.bass_boost') }}{% endraw %}, re-sending"
+              - action: script.minidsp_apply_bass_boost_preset
+                data:
+                  serial: "{{ unit.serial }}"
+                continue_on_error: true
+{% endfor %}

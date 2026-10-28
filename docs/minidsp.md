@@ -21,8 +21,10 @@ speakers. Without Noah present:
 - Do not POST to the minidspd HTTP API (`/devices/<n>`, `/devices/<n>/config`).
 - Do not play audio into the miniDSP USB sound cards.
 - Do not trigger the bass-boost automation or call `rest_command.bass_boost` /
-  `bass_boost_2` (flip `input_boolean.bass_boost`) to test something. Home
-  Assistant already does the only writes that are expected.
+  `bass_boost_2` or `script.minidsp_apply_bass_boost_preset` (flip
+  `input_boolean.bass_boost`) to test something. Home Assistant already does
+  the only writes that are expected: the bass-boost automation and its sync
+  check, both of which only select the preset that matches the boolean.
 - Do not run `udevadm trigger --action=add` for the sound subsystem. The add
   event re-runs `90-alsa-restore.rules`, which writes mixer values to the
   units' USB audio interfaces.
@@ -111,10 +113,63 @@ ssh zwave.lab.nkontur.com 'cat /proc/asound/cards'
   (bass boost), on both units. They are defined in the repo-managed
   `docker/homeassistant/configuration.yaml`; before 2026-10-28 they used
   indexes 0 and 1.
-- The automation "Change Minidsp on base boost" (`id: '1665111219536'`) calls
-  both commands when `input_boolean.bass_boost` changes off -> on or
-  on -> off. Like all automations it lives only in `automations.yaml` on the
-  live volume (`docs/HOMEASSISTANT.md`).
+- Everything that calls them is repo-managed in the Home Assistant package
+  `docker/homeassistant/packages/minidsp_bass_boost.yaml`
+  (`docs/HOMEASSISTANT.md`, *Packages*). Until 2026-10-28 the automation was a
+  UI automation in `automations.yaml` that called the two units one after the
+  other, so a failed first call skipped the second unit, and nothing checked
+  afterwards.
+
+### Switching
+
+The automation "Change Minidsp on base boost" (`id: '1665111219536'`, kept
+from the UI version) runs on every off -> on / on -> off change of
+`input_boolean.bass_boost`. It runs
+`script.minidsp_apply_bass_boost_preset` for both units in `parallel:`, each
+with `continue_on_error: true`, so one unit failing does not affect the other.
+`mode: queued`: a toggle during a run is applied after it, not dropped.
+
+`script.minidsp_apply_bass_boost_preset` (field `serial`) maps the serial to
+its rest_command, reads the boolean (and sends nothing if it is not `on` or
+`off`), and runs `script.minidsp_bass_boost_attempt` up to twice, 5 s apart.
+One attempt:
+
+1. calls the unit's rest_command (`continue_on_error: true`);
+2. reads the preset back with `rest_command.minidsp_status`
+   (`GET /devices/<serial>`, read-only);
+3. refreshes `sensor.minidsp_<serial>_preset` (`homeassistant.update_entity`,
+   another read-only GET);
+4. returns `ok` only if the read-back is HTTP 200 and shows the expected
+   preset.
+
+The read-back decides, not the write's response, because in Home Assistant
+2026.10 `rest_command` only raises (`HomeAssistantError`) on timeouts,
+connection errors and responses it cannot decode. An HTTP error status (for
+example 500 `DeviceIndexOutOfRange` when the unit is not connected) is only
+logged as a warning; the call returns normally with `status` in its response.
+After two failed attempts the script logs an error
+(`homeassistant.minidsp_bass_boost`) and creates the persistent notification
+`minidsp_<serial>_preset`, which the next success dismisses.
+
+### Sync check and mismatch sensors
+
+| Entity | On when |
+|---|---|
+| `binary_sensor.minidsp_919619_preset_mismatch`, `binary_sensor.minidsp_921284_preset_mismatch` | that unit's preset sensor has not matched the boolean (0 off, 1 on) for 2 minutes (`delay_on`). Unavailable while the preset sensor or the boolean is unavailable/unknown. |
+| `binary_sensor.minidsp_preset_mismatch` | a readable unit has been mismatched for 10 minutes. An unreadable unit does not count (that is the `minidsp_units` anomaly signal). |
+
+The 2-minute delay covers the 60 s poll of the preset sensors: right after a
+switch a unit can look mismatched for up to a minute.
+
+The automation "miniDSP bass boost sync check" (`id: minidsp_bass_boost_sync`)
+triggers on HA start, on any change of either preset sensor or per-unit
+mismatch sensor, and every 5 minutes. It runs only if a per-unit mismatch
+sensor is on and it has not run in the last 10 minutes (the cooldown is a
+condition, so `last_triggered` moves only when it re-sends). It then runs
+`script.minidsp_apply_bass_boost_preset` for the mismatched unit(s) only,
+which sends the preset that matches the boolean at that moment. `mode:
+single`. A unit that stays wrong is retried at most every 10 minutes, and
+`binary_sensor.minidsp_preset_mismatch` turns on.
 - Read-only status, one REST resource per unit (`GET /devices/<serial>` every
   60 s):
 
@@ -145,6 +200,12 @@ reads `GET http://127.0.0.1:5380/devices/<serial>` every 60 s into the
 The anomaly detector's `minidsp_units` signal (moderate only, digest) fires
 when a serial has written no point for 15 minutes: the unit dropped off USB,
 lost power, or `minidspd` stopped.
+
+The `minidsp_preset_mismatch` signal (moderate only, digest) fires while
+`binary_sensor.minidsp_preset_mismatch` is on (`homeassistant` bucket,
+measurement `binary_sensor.minidsp_preset_mismatch`, field `value`): a unit has
+been on the wrong preset for 10 minutes and the HA sync check could not fix
+it.
 
 Example Flux:
 

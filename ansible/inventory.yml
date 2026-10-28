@@ -193,6 +193,9 @@ all:
         - src: "docker/homeassistant/configuration.yaml"
           dest: "{{ docker_persistent_data_path }}/homeassistant/configuration.yaml"
           name: "homeassistant"
+        - src: "docker/homeassistant/packages/minidsp_bass_boost.yaml"
+          dest: "{{ docker_persistent_data_path }}/homeassistant/packages/minidsp_bass_boost.yaml"
+          name: "homeassistant"
         # Runtime state that snapserver rewrites: seeded only when missing.
         # The zone layout in it is enforced by configure-homelab-services.
         - src: "docker/snapserver/server.json"
