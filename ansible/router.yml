@@ -63,6 +63,16 @@
       restic_aws_secret_access_key: "{{ vault_backblaze_secret_access_key | trim }}"
       restic_check: true
       restic_forget_keep_within: 90d
+      # Deletion resistance (docs/backups.md): the Vault key at
+      # backup/backblaze must be an append-only B2 key (no deleteFiles), and
+      # the bucket lifecycle keeps hidden versions >= the minimum below, so
+      # this host can hide history but never destroy it.
+      restic_b2_policy_check: true
+      restic_b2_bucket: nkontur-homelab
+      restic_b2_min_hidden_retention_days: 35
+      # Weekly instead of after every backup: each pruned pack stays billed
+      # for the retention window, so less frequent repacking costs less.
+      restic_prune_timer_on_calendar: "Sat *-*-* 12:00:00"
       restic_default_folders: []
       restic_folders:
         - {path: "/mpool/nextcloud"}

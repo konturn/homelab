@@ -33,8 +33,9 @@ These values are everything needed for full recovery:
 
 | Secret | Purpose |
 |--------|---------|
-| `B2_ACCOUNT_ID` | Backblaze B2 application key ID |
+| `B2_ACCOUNT_ID` | Backblaze B2 application key ID (the append-only key in Vault `backup/backblaze` is enough to restore) |
 | `B2_ACCOUNT_KEY` | Backblaze B2 application key |
+| B2 account login | Only for the account owner: lifecycle rules, keys, and early permanent deletion. Never stored on the router or in Vault |
 | `RESTIC_REPOSITORY` | Backup repo URL (e.g. `s3:s3.us-east-005.backblazeb2.com/nkontur-homelab`) |
 | `RESTIC_PASSWORD` | Restic repository encryption password |
 | Vault unseal keys (3 of 5) | Unseal Vault for secrets management |
@@ -209,6 +210,52 @@ restic restore latest --target / --include /mpool/plex/Family
 ```
 
 Restart services after restoring: `cd /persistent_data/application/ansible_state && docker compose down && docker compose up -d`
+
+---
+
+## Offsite repository tampered with
+
+Use this when the router was compromised, or `restic snapshots` against B2 is
+missing history, or `restic check` reports missing packs/indexes.
+
+The router's B2 key cannot permanently delete anything. Whatever an attacker
+"deleted" or overwrote is still in the bucket as a hidden or older file version
+for **35 days** after the change (bucket lifecycle rule, see `docs/backups.md`,
+*Deletion resistance*). Act inside that window.
+
+1. **Freeze.** Stop the router timers (`systemctl stop restic-backup.timer
+   restic-prune.timer restic-check.timer`) or keep the router off the network.
+   From a clean machine, in the B2 web console, delete the B2 application key the
+   router used and create a new one with the same restricted capabilities. If the
+   timeline is unclear, raise the bucket's lifecycle `daysFromHidingToDeleting` (for
+   example to 365) to stop the clock while you investigate.
+2. **Find a point in time** before the first tampering. B2's file browser with
+   *Show hidden files* shows when hide markers and new versions appeared.
+3. **Read the repository as of that time** from a clean machine with
+   [rclone](https://rclone.org/b2/) (b2 backend, any key with `listFiles` +
+   `readFiles` on the bucket). Nothing is changed in the bucket:
+
+   ```bash
+   # rclone remote "b2" configured with the key; T is UTC, before the attack
+   T=2026-01-01T00:00:00Z
+   rclone serve restic --b2-version-at "$T" b2:nkontur-homelab --addr 127.0.0.1:8000 &
+   export RESTIC_REPOSITORY=rest:http://127.0.0.1:8000/
+   export RESTIC_PASSWORD="<restic-password>"
+   # the point-in-time view is read-only, so restic must not try to lock it
+   restic snapshots --no-lock
+   restic check --no-lock
+   restic restore --no-lock <snapshot-id> --target /restore --include /persistent_data/application
+   ```
+
+   For a full copy instead (for example to re-seed a new bucket):
+   `rclone copy --b2-version-at "$T" b2:nkontur-homelab /restore/restic-repo`.
+4. **Repair the live bucket**, if you want to keep using it, by unhiding files in the
+   B2 console (or copying the point-in-time view to a new bucket with
+   `rclone sync --b2-version-at`) and then running `restic check` against it.
+   Only then re-enable the router timers with the new key.
+
+Do not run `restic forget` or `restic prune` against the tampered bucket until
+step 3 has produced a good restore.
 
 ---
 

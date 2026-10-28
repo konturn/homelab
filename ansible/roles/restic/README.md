@@ -65,7 +65,19 @@ Each database has a `name` property which will be the name of the restic snapsho
 
 - `restic_forget`: run `restic forget` as `ExecStartPost` with `--keep-within {{ restic_forget_keep_within }}` (`true`)
 - `restic_forget_keep_within`: period of time to use with `--keep-within` (`30d`)
-- `restic_prune`: run `restic prune` as `ExecStartPost` (`true`)
+- `restic_prune`: run `restic prune` (`true`)
+- `restic_prune_timer_on_calendar`: empty runs prune as `ExecStartPost` of every backup; an `OnCalendar` expression moves it to `restic-prune.service`/`restic-prune.timer` (`""`)
+- `restic_prune_retry_lock`: how long the scheduled prune waits for the repository lock (`2h`)
+
+### B2 deletion resistance
+
+- `restic_b2_policy_check`: install `/usr/local/sbin/restic-b2-policy-check` and run it as a non-blocking `ExecStartPre` of the backup (`false`)
+- `restic_b2_bucket`: bucket the key must be scoped to
+- `restic_b2_min_hidden_retention_days`: minimum lifecycle `daysFromHidingToDeleting` accepted (`30`)
+- `restic_b2_forbidden_capabilities`: key capabilities that fail the check (`deleteFiles`, `writeBuckets`, `writeKeys`, ...)
+- `restic_b2_probe_object`: name of the probe object at the bucket root (`.restic-b2-policy-probe`)
+
+The check prints `restic-b2-policy: OK ...` or `restic-b2-policy: FAIL <reason>`; secrets are never printed. Design and rationale: `docs/backups.md`, *Deletion resistance*.
 
 ### SSH/SFTP backend configuration
 

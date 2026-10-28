@@ -1365,7 +1365,7 @@ groups:
                   |> range(start: -15m)
                   |> filter(fn: (r) => r._measurement == "systemd_units")
                   |> filter(fn: (r) => r._field == "active_code")
-                  |> filter(fn: (r) => r.name =~ /^restic-(backup|check)\.service$/)
+                  |> filter(fn: (r) => r.name =~ /^restic-(backup|check|prune)\.service$/)
                   |> group(columns: ["name"])
                   |> last()
                   |> keep(columns: ["_time", "_value", "name"])
@@ -1393,6 +1393,40 @@ groups:
           description: "A restic unit failed. The OnFailure email path is unreliable (msmtp has exited 69/UNAVAILABLE), so this alert is the primary signal. Check: systemctl status {{ $labels.name }} && journalctl -u {{ $labels.name }} --since '24 hours ago'"
         labels:
           severity: critical
+
+      # Deletion resistance of the offsite copy (docs/backups.md). Before each
+      # backup, restic-b2-policy-check proves the B2 key restic uses cannot
+      # permanently delete file versions and that the bucket lifecycle keeps
+      # hidden versions long enough to recover. It prints
+      # "restic-b2-policy: OK" only when every check passes, so this rule
+      # requires the OK line rather than matching FAIL: a check that stopped
+      # running, or a key swapped back to a delete-capable one, both go red.
+      - uid: restic-b2-policy
+        title: Restic B2 Deletion Resistance Not Verified
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 172800, to: 0}
+            datasourceUid: loki
+            model:
+              expr: 'count_over_time({unit="restic-backup.service"} |= "restic-b2-policy: OK" [48h])'
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: replaceNN, replaceWithValue: 0}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [1]}}]}
+        noDataState: Alerting
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "Offsite backups are not verified deletion-resistant"
+          description: "No 'restic-b2-policy: OK' in 48h. The reason is on the FAIL line: journalctl -u restic-backup.service --since '48 hours ago' | grep restic-b2-policy. Run by hand: /usr/local/sbin/restic-b2-policy-check"
+        labels:
+          severity: warning
 
       # The OnFailure= notifier for the restic units. Split out of
       # restic-unit-failed so a broken notifier can no longer masquerade as a

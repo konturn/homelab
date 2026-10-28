@@ -21,6 +21,12 @@ SuccessExitStatus=3
 
 EnvironmentFile=/root/.restic_env
 
+{% if restic_b2_policy_check %}
+# "-": a failed policy check must never stop the backup itself. It is surfaced
+# by the restic-b2-policy alert, which requires a "restic-b2-policy: OK" line.
+ExecStartPre=-/usr/local/sbin/restic-b2-policy-check
+{% endif -%}
+
 {% if restic_check %}
 ExecStartPre={{ restic_path }} check
 {% endif -%}
@@ -38,6 +44,6 @@ ExecStart=/bin/sh -c "{{ database.dump_command }} {{ '| pigz |' if restic_dump_c
 ExecStartPost={{ restic_path }} forget --keep-within {{ restic_forget_keep_within }}
 {% endif -%}
 
-{% if restic_prune %}
+{% if restic_prune and restic_prune_timer_on_calendar | length == 0 %}
 ExecStartPost={{ restic_path }} prune
 {% endif -%}

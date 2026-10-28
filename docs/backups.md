@@ -249,9 +249,12 @@ no new archive is written; the last 7 archives (and restic's history) remain.
 **Deep check:** `restic-check.timer`, Sundays at 09:00 local (`restic check --read-data-subset=5%`), deliberately outside the backup window because the repository takes a single lock.
 **Integrity check:** `ExecStartPre=restic check` runs a full metadata check *before every
 backup*, so repository reachability and structural integrity are verified daily, not just weekly.
-**Retention:** `restic forget --keep-within 90d`, then `restic prune` — both as `ExecStartPost` on
-every backup run. That is the **only** retention rule. Every snapshot taken in the last 90 days is
-kept and **nothing older than 90 days survives**; there is no daily/monthly/yearly tier.
+**Retention:** `restic forget --keep-within 90d` as `ExecStartPost` on every backup run, and
+`restic prune` weekly from `restic-prune.timer` (Saturdays 12:00 local, `--retry-lock 2h`). That is
+the **only** snapshot retention rule. Every snapshot taken in the last 90 days is kept and
+**nothing older than 90 days survives** in the repository view; there is no daily/monthly/yearly
+tier. Underneath that, B2 keeps every file restic forgets or prunes for a further 35 days as a
+hidden version (see *Deletion resistance* below).
 
 > **Corrected 2026-10-10.** This line previously read "30 daily, 12 monthly, 5 yearly". That was
 > never configured. `--keep-within` has been the sole `forget` flag since the role was written
@@ -266,6 +269,64 @@ kept and **nothing older than 90 days survives**; there is no daily/monthly/year
 > backup restoration" scenario below assumes a long tail that does not exist. Adding a
 > `--keep-monthly`/`--keep-yearly` tier is a Backblaze storage-cost decision, so it is left to the
 > repo owner rather than changed here — only the documentation is corrected.
+
+### Deletion resistance (offsite copy)
+
+**Threat:** someone with root on the router can read `/root/.restic_env`, and through the
+router everything it can reach. The offsite copy must survive that for at least 30 days.
+
+**Design: append-only key plus versioned retention.** Two B2 properties do the work:
+
+1. A B2 application key **without `deleteFiles`** cannot remove a file version. Its "deletes"
+   (S3 `DeleteObject` without a version id, or `b2_hide_file`) only add a *hide marker*; the data
+   stays in the bucket as a hidden version. Uploading over an existing name likewise keeps the
+   old version.
+2. The bucket lifecycle rule `daysFromHidingToDeleting` permanently removes a hidden or superseded
+   version only after that many days. Changing lifecycle rules needs `writeBuckets`, which the
+   router key does not hold.
+
+So restic on the router runs `forget` and `prune` normally with the restricted key: everything it
+"deletes" is hidden, and B2 expires it after the retention window. No delete-capable credential is
+needed for routine operation, so none is stored on the router, in Vault, or in CI.
+
+| Setting | Value |
+|---|---|
+| Router key (Vault `backup/backblaze`) | bucket-scoped to `nkontur-homelab`; `listBuckets, readBuckets, listFiles, readFiles, writeFiles` only |
+| Bucket lifecycle | one bucket-wide rule: `daysFromHidingToDeleting = 35`, `daysFromUploadingToHiding` unset |
+| Object Lock | not used (see below) |
+| Prune cadence | weekly, so repacking churn (billed for the window) stays small |
+
+**Effective protection window:** any version an attacker hides or overwrites stays recoverable for
+35 days after that action (lifecycle runs once a day, so up to ~36). Within that window the
+repository can be rebuilt as it was before the attack: see `docs/DISASTER_RECOVERY.md`,
+*Offsite repository tampered with*. The attacker can still stop new backups and upload junk
+(cost, not loss); `restic-backup-stale` and the morning digest catch the first.
+
+**Continuous verification:** `/usr/local/sbin/restic-b2-policy-check` runs as `ExecStartPre` of
+every backup (it can never block the backup). With the key restic actually uses, it checks the
+key's bucket scope and capabilities, checks the lifecycle rules against
+`restic_b2_min_hidden_retention_days`, uploads a tiny probe (`.restic-b2-policy-probe` at the bucket
+root, ignored by restic) and confirms B2 refuses `b2_delete_file_version` on it. It prints
+`restic-b2-policy: OK ...` only when everything passes; the **Restic B2 Deletion Resistance Not
+Verified** alert fires when no OK line appeared in 48h. A check running on the router cannot defend
+against an attacker who is already root there; its job is to catch drift, such as a full-access key
+put back into Vault or the lifecycle rule shortened from the B2 console.
+
+**Why not Object Lock?** B2 can enable Object Lock on an existing bucket, but restic never
+refreshes retention on objects it has already written. Because restic deduplicates, the oldest
+packs hold most of the data and are referenced by every recent snapshot; once their lock lapses
+they are as deletable as before. Lock alone would therefore not protect against a delete-capable
+key, and with an append-only key it adds nothing against a router compromise. It would only add
+protection against a compromised B2 account, at the price of extra billed storage and the
+irreversibility of enabling it. It stays an option for that threat.
+
+**Things that must stay true:**
+- The B2 master key and any key with `deleteFiles` live only in the account owner's password
+  manager, never on the router, in Vault, or in CI. Vault runs on the router.
+- Do not set the bucket back to "Keep only the last version" (that is
+  `daysFromHidingToDeleting = 1`, the pre-2026-10 setting).
+- Permanently removing data early (for example to cut costs) is a manual action from the B2 web
+  console by the account owner.
 
 **Backed up paths:**
 - `/mpool/nextcloud` (user files, Paperless docs)
@@ -461,7 +522,9 @@ docker exec homeassistant python -m homeassistant --script check_config
 
 - **Restic logs** via systemd journal (`syslog_identifier=restic`), visible in Loki
 - **Grafana provisioned alerts** for stale backups, restic errors, failed restic
-  units, unscheduled timers, and incomplete snapshots
+  units (`restic-backup`, `restic-check`, `restic-prune`), unscheduled timers,
+  incomplete snapshots, and offsite deletion resistance not verified
+  (`restic-b2-policy`, see *Deletion resistance* above)
 - **Email alerts** on backup failures (via Grafana contact points)
 - **Morning digest** includes restic backup status summary
 
@@ -479,7 +542,8 @@ docker exec homeassistant python -m homeassistant --script check_config
 > as coverage; `git show 94eac7a:base/backup-verify/backup-verify.sh` recovers them (full clone; the hash is unreachable in a shallow one) if repository-side
 > verification metrics are ever wanted as a deliberate piece of work. Tracked in #142.
 
-> **Note:** Backup credentials are managed via Vault (`homelab/data/restic`).
+> **Note:** Backup credentials are managed via Vault (`homelab/backup/restic` for the repository
+> password, `homelab/backup/backblaze` for the append-only B2 key).
 > JIT T2 approval is required for credential access.
 
 #### Incomplete snapshots

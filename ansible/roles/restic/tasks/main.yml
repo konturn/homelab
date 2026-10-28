@@ -32,6 +32,15 @@
     group: root
     mode: "0600"
 
+- name: Install B2 deletion-resistance check
+  ansible.builtin.template:
+    src: restic-b2-policy-check.j2
+    dest: /usr/local/sbin/restic-b2-policy-check
+    owner: root
+    group: root
+    mode: "0750"
+  when: restic_b2_policy_check
+
 - name: Add systemd service for restic
   ansible.builtin.template:
     src: restic-backup.service.j2
@@ -71,6 +80,22 @@
   when: restic_check
   notify: Reload systemd
 
+- name: Add systemd service for restic prune
+  ansible.builtin.template:
+    src: restic-prune.service.j2
+    dest: /etc/systemd/system/restic-prune.service
+    mode: "0644"
+  when: restic_prune and restic_prune_timer_on_calendar | length > 0
+  notify: Reload systemd
+
+- name: Add systemd timer for restic prune
+  ansible.builtin.template:
+    src: restic-prune.timer.j2
+    dest: /etc/systemd/system/restic-prune.timer
+    mode: "0644"
+  when: restic_prune and restic_prune_timer_on_calendar | length > 0
+  notify: Reload systemd
+
 - name: Enable and start restic timer
   ansible.builtin.systemd:
     name: restic-backup.timer
@@ -83,3 +108,14 @@
     enabled: true
     state: started
   when: restic_check
+
+# Flush the daemon-reload before enabling a timer that may be brand new.
+- name: Flush handlers before enabling the prune timer
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start restic prune timer
+  ansible.builtin.systemd:
+    name: restic-prune.timer
+    enabled: true
+    state: started
+  when: restic_prune and restic_prune_timer_on_calendar | length > 0
