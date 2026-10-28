@@ -135,6 +135,29 @@ signals:
         interval: 15m
         max_age: {moderate: 15m}
 
+  # binary_sensor.minidsp_preset_mismatch (docker/homeassistant/packages/
+  # minidsp_bass_boost.yaml) turns on when a readable unit has not matched
+  # input_boolean.bass_boost for 10 minutes, i.e. the HA sync check could not
+  # fix it. HA writes on change only, so the last state over a long window is
+  # the current one (as in zwave_dead_nodes). An unreadable unit is
+  # minidsp_units, not this.
+  - name: minidsp_preset_mismatch
+    description: miniDSP unit stuck on the wrong preset for bass boost (Home Assistant could not re-sync it)
+    owner: house
+    category: infrastructure
+    max_severity: moderate
+    source:
+      bucket: homeassistant
+      measurement: binary_sensor.minidsp_preset_mismatch
+      field: value
+      agg: last
+    checks:
+      - type: threshold
+        window: 30d
+        interval: 15m
+        above: {moderate: 1}
+        for_cycles: 1
+
   - name: weather_station
     description: Ambient weather station data stopped arriving
     owner: house

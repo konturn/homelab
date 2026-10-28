@@ -2,6 +2,11 @@
 # Loads default set of integrations. Do not remove.
 default_config:
 
+# Repo-managed packages (docker/homeassistant/packages/, one docker_config
+# entry each in ansible/inventory.yml). Each file is named after its package.
+homeassistant:
+  packages: !include_dir_named packages
+
 switch:
   - platform: wake_on_lan
     mac: {{ pc_mac }}
@@ -58,8 +63,8 @@ recorder:
 # minidsp_units is in ansible/inventory.yml.
 rest_command:
   # Preset on both units: 0 = normal, 1 = bass boost, following
-  # input_boolean.bass_boost. Called by the "Change Minidsp on base boost"
-  # automation (automations.yaml, live volume only).
+  # input_boolean.bass_boost at call time. Called only through
+  # script.minidsp_apply_bass_boost_preset (packages/minidsp_bass_boost.yaml).
   bass_boost:
     url: "http://zwave.lab.nkontur.com:5380/devices/{{ minidsp_units[0].serial }}/config"
     method: POST

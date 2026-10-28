@@ -2,25 +2,25 @@
   <timestamp>70665622</timestamp>
   <dspversion>100</dspversion>
   <master_mute>0</master_mute>
-  <label name="Input1" text="Input1"/>
-  <label name="Input2" text="Input2"/>
-  <label name="Output1" text="Output1"/>
-  <label name="Output2" text="Output2"/>
-  <label name="Output3" text="Output3"/>
-  <label name="Output4" text="Output4"/>
-  <label name="FIR_3_Coeffs" text="Default taps used."/>
-  <label name="FIR_4_Coeffs" text="Taps restored to user settings."/>
-  <label name="FIR_5_Coeffs" text="Default taps used."/>
-  <label name="FIR_6_Coeffs" text="Default taps used."/>
-  <label name="FIR_3_Min_Taps" text="6"/>
-  <label name="FIR_4_Min_Taps" text="6"/>
-  <label name="FIR_5_Min_Taps" text="6"/>
-  <label name="FIR_6_Min_Taps" text="6"/>
-  <label name="FIR_3_Max_Taps" text="2048"/>
-  <label name="FIR_4_Max_Taps" text="2048"/>
-  <label name="FIR_5_Max_Taps" text="2048"/>
-  <label name="FIR_6_Max_Taps" text="2048"/>
-  <label name="FIR_Max_Taps_Total" text="4096"/>
+  <label name="Input1" text="Input1" />
+  <label name="Input2" text="Input2" />
+  <label name="Output1" text="Output1" />
+  <label name="Output2" text="Output2" />
+  <label name="Output3" text="Output3" />
+  <label name="Output4" text="Output4" />
+  <label name="FIR_3_Coeffs" text="Default taps used." />
+  <label name="FIR_4_Coeffs" text="Taps restored to user settings." />
+  <label name="FIR_5_Coeffs" text="Default taps used." />
+  <label name="FIR_6_Coeffs" text="Default taps used." />
+  <label name="FIR_3_Min_Taps" text="6" />
+  <label name="FIR_4_Min_Taps" text="6" />
+  <label name="FIR_5_Min_Taps" text="6" />
+  <label name="FIR_6_Min_Taps" text="6" />
+  <label name="FIR_3_Max_Taps" text="2048" />
+  <label name="FIR_4_Max_Taps" text="2048" />
+  <label name="FIR_5_Max_Taps" text="2048" />
+  <label name="FIR_6_Max_Taps" text="2048" />
+  <label name="FIR_Max_Taps_Total" text="4096" />
   <item name="DGain_1_0_status" addr="0">
     <dec>2</dec>
     <hex>00000002</hex>
@@ -134,12 +134,12 @@
     <hex>00000000</hex>
   </item>
   <item name="DGain_3_0" addr="28">
-    <dec>0</dec>
-    <hex>00000000</hex>
+    <dec>10</dec>
+    <hex>41200000</hex>
   </item>
   <item name="DGain_4_0" addr="29">
-    <dec>0</dec>
-    <hex>00000000</hex>
+    <dec>10</dec>
+    <hex>41200000</hex>
   </item>
   <item name="DGain_5_0" addr="30">
     <dec>10</dec>

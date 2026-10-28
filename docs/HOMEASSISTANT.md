@@ -1,15 +1,45 @@
 # Home Assistant
 
-Home Assistant runs as the `homeassistant` container on the router. Only
-`configuration.yaml` is templated from this repo
-(`docker/homeassistant/configuration.yaml`). Everything else under
+Home Assistant runs as the `homeassistant` container on the router. Two
+things are templated from this repo: `configuration.yaml`
+(`docker/homeassistant/configuration.yaml`) and the packages in
+`docker/homeassistant/packages/` (to `/config/packages/`). Everything else under
 `/persistent_data/application/homeassistant/` (`.storage`, `automations.yaml`,
 `scripts.yaml`, `custom_components/`) lives only on the live volume and is
 covered by the normal backups, not by git.
 
-Automations are deliberately not in git: they are edited in the UI and stay
-in `automations.yaml` on the volume. Only the pieces they call (REST
+Most automations are deliberately not in git: they are edited in the UI and
+stay in `automations.yaml` on the volume. Only the pieces they call (REST
 commands, sensors) are in `configuration.yaml`.
+
+## Packages (repo-managed automations)
+
+Automations that must not drift, or that belong with repo-managed REST
+commands and sensors, go in a package instead:
+
+- `configuration.yaml` has `homeassistant: packages: !include_dir_named
+  packages`. Each file in `/config/packages/` is one package, named after the
+  file, and can hold any mix of integrations (`automation:`, `script:`,
+  `template:`, `rest_command:` ...), which Home Assistant merges with the main
+  config.
+- To add one: create `docker/homeassistant/packages/<name>.yaml` and add a
+  `docker_config` entry for it (next to `configuration.yaml`, `name:
+  "homeassistant"`) in `ansible/inventory.yml`. The file is rendered by
+  Ansible like every other config file, so Home Assistant templates go inside
+  `{% raw %}` blocks.
+- A changed package restarts Home Assistant on deploy, like
+  `configuration.yaml`.
+- Package automations and scripts show in the UI but cannot be edited there
+  ("not stored in automations.yaml"). Change them by MR. Give each automation
+  an `id` so its entity, history and traces are kept.
+- Moving a UI automation into a package: keep its `id`, back up
+  `automations.yaml` on the volume, and delete the old copy from it, or the
+  id is defined twice.
+- Check a change before merging: copy the live config to a scratch directory
+  under `/config`, add the rendered package, and run
+  `docker exec homeassistant python3 -m homeassistant --script check_config -c <dir>`
+  (`-i automation` etc. prints what was parsed). The only expected warning is
+  `spotcast` not found, which the live config has too.
 
 ## miniDSP (bass boost)
 
@@ -21,8 +51,11 @@ the existing bass-boost automation.
   units 919619 and 921284 (`/devices/<serial>/config`, addressed by serial so
   USB re-enumeration cannot swap them): 0 = normal when
   `input_boolean.bass_boost` is off, 1 = bass boost when it is on.
-- The automation "Change Minidsp on base boost" (live volume) calls both on
-  every off -> on / on -> off change of `input_boolean.bass_boost`.
+- Everything that calls them is in the package
+  `docker/homeassistant/packages/minidsp_bass_boost.yaml`: the automation
+  "Change Minidsp on base boost" (same id as the old UI automation), the sync
+  check, the mismatch sensors and the scripts that do the write and read-back.
+  See docs/minidsp.md for how they work.
 - Read-only status per unit: `sensor.minidsp_<serial>_preset`, `_source`,
   `_volume` and `binary_sensor.minidsp_<serial>_mute`. Levels are in InfluxDB
   (`metrics` bucket, measurement `minidsp`).
