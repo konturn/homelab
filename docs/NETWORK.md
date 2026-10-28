@@ -56,7 +56,7 @@ All VLANs use macvlan Docker networks, allowing containers to have their own IP 
 - **Nextcloud** — File sync and sharing
 - **Bitwarden** (Vaultwarden) — Password manager
 - **Audioserve** — Audiobook streaming
-- **WordPress** — Blog
+- **Blog** — static files served by nginx (WordPress retired, see docker/wordpress/README.md)
 - **Ombi** — Media request management
 
 **Egress:** Direct to WAN (not through Mullvad VPN).
@@ -203,7 +203,7 @@ Some containers need access to multiple networks:
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                           EXTERNAL (VLAN 2)                              │
-│  nginx ─── nextcloud ─── bitwarden ─── plex ─── audioserve ─── wordpress│
+│  nginx ─── nextcloud ─── bitwarden ─── plex ─── audioserve             │
 └────────────────────────────────────┬────────────────────────────────────┘
                                      │ (homeassistant, plex, ombi)
 ┌────────────────────────────────────┴────────────────────────────────────┐

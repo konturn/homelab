@@ -267,18 +267,21 @@
     mode: "{{ item.mode | default('0755') }}"
   loop: "{{ docker_data_dirs | default([]) }}"
 
-### Deploy static website files for nkontur.com
-- name: Create nkontur.com webroot directory
+### Deploy static website files (docker/nginx/sites/<site>/ -> nginx webroot)
+# blog.nkontur.com is the static export of the retired WordPress site
+# (docker/wordpress/README.md).
+- name: Create static site webroot directories
   ansible.builtin.file:
-    path: "{{ docker_persistent_data_path }}/nginx/webroot/nkontur.com"
+    path: "{{ docker_persistent_data_path }}/nginx/webroot/{{ item }}"
     state: directory
     mode: '0755'
   when: "'external' in (nginx_config | default([]) | map(attribute='network') | list)"
+  loop: [nkontur.com, blog.nkontur.com]
 
-- name: Synchronize nkontur.com website files
+- name: Synchronize static site files
   ansible.posix.synchronize:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/sites/nkontur.com/"
-    dest: "{{ docker_persistent_data_path }}/nginx/webroot/nkontur.com/"
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/nginx/sites/{{ item }}/"
+    dest: "{{ docker_persistent_data_path }}/nginx/webroot/{{ item }}/"
     delete: yes
     recursive: yes
     # By content, with fixed modes. The CI checkout (umask 0) has 0777/0666
@@ -290,6 +293,7 @@
     rsync_opts:
       - "--chmod=D755,F644"
   when: "'external' in (nginx_config | default([]) | map(attribute='network') | list)"
+  loop: [nkontur.com, blog.nkontur.com]
 
 # A config dest that is a directory (Docker creates one when it bind-mounts a
 # missing file) is removed so the file can be written. One remote call lists
