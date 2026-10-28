@@ -106,3 +106,13 @@ excluded. The options flow only accepts explicit entity lists, so new Plex
 clients have to be added to the exclude list in
 *Settings -> Devices & services -> HomeKit Bridge -> Configure*.
 The speakers, TV, lock and cameras are separate accessory-mode entries.
+
+## Denon receiver
+
+`media_player.denon` comes from the `denonavr` integration (telnet enabled).
+The *denon* HomeKit entry (accessory mode, port 21077) includes only
+`media_player.denon`. It used to point at `media_player.home_theater`, which
+no longer exists, and was repointed in the options flow on 2026-10-28. If the
+integration is stuck in `setup_retry` with a 403 on `description.xml`, the
+receiver needs a mains power-cycle; see docs/denon.md, which also covers the
+settings export and drift check.

@@ -50,6 +50,7 @@ shared:
     - ci/reports/**
     - networking/switches/**
     - networking/aruba-iap/**
+    - networking/denon/**
     - ansible/tests/**
     - ansible/bootstrap.yml
     - ansible/os-patch-report.yml
