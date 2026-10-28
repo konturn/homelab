@@ -330,6 +330,11 @@ all:
           name: "headway-frontend"
 
       docker_data_dirs:
+        # jit-approval-svc action-prompt socket (container user svc, uid 1000)
+        - path: "{{ docker_persistent_data_path }}/jit-approval-svc/actions"
+          owner: "1000"
+          group: "1000"
+          mode: "0700"
         - path: "{{ docker_persistent_data_path }}/tempo"
           owner: "10001"
           group: "10001"

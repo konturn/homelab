@@ -1175,6 +1175,11 @@ services:
       - TAILSCALE_API_URL=https://api.tailscale.com
       - TELEGRAM_WEBHOOK_URL=https://jit-webhook.nkontur.com/telegram/webhook
       - PAPERLESS_URL=https://paperless-ngx.lab.nkontur.com
+      # Action prompts for host-side clients (internal/actions). The socket
+      # dir is a host bind mount (uid 1000, 0700), not on any network.
+      - ACTIONS_SOCKET=/run/actions/actions.sock
+    volumes:
+      - {{ docker_persistent_data_path }}/jit-approval-svc/actions:/run/actions
     depends_on:
       vault:
         condition: service_healthy

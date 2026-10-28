@@ -130,6 +130,36 @@ Health check.
 
 Telegram webhook endpoint for inline button callbacks. Validates `X-Telegram-Bot-Api-Secret-Token` header.
 
+### Action prompts (Unix socket, host clients only)
+
+When `ACTIONS_SOCKET` is set, the service also serves a small API on that Unix
+socket (`internal/actions`). It lets a trusted program on the Docker host show
+Noah a message with inline buttons and learn which one he pressed; the service
+only relays the decision and never acts on it. The socket directory is a host
+bind mount (`/persistent_data/application/jit-approval-svc/actions`, uid 1000,
+mode 0700), so host filesystem permissions are the access control. It is not
+reachable from any container network and needs no API key.
+
+| Method | Path | Body / query | Notes |
+|--------|------|--------------|-------|
+| POST | `/v1/prompts` | `{id, text, buttons: [{action, label}], ttl_seconds}` | `id` `^[a-z0-9][a-z0-9-]{3,39}$`, `action` `^[a-z][a-z0-9-]{1,15}$`, at most 4 buttons, HTML text (caller escapes), default TTL 72 h |
+| POST | `/v1/prompts/{id}` | `{text, buttons, ttl_seconds}` | edit the message; non-empty buttons re-arm it, empty buttons close it |
+| GET | `/v1/decisions?wait=N` | | presses since the last call, each delivered once; long poll up to 25 s |
+| POST | `/v1/notify` | `{text}` | plain message, no buttons |
+| GET | `/v1/health` | | |
+
+```bash
+curl --unix-socket /persistent_data/application/jit-approval-svc/actions/actions.sock \
+  -d '{"id":"p-0001","text":"Test","buttons":[{"action":"ok","label":"OK"}]}' http://x/v1/prompts
+```
+
+Buttons carry callback data `act:<action>:<id>` and arrive on the existing
+webhook, after its secret-token and chat-ID checks. A press is accepted once,
+only for a button the prompt offered and before it expires; the message is
+then edited to "requested, working…" until the client updates it with the
+outcome. Prompts live in memory: after a restart, old buttons answer "no
+longer active" and the client re-sends what it still needs.
+
 ## Tier System
 
 | Tier | TTL | Approval | Resources |

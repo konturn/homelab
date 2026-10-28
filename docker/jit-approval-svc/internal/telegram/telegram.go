@@ -212,13 +212,60 @@ func (c *Client) sendMessage(text string, buttons [][]InlineButton) (int, error)
 	return result.Result.MessageID, nil
 }
 
+// SendWithButtons sends an HTML message with an optional inline keyboard and
+// returns its message ID.
+func (c *Client) SendWithButtons(text string, rows [][]InlineButton) (int, error) {
+	return c.sendMessage(text, rows)
+}
+
+// EditWithButtons replaces a message's text and inline keyboard (nil rows
+// remove the keyboard).
+func (c *Client) EditWithButtons(messageID int, text string, rows [][]InlineButton) error {
+	return c.editMessageMarkup(messageID, text, rows)
+}
+
+// AnswerCallback acknowledges a button press (stops the client's spinner and
+// shows text as a short toast).
+func (c *Client) AnswerCallback(callbackID, text string) error {
+	body, err := json.Marshal(map[string]interface{}{"callback_query_id": callbackID, "text": text})
+	if err != nil {
+		return fmt.Errorf("marshal answer payload: %w", err)
+	}
+	resp, err := c.http.Post(c.baseURL+"/answerCallbackQuery", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("answer telegram callback: %w", err)
+	}
+	defer resp.Body.Close()
+	var result struct {
+		OK          bool   `json:"ok"`
+		Description string `json:"description"`
+	}
+	respBody, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return fmt.Errorf("decode telegram answer response: %w", err)
+	}
+	if !result.OK {
+		return fmt.Errorf("telegram answer API error: %s", result.Description)
+	}
+	return nil
+}
+
 // editMessage edits an existing message (removes inline keyboard).
 func (c *Client) editMessage(messageID int, text string) error {
+	return c.editMessageMarkup(messageID, text, nil)
+}
+
+// editMessageMarkup edits a message's text; rows, when non-empty, become its
+// new inline keyboard, otherwise the keyboard is removed.
+func (c *Client) editMessageMarkup(messageID int, text string, rows [][]InlineButton) error {
 	payload := map[string]interface{}{
 		"chat_id":    c.chatID,
 		"message_id": messageID,
 		"text":       text,
 		"parse_mode": "HTML",
+	}
+	if len(rows) > 0 {
+		payload["reply_markup"] = map[string]interface{}{"inline_keyboard": rows}
 	}
 
 	body, err := json.Marshal(payload)
