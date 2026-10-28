@@ -67,7 +67,7 @@ The homelab runs containerized services with data stored on ZFS (mpool) with aut
 ### Nextcloud
 **Data locations:**
 - App data: `/mpool/nextcloud/nextcloud/` (bind mount)
-- Database: `nextcloud_db` Docker volume (MariaDB)
+- Database: `nextcloud_db_lts` Docker volume (`docker_nextcloud_db_lts`, MariaDB 12.3 LTS)
 - Config: Container-managed
 
 **Critical components:**
@@ -78,7 +78,7 @@ The homelab runs containerized services with data stored on ZFS (mpool) with aut
 **Restore procedure:**
 1. Stop containers: `docker stop nextcloud nextcloud_database`
 2. Restore data directory: `/mpool/nextcloud/`
-3. Restore database volume: `nextcloud_db`
+3. Restore database volume: `nextcloud_db_lts`
 4. Start database first: `docker start nextcloud_database`
 5. Start Nextcloud: `docker start nextcloud`
 6. Run occ commands to verify: `docker exec nextcloud php occ status`

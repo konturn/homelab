@@ -149,6 +149,16 @@
       "enabled": false
     },
     {
+      "description": "Nextcloud's MariaDB stays on the 12.3 LTS series (patch and digest updates only). Changing series is a manual migration, see the comment in docker/docker-compose.yml",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "mariadb"
+      ],
+      "allowedVersions": "/^12\\.3\\.\\d+$/"
+    },
+    {
       "description": "promtail >= 3.6 dropped journal support in the published image",
       "matchPackageNames": [
         "grafana/promtail"
