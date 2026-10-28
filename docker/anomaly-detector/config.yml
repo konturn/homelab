@@ -380,6 +380,22 @@ signals:
         interval: 15m
         max_age: {moderate: 26h, severe: 36h}
 
+  # last_ok is refreshed every 5 minutes by homelab-repo-sync.sh while the
+  # OpenClaw workspace and /root/repos/homelab both contain origin/main. Stale
+  # means the sync is failing, or the router checkout was left on another
+  # branch, with tracked changes, or otherwise behind main.
+  - name: homelab_repo_sync
+    description: Router homelab checkouts have not been at origin/main recently (repo sync failing or checkout left behind)
+    owner: infra
+    category: infrastructure
+    source: {bucket: metrics, measurement: homelab_repo_sync, field: value, to_float: false}
+    checks:
+      - type: stale
+        age_from: value
+        lookback: 7d
+        interval: 15m
+        max_age: {moderate: 1h, severe: 6h}
+
   - name: container_restarts
     description: Container restarts per hour across all hosts
     owner: infra
