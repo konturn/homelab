@@ -220,6 +220,16 @@
     group: root
     mode: 0644
 
+### Rotate the Vault audit log (base/logrotate/vault-audit)
+- name: Vault audit log logrotate config
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/logrotate/vault-audit' }}"
+    dest: '/etc/logrotate.d/vault-audit'
+    owner: root
+    group: root
+    mode: 0644
+    validate: 'logrotate -d %s'
+
 - name: Make sure timer enabled
   ansible.builtin.systemd:
     name: zpool-scrub.timer

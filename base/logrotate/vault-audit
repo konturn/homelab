@@ -1,0 +1,28 @@
+# Vault file audit device (terraform/vault/audit.tf: file_path /vault/logs/audit.log),
+# bind-mounted from the host. Deployed to /etc/logrotate.d/vault-audit by
+# configure-base; run by the stock logrotate.timer (daily, 00:00).
+#
+# Rotation is by rename, not copytruncate: Vault reopens file audit devices on
+# SIGHUP. The signal has to reach the `vault server` process itself. PID 1 in
+# the container is /bin/sh running auto-unseal.sh, which has no HUP trap, and
+# the kernel drops signals to a namespace's PID 1 that it has no handler for,
+# so `docker kill --signal=HUP vault` would be silently ignored. Signal the
+# vault child of the container's PID 1 from the host instead.
+#
+# Vault blocks every request if it cannot write to its only audit device, so
+# `create` puts a writable file in place before Vault reopens the path.
+/persistent_data/application/vault/logs/audit.log {
+    daily
+    maxsize 500M
+    rotate 14
+    compress
+    missingok
+    notifempty
+    create 0600 root root
+    postrotate
+        pid=$(docker inspect -f '{{if .State.Running}}{{.State.Pid}}{{end}}' vault 2>/dev/null)
+        if [ -n "$pid" ]; then
+            pkill -HUP -x -P "$pid" vault
+        fi
+    endscript
+}

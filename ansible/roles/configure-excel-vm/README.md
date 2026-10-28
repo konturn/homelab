@@ -38,6 +38,16 @@ docker's IPAM (first-free from `10.3.0.3`) and the static `10.3.32.x` block.
    `sha256sum` matches `excel_vm_windows_iso.sha256` in `defaults/main.yml`.
    If Microsoft has moved on to a newer build, update filename + SHA256 from
    the page's "Verify your download" table in an MR first.
+
+   **Archived copy:** after the initial build the ISO was moved out of the iso
+   dir to `/mpool/backups/iso/Win11_26H2_English_x64.iso` (sha256 still matches
+   the pinned value). It is only needed for a first-time build:
+   `tasks/build.yml` asserts it exists at `excel_vm_windows_iso_path`. Before a
+   rebuild, copy it back (throttled, it is ~9 GB) and re-check the hash:
+   ```bash
+   ionice -c3 nice -n19 cp /mpool/backups/iso/Win11_26H2_English_x64.iso /persistent_data/vms/iso/
+   sha256sum /persistent_data/vms/iso/Win11_26H2_English_x64.iso
+   ```
 2. Make sure Vault `homelab/excel-vm` has `admin_password` (or export
    `EXCEL_VM_ADMIN_PASSWORD` for a manual run).
 3. On the router, from the repo checkout:

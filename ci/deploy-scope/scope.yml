@@ -93,6 +93,7 @@ playbooks:
     - match:
         - base/disk/**
         - base/gitlab-runner/**
+        - base/logrotate/**
         - base/systemd/zpool-scrub.*
         - base/udev/**
         - networking/nfs/**
