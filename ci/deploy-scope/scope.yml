@@ -102,6 +102,8 @@ playbooks:
       roles: [configure-base]
     - match: [base/msmtp/**]
       roles: [configure-notifications]
+    - match: [base/logrotate/nginx]
+      roles: [configure-base]
     - match:
         - networking/avahi/**
         - networking/dhcp/**

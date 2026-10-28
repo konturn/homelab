@@ -1,0 +1,54 @@
+# Access and error logs of the nginx containers (nginx, lab_nginx, iot_nginx),
+# bind-mounted from these host directories at /data/log. Deployed to
+# /etc/logrotate.d/nginx by configure-base, replacing the stanza from the
+# host's (unused, inactive) nginx package. That one rotated only
+# /var/log/nginx and its postrotate reloaded the host nginx service, so the
+# containers never reopened their logs and kept writing to access.log.1 until
+# the next config reload. lab_nginx and iot_nginx were never rotated at all.
+#
+# Rotation is by rename. USR1 makes the nginx master reopen its log files
+# (and chown them to the worker user). It is PID 1 in each container and
+# handles USR1, so `docker kill --signal=USR1` reaches it. A stopped
+# container is skipped: it opens fresh files when it starts.
+# Run by the stock logrotate.timer (daily, 00:00; Nice=19, idle-ish I/O).
+/var/log/nginx/*.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 root adm
+    sharedscripts
+    postrotate
+        [ "$(docker inspect -f '{{.State.Running}}' nginx 2>/dev/null)" = true ] && docker kill --signal=USR1 nginx >/dev/null || true
+    endscript
+}
+
+/var/log/lab_nginx/*.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 root adm
+    sharedscripts
+    postrotate
+        [ "$(docker inspect -f '{{.State.Running}}' lab_nginx 2>/dev/null)" = true ] && docker kill --signal=USR1 lab_nginx >/dev/null || true
+    endscript
+}
+
+/var/log/iot_nginx/*.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 root adm
+    sharedscripts
+    postrotate
+        [ "$(docker inspect -f '{{.State.Running}}' iot_nginx 2>/dev/null)" = true ] && docker kill --signal=USR1 iot_nginx >/dev/null || true
+    endscript
+}
