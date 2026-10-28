@@ -395,6 +395,18 @@
     group: root
     mode: 0644
 
+### Rotate the nginx containers' logs (base/logrotate/nginx)
+# Replaces the host nginx package's stanza, whose postrotate never reached the
+# containers. See the comment in the file.
+- name: nginx container logs logrotate config
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/logrotate/nginx' }}"
+    dest: '/etc/logrotate.d/nginx'
+    owner: root
+    group: root
+    mode: 0644
+    validate: 'logrotate -d %s'
+
 - name: Disable rsyslog (replaced by Promtail journal scraping)
   ansible.builtin.systemd:
     name: rsyslog
