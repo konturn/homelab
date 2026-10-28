@@ -1193,19 +1193,36 @@
     hour: "4"
     job: "docker restart chromium-browser 2>&1 | logger -t chromium-restart"
 
-- name: Template homelab repo sync script
+# Keeps the OpenClaw workspace clone and the router checkout
+# (/root/repos/homelab) at origin/main; see scripts/homelab-repo-sync.sh.
+# Writes /var/lib/homelab-repo-sync/last_ok, read by telegraf and the
+# anomaly detector's homelab_repo_sync signal.
+- name: Deploy homelab repo sync script
   ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/scripts/homelab-repo-sync.sh"
     dest: /usr/local/bin/homelab-repo-sync.sh
-    content: |
-      #!/bin/bash
-      REPO={{ docker_persistent_data_path }}/openclaw/workspace/homelab
-      cd "$REPO" || exit 1
-      git fetch origin main --quiet 2>/dev/null
-      git reset --hard origin/main --quiet 2>/dev/null
-      git clean -fd --quiet 2>/dev/null
     owner: root
     group: root
     mode: '0755'
+
+- name: Create homelab repo sync state directory
+  ansible.builtin.file:
+    path: /var/lib/homelab-repo-sync
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+# Seed last_ok once so telegraf has a value and the signal counts from the
+# first deploy; the sync script refreshes it after every good run.
+- name: Seed the homelab repo sync last_ok timestamp
+  ansible.builtin.copy:
+    dest: /var/lib/homelab-repo-sync/last_ok
+    content: "{{ now(utc=true).strftime('%Y-%m-%dT%H:%M:%SZ') }}\n"
+    owner: root
+    group: root
+    mode: '0644'
+    force: false
 
 - name: Mark homelab repo as safe directory for git
   ansible.builtin.command:
@@ -1216,7 +1233,10 @@
   ansible.builtin.cron:
     name: "Sync homelab repo for openclaw agent"
     minute: "*/5"
-    job: "/usr/local/bin/homelab-repo-sync.sh 2>&1 | logger -t homelab-sync"
+    job: >-
+      WORKSPACE={{ docker_persistent_data_path }}/openclaw/workspace/homelab
+      ROUTER_REPO=/root/repos/homelab
+      /usr/local/bin/homelab-repo-sync.sh 2>&1 | logger -t homelab-sync
 
 - name: Template Grafana cleanup env file
   ansible.builtin.copy:
