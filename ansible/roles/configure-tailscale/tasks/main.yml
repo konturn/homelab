@@ -1,59 +1,190 @@
 ---
-# Tailscale installation and configuration
-# Configures the router as a subnet router advertising local VLANs
+# Tailscale on the router: package from the official apt repository,
+# tailscaled enabled, node prefs enforced, login (auth key or URL), split DNS.
 
-- name: Check if Tailscale binary exists
-  ansible.builtin.stat:
-    path: /usr/bin/tailscale
-  register: tailscale_binary
+# -----------------------------------------------------------------------------
+# Package
+# -----------------------------------------------------------------------------
 
-- name: Download and install Tailscale
-  shell: curl -fsSL https://tailscale.com/install.sh | sh
-  args:
-    creates: /usr/bin/tailscale
-  when: not tailscale_binary.stat.exists
+- name: Install Tailscale apt signing key
+  ansible.builtin.get_url:
+    url: "https://pkgs.tailscale.com/{{ tailscale_apt_channel }}/{{ tailscale_apt_distro }}/{{ tailscale_apt_release }}.noarmor.gpg"
+    dest: "{{ tailscale_apt_keyring }}"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Add Tailscale apt repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/tailscale.list
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      # Tailscale packages for {{ tailscale_apt_distro }} {{ tailscale_apt_release }}
+      deb [signed-by={{ tailscale_apt_keyring }}] https://pkgs.tailscale.com/{{ tailscale_apt_channel }}/{{ tailscale_apt_distro }} {{ tailscale_apt_release }} main
+  register: _tailscale_repo
+
+- name: Pin Tailscale packages to the official repository
+  ansible.builtin.copy:
+    dest: /etc/apt/preferences.d/tailscale
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      # Managed by Ansible (configure-tailscale)
+      Package: tailscale tailscale-archive-keyring
+      Pin: origin pkgs.tailscale.com
+      Pin-Priority: {{ tailscale_apt_pin_priority }}
+  register: _tailscale_pin
+
+- name: Install Tailscale
+  ansible.builtin.apt:
+    name: "{{ 'tailscale=' + tailscale_version if tailscale_version | length > 0 else 'tailscale' }}"
+    state: present
+    update_cache: "{{ _tailscale_repo is changed or _tailscale_pin is changed or tailscale_version | length > 0 }}"
+    cache_valid_time: 3600
 
 - name: Enable IP forwarding for Tailscale subnet routing
-  sysctl:
+  ansible.posix.sysctl:
     name: "{{ item }}"
     value: '1'
-    sysctl_set: yes
+    sysctl_set: true
     state: present
-    reload: yes
+    reload: true
   loop:
     - net.ipv4.ip_forward
     - net.ipv6.conf.all.forwarding
 
-- name: Ensure tailscaled service is enabled and running
-  systemd:
+- name: Ensure tailscaled is enabled and running
+  ansible.builtin.systemd:
     name: tailscaled
-    enabled: yes
+    enabled: true
     state: started
-  when:
-    - not ansible_check_mode
-    - tailscale_binary.stat.exists
 
-- name: Check Tailscale status
-  command: tailscale status --json
-  register: tailscale_status
-  ignore_errors: yes
+# -----------------------------------------------------------------------------
+# Node state and preferences
+# -----------------------------------------------------------------------------
+
+- name: Read Tailscale status
+  ansible.builtin.command: tailscale status --json
+  register: _tailscale_status
   changed_when: false
-  when:
-    - not ansible_check_mode
-    - tailscale_binary.stat.exists
+  failed_when: false
+  check_mode: false
 
-- name: Configure Tailscale as subnet router
-  command: >
-    tailscale up
-    --authkey={{ tailscale_auth_key | trim }}
-    --advertise-routes={{ tailscale_advertised_routes }}
-    --accept-dns=false
-    --reset
+- name: Determine Tailscale backend state
+  ansible.builtin.set_fact:
+    _tailscale_backend: >-
+      {{ (_tailscale_status.stdout | from_json).BackendState
+         if _tailscale_status.rc == 0 and _tailscale_status.stdout | length > 0
+         else 'Unknown' }}
+    _tailscale_flags: >-
+      --advertise-routes={{ tailscale_advertised_routes }}
+      --accept-dns={{ tailscale_accept_dns | bool | lower }}
+      --accept-routes={{ tailscale_accept_routes | bool | lower }}
+
+# Logged in: enforce prefs with `tailscale set`, which never re-authenticates
+# or drops the connection, and only when they differ from the wanted ones.
+- name: Read Tailscale preferences
+  ansible.builtin.command: tailscale debug prefs
+  register: _tailscale_prefs
+  changed_when: false
+  check_mode: false
+  when: _tailscale_backend == 'Running'
+
+- name: Enforce Tailscale preferences
+  ansible.builtin.command: "tailscale set {{ _tailscale_flags }}"
+  when:
+    - _tailscale_backend == 'Running'
+    - >-
+      (_prefs.CorpDNS | bool) != (tailscale_accept_dns | bool)
+      or (_prefs.RouteAll | bool) != (tailscale_accept_routes | bool)
+      or (_prefs.AdvertiseRoutes | default([], true) | sort)
+         != (tailscale_advertised_routes.split(',') | select | sort)
+  vars:
+    _prefs: "{{ _tailscale_prefs.stdout | from_json }}"
+
+# Logged out, with an auth key (Vault homelab/infrastructure/tailscale,
+# field auth_key): log in non-interactively.
+- name: Log in to Tailscale with the auth key
+  ansible.builtin.command: >
+    tailscale up --reset {{ _tailscale_flags }}
+    --auth-key={{ tailscale_auth_key | trim }}
+  register: _tailscale_up_key
+  failed_when: false
+  no_log: true
   when:
     - not ansible_check_mode
-    - tailscale_binary.stat.exists
-    - tailscale_status.rc != 0 or (tailscale_status.stdout | from_json).BackendState != "Running"
-  no_log: true  # Hide auth key from logs
+    - _tailscale_backend != 'Running'
+    - tailscale_auth_key | trim | length > 0
+
+- name: Warn when the auth key login failed
+  ansible.builtin.debug:
+    msg: >-
+      tailscale up with the Vault auth key failed (rc {{ _tailscale_up_key.rc }};
+      expired or already used?). Falling back to an interactive login URL.
+  when:
+    - _tailscale_up_key is not skipped
+    - _tailscale_up_key.rc != 0
+
+# Logged out, no (working) auth key: start an interactive login. `tailscale up`
+# waits for the browser login, so it is bounded with --timeout; the pending
+# login URL stays in the status as AuthURL.
+- name: Start interactive Tailscale login
+  ansible.builtin.command: >
+    tailscale up --reset {{ _tailscale_flags }}
+    --timeout={{ tailscale_login_timeout }}
+  register: _tailscale_up_interactive
+  failed_when: false
+  changed_when: true
+  no_log: true  # the output carries the login URL
+  when:
+    - not ansible_check_mode
+    - _tailscale_backend != 'Running'
+    - _tailscale_up_key is skipped or _tailscale_up_key.rc != 0
+
+- name: Read pending Tailscale login URL
+  ansible.builtin.command: tailscale status --json
+  register: _tailscale_status_login
+  changed_when: false
+  failed_when: false
+  no_log: true
+  when: _tailscale_up_interactive is not skipped
+
+- name: Save Tailscale login URL (root only)
+  ansible.builtin.copy:
+    dest: "{{ tailscale_login_url_file }}"
+    owner: root
+    group: root
+    mode: '0600'
+    content: "{{ (_tailscale_status_login.stdout | from_json).AuthURL }}\n"
+  register: _tailscale_login_url_saved
+  no_log: true
+  when:
+    - _tailscale_status_login is not skipped
+    - _tailscale_status_login.rc == 0
+    - (_tailscale_status_login.stdout | from_json).AuthURL | default('') | length > 0
+
+- name: Report pending Tailscale login
+  ansible.builtin.debug:
+    msg: >-
+      Tailscale is not logged in. Open the URL in {{ tailscale_login_url_file }}
+      on the router (root only) and sign in, or store a pre-authorized auth key
+      in Vault (homelab/infrastructure/tailscale, field auth_key) and redeploy.
+  when:
+    - _tailscale_login_url_saved is defined
+    - _tailscale_login_url_saved is not skipped
+
+- name: Remove stale Tailscale login URL
+  ansible.builtin.file:
+    path: "{{ tailscale_login_url_file }}"
+    state: absent
+  when: _tailscale_backend == 'Running'
+
+# -----------------------------------------------------------------------------
+# Tailnet split DNS (Tailscale API)
+# -----------------------------------------------------------------------------
 
 - name: Obtain Tailscale OAuth access token
   ansible.builtin.uri:
@@ -73,6 +204,7 @@
     - tailscale_oauth_client_secret is defined
   no_log: true
 
+# PATCH merges: domains listed here are set, other split-DNS entries are kept.
 - name: Configure Tailscale split DNS
   ansible.builtin.uri:
     url: "https://api.tailscale.com/api/v2/tailnet/{{ tailscale_tailnet }}/dns/split-dns"

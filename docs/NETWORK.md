@@ -321,6 +321,64 @@ When IoT devices (VLAN 6) access external services via public DNS:
 Remote access is via Tailscale (`tailscale0`, subnet router for 10.2/10.3/10.4/10.6).
 The former WireGuard tunnels `wg0`/`wg1` and the `wg-mullvad` failover interface have been removed.
 
+### Tailscale on the router
+
+Managed by the `configure-tailscale` role (`ansible/roles/configure-tailscale/`):
+
+- **Package:** `tailscale` from the official apt repository (`pkgs.tailscale.com`,
+  signed-by keyring), pinned in `/etc/apt/preferences.d/tailscale`. Set
+  `tailscale_version` to hold an exact version; otherwise the installed one is kept.
+- **Service:** `tailscaled` enabled and running, UDP 41641 (`/etc/default/tailscaled`).
+- **Node prefs**, enforced with `tailscale set` (never re-authenticates):
+  `--advertise-routes=10.2.0.0/16,10.3.0.0/16,10.4.0.0/16,10.6.0.0/16`,
+  `--accept-dns=false` (the router keeps its own resolvers),
+  `--accept-routes=false` (tailnet routes would land in table 52, see below).
+- **Login:** if the node is logged out, the role logs in with the auth key from Vault
+  (`homelab/infrastructure/tailscale`, field `auth_key`, optional). Without a working
+  key it starts an interactive login and writes the login URL to
+  `/root/tailscale-login-url.txt` (mode 0600, never logged); the file is removed once
+  the node is running. To finish non-interactively instead, store a pre-authorized,
+  single-use key and redeploy:
+  `vault kv patch -mount=homelab infrastructure/tailscale auth_key=-` (key on stdin).
+- **Key expiry:** disable key expiry for the router in the admin console; when its node
+  key expires the router drops off the tailnet until it is logged in again.
+
+### Coexistence with Mullvad policy routing
+
+| Traffic | Path |
+|---------|------|
+| tailscaled control, DERP, WireGuard UDP | Router-originated and fwmark `0x80000`; rule 5210 sends it to `main`, i.e. the WAN. The Mullvad rule matches only fwmark `0x1`, which is set in mangle PREROUTING for VLAN 3/6/7 *ingress*, never on router OUTPUT, so the kill switch does not apply. |
+| Tailnet client → LAN (subnet route) | Arrives on `tailscale0`, forwarded to the VLAN, masqueraded to the router's VLAN address (`ts-postrouting`). LAN services see a 10.x source. |
+| VLAN 3/6/7 → tailnet peer (100.64.0.0/10) | Marked `0x1`, but rule 5270 (table 52, Tailscale) is consulted before rule 30000 (Mullvad), so it goes out `tailscale0`. |
+
+Rule 5270 is why the router must not accept tailnet routes: an advertised `0.0.0.0/0`
+or `10.0.0.0/8` would land in table 52 and win over both the Mullvad table and `main`.
+
+Verify after changes:
+
+```bash
+ip rule                                    # 5210-5270 Tailscale, 30000 Mullvad
+ip route get "$(getent ahostsv4 controlplane.tailscale.com | awk 'NR==1{print $1}')" mark 0x80000   # dev = WAN
+tailscale netcheck                         # UDP: true
+tailscale debug prefs | jq '{RouteAll, CorpDNS, AdvertiseRoutes}'
+```
+
+### Services restricted to LAN + tailnet
+
+Vaultwarden (`bitwarden.`), Audioserve (`booksonic.`), Home Assistant
+(`homeassistant.`) and Ombi (`/plex-requests/`) are served by the external nginx under
+their public `nkontur.com` names and are reachable over Tailscale through the
+`10.2.0.0/16` subnet route. Tailnet split DNS sends `nkontur.com` queries to Pi-hole,
+which answers every `*.nkontur.com` name with the external nginx address, so clients
+keep their existing server URLs and the existing certificate. This was chosen over
+`tailscale serve` or a listener on the router's tailnet address because it needs no new
+names, certificates or client reconfiguration.
+
+Nextcloud, Plex, the blog, the `nkontur.com` site and the Telegram webhook (already
+limited to Telegram's address ranges) stay public. The nginx `allow 10.0.0.0/8;
+allow 100.64.0.0/10; deny all;` restriction and the removal of unused port forwards
+are a separate change, made once client devices are confirmed working over Tailscale.
+
 ---
 
 ## Mullvad VPN Egress

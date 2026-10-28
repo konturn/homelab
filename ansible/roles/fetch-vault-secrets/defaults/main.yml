@@ -165,6 +165,8 @@ vault_secret_paths:
       vault_tailscale_auth_key: "auth_key"
       vault_tailscale_oauth_client_id: "oauth_client_id"
       vault_tailscale_oauth_client_secret: "oauth_client_secret"
+    # Only used to log the router in when it is logged out (see configure-tailscale)
+    optional_fields: [vault_tailscale_auth_key]
   - path: "infrastructure/luks"
     fields:
       vault_luks_password_base64: "password_base64"
