@@ -69,6 +69,8 @@ all:
     apple_tv_address: 10.6.128.19
     zigbee_radio_mac: 68:25:dd:2f:51:27
     zigbee_radio_address: 10.6.128.20
+    frame_tv_mac: e8:aa:cb:04:64:da
+    frame_tv_address: 10.6.128.21
     snapserver_address: 10.6.32.2
     mosquitto_address: 10.6.32.3
     iot_nginx_ip: 10.6.32.5
@@ -144,6 +146,7 @@ all:
         - "{{ shield_address }} shield.lab.nkontur.com"
         - "{{ denon_address }} denon.lab.nkontur.com"
         - "{{ projector_address }} projector.lab.nkontur.com"
+        - "{{ frame_tv_address }} frame-tv.lab.nkontur.com"
         - "{{ kitchen_qual_address }} AWAIR-ELEM-14B541.lab.nkontur.com"
         - "{{ bedroom_qual_address }} AWAIR-ELEM-147AA0.lab.nkontur.com"
         - "{{ satellite_2_address }} satellite-2.lab.nkontur.com"

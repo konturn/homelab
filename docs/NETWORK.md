@@ -167,6 +167,7 @@ All VLANs use macvlan Docker networks, allowing containers to have their own IP 
 | 10.6.128.18 | Robot vacuum |
 | 10.6.128.19 | Apple TV |
 | 10.6.128.20 | Zigbee radio |
+| 10.6.128.21 | Frame TV (Samsung, Wi-Fi) |
 
 **Egress:** Routes through Mullvad VPN (marked traffic).
 
