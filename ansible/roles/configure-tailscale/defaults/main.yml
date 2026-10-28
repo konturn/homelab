@@ -1,0 +1,32 @@
+---
+# Tailscale on the router: official apt repository, tailscaled, subnet routes.
+# See docs/NETWORK.md ("Remote access") and docs/FIREWALL.md ("Tailscale").
+
+# Official package repository (pkgs.tailscale.com), pinned in
+# /etc/apt/preferences.d/tailscale so no other origin can supply the package.
+tailscale_apt_channel: stable
+tailscale_apt_distro: "{{ ansible_distribution | lower }}"
+tailscale_apt_release: "{{ ansible_distribution_release }}"
+tailscale_apt_keyring: /usr/share/keyrings/tailscale-archive-keyring.gpg
+tailscale_apt_pin_priority: 900
+
+# Exact package version to hold, e.g. "1.104.4". Empty: keep whatever version
+# is installed (install the repository's latest if missing).
+tailscale_version: ""
+
+# Comma-separated subnet routes to advertise. Empty: advertise none.
+tailscale_advertised_routes: ""
+
+# Node preferences enforced on every run. The router keeps its own DNS
+# (Pi-hole / systemd-resolved) and its own routing table: accepting tailnet
+# routes would put them in table 52, which is consulted before the Mullvad
+# policy rule and could steer LAN or kill-switched traffic.
+tailscale_accept_dns: false
+tailscale_accept_routes: false
+
+# Pre-authorized auth key for a non-interactive login. Empty: when the node is
+# logged out, the role starts an interactive login and writes the login URL to
+# tailscale_login_url_file (root-only) instead.
+tailscale_auth_key: ""
+tailscale_login_url_file: /root/tailscale-login-url.txt
+tailscale_login_timeout: 20s

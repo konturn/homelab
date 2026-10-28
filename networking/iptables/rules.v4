@@ -217,6 +217,17 @@ COMMIT
 
 # Tailscale — allow tailnet clients to reach internal services
 # Must be before the lab_nginx ICMP drop so tailnet pings work
+#
+# NOTE: tailscaled (netfilter mode "on") hooks ts-input/ts-forward in front of
+# these rules and accepts everything arriving on tailscale0, so today the
+# tailnet policy file decides what tailnet devices can reach. The rules below
+# state the intended policy and become the enforcing ones if tailscaled runs
+# with --netfilter-mode=nodivert. See docs/FIREWALL.md ("Tailscale").
+#
+# Services restricted to LAN + tailnet (Vaultwarden, Audioserve, Ombi, Home
+# Assistant) are served by the external nginx under their public names; tailnet
+# split DNS resolves nkontur.com through Pi-hole to nginx_ip.
+-A FORWARD -i tailscale0 -d {{ nginx_ip }}/32 -p tcp -m tcp --dport 443 -j ACCEPT
 -A FORWARD -s 100.64.0.0/10 -p icmp -j ACCEPT
 -A FORWARD -s 100.64.0.0/10 -d {{ pihole_ip }} -p udp -m udp --dport 53 -j ACCEPT
 -A FORWARD -s 100.64.0.0/10 -d {{ pihole_ip }} -p tcp -m tcp --dport 53 -j ACCEPT

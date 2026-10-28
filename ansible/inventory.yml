@@ -100,8 +100,14 @@ all:
     tailscale_api_token: "{{ vault_tailscale_api_token | trim }}"
     tailscale_oauth_client_id: "{{ vault_tailscale_oauth_client_id | trim }}"
     tailscale_oauth_client_secret: "{{ vault_tailscale_oauth_client_secret | trim }}"
-    tailscale_tailnet: "tail2360f8.ts.net"
+    # "-": the tailnet the OAuth client belongs to (keeps its name out of git)
+    tailscale_tailnet: "-"
+    # Tailnet clients resolve these through Pi-hole: *.lab names to lab_nginx,
+    # every other nkontur.com name to the external nginx, reached over the
+    # subnet route. Services restricted to LAN + tailnet keep their public names.
     tailscale_split_dns:
+      nkontur.com:
+        - "10.3.32.2"
       lab.nkontur.com:
         - "10.3.32.2"
       iot.lab.nkontur.com:

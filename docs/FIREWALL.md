@@ -167,6 +167,29 @@ no global IPv6 today; if that changes, add the DHCPv6 client rule there.
 LAN-side links (`bond0`, `bond0.N`, `vlanN-shim`) run with `IPv6AcceptRA=no`
 so the router never takes addresses/routes from RAs sent by LAN devices.
 
+## Tailscale
+
+tailscaled runs in netfilter mode `on` and installs its own hooks, which fw-apply keeps
+across reloads:
+
+| Chain | Effect |
+|-------|--------|
+| filter `INPUT` → `ts-input` (first rule) | accept everything from `tailscale0`; accept UDP 41641; drop 100.64.0.0/10 sources on other interfaces |
+| filter `FORWARD` → `ts-forward` (first rule) | mark and accept everything from `tailscale0`; accept everything to `tailscale0` |
+| nat `POSTROUTING` → `ts-postrouting` | masquerade forwarded tailnet traffic to the router's address on the egress VLAN |
+
+So the managed `100.64.0.0/10` / `tailscale0` rules in `rules.v4` (ICMP, DNS to Pi-hole,
+TCP 80/443, `nginx_ip`:443, SSH and DNS to the router) are not what limits tailnet
+access today: the tailnet policy file is. They describe the intended policy and take
+over if tailscaled is switched to `--netfilter-mode=nodivert` (which also needs a
+managed MASQUERADE for forwarded tailnet traffic and an INPUT rule for UDP 41641).
+Narrowing access is done in the tailnet policy, for example by limiting a device group
+to `10.2.32.1:443` and the Pi-hole on port 53.
+
+The router's own Tailscale traffic (control plane, DERP, WireGuard UDP) is fwmark
+`0x80000` and routed via `main` to the WAN; the Mullvad mark `0x1` and the FORWARD kill
+switch only apply to forwarded VLAN 3/6/7 traffic. See docs/NETWORK.md ("Remote Access").
+
 ## Docker and iptables
 
 Docker's iptables management is **disabled** on the router (`"iptables": false` in `daemon.json`).
@@ -308,3 +331,4 @@ iptables -A FORWARD -j LOG --log-prefix "FWD-DROPPED: "
 | 2025-01 | Audit and documentation added |
 | 2026-03 | Document Docker iptables disabled on router |
 | 2026-10 | excel-vm routes via WAN for client M365 sign-in |
+| 2026-10 | Tailscale: role installs from the pinned apt repo; tailnet → nginx:443 rule; ts-* hooks documented |
