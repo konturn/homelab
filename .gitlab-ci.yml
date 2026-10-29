@@ -748,6 +748,8 @@ router:deploy:
       optional: true
     - job: jit-approval-svc:build
       optional: true
+    - job: nginx:build
+      optional: true
     - job: novnc:build
       optional: true
     - job: openclaw:build
@@ -1677,6 +1679,8 @@ router:deploy-service:
     - job: chromium-browser:build
       optional: true
     - job: jit-approval-svc:build
+      optional: true
+    - job: nginx:build
       optional: true
     - job: novnc:build
       optional: true
