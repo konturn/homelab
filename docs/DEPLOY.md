@@ -111,6 +111,29 @@ including a host that drops mid-run (Ansible's own exit code 4), still fails
 the job. To give another host the same treatment, add the same
 `allow_failure` to its deploy job (and to `test_ci_tolerates_unreachable_exit_code`).
 
+## Image builds before deploys
+
+The `<image>:build` jobs on `main` build on the router's Docker daemon and tag
+`gitlab-registry.lab.nkontur.com:443/root/homelab/<image>:latest` there.
+Compose records the image ID each container was created from and recreates a
+container when the local image behind its tag has changed, so the deploy that
+follows a build picks up the new image without a pull. That only works if the
+deploy starts after the build has finished.
+
+The deploy jobs use `needs:`, so stage order does not hold them back. Instead
+`router:deploy` and `router:deploy-service` list every build of an image in
+`docker/docker-compose.yml` with `optional: true`. On `main` each build is
+either path-triggered, and the deploy waits for it, or a manual job that is
+allowed to fail, and the deploy does not wait for it. A failed build stops
+the router deploy, so the host never runs a half-updated stack. The other
+host deploys use no registry images and wait for no build.
+
+`test_deploy_needs.py` (run by `deploy-scope:test`) checks that every
+registry image in the router compose file has a `.docker_build` job, that
+both router deploy jobs need all of those builds (optionally) and no others,
+and that no other compose file uses registry images. When you add an image,
+add its build job to the `needs:` of both router deploy jobs.
+
 ## Keeping scope.yml correct
 
 `deploy-scope:test` (MR and main, whenever ansible/, docker/, base/,
