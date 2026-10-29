@@ -32,6 +32,16 @@ class PolicyError(Exception):
     """A change is outside the policy. The message is the human-readable reason."""
 
 
+class MajorVersionChange(PolicyError):
+    """A major-version tag change (or a 0.x minor one). Never auto-merged; for a
+    stateful service it is also a heavy change (see `is_stateful`)."""
+
+    def __init__(self, msg: str, service: Optional[str] = None, image: Optional[str] = None):
+        super().__init__(msg)
+        self.service = service
+        self.image = image
+
+
 # ---------------------------------------------------------------------------
 # Image references
 # ---------------------------------------------------------------------------
@@ -119,10 +129,10 @@ def classify_tag_change(old_tag: str, new_tag: str) -> str:
     o_major, o_minor = old_v.nums[0], old_v.nums[1]
     n_major, n_minor = new_v.nums[0], new_v.nums[1]
     if n_major != o_major:
-        raise PolicyError(f"major version change ({old_tag} -> {new_tag})")
+        raise MajorVersionChange(f"major version change ({old_tag} -> {new_tag})")
     if o_major == 0 and n_minor != o_minor:
         # semver: in 0.x the minor component is the breaking one
-        raise PolicyError(f"0.x minor version change counts as major ({old_tag} -> {new_tag})")
+        raise MajorVersionChange(f"0.x minor version change counts as major ({old_tag} -> {new_tag})")
     return "minor" if n_minor != o_minor else "patch"
 
 
@@ -243,6 +253,8 @@ def diff_compose(base: str, head: str) -> List[ImageChange]:
                 raise PolicyError(f"{where} ({service}): tag added or removed")
             try:
                 kind = classify_tag_change(old.tag, new.tag)
+            except MajorVersionChange as e:
+                raise MajorVersionChange(f"{where} ({service}): {e}", service=service, image=new.name)
             except PolicyError as e:
                 raise PolicyError(f"{where} ({service}): {e}")
         changes.append(ImageChange(service, i + 1, old, new, kind, bl, hl))
@@ -376,6 +388,31 @@ def fast_track_verdict(author: str, changes: List["ImageChange"], allowlist: dic
 
 
 # ---------------------------------------------------------------------------
+# Heavy changes
+# ---------------------------------------------------------------------------
+# A heavy change is a major-version upgrade of a stateful service: one listed
+# under `stateful.services` in the allowlist, or running an image listed under
+# `stateful.images` (databases). A heavy change would need last night's backup
+# to have succeeded and a fresh ZFS snapshot of the service's dataset. The bot
+# cannot verify either reliably, so heavy changes stay manual-only in every
+# storage state (and rule 3 already refuses every major-version change). The
+# `no-heavy` storage level (rule 8) is the second line if that ever changes.
+
+HEAVY_MANUAL_REASON = ("heavy change (major version of a stateful service): manual only; "
+                       "the bot cannot verify last night's backup or a fresh snapshot of the dataset")
+
+
+def is_stateful(service: Optional[str], image: Optional[str], allowlist: dict) -> bool:
+    st = allowlist.get("stateful") or {}
+    if service and service in (st.get("services") or []):
+        return True
+    if image:
+        base = image.rsplit("/", 1)[-1]
+        return any(image == i or base == i for i in (st.get("images") or []))
+    return False
+
+
+# ---------------------------------------------------------------------------
 # Whole-MR evaluation (MR-local checks; global gates are added by the caller)
 # ---------------------------------------------------------------------------
 
@@ -386,6 +423,7 @@ class Verdict:
     notes: List[str] = field(default_factory=list)     # informational
     changes: List[ImageChange] = field(default_factory=list)
     fast_track: bool = False                           # eligible AND in the fast-track class
+    heavy: bool = False                                # major version of a stateful service
 
     def reject(self, reason: str) -> None:
         self.eligible = False
@@ -393,7 +431,8 @@ class Verdict:
         self.reasons.append(reason)
 
     def as_dict(self) -> dict:
-        return {"eligible": self.eligible, "fast_track": self.fast_track, "reasons": self.reasons,
+        return {"eligible": self.eligible, "fast_track": self.fast_track, "heavy": self.heavy,
+                "reasons": self.reasons,
                 "notes": self.notes, "changes": [c.as_dict() for c in self.changes]}
 
 
@@ -448,6 +487,11 @@ def evaluate_mr(*, author: str, target_branch: str, labels: List[str],
         else:
             try:
                 v.changes = diff_compose(base_compose, head_compose)
+            except MajorVersionChange as e:
+                v.reject(f"compose: {e}")
+                if is_stateful(e.service, e.image, allowlist):
+                    v.heavy = True
+                    v.reject(HEAVY_MANUAL_REASON)
             except PolicyError as e:
                 v.reject(f"compose: {e}")
             for r in change_kind_reasons(v.changes, allowlist):
@@ -492,14 +536,37 @@ def change_kind_reasons(changes: List[ImageChange], allowlist: dict) -> List[str
 # ---------------------------------------------------------------------------
 # Host storage (rule 8)
 # ---------------------------------------------------------------------------
-# A pool must be ONLINE with no resilver running, unless it has an entry under
-# `storage_known_state` in the allowlist. Such a pool may also be DEGRADED while
-# a resilver runs, as long as nothing is worse than the recorded state: no vdev
-# FAULTED/UNAVAIL/OFFLINE/REMOVED beyond the listed ones, no READ/WRITE/CKSUM
-# counter above its recorded value, no data errors, not suspended.
+# Decided by the redundancy each vdev has left, not by the DEGRADED label:
+#
+#   blocked   every auto-merge stops: a pool is SUSPENDED, UNAVAIL or FAULTED
+#             (any health other than ONLINE/DEGRADED), I/O is suspended, data
+#             errors are reported, the output cannot be parsed, or a data vdev
+#             has no redundancy left (raidzN: N members unavailable; an N-way
+#             mirror: N-1 members unavailable; a single-disk vdev never has any).
+#   no-heavy  a resilver or scrub is running: heavy changes (see
+#             `is_stateful`) stop, normal image updates go ahead.
+#   open      anything else, including a DEGRADED pool that still has
+#             redundancy and no resilver running.
+#
+# Log, cache and spare vdevs do not count; special and dedup vdevs do.
 
-BAD_VDEV_STATES = {"FAULTED", "UNAVAIL", "OFFLINE", "REMOVED"}
+STORAGE_OPEN, STORAGE_NO_HEAVY, STORAGE_BLOCKED = "open", "no-heavy", "blocked"
+_STORAGE_RANK = {STORAGE_OPEN: 0, STORAGE_NO_HEAVY: 1, STORAGE_BLOCKED: 2}
+
+UNAVAILABLE_STATES = {"FAULTED", "UNAVAIL", "OFFLINE", "REMOVED"}
 POOL_OK_HEALTH = {"ONLINE", "DEGRADED"}
+DATA_SECTIONS = {"data", "special", "dedup"}
+_SECTION_LABELS = {"logs", "cache", "spares", "special", "dedup"}
+_REPAIR_SCAN_RE = re.compile(r"\b(resilver|scrub|rebuild)\b.*\bin progress\b")
+
+
+@dataclass
+class VdevNode:
+    name: str
+    state: str
+    counts: Optional[Tuple[int, int, int]]
+    section: str
+    children: List["VdevNode"] = field(default_factory=list)
 
 
 @dataclass
@@ -507,10 +574,13 @@ class PoolStatus:
     name: str
     state: str = ""
     resilvering: bool = False
+    repairing: bool = False        # resilver, rebuild or scrub in progress
     suspended: bool = False
     errors_line: str = ""
     # vdev name -> (state, (read, write, cksum) or None when the row has no counters)
     rows: Dict[str, Tuple[str, Optional[Tuple[int, int, int]]]] = field(default_factory=dict)
+    # top-level vdevs in config order, with their members as children
+    vdevs: List[VdevNode] = field(default_factory=list)
 
 
 def _counter(tok: str) -> int:
@@ -524,6 +594,8 @@ def parse_zpool_status(text: str) -> Dict[str, PoolStatus]:
     pools: Dict[str, PoolStatus] = {}
     cur: Optional[PoolStatus] = None
     in_config = False
+    section = "data"
+    stack: List[Tuple[int, VdevNode]] = []
     for raw in text.splitlines():
         line = raw.rstrip()
         stripped = line.strip()
@@ -541,8 +613,9 @@ def parse_zpool_status(text: str) -> Dict[str, PoolStatus]:
                 if "suspend" in val.lower():
                     cur.suspended = True
             elif key == "scan":
-                if "resilver in progress" in val:
-                    cur.resilvering = True
+                if _REPAIR_SCAN_RE.search(val):
+                    cur.repairing = True
+                    cur.resilvering = "resilver" in val or "rebuild" in val
             elif key == "errors":
                 cur.errors_line = val
                 in_config = False
@@ -550,75 +623,132 @@ def parse_zpool_status(text: str) -> Dict[str, PoolStatus]:
         if cur is None:
             continue
         if stripped.startswith("config:"):
-            in_config = True
+            in_config, section, stack = True, "data", []
             continue
         if "suspend" in stripped.lower() and not in_config:
             cur.suspended = True   # continuation of a status: paragraph
         if not in_config or not stripped:
             continue
         toks = stripped.split()
-        if toks[0] == "NAME" or len(toks) < 2:
-            continue   # header, or a section label (logs, cache, spares)
+        if toks[0] == "NAME":
+            continue
+        body = line[1:] if line.startswith("\t") else line
+        depth = (len(body) - len(body.lstrip(" "))) // 2
+        if depth == 0:
+            # the pool's own row (data section) or a section label
+            if toks[0] == cur.name:
+                section = "data"
+            elif toks[0] in _SECTION_LABELS:
+                section = toks[0]
+            else:
+                raise PolicyError(f"zpool status: unexpected top-level row {toks[0]!r}")
+            stack = []
+            if len(toks) < 2:
+                continue
+        if len(toks) < 2:
+            raise PolicyError(f"zpool status: vdev row without a state: {stripped!r}")
         name, state = toks[0], toks[1]
         counts = None
         if len(toks) >= 5:
             counts = (_counter(toks[2]), _counter(toks[3]), _counter(toks[4]))
         cur.rows[name] = (state, counts)
+        if depth == 0:
+            continue
+        node = VdevNode(name, state, counts, section)
+        while stack and stack[-1][0] >= depth:
+            stack.pop()
+        if depth == 1:
+            cur.vdevs.append(node)
+        elif not stack or stack[-1][0] != depth - 1:
+            raise PolicyError(f"zpool status: cannot place vdev row {name!r}")
+        else:
+            stack[-1][1].children.append(node)
+        stack.append((depth, node))
     return pools
 
 
-def storage_verdict(list_text: str, status_text: str, known: Optional[dict]) -> Tuple[bool, str]:
-    """Decide rule 8 from `zpool list -H -o name,health` and `zpool status -p` output."""
-    known = known or {}
+def _parity(vdev: VdevNode) -> int:
+    """Members a top-level vdev can lose without losing data."""
+    m = re.match(r"^(raidz|draid)([123])?[-:]", vdev.name)
+    if m:
+        return int(m.group(2) or 1)
+    if re.match(r"^mirror-\d+$", vdev.name):
+        return len(vdev.children) - 1
+    return 0   # a single disk (or file) vdev
+
+
+def _member_unavailable(member: VdevNode, repairing: bool) -> bool:
+    if not member.children:
+        return member.state in UNAVAILABLE_STATES
+    # replacing-N / spare-N: the slot is available while one child holds the
+    # data; during a resilver only when every child is available, since a
+    # replacement that is still resilvering does not hold all of it yet.
+    up = [c for c in member.children if not _member_unavailable(c, repairing)]
+    if not up:
+        return True
+    return repairing and len(up) < len(member.children)
+
+
+def vdev_redundancy(vdev: VdevNode, repairing: bool) -> Tuple[int, List[str]]:
+    """(redundancy left, unavailable member names) for a top-level vdev."""
+    members = vdev.children or [vdev]
+    parity = _parity(vdev)
+    down = [m.name for m in members if _member_unavailable(m, repairing)]
+    if vdev.state in UNAVAILABLE_STATES:
+        return -1, down or [vdev.name]
+    return parity - len(down), down
+
+
+def _pool_verdict(name: str, health: str, st: PoolStatus) -> Tuple[str, str]:
+    if health not in POOL_OK_HEALTH or st.state not in POOL_OK_HEALTH:
+        return STORAGE_BLOCKED, f"storage pool {name} is {health if health not in POOL_OK_HEALTH else st.state}"
+    if st.suspended:
+        return STORAGE_BLOCKED, f"storage pool {name}: I/O suspended"
+    if st.errors_line != "No known data errors":
+        return STORAGE_BLOCKED, f"storage pool {name}: errors: {st.errors_line or 'line missing'}"
+    data_vdevs = [v for v in st.vdevs if v.section in DATA_SECTIONS]
+    if not data_vdevs:
+        return STORAGE_BLOCKED, f"storage pool {name}: no vdevs parsed from zpool status"
+    degraded = []
+    for v in data_vdevs:
+        left, down = vdev_redundancy(v, st.repairing)
+        if left <= 0:
+            why = f"{', '.join(down)} unavailable" if down else "no parity"
+            return STORAGE_BLOCKED, f"storage pool {name}: {v.name} has no redundancy left ({why})"
+        if down:
+            degraded.append(f"{v.name}: {', '.join(down)} unavailable, redundancy {left} left")
+    detail = f" ({'; '.join(degraded)})" if degraded else ""
+    if st.repairing:
+        what = "resilvering" if st.resilvering else "scrubbing"
+        return STORAGE_NO_HEAVY, f"{name} {health}, {what}{detail}: heavy changes wait"
+    return STORAGE_OPEN, f"{name} {health}{detail}"
+
+
+def storage_verdict(list_text: str, status_text: str) -> Tuple[str, str]:
+    """Decide rule 8 from `zpool list -H -o name,health` and `zpool status -p` output.
+    Returns (level, message), level one of STORAGE_OPEN / STORAGE_NO_HEAVY / STORAGE_BLOCKED.
+    Anything unexpected fails closed (blocked)."""
     health = {}
     for line in list_text.strip().splitlines():
         parts = line.split()
         if len(parts) != 2:
-            return False, f"unexpected zpool list line: {line!r}"
+            return STORAGE_BLOCKED, f"unexpected zpool list line: {line!r}"
         health[parts[0]] = parts[1]
     if not health:
-        return False, "storage check returned no pools"
+        return STORAGE_BLOCKED, "storage check returned no pools"
     try:
         status = parse_zpool_status(status_text)
     except PolicyError as e:
-        return False, f"storage check: {e}"
-    notes = []
+        return STORAGE_BLOCKED, f"storage check: {e}"
+    level, notes = STORAGE_OPEN, []
     for name, h in health.items():
         st = status.get(name)
         if st is None:
-            return False, f"storage pool {name}: missing from zpool status"
-        if h not in POOL_OK_HEALTH or st.state not in POOL_OK_HEALTH:
-            return False, f"storage pool {name} is {h}"
-        if st.suspended:
-            return False, f"storage pool {name}: I/O suspended"
-        if st.errors_line != "No known data errors":
-            return False, f"storage pool {name}: errors: {st.errors_line or 'line missing'}"
-        if not st.rows:
-            return False, f"storage pool {name}: no vdevs parsed from zpool status"
-        k = known.get(name)
-        if k is None:
-            if h != "ONLINE":
-                return False, f"storage pool not ONLINE: {name} {h}"
-            if st.resilvering:
-                return False, f"storage pool {name} is resilvering"
-        elif h != "ONLINE" and not st.resilvering:
-            return False, f"storage pool {name} is {h} with no resilver running"
-        k = k or {}
-        known_bad = set(k.get("bad_vdevs") or [])
-        baseline = {v: tuple(c) for v, c in (k.get("errors") or {}).items()}
-        for vdev, (vstate, counts) in st.rows.items():
-            if vstate in BAD_VDEV_STATES and vdev not in known_bad:
-                return False, f"storage pool {name}: {vdev} is {vstate} (not in the known state)"
-            if counts is None:
-                continue
-            base = baseline.get(vdev, (0, 0, 0))
-            for label, got, was in zip(("read", "write", "cksum"), counts, base):
-                if got > was:
-                    return False, f"storage pool {name}: {vdev} {label} errors {got} (known {was})"
-        if h == "ONLINE" and not st.resilvering:
-            notes.append(f"{name} ONLINE")
-        else:
-            bad = sorted(v for v, (vs, _) in st.rows.items() if vs in BAD_VDEV_STATES)
-            notes.append(f"{name} {h}{', resilvering' if st.resilvering else ''}, within the known state"
-                         f" ({', '.join(bad) or 'no faulted vdevs'})")
-    return True, "storage pools: " + "; ".join(notes)
+            return STORAGE_BLOCKED, f"storage pool {name}: missing from zpool status"
+        lvl, msg = _pool_verdict(name, h, st)
+        if lvl == STORAGE_BLOCKED:
+            return lvl, msg
+        if _STORAGE_RANK[lvl] > _STORAGE_RANK[level]:
+            level = lvl
+        notes.append(msg)
+    return level, "storage pools: " + "; ".join(notes)

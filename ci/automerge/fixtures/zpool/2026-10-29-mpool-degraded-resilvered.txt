@@ -1,0 +1,40 @@
+  pool: mpool
+ state: DEGRADED
+status: One or more devices are faulted in response to persistent errors.
+	Sufficient replicas exist for the pool to continue functioning in a
+	degraded state.
+action: Replace the faulted device, or use 'zpool clear' to mark the device
+	repaired.
+  scan: resilvered 17.4T in 3 days 00:56:49 with 0 errors on Wed Oct 21 22:07:21 2026
+config:
+
+	NAME        STATE     READ WRITE CKSUM
+	mpool       DEGRADED     0     0     0
+	  raidz2-0  ONLINE       0     0     0
+	    dev1    ONLINE       0     0     0
+	    dev3    ONLINE       0     0     0
+	    dev4    ONLINE       0     0     0
+	    dev5    ONLINE       0     0     0
+	    dev8    ONLINE       0     0     0
+	    dev7    ONLINE       0     0     0
+	    dev2    ONLINE       0     0     0
+	    dev17   ONLINE       0     0     0
+	  raidz2-1  DEGRADED     0     0     0
+	    dev12   FAULTED     55     0     0  too many errors
+	    dev11   ONLINE       0     0     0
+	    dev24   ONLINE       0     0     0
+	    dev23   ONLINE       0     0     0
+	    dev20   ONLINE       0     0     0
+	    dev21   ONLINE       0     0     0
+	    dev19   ONLINE       0     0     0
+	    dev18   ONLINE       0     0     0
+	  raidz2-2  ONLINE       0     0     0
+	    dev14   ONLINE       0     0     0
+	    dev16   ONLINE       0     0     0
+	    dev15   ONLINE       0     0     0
+	    dev10   ONLINE       0     0     0
+	    dev9    ONLINE       0     0     0
+	    dev13   ONLINE       0     0     0
+	    dev6    ONLINE       0     0     0
+
+errors: No known data errors
