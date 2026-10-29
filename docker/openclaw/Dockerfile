@@ -97,6 +97,18 @@ RUN npm install -g playwright \
 # Pinned: Opus 5.5 (claude-opus-5-5) needs >= 2.1.296; older CLIs reject the model ID
 RUN npm install -g @anthropic-ai/claude-code@2.1.296
 
+# Bundled diagnostics-otel plugin: install its production dependencies at
+# build time from the upstream npm-shrinkwrap.json (exact versions and
+# integrity hashes), so container start fetches nothing. package.json's
+# devDependencies use `workspace:*`, which npm cannot resolve outside the
+# upstream monorepo; the shrinkwrap has no dev entries, so dropping them keeps
+# package.json and the lockfile in sync for `npm ci`.
+RUN cd /app/extensions/diagnostics-otel \
+    && npm pkg delete devDependencies \
+    && npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
+    && chown -R node:node node_modules \
+    && npm cache clean --force
+
 # Ensure node user can access installed tools
 RUN chmod -R a+rx /usr/local/bin
 
