@@ -21,18 +21,40 @@ allowed_files:
 # Maximum auto-merges in any rolling 24h window.
 max_per_24h: 3
 
-# Rule 8 (ZFS). Every pool must be ONLINE with no resilver running, except a
-# pool listed here: it may also be DEGRADED while a resilver runs, as long as
-# nothing is worse than recorded below. Any other vdev going FAULTED, UNAVAIL,
-# OFFLINE or REMOVED, any READ/WRITE/CKSUM counter above its value here (0 when
-# not listed), data errors, or suspended I/O still block. Remove the entry once
-# the pool is ONLINE again.
-storage_known_state:
-  mpool:
-    bad_vdevs: [dev22, dev12]
-    errors:            # [read, write, cksum]
-      dev22: [25, 0, 0]
-      dev12: [55, 0, 0]
+# Rule 8 (ZFS) is decided by the redundancy each vdev has left, not by the
+# DEGRADED label (ci/automerge/policy.py, "Host storage"):
+#   - every auto-merge stops while a pool is SUSPENDED, UNAVAIL or FAULTED, I/O
+#     is suspended, data errors are reported, or a vdev has no redundancy left
+#     (raidz2: two members unavailable in the same vdev);
+#   - while a resilver or scrub runs, heavy changes (below) stop and normal
+#     image updates go ahead;
+#   - a DEGRADED pool that still has redundancy, with no resilver running, does
+#     not block.
+# Nothing to configure here.
+
+# Stateful services and database images. A major-version upgrade of one of
+# these is a heavy change: it would need last night's backup to have succeeded
+# and a fresh ZFS snapshot of its dataset, which the bot cannot verify, so heavy
+# changes stay manual-only (rule 3 also refuses every major-version change).
+stateful:
+  services:
+    - nextcloud
+    - nextcloud_db
+    - wordpress_db
+    - bitwarden
+    - blog
+    - gitlab
+    - vault
+    - influxdb
+    - paperless-ngx
+    - homeassistant
+  images:
+    - mariadb
+    - mysql
+    - postgres
+    - mongo
+    - redis
+    - influxdb
 
 # MR label that blocks auto-merge for that MR.
 freeze_label: freeze
