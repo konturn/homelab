@@ -193,6 +193,45 @@ scrape_configs:
           expression: '(?i)api_key=([^&\s"\]]+)'
           replace: 'REDACTED'
 
+  # External (internet-facing) nginx: access and error logs. The container
+  # writes them to /data/log, bind-mounted from /var/log/nginx (not stdout), so
+  # the docker job above never sees a single request line. Without this, a
+  # probe against a public vhost is only visible if the backend happens to log
+  # it (#138 was found in nextcloud's own PHP errors), and no alert can count
+  # requests per source at the edge. lab_nginx and iot_nginx are deliberately
+  # not shipped: they are LAN-only, and most of their volume is GitLab runner
+  # and automerge API polling.
+  #
+  # Files rotate by rename (base/logrotate/nginx, daily, USR1 reopen), which
+  # promtail follows by path; the rotated .log.1/.gz copies are not matched.
+  # Labels stay low-cardinality on purpose: parse status, client and vhost at
+  # query time, e.g.
+  #   {job="nginx", file_kind="access"} | pattern `<ip> - <_> [<_>] "<method> <path> <_>" <status> <_>`
+  - job_name: nginx-external
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: nginx
+          host: router
+          nginx: external
+          file_kind: access
+          __path__: /var/log/nginx/access.log
+      - targets: [localhost]
+        labels:
+          job: nginx
+          host: router
+          nginx: external
+          file_kind: error
+          __path__: /var/log/nginx/error.log
+    pipeline_stages:
+      # Clients put credentials in query strings that pass through this proxy:
+      # Plex sends X-Plex-Token on every /plex/ request, and SignalR (Vaultwarden
+      # notifications) sends access_token. "token=" also matches both of those
+      # case-insensitively. Only the captured value is rewritten.
+      - replace:
+          expression: '(?i)(?:token|apikey|api_key|password|secret)=([^&\s"]+)'
+          replace: 'REDACTED'
+
   # Credential scrubber audit log
   - job_name: scrub-transcripts
     static_configs:
