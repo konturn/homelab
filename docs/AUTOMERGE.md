@@ -125,7 +125,6 @@ The services published through the external reverse proxy
 
 | Image | Services | Kinds | Why |
 |---|---|---|---|
-| `nginx` | nginx, lab_nginx, iot_nginx, bluebubbles-relay | digest, patch | the external reverse proxy; the other three share the image, so Renovate changes them in the same MR |
 | `plexinc/pms-docker` | plex | digest, patch | |
 | `linuxserver/ombi` | ombi | digest, patch | |
 | `homeassistant/home-assistant` | homeassistant | digest, patch | monthly releases (minor) migrate its database and stay reviewed |
@@ -137,6 +136,9 @@ The services published through the external reverse proxy
 
 Not fast-tracked:
 
+- **Reverse proxies** (nginx, lab_nginx, iot_nginx, bluebubbles-relay). They
+  run the local build from `docker/images/nginx`; its base image updates are
+  Dockerfile changes, which always need review.
 - **Databases** (`nextcloud_db`, `wordpress_db`). They are reachable only from
   their application's internal network, restarting one interrupts the
   application, and a database image is the hardest to roll back. Their updates,
