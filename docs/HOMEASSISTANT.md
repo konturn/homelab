@@ -44,6 +44,10 @@ the deploy plumbing:
   the files to it, and then calls `automation.reload`, `script.reload` and
   `scene.reload` over the API. It never restarts Home Assistant. Pre-deploy
   archives are kept in `/var/backups/ha-config-sync/` on the router.
+- CI tokens: lint (`ha-config-ci`, any ref) reads the token of the non-admin,
+  local-only Home Assistant user `ci-lint` from `homelab/docker/homeassistant-lint`.
+  The deploy and drift jobs (`ha-config-deploy`, protected `main` only) read
+  `homelab/docker/homeassistant`.
 - `ha-config-sync` refuses an id that is also defined in `/config/packages/`.
   Packages stay in this repo. To move a package automation to the private
   repo, delete it here and add it there in the same change window.

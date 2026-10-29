@@ -120,8 +120,9 @@ resource "vault_jwt_auth_backend_role" "vault_read" {
 # CI of the private Home Assistant config repo (root/homeassistant, project
 # ID 14). See docs/HOMEASSISTANT.md.
 #
-# ha-config-ci: any ref (MR pipelines). Reads the Home Assistant API token
-# for the read-only lint (entity, service and device lists).
+# ha-config-ci: any ref (MR pipelines). Reads the token of the non-admin
+# `ci-lint` Home Assistant user (homelab/docker/homeassistant-lint) for the
+# read-only lint (entity, service and device lists).
 # ha-config-deploy: protected main only. Also signs a 5-minute SSH
 # certificate for the ha-config forced-command user and reads the GitLab
 # token the drift job uses to open MRs in that project.
