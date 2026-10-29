@@ -427,8 +427,10 @@ resource "vault_policy" "ha_config_ci" {
   name = "ha-config-ci"
 
   policy = <<-EOT
-    # Home Assistant API token (the job uses the `token` field only)
-    path "homelab/data/docker/homeassistant" {
+    # Token of the non-admin `ci-lint` Home Assistant user (read-only lint;
+    # the job uses the `token` field only). The deploy token below is
+    # readable only by ha-config-deploy (protected main).
+    path "homelab/data/docker/homeassistant-lint" {
       capabilities = ["read"]
     }
   EOT
