@@ -225,7 +225,6 @@
         "docker/docker-compose.yml"
       ],
       "matchPackageNames": [
-        "nginx",
         "plexinc/pms-docker",
         "linuxserver/ombi",
         "homeassistant/home-assistant",
@@ -243,7 +242,6 @@
         "docker/docker-compose.yml"
       ],
       "matchPackageNames": [
-        "nginx",
         "plexinc/pms-docker",
         "linuxserver/ombi",
         "homeassistant/home-assistant",

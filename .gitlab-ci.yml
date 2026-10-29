@@ -18,7 +18,7 @@
 #   BUILD (parallel, path-triggered)
 #   ┌──────────────┬──────────────┬──────────────┬──────────────────────┐
 #   openclaw:build  amcrest2mqtt:build  snapcast:build  snapclient:build  jit-approval-svc:build
-#   anomaly-detector:build
+#   anomaly-detector:build  nginx:build
 #   main: <image>:build builds and pushes :latest and :<sha> (protected runner)
 #   MRs:  <image>:build-check builds with kaniko, no push (unprotected runner)
 #
@@ -605,6 +605,32 @@ snapclient:build-check:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - docker/images/snapclient/**/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
+
+nginx:build:
+  extends: .docker_build
+  variables:
+    IMAGE_NAME: nginx
+    BUILD_CONTEXT: docker/images/nginx
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - docker/images/nginx/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
+
+nginx:build-check:
+  extends: .kaniko_check
+  variables:
+    BUILD_CONTEXT: docker/images/nginx
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - docker/images/nginx/**/*
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       when: manual
       allow_failure: true

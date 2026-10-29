@@ -384,7 +384,7 @@ services:
       retries: 3
       start_period: 10s
   nginx: 
-    image: nginx:1.31.2-alpine3.23-perl@sha256:b3b337e1ef5b1bc8253dec68bc4522d9027920666a428bf51a022ceb7e3396bc
+    image: gitlab-registry.lab.nkontur.com:443/root/homelab/nginx:latest  # docker/images/nginx
     container_name: nginx
     security_opt:
       - no-new-privileges=true
@@ -425,7 +425,7 @@ services:
       - /var/log/nginx:/data/log
       - {{ docker_persistent_data_path }}/certs:/data/certs
   lab_nginx: 
-    image: nginx:1.31.2-alpine3.23-perl@sha256:b3b337e1ef5b1bc8253dec68bc4522d9027920666a428bf51a022ceb7e3396bc
+    image: gitlab-registry.lab.nkontur.com:443/root/homelab/nginx:latest  # docker/images/nginx
     container_name: lab_nginx
     security_opt:
       - no-new-privileges=true
@@ -469,7 +469,7 @@ services:
       - {{ docker_persistent_data_path }}/certs:/data/certs
       - {{ docker_persistent_data_path }}/docker-proxy-tls:/data/docker-proxy-tls:ro
   iot_nginx: 
-    image: nginx:1.31.2-alpine3.23-perl@sha256:b3b337e1ef5b1bc8253dec68bc4522d9027920666a428bf51a022ceb7e3396bc
+    image: gitlab-registry.lab.nkontur.com:443/root/homelab/nginx:latest  # docker/images/nginx
     container_name: iot_nginx
     security_opt:
       - no-new-privileges=true
@@ -2381,7 +2381,7 @@ services:
   # (mgmt VLAN), so the gateway itself needs no mgmt leg. Listens only on
   # the openclaw-relay network and forwards to a single host:port.
   bluebubbles-relay:
-    image: nginx:1.31.2-alpine3.23-perl@sha256:b3b337e1ef5b1bc8253dec68bc4522d9027920666a428bf51a022ceb7e3396bc
+    image: gitlab-registry.lab.nkontur.com:443/root/homelab/nginx:latest  # docker/images/nginx
     container_name: bluebubbles-relay
     user: "101:101"
     security_opt:

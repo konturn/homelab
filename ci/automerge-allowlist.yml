@@ -113,7 +113,7 @@ services:
   lab_nginx:
     probe: https://grafana.lab.nkontur.com/api/health
   iot_nginx: {}
-  bluebubbles-relay: {}  # same image as nginx; must be listed so nginx MRs can qualify
+  bluebubbles-relay: {}  # same image as nginx
   # Digest-only services. A new version of these runs a one-way migration on
   # start (nextcloud: `occ upgrade`; vaultwarden and wordpress: their database
   # schema), so rolling back the image would not restore the previous state.
@@ -155,7 +155,6 @@ fast_track:
     - project_4_bot_af78a2ea227eba9e10006515fbde375e
   max_per_24h: 4
   images:
-    nginx: {}                                   # nginx (external), lab_nginx, iot_nginx, bluebubbles-relay
     plexinc/pms-docker: {}                      # plex
     linuxserver/ombi: {}                        # ombi
     homeassistant/home-assistant: {}            # homeassistant
@@ -164,6 +163,9 @@ fast_track:
     nextcloud: {updates: [digest]}              # nextcloud
     vaultwarden/server: {updates: [digest]}     # bitwarden
     wordpress: {updates: [digest]}              # blog
+  # Not listed: nginx. nginx, lab_nginx, iot_nginx and bluebubbles-relay run
+  # the local build from docker/images/nginx, whose base image updates are
+  # Dockerfile changes and always reviewed.
   # Not listed: database images. nextcloud_db and wordpress_db are reachable
   # only from their application's internal network, restarting one interrupts
   # its application, and a database image is the hardest one to roll back.
