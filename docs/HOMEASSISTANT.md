@@ -38,16 +38,15 @@ the deploy plumbing:
 - Deploy target: the `ha-config-sync` role (`ansible/roles/ha-config-sync/`)
   creates the three directories, the `ha-config` user and
   `/usr/local/sbin/ha-config-sync`. CI in the private repo logs in to Vault
-  with its GitLab `id_token` (JWT roles `ha-config-ci` and `ha-config-deploy`,
+  with its GitLab `id_token` (JWT role `ha-config-deploy`,
   `terraform/vault/roles.tf`). It gets a 5-minute SSH certificate (SSH role
   `ha-config-deploy`) whose only possible command is `ha-config-sync`, pipes
   the files to it, and then calls `automation.reload`, `script.reload` and
   `scene.reload` over the API. It never restarts Home Assistant. Pre-deploy
   archives are kept in `/var/backups/ha-config-sync/` on the router.
-- CI tokens: lint (`ha-config-ci`, any ref) reads the token of the non-admin,
-  local-only Home Assistant user `ci-lint` from `homelab/docker/homeassistant-lint`.
-  The deploy and drift jobs (`ha-config-deploy`, protected `main` only) read
-  `homelab/docker/homeassistant`.
+- CI tokens: only the protected `main` jobs (`ha-config-deploy`) read
+  `homelab/docker/homeassistant`. MR and branch pipelines get no Vault role
+  or Home Assistant token; lint reads a data snapshot that `main` publishes.
 - `ha-config-sync` refuses an id that is also defined in `/config/packages/`.
   Packages stay in this repo. To move a package automation to the private
   repo, delete it here and add it there in the same change window.

@@ -419,22 +419,9 @@ resource "vault_policy" "jit_tier2_infra" {
 }
 
 # =============================================================================
-# Policies: ha-config-ci / ha-config-deploy
+# Policy: ha-config-deploy
 # =============================================================================
 # CI of the private Home Assistant config repo (JWT roles in roles.tf).
-
-resource "vault_policy" "ha_config_ci" {
-  name = "ha-config-ci"
-
-  policy = <<-EOT
-    # Token of the non-admin `ci-lint` Home Assistant user (read-only lint;
-    # the job uses the `token` field only). The deploy token below is
-    # readable only by ha-config-deploy (protected main).
-    path "homelab/data/docker/homeassistant-lint" {
-      capabilities = ["read"]
-    }
-  EOT
-}
 
 resource "vault_policy" "ha_config_deploy" {
   name = "ha-config-deploy"
