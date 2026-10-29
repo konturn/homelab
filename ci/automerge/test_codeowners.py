@@ -4,7 +4,7 @@ Run: python3 -m unittest discover -s ci/automerge -v
 """
 
 import fnmatch
-import os
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -18,8 +18,6 @@ RULES = policy.parse_codeowners(TEXT)
 
 # Paths that are never deployed and may change without code-owner review.
 UNOWNED = ["docs/**", "README.md", "CLAUDE.md", "DISASTER_RECOVERY.md", ".gitignore"]
-# .git is a file in a worktree checkout.
-SKIP_DIRS = {".git", ".claude", "__pycache__", "mpool"}
 
 
 def owners(path):
@@ -32,10 +30,11 @@ def owners(path):
 
 
 def repo_files():
-    for root, dirs, files in os.walk(REPO):
-        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
-        for name in (f for f in files if f not in SKIP_DIRS):
-            yield str((Path(root) / name).relative_to(REPO))
+    """Tracked files (CI jobs leave untracked files such as an SSH key in the checkout)."""
+    out = subprocess.run(
+        ["git", "-c", "safe.directory=*", "-C", str(REPO), "ls-files", "-z"],
+        check=True, capture_output=True, text=True).stdout
+    return [f for f in out.split("\0") if f]
 
 
 class RealCodeownersTests(unittest.TestCase):
