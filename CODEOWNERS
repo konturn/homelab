@@ -11,6 +11,22 @@
 # it more access, break network connectivity, or run arbitrary
 # code on hosts requires human approval.
 
+# === DEPLOYED PATHS (catch-all) ===
+# Everything under these paths is applied to hosts or network devices by
+# jobs on main (ansible as root, image builds, compose, switch/AP config).
+# GitLab uses the last matching rule, so the more specific rules below
+# (for example docker/docker-compose.yml) take precedence; keep these first.
+/ansible/                                @root
+/base/                                   @root
+/ci/                                     @root
+/docker/                                 @root
+/networking/                             @root
+/scripts/                                @root
+/snapclient/                             @root
+/terraform/                              @root
+/requirements.txt                        @root
+/renovate.json                           @root
+
 # === NETWORK & FIREWALL ===
 # Could open ports, grant network access, break remote connectivity
 /networking/iptables/                    @root
@@ -93,18 +109,6 @@
 # Prevent moltbot from removing its own restrictions
 /CODEOWNERS                              @root
 
-# === SAFE FOR SELF-MERGE (no CODEOWNERS rule needed) ===
-# /docs/                    — documentation
-# /docker/grafana/          — monitoring dashboards
-# /docker/pihole/           — DNS configs
-# /docker/loki/             — logging configs
-# /docker/homeassistant/    — HA configs
-# /docker/snapserver/       — audio configs
-# /docker/zigbee2mqtt/      — zigbee configs
-# /docker/deluge/           — torrent client config
-# /docker/images/           — custom Dockerfiles
-# /docker/plex/             — media server configs
-# /docker/nextcloud/        — cloud storage configs
-# /base/minidsp/            — audio config
-# /base/sane/               — scanner config
-# /snapclient/              — audio client config
+# === NOT CODE-OWNED (not deployed) ===
+# /docs/, README.md, CLAUDE.md, DISASTER_RECOVERY.md, .gitignore
+# ci/automerge/test_codeowners.py checks that every other path is owned.
