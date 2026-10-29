@@ -57,13 +57,31 @@ these hold:
 7. Fewer than `max_per_24h` (default 3) general-class MRs, or fewer than
    `fast_track.max_per_24h` (default 4) fast-track MRs, carry the `automerged`
    label with a merge time in the last 24 hours. Each class has its own budget.
-8. The router's ZFS pools all report `ONLINE` and no resilver is running. Any error
-   while checking counts as a failure. A pool listed under `storage_known_state` in
-   the allowlist may instead be `DEGRADED` while a resilver is in progress, but only
-   if it is no worse than recorded there: no other vdev `FAULTED`, `UNAVAIL`,
-   `OFFLINE` or `REMOVED`, no `READ`/`WRITE`/`CKSUM` counter above its recorded
-   value (0 if not listed), no data errors, and I/O not suspended. A listed pool
-   that is `DEGRADED` without a resilver running still blocks.
+8. The router's ZFS pools still have redundancy. The gate looks at what each
+   vdev can still lose, not at the `DEGRADED` label (`ci/automerge/policy.py`,
+   "Host storage"; tests in `ci/automerge/test_storage.py` with `zpool status -p`
+   fixtures):
+   - **Every** auto-merge stops while a pool is `SUSPENDED`, `UNAVAIL` or
+     `FAULTED` (any health other than `ONLINE`/`DEGRADED`), I/O is suspended,
+     data errors are reported, or a data vdev has no redundancy left: a raidzN
+     vdev with N members unavailable (`FAULTED`, `UNAVAIL`, `OFFLINE`,
+     `REMOVED`), an N-way mirror with N-1, or a single-disk vdev. A
+     `replacing`/`spare` slot counts as unavailable until its resilver has
+     finished. Log, cache and spare vdevs do not count. Any error while
+     checking counts as a failure.
+   - While a resilver or scrub is running, **heavy changes** stop and normal
+     image updates go ahead.
+   - A `DEGRADED` pool that still has redundancy, with no resilver running, does
+     not block. Error counters on devices that are still `ONLINE` do not block
+     either; ZFS faults a device that keeps failing, and that then counts.
+
+   A heavy change is a major-version upgrade of a stateful service: one listed
+   under `stateful.services` in the allowlist, or one running a database image
+   listed under `stateful.images`. It would need last night's backup to have
+   succeeded and a fresh ZFS snapshot of the service's dataset. The bot cannot
+   check either reliably, so heavy changes are **manual only** in every storage
+   state; the sweep prints the reason on the MR's verdict (rule 3 refuses every
+   major-version change in any case).
 
 Before merging, the sweep also requires: the MR pipeline for the current head
 commit succeeded, the MR is not a draft and has no conflicts. MRs labelled
