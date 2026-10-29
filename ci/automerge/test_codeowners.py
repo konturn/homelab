@@ -17,7 +17,7 @@ TEXT = (REPO / "CODEOWNERS").read_text()
 RULES = policy.parse_codeowners(TEXT)
 
 # Paths that are never deployed and may change without code-owner review.
-UNOWNED = ["docs/**", "README.md", "CLAUDE.md", "DISASTER_RECOVERY.md", ".gitignore"]
+UNOWNED = ["docs/**", "README.md", ".gitignore"]
 
 
 def owners(path):
@@ -59,6 +59,11 @@ class RealCodeownersTests(unittest.TestCase):
 
     def test_docs_unowned(self):
         self.assertIsNone(owners("docs/AUTOMERGE.md"))
+
+    def test_agent_instructions_require_root(self):
+        # Loaded as instructions by agent sessions.
+        for p in ["CLAUDE.md", "DISASTER_RECOVERY.md", "docs/DISASTER_RECOVERY.md"]:
+            self.assertEqual(owners(p), ["@root"], p)
 
 
 if __name__ == "__main__":
