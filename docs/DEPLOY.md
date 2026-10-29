@@ -122,16 +122,20 @@ deploy starts after the build has finished.
 
 The deploy jobs use `needs:`, so stage order does not hold them back. Instead
 `router:deploy` and `router:deploy-service` list every build of an image in
-`docker/docker-compose.yml` with `optional: true`. On `main` each build is
-either path-triggered, and the deploy waits for it, or a manual job that is
-allowed to fail, and the deploy does not wait for it. A failed build stops
-the router deploy, so the host never runs a half-updated stack. The other
-host deploys use no registry images and wait for no build.
+`docker/docker-compose.yml` with `optional: true`. A build job exists only
+when its image changed, or in a pipeline not started by a push (schedule,
+*Run pipeline*, API), where `changes:` is always true; the deploy waits for
+the builds that exist. Build jobs have no manual rule: a job that needs an
+unplayed manual job is skipped, so a manual build would hold back every
+router deploy. To rebuild an unchanged image, run a pipeline on `main`. A
+failed build stops the router deploy, so the host never runs a half-updated
+stack. The other host deploys use no registry images and wait for no build.
 
 `test_deploy_needs.py` (run by `deploy-scope:test`) checks that every
 registry image in the router compose file has a `.docker_build` job, that
 both router deploy jobs need all of those builds (optionally) and no others,
-and that no other compose file uses registry images. When you add an image,
+that no build job has a manual rule, and that no other compose file uses
+registry images. When you add an image,
 add its build job to the `needs:` of both router deploy jobs.
 
 ## Keeping scope.yml correct

@@ -6,8 +6,9 @@ compose up recreates a container when the local image behind its tag
 changed. A deploy that runs while a build is still going keeps the old image
 (main pipeline 5186: snapcast:build finished after router:deploy). Each deploy
 job that brings up a compose file with registry images therefore lists the
-builds of those images in `needs:` (optional, since on main an unchanged
-image's build is a manual job that the deploy must not wait for).
+builds of those images in `needs:` (optional: a build job exists only when
+its image changed). Build jobs must have no manual rule: a job that needs an
+unplayed manual job is skipped (main pipelines 5228 and 5230).
 
 Run: python3 -m unittest discover -s ci/deploy-scope -p 'test_*.py' -v
 """
@@ -104,6 +105,13 @@ class DeployNeedsBuilds(unittest.TestCase):
             for deploy in deploys:
                 extra = (set(needs_of(self.cfg[deploy])) & all_builds) - self.consumed(path)
                 self.assertEqual(extra, set(), f"{deploy} needs builds it does not deploy")
+
+    def test_build_jobs_have_no_manual_rule(self):
+        for build in sorted(self.builds.values()):
+            job = self.cfg[build]
+            whens = [r.get("when") for r in job.get("rules", []) if isinstance(r, dict)]
+            self.assertNotIn("manual", whens + [job.get("when")],
+                             f"{build}: the router deploys need it, a manual rule skips them")
 
     def test_host_deploys_without_registry_images_wait_for_no_build(self):
         all_builds = set(self.builds.values())
