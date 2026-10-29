@@ -441,6 +441,10 @@ deploy-scope:test:
 
 # main: build on the host daemon (docker-socket-proxy, protected runner only)
 # and push :latest and :$CI_COMMIT_SHORT_SHA.
+# The router deploy jobs need these builds, so a build job must not have a
+# manual rule (the deploy would be skipped until it is played). To rebuild an
+# unchanged image, run a pipeline on main (Run pipeline): changes: is always
+# true outside push pipelines, so every image builds before the deploy.
 .docker_build:
   stage: build
   image: docker:27
@@ -489,9 +493,6 @@ openclaw:build:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/openclaw/**/*
-    - if: $CI_COMMIT_BRANCH == "main"
-      when: manual
-      allow_failure: true
 
 openclaw:build-check:
   extends: .kaniko_check
@@ -515,9 +516,6 @@ amcrest2mqtt:build:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/images/amcrest2mqtt/**/*
-    - if: $CI_COMMIT_BRANCH == "main"
-      when: manual
-      allow_failure: true
 
 amcrest2mqtt:build-check:
   extends: .kaniko_check
@@ -541,9 +539,6 @@ snapcast:build:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/images/snapcast/**/*
-    - if: $CI_COMMIT_BRANCH == "main"
-      when: manual
-      allow_failure: true
 
 snapcast:build-check:
   extends: .kaniko_check
@@ -567,9 +562,6 @@ jit-approval-svc:build:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/jit-approval-svc/**/*
-    - if: $CI_COMMIT_BRANCH == "main"
-      when: manual
-      allow_failure: true
 
 jit-approval-svc:build-check:
   extends: .kaniko_check
@@ -593,9 +585,6 @@ snapclient:build:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/images/snapclient/**/*
-    - if: $CI_COMMIT_BRANCH == "main"
-      when: manual
-      allow_failure: true
 
 snapclient:build-check:
   extends: .kaniko_check
@@ -619,9 +608,6 @@ nginx:build:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/images/nginx/**/*
-    - if: $CI_COMMIT_BRANCH == "main"
-      when: manual
-      allow_failure: true
 
 nginx:build-check:
   extends: .kaniko_check
@@ -645,9 +631,6 @@ anomaly-detector:build:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/anomaly-detector/**/*
-    - if: $CI_COMMIT_BRANCH == "main"
-      when: manual
-      allow_failure: true
 
 anomaly-detector:build-check:
   extends: .kaniko_check
@@ -671,9 +654,6 @@ chromium-browser:build:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/chromium-browser/**/*
-    - if: $CI_COMMIT_BRANCH == "main"
-      when: manual
-      allow_failure: true
 
 chromium-browser:build-check:
   extends: .kaniko_check
@@ -697,9 +677,6 @@ novnc:build:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/novnc/**/*
-    - if: $CI_COMMIT_BRANCH == "main"
-      when: manual
-      allow_failure: true
 
 novnc:build-check:
   extends: .kaniko_check
@@ -736,10 +713,10 @@ router:deploy:
       optional: true
     # Image builds for docker/docker-compose.yml. They tag :latest on the
     # host daemon, so compose up must start after they finish or it keeps the
-    # old image. Optional: on main a build job is either path-triggered or a
-    # manual job that is allowed to fail, and a deploy never waits on the
-    # manual ones. ci/deploy-scope/test_deploy_needs.py keeps this list in
-    # sync with the .docker_build jobs.
+    # old image. Optional: a build job exists only when its image changed (or
+    # in a non-push pipeline, where changes: is always true). Build jobs must
+    # not have a manual rule: a job that needs an unplayed manual job is
+    # skipped. ci/deploy-scope/test_deploy_needs.py checks both.
     - job: amcrest2mqtt:build
       optional: true
     - job: anomaly-detector:build
@@ -747,6 +724,8 @@ router:deploy:
     - job: chromium-browser:build
       optional: true
     - job: jit-approval-svc:build
+      optional: true
+    - job: nginx:build
       optional: true
     - job: novnc:build
       optional: true
@@ -1677,6 +1656,8 @@ router:deploy-service:
     - job: chromium-browser:build
       optional: true
     - job: jit-approval-svc:build
+      optional: true
+    - job: nginx:build
       optional: true
     - job: novnc:build
       optional: true
