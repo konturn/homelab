@@ -387,6 +387,24 @@
     state: restarted
   when: nfs.changed
 
+# Exports use sec=sys only. The stale /etc/krb5.keytab satisfies the unit's
+# ConditionPathExists but holds no nfs/ principal, so rpc.svcgssd can only
+# fail whenever nfs-server starts. Kerberized NFS is not used.
+- name: Mask rpc-svcgssd (Kerberized NFS is not used)
+  ansible.builtin.systemd:
+    name: rpc-svcgssd
+    masked: true
+
+# PID 1 and the containers all draw inotify instances from root's budget;
+# the 128 default sits close to that usage, and path units fail with
+# Result: resources when it runs out.
+- name: Raise the inotify instance limit
+  ansible.posix.sysctl:
+    name: fs.inotify.max_user_instances
+    value: '1024'
+    sysctl_file: /etc/sysctl.d/60-inotify.conf
+    sysctl_set: true
+
 - name: udev rule for sound cards
   ansible.builtin.copy:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/udev/85-my-usb-audio.rules' }}"
