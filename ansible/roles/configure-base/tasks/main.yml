@@ -407,6 +407,33 @@
     mode: 0644
     validate: 'logrotate -d %s'
 
+### Stale logrotate stanzas that make logrotate.service exit 1
+# wokd: not owned by any package; /var/log/wok does not exist and the stanza
+#   sets nomissingok, so every run ends with "stat of /var/log/wok failed".
+# mumble-server: dpkg marks it an obsolete conffile (the current package no
+#   longer ships it). Its postrotate calls /usr/sbin/murmurd, which was renamed
+#   to /usr/bin/mumble-server, so every weekly rotation fails.
+# Each stanza is removed only while the path it depends on is missing. Only
+# the config is removed; existing log files are left in place.
+- name: Check paths the stale logrotate stanzas depend on
+  ansible.builtin.stat:
+    path: "{{ item.needs }}"
+  loop:
+    - { conf: wokd, needs: /var/log/wok }
+    - { conf: mumble-server, needs: /usr/sbin/murmurd }
+  loop_control:
+    label: "{{ item.conf }}"
+  register: stale_logrotate
+
+- name: Remove stale logrotate stanzas
+  ansible.builtin.file:
+    path: "/etc/logrotate.d/{{ item.item.conf }}"
+    state: absent
+  loop: "{{ stale_logrotate.results }}"
+  loop_control:
+    label: "{{ item.item.conf }}"
+  when: not item.stat.exists
+
 - name: Disable rsyslog (replaced by Promtail journal scraping)
   ansible.builtin.systemd:
     name: rsyslog
