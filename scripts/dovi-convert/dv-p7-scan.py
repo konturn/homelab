@@ -114,7 +114,9 @@ def main():
     old = {}
     if os.path.exists(a.out):  # reuse probes of unchanged files
         for r in json.load(open(a.out)).get("files", []):
-            old[(r["file"], r["size"])] = r.get("probe")
+            pr = r.get("probe") or {}
+            if "error" not in pr and pr.get("el_type"):  # re-probe failures
+                old[(r["file"], r["size"])] = pr
 
     for n, r in enumerate(p7, 1):
         r["host_path"] = os.path.join(MEDIA_HOST, os.path.relpath(r["file"], "/data"))

@@ -6,6 +6,10 @@
 # Bump a version: change it here and update the matching checksum/digest.
 FROM debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4
 
+# UTF-8 locale: under the default C locale mkvmerge truncates its JSON (and
+# mangles names) at the first non-ASCII track name.
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
+
 ARG DOVI_TOOL_VERSION=2.3.4
 ARG DOVI_TOOL_SHA256=1844258e13c26607b32224bf1fa82b595d3b35949f5467405fda560daad32b3f
 
