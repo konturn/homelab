@@ -34,7 +34,11 @@ for pct in 5 35 65; do
   fi
 done
 
-mediainfo --Output=JSON "$f" >"$tmp/mi.json" 2>/dev/null || echo '{}' >"$tmp/mi.json"
+# mediainfo's JSON output is not always valid JSON (unescaped tag values), so
+# ask for just the HDR fields through a template and build the JSON here.
+mediainfo --Inform='Video;%HDR_Format%|%HDR_Format_Profile%|%HDR_Format_Settings%|%HDR_Format_Compatibility%\n' "$f" 2>/dev/null \
+  | jq -R 'select(length > 0) | split("|") | {HDR_Format: .[0], HDR_Format_Profile: .[1], HDR_Format_Settings: .[2], HDR_Format_Compatibility: .[3]}' \
+  | jq -s . >"$tmp/mi.json" || echo '[]' >"$tmp/mi.json"
 
 jq -n \
   --arg file "$f" \
@@ -45,8 +49,7 @@ jq -n \
   {
     file: $file,
     duration_s: (($m.container.properties.duration // 0) / 1e9),
-    mediainfo_hdr: [ ($mi[0].media.track // [])[] | select(."@type" == "Video")
-                     | {HDR_Format, HDR_Format_Profile, HDR_Format_Settings, HDR_Format_Compatibility} ],
+    mediainfo_hdr: $mi[0],
     rpu_samples: $samples,
     dv_profile: ([ $samples[] | .profile // empty | capture("^(?<p>[0-9]+)").p | tonumber ] | max),
     el_type: (
