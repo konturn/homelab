@@ -65,6 +65,9 @@ shared:
     - scripts/check-updates.sh
     - scripts/gitlab-settings.sh
     - scripts/validate-nginx-config.sh
+    # run by hand on the router; the image is built by CI, never deployed
+    - scripts/dovi-convert/**
+    - docker/images/dovi-convert/**
 
 playbooks:
   router:
