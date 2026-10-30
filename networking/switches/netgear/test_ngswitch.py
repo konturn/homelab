@@ -586,6 +586,15 @@ class TestExportFirmwareHeader(unittest.TestCase):
         changed = SAMPLE.replace("scc mode disable", "scc mode enable")
         self.assertIn("scc mode enable", ng.unmanaged_diff(SAMPLE, changed))
 
+    def test_image_table_selector_ignored_by_unmanaged_diff(self):
+        line = "snmp-server set  rndImageInfoTable rndStackUnitNumber 1"
+        live = SAMPLE.replace("scc mode disable", "scc mode disable\n" + line)
+        self.assertNotEqual(live, SAMPLE)
+        self.assertEqual(ng.unmanaged_diff(SAMPLE, live), "")
+        self.assertEqual(ng.unmanaged_diff(live, SAMPLE), "")
+        other = SAMPLE.replace("scc mode disable", "scc mode disable\nsnmp-server set  rlFoo rlFoo 1")
+        self.assertIn("rlFoo", ng.unmanaged_diff(SAMPLE, other))
+
 
 class TestCommittedFiles(unittest.TestCase):
     """Every committed desired-state file is valid and consistent with its snapshot."""

@@ -1370,17 +1370,25 @@ def export_firmware_version(text: str) -> Optional[str]:
     return None
 
 
+# Row selector of the image information MIB table. The switch writes it into the
+# running configuration when the image table is read or written (Dual Image page,
+# firmware upload). It selects a stack unit for the next query and configures
+# nothing, so it is runtime state.
+_IMAGE_TABLE_SELECTOR_RE = re.compile(r"^snmp-server\s+set\s+rndImageInfoTable\s")
+
+
 def unmanaged_diff(snapshot_text: str, live_text: str) -> str:
     """Diff of everything outside the managed settings (order-insensitive per context).
 
     The firmware header line is left out: firmware is compared on its own
-    (see the firmware block of the desired state).
+    (see the firmware block of the desired state). So is the image-table row
+    selector (_IMAGE_TABLE_SELECTOR_RE), which is runtime state.
     """
     _, us = parse_running_config(snapshot_text)
     _, ul = parse_running_config(live_text)
 
     def keep(c, l):
-        return not (c == "" and _FW_HEADER_RE.match(l))
+        return not (c == "" and (_FW_HEADER_RE.match(l) or _IMAGE_TABLE_SELECTOR_RE.match(l)))
     fa = [f"[{c or 'global'}] {l}" for c, l in sorted(us) if keep(c, l)]
     fb = [f"[{c or 'global'}] {l}" for c, l in sorted(ul) if keep(c, l)]
     return "\n".join(difflib.unified_diff(fa, fb, "snapshot", "live", lineterm="", n=1))

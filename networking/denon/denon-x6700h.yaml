@@ -36,15 +36,12 @@ sources:
     TV: "USE"
 web:
   sources:
-    AUX:
-      rename: "AUX"
-      use: "USE"
     AUX1:
       rename: "AUX"
       use: "USE"
     AUX2:
-      rename: ""
-      use: "DEL"
+      rename: "NintendoSwitch"
+      use: "USE"
     Blu-ray:
       rename: "Blu-ray"
       use: "USE"
@@ -67,7 +64,13 @@ web:
       rename: "SHIELD"
       use: "USE"
     NETWORK:
-      rename: "Online Music"
+      rename: "HEOS Music"
+      use: "USE"
+    PHONO:
+      rename: "Phono"
+      use: "USE"
+    TUNER:
+      rename: "Tuner"
       use: "USE"
     "TV AUDIO":
       rename: "TV Audio"
@@ -84,8 +87,10 @@ web:
       source: "SHIELD"
     "4":
       name: "Quick Select 4"
-      source: "Online Music"
+      source: "HEOS Music"
   zone_names:
+    zone2: "ZONE2"
+    zone3: "ZONE3"
     zone1: "MAIN ZONE"
 speakers:
   amp_assign:
@@ -273,6 +278,49 @@ per_input:
       subwoofer_db: "+1.0"
       subwoofer_on: "ON"
     sound_mode: "MCH STEREO"
+    surround:
+      audio_delay_ms: "000"
+      audio_restorer: "OFF"
+      auro_mode: "EXP"
+      auro_preset: "MED"
+      auro_strength: "10"
+      bass_sync: "00"
+      cinema_eq: "OFF"
+      delay: "000"
+      dialog_enhancer_level: "OFF"
+      dynamic_compression: "OFF"
+      effect: "00"
+      headphone_eq: "OFF"
+      loudness_management: "ON"
+      neural_x: "ON"
+      speaker_output: "HF"
+      speaker_virtualizer: "ON"
+    tone:
+      bass_db: "0.0"
+      control: "OFF"
+      treble_db: "0.0"
+  MPLAY:
+    audyssey:
+      containment_amount: "04"
+      dynamic_eq: "OFF"
+      dynamic_volume: "OFF"
+      lfc: "OFF"
+      multeq: "OFF"
+      reference_level_offset: "0"
+    graphic_eq: "OFF"
+    input_mode: "HDMI"
+    levels:
+      channels_db:
+        FL: "0.0"
+        FR: "0.0"
+        SW: "0.0"
+        SW2: "0.0"
+      dialog_enhancer: "00"
+      lfe_attenuation: "00"
+      subwoofer2_db: "+1.0"
+      subwoofer_db: "+1.0"
+      subwoofer_on: "ON"
+    sound_mode: "STEREO"
     surround:
       audio_delay_ms: "000"
       audio_restorer: "OFF"
