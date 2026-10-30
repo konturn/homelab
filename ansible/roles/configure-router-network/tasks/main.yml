@@ -442,3 +442,20 @@
     - dhcp.changed or dhcp_defaults.changed
     - not ansible_check_mode
 
+
+# DHCPv6 is not served on any VLAN (INTERFACESv6 is empty in
+# networking/dhcp/isc-dhcp-server), and dhcpd6.conf is the package sample.
+# The v6 unit only fails at boot. Does not affect isc-dhcp-server (v4).
+- name: Mask the unused DHCPv6 server
+  ansible.builtin.systemd:
+    name: isc-dhcp-server6
+    enabled: false
+    masked: true
+
+# NTP servers are configured statically; DHCP-supplied NTP servers are not
+# wanted, so ntpsec's watcher on networkd leases is not needed.
+- name: Mask ntpsec's networkd lease watcher
+  ansible.builtin.systemd:
+    name: ntpsec-systemd-netif.path
+    enabled: false
+    masked: true
