@@ -113,6 +113,11 @@ and check what hangs off that switch before starting the next one.
 The firmware version is also the header line of the export (`v6.7.0.42 / ...`).
 Drift leaves that line out of the comparison with the snapshot.
 
+Drift also leaves out `snmp-server set rndImageInfoTable ...`. The switch adds
+that line when its image table is read or written (Dual Image page, firmware
+upload). It only selects a stack unit for the next query, so it is runtime
+state, not configuration.
+
 ## Local use
 
 ```sh
