@@ -407,6 +407,17 @@
     mode: 0644
     validate: 'logrotate -d %s'
 
+# rsyslog is disabled, so the stock postrotate (HUP rsyslog) would exit 1
+# and fail logrotate.service whenever one of its files is non-empty.
+- name: rsyslog logrotate config (HUP only when rsyslog is active)
+  ansible.builtin.copy:
+    src: "{{ lookup(env, CI_PROJECT_DIR) + /base/logrotate/rsyslog }}"
+    dest: /etc/logrotate.d/rsyslog
+    owner: root
+    group: root
+    mode: 0644
+    validate: logrotate -d %s
+
 ### Stale logrotate stanzas that make logrotate.service exit 1
 # wokd: not owned by any package; /var/log/wok does not exist and the stanza
 #   sets nomissingok, so every run ends with "stat of /var/log/wok failed".
