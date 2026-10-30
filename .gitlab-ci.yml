@@ -690,6 +690,31 @@ novnc:build-check:
       when: manual
       allow_failure: true
 
+# Dolby Vision P7 -> P8.1 toolbox, run on demand by
+# scripts/dovi-convert/dv-p7-convert.sh (not a deployed service)
+dovi-convert:build:
+  extends: .docker_build
+  variables:
+    IMAGE_NAME: dovi-convert
+    BUILD_CONTEXT: docker/images/dovi-convert
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - docker/images/dovi-convert/**/*
+
+dovi-convert:build-check:
+  extends: .kaniko_check
+  variables:
+    BUILD_CONTEXT: docker/images/dovi-convert
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - docker/images/dovi-convert/**/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
+
 
 # =============================================================================
 # Deploy Stage - Parallel deployment (main only)
