@@ -1,0 +1,22 @@
+# Managed by ansible (configure-base). Same as the Debian stanza, except the
+# postrotate HUP only runs when rsyslog is active: rsyslog is disabled here
+# (journald + Promtail), and the stock hook exits 1 when it is not running,
+# which would fail logrotate.service once any of these files is non-empty.
+/var/log/syslog
+/var/log/mail.log
+/var/log/kern.log
+/var/log/auth.log
+/var/log/user.log
+/var/log/cron.log
+{
+	rotate 4
+	weekly
+	missingok
+	notifempty
+	compress
+	delaycompress
+	sharedscripts
+	postrotate
+		if systemctl is-active --quiet rsyslog.service; then /usr/lib/rsyslog/rsyslog-rotate; fi
+	endscript
+}
