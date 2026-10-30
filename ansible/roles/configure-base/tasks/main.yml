@@ -411,7 +411,7 @@
 # and fail logrotate.service whenever one of its files is non-empty.
 - name: rsyslog logrotate config (HUP only when rsyslog is active)
   ansible.builtin.copy:
-    src: "{{ lookup(env, CI_PROJECT_DIR) + /base/logrotate/rsyslog }}"
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/logrotate/rsyslog' }}"
     dest: /etc/logrotate.d/rsyslog
     owner: root
     group: root
