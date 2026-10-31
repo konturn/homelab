@@ -66,6 +66,13 @@ devices:
     friendly_name: Movie Room Hallway Rear
   '0x001788010f13640a':
     friendly_name: Dining Room Vanity Light
+  '0x001788010f136b50':
+    friendly_name: Living Room Recliner Light 1
+  '0x001788010f135912':
+    friendly_name: Living Room Recliner Light 2
 blocklist:
   - '0x88571dfffe76802a'
 version: 5
+groups:
+  '1':
+    friendly_name: Living Room Recliners
