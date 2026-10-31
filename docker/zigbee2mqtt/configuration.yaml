@@ -64,6 +64,8 @@ devices:
     friendly_name: Movie Room Hallway Front
   '0x001788010f26f85a':
     friendly_name: Movie Room Hallway Rear
+  '0x001788010f13640a':
+    friendly_name: Dining Room Vanity Light
 blocklist:
   - '0x88571dfffe76802a'
 version: 5
