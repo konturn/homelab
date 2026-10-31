@@ -22,48 +22,44 @@ device_options: {}
 availability:
   enabled: true
 devices:
-  '0x88571dfffe0e4b8a':
-    friendly_name: Dining Room Right Rear
-  '0x88571dfffe130b74':
-    friendly_name: Front Hallway Front
-  '0x88571dfffe7695da':
-    friendly_name: Pantry
-  '0x88571dfffe0e1ebe':
-    friendly_name: Back Hallway Rear
-  '0x88571dfffe74311e':
-    friendly_name: Dining Room Left Front
-  '0x88571dfffe766852':
-    friendly_name: Top Staircase
-  '0x88571dfffe769190':
-    friendly_name: Front Door Inside
-  '0x88571dfffe769d12':
-    friendly_name: Front Hallway Rear
-  '0x88571dfffe0e20a2':
-    friendly_name: Kitchen Left Front
-  '0x88571dfffe7b89c6':
-    friendly_name: Kitchen Right Rear
-  '0x88571dfffe6a6796':
-    friendly_name: Kitchen Left Rear
-  '0x88571dfffe0e1d2c':
-    friendly_name: Kitchen Right Front
-  '0x88571dfffe768046':
-    friendly_name: Back Hallway Front
-  '0x88571dfffe0e4d84':
-    friendly_name: Living Room Center Front
-  '0x88571dfffe76768c':
-    friendly_name: Living Room Right Rear
-  '0x88571dfffe1313fa':
-    friendly_name: Living Room Center Rear
-  '0x88571dfffe769c04':
-    friendly_name: Living Room Right Front
-  '0x88571dfffe769778':
-    friendly_name: Dining Room Left Rear
   '0x008b43fffe1240d3':
     friendly_name: Basement Hallway Light 1
   '0x008b43fffe124fed':
     friendly_name: Basement Hallway Light 2
   '0x008b43fffe12421d':
     friendly_name: Soffit Light 3
+  '0x001788010f200d0a':
+    friendly_name: Living Room Right Rear
+  '0x001788010f200704':
+    friendly_name: Living Room Center Rear
+  '0x001788010f26f5e4':
+    friendly_name: Kitchen Left Rear
+  '0x001788010f2a1d74':
+    friendly_name: Kitchen Right Front
+  '0x001788010f270562':
+    friendly_name: Pantry
+  '0x001788010f2a2787':
+    friendly_name: Dining Room Right Rear
+  '0x001788010f2a1d60':
+    friendly_name: Dining Room Right Front
+  '0x001788010f20251c':
+    friendly_name: Living Room Left Front
+  '0x001788010f2a26b6':
+    friendly_name: Front Hallway
+  '0x001788010ebfd4b8':
+    friendly_name: Living Room Left Rear
+  '0x001788010f2a271b':
+    friendly_name: Dining Room Left Rear
+  '0x001788010f2a2040':
+    friendly_name: Dining Room Left Front
+  '0x001788010f2709b1':
+    friendly_name: Living Room Right Front
+  '0x001788010f270519':
+    friendly_name: Kitchen Left Front
+  '0x001788010f2704f2':
+    friendly_name: Kitchen Right Rear
+  '0x001788010ebdbcb6':
+    friendly_name: Living Room Center Front
 blocklist:
   - '0x88571dfffe76802a'
 version: 5
