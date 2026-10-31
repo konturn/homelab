@@ -1,5 +1,5 @@
-# Halloween mode: the switch for the seasonal red flicker light effect, and a
-# combined blocker for the motion-lighting automations.
+# Halloween mode: the switch and effect picker for the seasonal light
+# effects, and a combined blocker for the motion-lighting automations.
 #
 # Templated by Ansible (docker_config) to /config/packages/ like the other
 # packages; Home Assistant templates are inside raw blocks so Ansible leaves
@@ -11,6 +11,17 @@ input_boolean:
   halloween_mode:
     name: Halloween mode
     icon: mdi:halloween
+
+input_select:
+  # Which effect Halloween mode runs. Restored across restarts (no `initial`);
+  # the first option is the default for a fresh install. New effects are
+  # added here and handled in the Halloween effects automation.
+  halloween_effect:
+    name: Halloween effect
+    icon: mdi:ghost
+    options:
+      - Red candle
+      - Red flicker
 
 template:
   - binary_sensor:
