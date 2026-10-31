@@ -62,6 +62,8 @@ devices:
     friendly_name: Living Room Center Front
   '0x001788010f26f5e0':
     friendly_name: Movie Room Hallway Front
+  '0x001788010f26f85a':
+    friendly_name: Movie Room Hallway Rear
 blocklist:
   - '0x88571dfffe76802a'
 version: 5
