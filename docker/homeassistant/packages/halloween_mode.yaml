@@ -14,13 +14,16 @@ input_boolean:
 
 input_select:
   # Which effect Halloween mode runs. Restored across restarts (no `initial`);
-  # the first option is the default for a fresh install. New effects are
-  # added here and handled in the Halloween effects automation.
+  # the first option is the default for a fresh install. "Red flicker" is a
+  # scripted loop; every other option is a native Hue effect, mapped to its
+  # effect name in the Halloween native effect script. A new native effect is
+  # an option here plus one line in that map.
   halloween_effect:
     name: Halloween effect
     icon: mdi:ghost
     options:
       - Red candle
+      - Red fireplace
       - Red flicker
 
 template:
