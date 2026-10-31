@@ -1,0 +1,25 @@
+# Halloween mode: the switch for the seasonal red flicker light effect, and a
+# combined blocker for the motion-lighting automations.
+#
+# Templated by Ansible (docker_config) to /config/packages/ like the other
+# packages; Home Assistant templates are inside raw blocks so Ansible leaves
+# them alone. The effect itself (automation and scripts) is managed with the
+# rest of the automations, not here.
+
+input_boolean:
+  # Restored across restarts (no `initial`), so the effect resumes after one.
+  halloween_mode:
+    name: Halloween mode
+    icon: mdi:halloween
+
+template:
+  - binary_sensor:
+      # On while night mode or Halloween mode is on. The motion-lighting
+      # blueprints take a single blocker entity; this lets them stay out of
+      # the way in either mode.
+      - name: "Motion Lighting Blocked"
+        unique_id: motion_lighting_blocked
+        icon: mdi:motion-sensor-off
+        state: >-
+          {% raw %}{{ is_state('input_boolean.night_mode', 'on')
+             or is_state('input_boolean.halloween_mode', 'on') }}{% endraw %}
