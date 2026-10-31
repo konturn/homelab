@@ -60,6 +60,8 @@ devices:
     friendly_name: Kitchen Right Rear
   '0x001788010ebdbcb6':
     friendly_name: Living Room Center Front
+  '0x001788010f26f5e0':
+    friendly_name: Movie Room Hallway Front
 blocklist:
   - '0x88571dfffe76802a'
 version: 5
