@@ -74,13 +74,34 @@ else
   echo "WARNING: certificate sync to zwave FAILED (rsync exit ${rsync_rc}) -- continuing to the service restarts anyway."
 fi
 
+# Restart only when the certificate on disk differs from the one the services
+# last loaded. This runs weekly, and certbot replaces the cert only about every
+# 60 days, so restarting unconditionally took down every proxied service, vault
+# and the MQTT broker for ~35s each week for no reason (seen 2026-11-02 09:00Z).
+#
+# LOADED_STATE records the cert that was in place the last time ALL restarts
+# succeeded. It is written only on full success, so a failed restart is retried
+# next week instead of being forgotten, and a missing state file (first run,
+# fresh router) restarts once. To force a reload: delete the state file.
+LOADED_STATE=/root/cron/.ssl-loaded-cert.sha256
+current_sha=$(sha256sum "$CERT_ROOT/live/$LINEAGE/fullchain.pem" | cut -d' ' -f1)
+loaded_sha=$(cat "$LOADED_STATE" 2>/dev/null || true)
+
 # Reload every service that reads the cert from disk at startup. Each restart is
 # independent: one container failing to come back must not leave the rest still
 # serving the superseded certificate.
 restart_failed=0
-for c in lab_nginx nginx iot_nginx mosquitto vault; do
-  docker restart "$c" || { echo "WARNING: docker restart ${c} FAILED"; restart_failed=1; }
-done
+if [ "$current_sha" = "$loaded_sha" ]; then
+  echo "Certificate unchanged since last reload (sha256 ${current_sha:0:16}); skipping service restarts."
+else
+  echo "Certificate changed (loaded=${loaded_sha:0:16} current=${current_sha:0:16}); restarting services."
+  for c in lab_nginx nginx iot_nginx mosquitto vault; do
+    docker restart "$c" || { echo "WARNING: docker restart ${c} FAILED"; restart_failed=1; }
+  done
+  if [ "$restart_failed" -eq 0 ]; then
+    echo "$current_sha" > "$LOADED_STATE"
+  fi
+fi
 
 if [ "$restart_failed" -ne 0 ] || [ "$rsync_rc" -ne 0 ]; then
   echo "SSL renewal complete WITH WARNINGS (zwave sync rc=${rsync_rc}, restart_failed=${restart_failed})."
