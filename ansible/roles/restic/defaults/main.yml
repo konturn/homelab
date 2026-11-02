@@ -34,6 +34,12 @@ restic_global_excludes:
   - "*.db-journal"
   - "*.sqlite-shm"
   - "*.sqlite-wal"
+  # Tempo's live-store and WAL hold in-flight trace blocks that the
+  # ingester writes and deletes within seconds, so restic lists a file and
+  # then finds it gone (exit 3, restic-backup-incomplete). Neither is useful
+  # to restore: completed blocks are flushed to traces/, which stays backed up.
+  - "/persistent_data/docker/volumes/docker_tempo-storage/_data/live-store"
+  - "/persistent_data/docker/volumes/docker_tempo-storage/_data/wal"
 
 restic_folders: []
 restic_databases: []
