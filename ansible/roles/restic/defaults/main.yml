@@ -34,6 +34,12 @@ restic_global_excludes:
   - "*.db-journal"
   - "*.sqlite-shm"
   - "*.sqlite-wal"
+  # Tempo's live-store holds traces that are still being written. Tempo
+  # flushes and deletes those block dirs constantly, so restic can scan one
+  # and then find it gone -> "could not be read" -> exit 3 (10-09, 11-02).
+  # The data is seconds-to-minutes old and moves to Tempo's completed blocks,
+  # which are still backed up. A half-flushed live block is no use on restore.
+  - "/persistent_data/docker/volumes/docker_tempo-storage/_data/live-store"
 
 restic_folders: []
 restic_databases: []
