@@ -188,3 +188,15 @@
     password: "{{ lookup('env', 'CI_REGISTRY_PASSWORD') }}"
     registry_url: "https://gitlab-registry.lab.nkontur.com:443"
   when: gitlab_registry_login | default(true)
+
+# 6ec7457..292f2ca put the transcript scrub cron in this role, which also runs
+# on the satellites. dfd26c8 moved it to configure-homelab-services (router
+# only) but never removed the satellite entries, so satellite-2 and zwave have
+# run it every 10 minutes since February. The x64 gitleaks binary can't execute
+# there (exit 126) and there are no transcripts to scrub. ansible.builtin.cron
+# keys on name, and this is the name both of those commits used.
+- name: Remove orphaned transcript scrub cron from satellites
+  ansible.builtin.cron:
+    name: "Scrub credentials from moltbot transcripts"
+    state: absent
+  when: is_satellite | default(false)
