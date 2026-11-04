@@ -280,6 +280,22 @@ def token_user(gl: GitLab) -> str:
     return gl.get("user")["username"]
 
 
+# Merge status GitLab has not computed yet. Every merge to main resets the
+# other open MRs to "unchecked", and GitLab recomputes only when asked.
+PENDING_MERGE_STATUS = ("unchecked", "checking", "preparing", "approvals_syncing")
+
+
+def fetch_mr(gl: GitLab, iid: int, wait: float = 30.0) -> dict:
+    """The MR's full record with a current merge status: ask GitLab to recheck
+    (with_merge_status_recheck) and poll briefly while it does."""
+    deadline = time.monotonic() + wait
+    while True:
+        mr = gl.get(f"projects/{PROJECT}/merge_requests/{iid}", with_merge_status_recheck="true")
+        if mr.get("detailed_merge_status") not in PENDING_MERGE_STATUS or time.monotonic() >= deadline:
+            return mr
+        time.sleep(3)
+
+
 def readiness(mr: dict) -> List[str]:
     """Reasons an eligible MR cannot be merged yet."""
     r = []
@@ -393,7 +409,7 @@ def cmd_sweep(args: argparse.Namespace) -> int:
 
     verdicts = {}
     for iid in sorted(candidates):
-        mr = gl.get(f"projects/{PROJECT}/merge_requests/{iid}")  # full record (pipeline, merge status)
+        mr = fetch_mr(gl, iid)  # full record (pipeline, merge status)
         candidates[iid] = mr
         verdicts[iid] = evaluate_api(gl, mr, allow, merger=merger)
 
