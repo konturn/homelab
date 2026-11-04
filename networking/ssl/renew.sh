@@ -91,7 +91,7 @@ restart_failed=0
 for c in lab_nginx nginx iot_nginx mosquitto vault; do
   # GNU date reads an empty string as today's midnight, so guard it: a container
   # we cannot inspect falls through to the restart, which is the old behavior.
-  started=$(docker inspect -f '{{.State.StartedAt}}' "$c" 2>/dev/null) || started=""
+  started=$(docker inspect -f '{% raw %}{{.State.StartedAt}}{% endraw %}' "$c" 2>/dev/null) || started=""
   started_epoch=0
   [ -n "$started" ] && { started_epoch=$(date -d "$started" +%s 2>/dev/null) || started_epoch=0; }
   if [ "$started_epoch" -gt "$cert_mtime" ]; then
