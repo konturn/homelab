@@ -1933,7 +1933,7 @@ services:
   # kept from the linuxserver layout (/config, /data/media, /data/consume),
   # per the upstream "Migrating from LinuxServer.io" guide.
   paperless-ngx:
-    image: ghcr.io/paperless-ngx/paperless-ngx:2.20.15@sha256:6c86cad803970ea782683a8e80e7403444c5bf3cf70de63b4d3c8e87500db92f
+    image: ghcr.io/paperless-ngx/paperless-ngx:3.4.2@sha256:d704e84f88300eb6ab001ab15720a2330ff99169cf9f94d6b8fcc44b63a84c84
     container_name: paperless-ngx
     security_opt:
       - no-new-privileges=true
@@ -1966,6 +1966,10 @@ services:
       - PAPERLESS_DATA_DIR=/config
       - PAPERLESS_MEDIA_ROOT=/data/media
       - PAPERLESS_CONSUMPTION_DIR=/data/consume
+      # Required since 3.0. A new random key (Vault docker/paperless
+      # secret_key, 2026-11-04): web sessions had to log in again; API tokens
+      # are stored in the DB and are unaffected (paperless-ai keeps working).
+      - PAPERLESS_SECRET_KEY={{ vault_paperless_secret_key | trim | replace("$", "$$") }}
     volumes:
       - "{{ docker_persistent_data_path }}/paperless:/config"
       - "/mpool/nextcloud/paperless:/data"

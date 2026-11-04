@@ -115,8 +115,9 @@ vault_secret_paths:
     optional: true  # not referenced by any template
   - path: "docker/paperless"
     fields:
+      vault_paperless_secret_key: "secret_key"  # PAPERLESS_SECRET_KEY (required by 3.x)
       vault_paperless_token: "token"
-    optional: true  # not referenced by any template
+    optional_fields: [vault_paperless_token]  # not referenced by any template
   - path: "docker/plex"
     fields:
       vault_plex_token: "token"
