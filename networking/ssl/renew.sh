@@ -74,11 +74,31 @@ else
   echo "WARNING: certificate sync to zwave FAILED (rsync exit ${rsync_rc}) -- continuing to the service restarts anyway."
 fi
 
-# Reload every service that reads the cert from disk at startup. Each restart is
-# independent: one container failing to come back must not leave the rest still
-# serving the superseded certificate.
+# Reload every service that reads the cert from disk at startup, but only the
+# ones that started before the cert on disk was written. This runs weekly and
+# certbot is a no-op on all but ~one run in eight, so restarting unconditionally
+# bounced all three nginx fronts, mosquitto and vault every Monday 08:00Z for
+# nothing (nginx bounces can surface as Loki/Influx DatasourceError pages).
+#
+# Comparing against each container's own start time, rather than asking "did
+# certbot renew on THIS run", keeps the self-healing property: a restart that
+# failed on the renewal run, or a cert issued by hand, is picked up next week.
+# Each restart is independent: one container failing to come back must not leave
+# the rest still serving the superseded certificate.
+# If the cert files cannot be stat'ed, fall back to "now" so every service restarts.
+cert_mtime=$(stat -L -c %Y "$CERT_ROOT/live/$LINEAGE/fullchain.pem" "$CERT_ROOT/live/$LINEAGE/privkey.pem" | sort -n | tail -1) || cert_mtime=$(date +%s)
 restart_failed=0
 for c in lab_nginx nginx iot_nginx mosquitto vault; do
+  # GNU date reads an empty string as today's midnight, so guard it: a container
+  # we cannot inspect falls through to the restart, which is the old behavior.
+  started=$(docker inspect -f '{{.State.StartedAt}}' "$c" 2>/dev/null) || started=""
+  started_epoch=0
+  [ -n "$started" ] && { started_epoch=$(date -d "$started" +%s 2>/dev/null) || started_epoch=0; }
+  if [ "$started_epoch" -gt "$cert_mtime" ]; then
+    echo "${c}: started ${started}, after the current cert; no restart needed."
+    continue
+  fi
+  echo "${c}: restarting to load the current cert."
   docker restart "$c" || { echo "WARNING: docker restart ${c} FAILED"; restart_failed=1; }
 done
 
