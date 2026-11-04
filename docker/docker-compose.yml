@@ -1262,15 +1262,21 @@ services:
     networks:
       internal:
         ipv4_address: {{ deluge_ip }}
-    # Memory (2026-09-01, 30d max): 8192M of 8192M = 100.0% -- capped, OOM risk.
-    # Growth pattern 4G->6G->8G->12G indicates a libtorrent leak; tracked in #122.
-    # 12G is headroom, not a fix.
+    # Memory: deluge always reads ~100% of its limit, at 4G, 6G, 8G and 12G
+    # alike. That is file pages, not a leak. libtorrent 2.x does disk I/O
+    # through mmap, so every torrent file it touches is charged to this cgroup
+    # and fills any limit. Anon (active+inactive), the part the OOM killer
+    # weighs, was at most 284 MiB per sample over 2026-10-21..31, flat, under
+    # a 12G limit (~11.7G of active/inactive_file). File pages are reclaimed
+    # at the limit (oomkilled stayed false). 4G is ~14x the anon peak. Raising
+    # the limit only buys a larger cache, which on ZFS duplicates the ARC.
+    # Alerting uses anon for the same reason (container-memory-near-limit).
     deploy:
       resources:
         limits:
-          memory: 12G
+          memory: 4G
         reservations:
-          memory: 3G
+          memory: 512M
     volumes:
       - '{{ docker_persistent_data_path }}/deluge:/config'
       - '/mpool/samba_share/nfs:/downloads'
