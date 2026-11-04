@@ -67,6 +67,12 @@ groups:
       # crash-looping container gets is taken seconds after a (re)start -- so
       # detection is unchanged. A removed container (e.g. scaled to 0) keeps its
       # last short-uptime sample and still ages out with the 6h window.
+      #
+      # keep() before each group(): series carry every Docker label as a tag, so
+      # regrouping by container_name merges tables with different column sets.
+      # On 2026-10-21 (paperless-ngx official image with OCI labels, plus a burst
+      # of short-lived containers) that made Flux panic in sort()
+      # ("arrow/array: index out of range") and the rule went to DatasourceError.
       - uid: container-restart-loop
         title: Container Restart Loop
         condition: C
@@ -81,12 +87,14 @@ groups:
                   |> filter(fn: (r) => r._measurement == "docker_container_status")
                   |> filter(fn: (r) => r._field == "restart_count")
                   |> difference(nonNegative: true)
+                  |> keep(columns: ["_time", "_value", "container_name"])
                   |> group(columns: ["container_name"])
                   |> sum()
                 uptime = from(bucket: "metrics")
                   |> range(start: -6h)
                   |> filter(fn: (r) => r._measurement == "docker_container_status")
                   |> filter(fn: (r) => r._field == "uptime_ns")
+                  |> keep(columns: ["_time", "_value", "container_name"])
                   |> group(columns: ["container_name"])
                   |> sort(columns: ["_time"])
                   |> last()
