@@ -317,7 +317,9 @@ def print_verdict(mr: dict, v: policy.Verdict, extra: List[str] = ()) -> None:
 # ---------------------------------------------------------------------------
 
 def git(*args: str) -> str:
-    return subprocess.run(["git", "-C", str(REPO_ROOT), *args], check=True,
+    # The CI image runs as a non-root user while the runner checks the repo out
+    # as root; without safe.directory git refuses with "dubious ownership".
+    return subprocess.run(["git", "-c", f"safe.directory={REPO_ROOT}", "-C", str(REPO_ROOT), *args], check=True,
                           capture_output=True, text=True).stdout
 
 
