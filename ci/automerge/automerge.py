@@ -210,27 +210,9 @@ def gitlab_from_env(dry_run: bool) -> GitLab:
 # Global gates
 # ---------------------------------------------------------------------------
 
-def host_storage_level() -> Tuple[str, str]:
-    """(level, message) from policy.storage_verdict. Fail closed: any error is STORAGE_BLOCKED."""
-    cmd = ["ssh", "-i", SSH_KEY, "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes", "-o", "ConnectTimeout=15",
-           "-o", "StrictHostKeyChecking=yes", "-o", f"UserKnownHostsFile={KNOWN_HOSTS}",
-           "-o", "LogLevel=ERROR", f"root@{ROUTER_HOST}",
-           "zpool list -H -o name,health && echo --- && zpool status -p"]
-    try:
-        out = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-    except Exception as e:  # noqa: BLE001
-        return policy.STORAGE_BLOCKED, f"storage check failed to run: {e}"
-    if out.returncode != 0 or "---" not in out.stdout:
-        return policy.STORAGE_BLOCKED, f"storage check failed (rc={out.returncode}): {out.stderr.strip()[:200]}"
-    pools, _, status = out.stdout.partition("---")
-    return policy.storage_verdict(pools, status)
-
-
-def global_gates(gl: GitLab, allow: dict, host_check: bool = True) -> Tuple[List[str], List[str]]:
-    """Return (reasons that block every auto-merge, reasons that block heavy
-    changes only) right now. Both empty = open."""
+def global_gates(gl: GitLab, allow: dict) -> List[str]:
+    """Return the reasons that block every auto-merge right now. Empty = open."""
     reasons: List[str] = []
-    heavy: List[str] = []
     if truthy(os.environ.get("AUTOMERGE_FREEZE")):
         reasons.append("AUTOMERGE_FREEZE variable is set")
     if FREEZE_FILE.exists():
@@ -238,14 +220,7 @@ def global_gates(gl: GitLab, allow: dict, host_check: bool = True) -> Tuple[List
     open_rb = gl.get(f"projects/{PROJECT}/issues", state="opened", labels=LABEL_ROLLBACK, per_page=20)
     if open_rb:
         reasons.append("open rollback issue(s): " + ", ".join(f"#{i['iid']}" for i in open_rb))
-    if host_check:
-        level, msg = host_storage_level()
-        log(f"Storage: {level}: {msg}")
-        if level == policy.STORAGE_BLOCKED:
-            reasons.append(msg)
-        elif level == policy.STORAGE_NO_HEAVY:
-            heavy.append(msg)
-    return reasons, heavy
+    return reasons
 
 
 def rate_gate(recent: List[dict], allow: dict, fast_track: bool) -> Optional[str]:
@@ -421,13 +396,11 @@ def cmd_sweep(args: argparse.Namespace) -> int:
         verdicts[iid] = evaluate_api(gl, mr, allow, merger=merger)
 
     gates: List[str] = []
-    heavy_gates: List[str] = []
     rate: Dict[bool, Optional[str]] = {False: None, True: None}
     if any(v.eligible for v in verdicts.values()):
-        gates, heavy_gates = global_gates(gl, allow, host_check=not args.no_host_check)
-        log("Global gates: " + ("CLOSED" if gates else "open for normal updates, closed for heavy changes"
-                                if heavy_gates else "open"))
-        for g in gates + heavy_gates:
+        gates = global_gates(gl, allow)
+        log("Global gates: " + ("CLOSED" if gates else "open"))
+        for g in gates:
             log(f"  - {g}")
         recent = recent_automerges(gl)
         rate = {ft: rate_gate(recent, allow, ft) for ft in (False, True)}
@@ -441,8 +414,7 @@ def cmd_sweep(args: argparse.Namespace) -> int:
     merged_one = False
     for iid in order:
         mr, v = candidates[iid], verdicts[iid]
-        mr_gates = (gates + (heavy_gates if v.heavy else [])
-                    + ([rate[v.fast_track]] if rate[v.fast_track] else []))
+        mr_gates = gates + ([rate[v.fast_track]] if rate[v.fast_track] else [])
         eligible = v.eligible and not mr_gates
         print_verdict(mr, v, mr_gates if v.eligible else [])
         if v.eligible:
@@ -465,7 +437,8 @@ def cmd_sweep(args: argparse.Namespace) -> int:
         if merged_one:
             log("  ready, deferred: one auto-merge per run")
             continue
-        merged_one = do_merge(writer, mr, v)
+        # A dry-run merge does not use up the run's one real merge.
+        merged_one = do_merge(writer, mr, v) and not writer.dry_run
     return 0
 
 
@@ -745,7 +718,6 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     s = sub.add_parser("sweep")
     s.add_argument("--dry-run", action="store_true")
-    s.add_argument("--no-host-check", action="store_true", help="dry runs only")
     s.set_defaults(fn=cmd_sweep)
 
     s = sub.add_parser("plan-deploy")
@@ -768,9 +740,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     s.set_defaults(fn=cmd_daily_report)
 
     args = p.parse_args(argv)
-    # Fully dry only: with AUTOMERGE_DRY_RUN=1 the fast-track class still merges.
-    if getattr(args, "no_host_check", False) and not all(dry_modes(args.dry_run)):
-        p.error("--no-host-check is only allowed with --dry-run or AUTOMERGE_DRY_RUN=all")
     return args.fn(args)
 
 

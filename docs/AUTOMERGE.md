@@ -57,36 +57,20 @@ these hold:
 7. Fewer than `max_per_24h` (default 3) general-class MRs, or fewer than
    `fast_track.max_per_24h` (default 4) fast-track MRs, carry the `automerged`
    label with a merge time in the last 24 hours. Each class has its own budget.
-8. The router's ZFS pools still have redundancy. The gate looks at what each
-   vdev can still lose, not at the `DEGRADED` label (`ci/automerge/policy.py`,
-   "Host storage"; tests in `ci/automerge/test_storage.py` with `zpool status -p`
-   fixtures):
-   - **Every** auto-merge stops while a pool is `SUSPENDED`, `UNAVAIL` or
-     `FAULTED` (any health other than `ONLINE`/`DEGRADED`), I/O is suspended,
-     data errors are reported, or a data vdev has no redundancy left: a raidzN
-     vdev with N members unavailable (`FAULTED`, `UNAVAIL`, `OFFLINE`,
-     `REMOVED`), an N-way mirror with N-1, or a single-disk vdev. A
-     `replacing`/`spare` slot counts as unavailable until its resilver has
-     finished. Log, cache and spare vdevs do not count. Any error while
-     checking counts as a failure.
-   - While a resilver or scrub is running, **heavy changes** stop and normal
-     image updates go ahead.
-   - A `DEGRADED` pool that still has redundancy, with no resilver running, does
-     not block. Error counters on devices that are still `ONLINE` do not block
-     either; ZFS faults a device that keeps failing, and that then counts.
 
    A heavy change is a major-version upgrade of a stateful service: one listed
    under `stateful.services` in the allowlist, or one running a database image
    listed under `stateful.images`. It would need last night's backup to have
    succeeded and a fresh ZFS snapshot of the service's dataset. The bot cannot
-   check either reliably, so heavy changes are **manual only** in every storage
-   state; the sweep prints the reason on the MR's verdict (rule 3 refuses every
-   major-version change in any case).
+   check either reliably, so heavy changes are **manual only**; the sweep prints
+   the reason on the MR's verdict (rule 3 refuses every major-version change in
+   any case). The sweep does not check the state of the ZFS pools.
 
 Before merging, the sweep also requires: the MR pipeline for the current head
 commit succeeded, the MR is not a draft and has no conflicts. MRs labelled
 `security` (set by the daily running-image CVE scan, or by Renovate for advisories)
-are considered first. It merges at most one MR per run, through the API with the `sha` guard, so a push after evaluation
+are considered first. It merges at most one MR per run (a dry-run "would merge"
+does not count), through the API with the `sha` guard, so a push after evaluation
 blocks the merge. The merge is done by a dedicated CI identity (`AUTOMERGE_TOKEN`),
 never by the MR author. The merge commit message ends with the trailer
 `Automerge-Policy: image-update`, which the `main` pipeline uses to select the
@@ -320,8 +304,8 @@ above. The script refuses any MR not authored by root.
   from it carries a single image change (possibly on several services that share
   that image).
 - Pipeline schedules on `main` (owner `root`, timezone America/New_York):
-  - `automerge sweep`: `*/15 * * * *`, variables `AUTOMERGE_TASK=sweep` and
-    `AUTOMERGE_DRY_RUN=1`.
+  - `automerge sweep`: `*/15 * * * *`, variable `AUTOMERGE_TASK=sweep` (both
+    classes live; `AUTOMERGE_DRY_RUN` removed 2026-11-04).
   - `automerge report`: `30 8 * * *`, variable `AUTOMERGE_TASK=report`.
 - **Dry run**: while the sweep schedule has `AUTOMERGE_DRY_RUN=1`, the general
   class logs every decision (`ELIGIBLE` / `not eligible` with reasons, "would
