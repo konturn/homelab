@@ -372,6 +372,14 @@
     state: started
     enabled: yes
 
+# Kerberos NFS daemon. Our exports don't use sec=krb5 and there is no nfs/
+# keytab entry, so it fails on every nfs-server restart (deploys and
+# unattended-upgrades) and trips the systemd unit failure alert.
+- name: Mask rpc-svcgssd (NFS is not on Kerberos)
+  ansible.builtin.systemd:
+    name: rpc-svcgssd
+    masked: yes
+
 - name: nfs config file
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/nfs/exports' }}"
