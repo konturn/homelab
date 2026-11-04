@@ -461,6 +461,15 @@ deploy-scope:test:
     - docker build -t $CI_REGISTRY_IMAGE/$IMAGE_NAME:latest -t $CI_REGISTRY_IMAGE/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA $BUILD_CONTEXT/
     - docker push $CI_REGISTRY_IMAGE/$IMAGE_NAME:latest
     - docker push $CI_REGISTRY_IMAGE/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA
+  # These builds run on the router's daemon (data-root /persistent_data/docker)
+  # and nothing else removes what they leave. The :sha tag only needs to exist
+  # in the registry, and each superseded :latest goes dangling. until=24h keeps
+  # the untagged intermediates of a build still running in a parallel job.
+  # Dangling-only: tagged images (dovi-convert, etc.) and images in use are
+  # never touched. after_script, so a cleanup error cannot fail the build.
+  after_script:
+    - docker rmi $CI_REGISTRY_IMAGE/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA || true
+    - docker image prune -f --filter "until=24h" || true
 
 # MRs: check that the image builds, with kaniko inside the job container (no
 # Docker daemon, nothing is pushed). The last three flags keep memory down:
