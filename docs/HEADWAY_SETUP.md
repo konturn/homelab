@@ -70,6 +70,14 @@ docker volume rm $(docker volume ls -q --filter 'name=dagger-engine-')
 The "build machine" above is meant to be a separate host. If you built on `router` instead —
 which is what happened for the current US dataset — run the teardown there.
 
+**Status (2026-10-27):** the teardown has been done on `router`. The
+`dagger-engine-v0.19.11` container, its build-cache volume (~104 GB), its image and
+`/usr/local/bin/dagger` were all removed. Nothing Dagger-related is left on the host.
+
+A future map rebuild (e.g. a newer OSM extract) therefore needs Dagger reinstalled first
+(https://docs.dagger.io/install), and the teardown above run again once the new artifacts
+have been copied into place: container, cache volume, image and the `dagger` binary.
+
 ### Deploy artifacts to server
 
 Copy the built data to the server:
