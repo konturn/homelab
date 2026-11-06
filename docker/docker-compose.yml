@@ -197,9 +197,18 @@ services:
     # containers (e.g. an LLM server) via the same device reservation.
     # Plex prefs: HardwareAcceleratedCodecs/Encoders on (Plex defaults) and
     # HardwareDevicePath pinned to the P5000; see docs/plex-gpu.md.
+    # CPU cap: transcodes run on NVENC, so the CPU-heavy work is Butler
+    # maintenance (media.generate.loudness, ~8 jobs in parallel). On
+    # 2026-11-06 from 07:10Z it held plex at 1400-2000% of the host's 32
+    # CPUs for 2h+. Host idle dropped to 15-25% and load1 hit 72. CPU temp
+    # reached 85C, and ollama/loki/vault/gateway healthchecks timed out.
+    # Grafana's SQLite logged ~1.9k "database is locked" errors, including
+    # failed alert-state saves. 16 CPUs leaves half the host for everything
+    # else. Butler runs longer, but nothing it does is time-sensitive.
     deploy:
       resources:
         limits:
+          cpus: '16'
           memory: 8G
         reservations:
           memory: 3G
