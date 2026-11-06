@@ -231,8 +231,7 @@
         "lscr.io/linuxserver/deluge",
         "izderadicka/audioserve",
         "nextcloud",
-        "vaultwarden/server",
-        "wordpress"
+        "vaultwarden/server"
       ],
       "separateMinorPatch": true
     },
@@ -248,8 +247,7 @@
         "lscr.io/linuxserver/deluge",
         "izderadicka/audioserve",
         "nextcloud",
-        "vaultwarden/server",
-        "wordpress"
+        "vaultwarden/server"
       ],
       "matchUpdateTypes": [
         "digest",

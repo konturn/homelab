@@ -116,7 +116,6 @@ The services published through the external reverse proxy
 | `izderadicka/audioserve` | booksonic | digest | floating `latest` tag |
 | `nextcloud` | nextcloud | digest | a new version runs `occ upgrade` on start |
 | `vaultwarden/server` | bitwarden | digest | new versions migrate its database |
-| `wordpress` | blog | digest | core version is pinned to the declared state |
 
 Not fast-tracked:
 
@@ -133,7 +132,9 @@ Not fast-tracked:
 
 When a service stops being reachable from outside (moved behind Tailscale,
 converted to static files), remove its image from `fast_track.images` **and**
-from the two "Fast track" rules in `renovate.json`.
+from the two "Fast track" rules in `renovate.json`, and drop the service from
+`services` if it no longer runs on a normal deploy (for example `blog`, which
+only runs under the `wordpress` compose profile).
 `ci/automerge/test_fast_track.py` fails if the lists differ, if a fast-track
 image is used by a service that is not allowlisted (Renovate updates every line
 of an image in one MR, so a single unlisted service would make every such MR
@@ -141,7 +142,7 @@ ineligible), or if a database image is listed.
 
 ### Digest-only services and rollback
 
-`nextcloud`, `bitwarden` and `blog` are allowlisted with `updates: [digest]`. A
+`nextcloud` and `bitwarden` are allowlisted with `updates: [digest]`. A
 digest refresh of the same tag keeps the application version, so the previous
 image is a clean rollback. Version changes go through review and the full
 deploy, which runs `occ upgrade` for Nextcloud. For Nextcloud,

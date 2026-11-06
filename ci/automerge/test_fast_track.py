@@ -310,7 +310,7 @@ class RepoConfigTests(unittest.TestCase):
             self.assertNotIn(svc, self.allow["services"])
 
     def test_migrating_apps_are_digest_only(self):
-        for svc in ("nextcloud", "bitwarden", "blog"):
+        for svc in ("nextcloud", "bitwarden"):
             self.assertEqual(policy.allowed_kinds(svc, self.service_image[svc], self.allow), ("digest",))
 
     def test_external_probes(self):
