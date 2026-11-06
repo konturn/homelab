@@ -8,8 +8,11 @@
 #   - and the optional HTTP probe returns 2xx/3xx.
 # Fails fast if the container exits or restart-loops.
 #
-# Usage: wait-healthy.sh --project P --file F --service S [--expect-digest sha256:..]
+# Usage: wait-healthy.sh --project P --service S [--expect-digest sha256:..]
 #                        [--timeout 600] [--probe URL --probe-ip IP] [--stable 60]
+# The container is found by its compose labels (project + service), so this
+# works for projects built from several compose files. --file is accepted and
+# ignored (older callers).
 set -uo pipefail
 
 PROJECT=docker FILE="" SERVICE="" EXPECT="" TIMEOUT=600 PROBE="" PROBE_IP="" STABLE=60
@@ -26,7 +29,7 @@ while [ $# -gt 0 ]; do
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
-[ -n "$FILE" ] && [ -n "$SERVICE" ] || { echo "--file and --service are required" >&2; exit 2; }
+[ -n "$SERVICE" ] || { echo "--service is required" >&2; exit 2; }
 
 say() { echo "[$(date -u +%H:%M:%S)] [$SERVICE] $*"; }
 fail() {
@@ -38,9 +41,8 @@ fail() {
   exit 1
 }
 
-compose() { docker compose -p "$PROJECT" -f "$FILE" "$@"; }
-
-CID=$(compose ps -aq "$SERVICE" 2>/dev/null | head -1)
+CID=$(docker ps -aq --filter "label=com.docker.compose.project=$PROJECT" \
+  --filter "label=com.docker.compose.service=$SERVICE" 2>/dev/null | head -1)
 [ -n "$CID" ] || fail "no container found for service"
 
 IMAGE=$(docker inspect -f '{{.Config.Image}}' "$CID")

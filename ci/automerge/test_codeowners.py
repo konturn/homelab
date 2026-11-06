@@ -57,6 +57,15 @@ class RealCodeownersTests(unittest.TestCase):
         self.assertIn("@root", own)
         self.assertTrue(any(o.startswith("@project_4_bot_") for o in own), own)
 
+    def test_every_automerge_compose_file_lists_the_bot(self):
+        # The sweep's approval counts only where the bot is a code owner.
+        import yaml
+        pol = yaml.safe_load((REPO / "ci" / "automerge-policy.yml").read_text())
+        for path in policy.compose_files(pol):
+            own = owners(path) or []
+            self.assertIn("@root", own, path)
+            self.assertIn("@project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6", own, path)
+
     def test_docs_unowned(self):
         self.assertIsNone(owners("docs/AUTOMERGE.md"))
 

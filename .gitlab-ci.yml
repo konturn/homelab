@@ -57,7 +57,7 @@
 #   AUTO-MERGE (see docs/AUTOMERGE.md)
 #   automerge:test + automerge:eligibility (MR, informational)
 #   automerge:sweep / automerge:report (scheduled on main, AUTOMERGE_TASK=sweep|report)
-#   router:deploy-service (main, auto-merged commits only; replaces the full deploys)
+#   <host>:deploy-service (main, auto-merged commits only; replaces the full deploys)
 #
 #   GITLAB SETTINGS (see docs/GITLAB_SETTINGS.md)
 #   gitlab:settings (main: scheduled daily SCHEDULED_TASK=gitlab-settings, and on changes)
@@ -217,7 +217,7 @@ variables:
   rules:
     - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "full-deploy" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
 
-# Commits merged by the auto-merge policy get router:deploy-service instead of
+# Commits merged by the auto-merge policy get <host>:deploy-service instead of
 # the full host deploys; those stay available as manual jobs.
 .automerged_commit_manual:
   rules:
@@ -1938,13 +1938,16 @@ automerge:test:
   needs: []
   script:
     - python3 -m unittest discover -s ci/automerge -p 'test_*.py' -v
-    - ansible-playbook -i ansible/inventory.yml ansible/router-service-update.yml --syntax-check
+    - ansible-playbook -i ansible/inventory.yml ansible/service-update.yml -e automerge_host=router.lab.nkontur.com --syntax-check
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - ci/**/*
-        - ansible/router-service-update.yml
+        - ansible/service-update.yml
+        - ansible/inventory.yml
         - ansible/roles/configure-homelab-services/**/*
+        - docker/docker-compose*.yml
+        - renovate.json
         - CODEOWNERS
         - .gitlab-ci.yml
 
@@ -1972,7 +1975,7 @@ automerge:eligibility:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
-        - docker/docker-compose.yml
+        - docker/docker-compose*.yml
 
 # Scheduled (e.g. every 15 min) with AUTOMERGE_TASK=sweep: labels eligible MRs
 # and merges at most one MR whose pipeline has passed.
@@ -1996,16 +1999,14 @@ automerge:report:
   rules:
     - if: $CI_COMMIT_BRANCH == "main" && $AUTOMERGE_TASK == "report" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
 
-# Per-service deploy for commits merged by automerge:sweep.
-router:deploy-service:
+# Per-service deploy for commits merged by automerge:sweep, one job per host
+# (deploy_hosts in ci/automerge-policy.yml). The sweep writes the trailer
+# "Automerge-Deploy: [router] [zwave] ..." from main's policy and inventory;
+# plan-deploy derives the hosts again and refuses a job its commit does not
+# deploy to. Commits merged before the trailer existed deploy on the router.
+.deploy_service:
   extends: .ansible
   stage: deploy
-  resource_group: deploy-router
-  # environment: enables "prevent outdated deployment jobs"; with the
-  # resource group in newest_ready_first mode, older queued deploys are skipped.
-  # Both settings live in GitLab, enforced by gitlab:settings.
-  environment:
-    name: router
   id_tokens:
     VAULT_ID_TOKEN:
       aud: https://vault.lab.nkontur.com:8200
@@ -2013,6 +2014,58 @@ router:deploy-service:
     GIT_DEPTH: "20"
     AUTOMERGE_PLAN: "$CI_PROJECT_DIR/.automerge/plan.json"
     AUTOMERGE_RESULT: "$CI_PROJECT_DIR/.automerge/result.json"
+  script:
+    - mkdir -p .automerge
+    - |
+      if ! python3 ci/automerge/automerge.py plan-deploy --host "$AUTOMERGE_DEPLOY_TARGET" --out "$AUTOMERGE_PLAN"; then
+        python3 ci/automerge/automerge.py notify \
+          --subject "Homelab auto-merge: deploy refused on ${AUTOMERGE_DEPLOY_TARGET} (${CI_COMMIT_SHORT_SHA})" \
+          --message "plan-deploy refused this auto-merged commit, so nothing was deployed on ${AUTOMERGE_DEPLOY_TARGET} and main references an image that is not running there. Run the manual ${AUTOMERGE_DEPLOY_TARGET}:deploy job if a full deploy is wanted." \
+          && touch .automerge/alerted
+        exit 1
+      fi
+    - AUTOMERGE_HOST=$(python3 -c 'import json,os; print(json.load(open(os.environ["AUTOMERGE_PLAN"]))["host"])')
+    - |
+      if ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp -e "automerge_host=${AUTOMERGE_HOST}" ansible/service-update.yml; then
+        python3 ci/automerge/automerge.py deploy-report --plan "$AUTOMERGE_PLAN" --result "$AUTOMERGE_RESULT" --status success || true
+      else
+        # deploy-report opens the rollback issue and revert MR and mails root
+        python3 ci/automerge/automerge.py deploy-report --plan "$AUTOMERGE_PLAN" --result "$AUTOMERGE_RESULT" --status failed \
+          && touch .automerge/alerted
+        echo "=================================================================="
+        echo "AUTO-MERGE DEPLOY FAILED - services rolled back (see above);"
+        echo "a rollback issue and revert MR were opened and auto-merge is paused."
+        echo "=================================================================="
+        exit 1
+      fi
+  # Any other failure (timeout, cancellation, a crash before deploy-report)
+  # still mails root (over SSH with the key in `tmp`). This replaces .ansible's
+  # after_script, so it removes the key itself.
+  after_script:
+    - |
+      if [ "$CI_JOB_STATUS" != success ] && [ ! -e .automerge/alerted ]; then
+        python3 ci/automerge/automerge.py notify \
+          --subject "Homelab auto-merge: ${CI_JOB_NAME} ${CI_JOB_STATUS} (${CI_COMMIT_SHORT_SHA})" \
+          --message "The per-service deploy ended (${CI_JOB_STATUS}) without recording an outcome. The target services may be on either image: check the host and the job log." || true
+      fi
+    - rm -f tmp
+  artifacts:
+    when: always
+    paths:
+      - .automerge/plan.json
+      - .automerge/result.json
+    expire_in: 30 days
+
+router:deploy-service:
+  extends: .deploy_service
+  resource_group: deploy-router
+  # environment: enables "prevent outdated deployment jobs"; with the
+  # resource group in newest_ready_first mode, older queued deploys are skipped.
+  # Both settings live in GitLab, enforced by gitlab:settings.
+  environment:
+    name: router
+  variables:
+    AUTOMERGE_DEPLOY_TARGET: router
   needs:
     - job: vault:configure
       optional: true
@@ -2035,49 +2088,38 @@ router:deploy-service:
       optional: true
     - job: snapclient:build
       optional: true
-  script:
-    - mkdir -p .automerge
-    - |
-      if ! python3 ci/automerge/automerge.py plan-deploy --out "$AUTOMERGE_PLAN"; then
-        python3 ci/automerge/automerge.py notify \
-          --subject "Homelab auto-merge: deploy refused (${CI_COMMIT_SHORT_SHA})" \
-          --message "plan-deploy refused this auto-merged commit, so nothing was deployed and main references an image that is not running. Run the manual router:deploy job if a full deploy is wanted." \
-          && touch .automerge/alerted
-        exit 1
-      fi
-    - |
-      if ansible-playbook -i ansible/inventory.yml -u root --private-key=tmp ansible/router-service-update.yml; then
-        python3 ci/automerge/automerge.py deploy-report --plan "$AUTOMERGE_PLAN" --result "$AUTOMERGE_RESULT" --status success || true
-      else
-        # deploy-report opens the rollback issue and revert MR and mails root
-        python3 ci/automerge/automerge.py deploy-report --plan "$AUTOMERGE_PLAN" --result "$AUTOMERGE_RESULT" --status failed \
-          && touch .automerge/alerted
-        echo "=================================================================="
-        echo "AUTO-MERGE DEPLOY FAILED - services rolled back (see above);"
-        echo "a rollback issue and revert MR were opened and auto-merge is paused."
-        echo "=================================================================="
-        exit 1
-      fi
-  # Any other failure (timeout, cancellation, a crash before deploy-report)
-  # still mails root (over SSH with the key in `tmp`). This replaces .ansible's
-  # after_script, so it removes the key itself.
-  after_script:
-    - |
-      if [ "$CI_JOB_STATUS" != success ] && [ ! -e .automerge/alerted ]; then
-        python3 ci/automerge/automerge.py notify \
-          --subject "Homelab auto-merge: router:deploy-service ${CI_JOB_STATUS} (${CI_COMMIT_SHORT_SHA})" \
-          --message "The per-service deploy ended (${CI_JOB_STATUS}) without recording an outcome. The target services may be on either image: check the host and the job log." || true
-      fi
-    - rm -f tmp
-  artifacts:
-    when: always
-    paths:
-      - .automerge/plan.json
-      - .automerge/result.json
-    expire_in: 30 days
   rules:
     - !reference [.automerge_task_skip, rules]
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_MESSAGE =~ /Automerge-Policy: image-update/'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_MESSAGE =~ /Automerge-Deploy:.*\[router\]/'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_MESSAGE =~ /Automerge-Policy: image-update/ && $CI_COMMIT_MESSAGE !~ /Automerge-Deploy:/'
+
+zwave:deploy-service:
+  extends: .deploy_service
+  resource_group: deploy-zwave
+  environment:
+    name: zwave
+  variables:
+    AUTOMERGE_DEPLOY_TARGET: zwave
+  needs:
+    - job: vault:configure
+      optional: true
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_MESSAGE =~ /Automerge-Deploy:.*\[zwave\]/'
+
+satellite-2:deploy-service:
+  extends: .deploy_service
+  resource_group: deploy-satellite-2
+  environment:
+    name: satellite-2
+  variables:
+    AUTOMERGE_DEPLOY_TARGET: satellite-2
+  needs:
+    - job: vault:configure
+      optional: true
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_MESSAGE =~ /Automerge-Deploy:.*\[satellite-2\]/'
 
 # =============================================================================
 # GitLab project settings that .gitlab-ci.yml cannot express (see docs/GITLAB_SETTINGS.md)

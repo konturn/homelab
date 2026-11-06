@@ -11,7 +11,7 @@ the `gitlab:settings` CI job.
 | Project `ci_forward_deployment_enabled` ("Prevent outdated deployment jobs") | `true` | With the deploy jobs' `environment:`, an older deploy still waiting for its resource group is skipped once a newer one has run. |
 | Instance plan limit `ci_pipeline_schedules` (plan `default`) | `20` | GitLab allows 10 pipeline schedules per project by default; this project has 14 (deploy, reports, drift checks, NETGEAR firmware check and rollout, renovate, automerge, this job). Raised by hand on 2026-10-20 (Admin > plan limits, the same as `PUT /application/plan_limits`), now enforced here. |
 
-`router:deploy` and `router:deploy-service` share `deploy-router`. Resource
+`<host>:deploy` and `<host>:deploy-service` share `deploy-<host>` (router, zwave, satellite-2). Resource
 groups for the other jobs (`netgear-switches`, `aruba-iap`, `denon`, `automerge`,
 `renovate`, `report-trivy`) stay `unordered` on purpose.
 

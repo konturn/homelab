@@ -151,6 +151,36 @@ class LabelTest(unittest.TestCase):
                           ["influxdb"], by_title=False))
 
 
+class DashboardTickTest(unittest.TestCase):
+    DESC = "\n".join([
+        "## Awaiting Schedule",
+        "",
+        " - [ ] <!-- unschedule-branch=renovate/alpine-3.x -->chore(deps): update alpine docker tag",
+        " - [ ] <!-- create-all-awaiting-schedule-prs -->**Create all awaiting schedule MRs at once**",
+        "## Rate-Limited",
+        " - [ ] <!-- unlimit-branch=renovate/router-lscr.io-linuxserver-prowlarr-latest -->"
+        "chore(deps): update lscr.io/linuxserver/prowlarr:latest docker digest to 431d7ef (router)",
+        " - [ ] <!-- unlimit-branch=renovate/router-influxdb-2.8.0 -->"
+        "chore(deps): update influxdb:2.8.0 docker digest to e6d293b (router)",
+        "## Open",
+        " - [ ] <!-- rebase-branch=renovate/router-redis-8.x -->[chore(deps): update redis docker tag](!991)",
+    ])
+
+    def test_ticks_only_held_back_updates_of_affected_images(self):
+        desc, ticked = trivy_label.tick_held_back(
+            self.DESC, ["lscr.io/linuxserver/prowlarr", "redis"], [])
+        self.assertEqual(ticked, ["renovate/router-lscr.io-linuxserver-prowlarr-latest"])
+        self.assertIn(" - [x] <!-- unlimit-branch=renovate/router-lscr.io-linuxserver-prowlarr-latest -->", desc)
+        # open MRs (rebase-branch) and unrelated updates stay untouched
+        self.assertIn(" - [ ] <!-- rebase-branch=renovate/router-redis-8.x -->", desc)
+        self.assertIn(" - [ ] <!-- unlimit-branch=renovate/router-influxdb-2.8.0 -->", desc)
+        self.assertEqual(len(desc.split("\n")), len(self.DESC.split("\n")))
+
+    def test_nothing_affected(self):
+        desc, ticked = trivy_label.tick_held_back(self.DESC, ["nginx"], [])
+        self.assertEqual((desc, ticked), (self.DESC, []))
+
+
 class AppUpdatesTest(unittest.TestCase):
     def test_nextcloud(self):
         out = ("Nextcloud 33.0.6 is available. Get more information on how to update at https://x.\n"

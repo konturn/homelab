@@ -1,6 +1,6 @@
 # Render the Jinja2 compose file(s) into the host's ansible state directory.
 # Shared by the full deploy (main.yml) and the per-service deploy
-# (ansible/router-service-update.yml). `compose_src_dir` defaults to the
+# (ansible/service-update.yml). `compose_src_dir` defaults to the
 # repo's docker/ directory; the per-service deploy points it at the pre-merge
 # copy when rolling back.
 - name: Template out compose file to ansible state directory on host

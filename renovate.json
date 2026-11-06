@@ -37,7 +37,10 @@
     "schedule": []
   },
   "major": {
-    "dependencyDashboardApproval": true
+    "dependencyDashboardApproval": true,
+    "addLabels": [
+      "major"
+    ]
   },
   "enabledManagers": [
     "docker-compose",
@@ -142,6 +145,95 @@
       ]
     },
     {
+      "description": "Compose files no host renders (docker_compose_file_names in ansible/inventory.yml): nothing would deploy or health-check an update there. zigbee2mqtt runs from docker/docker-compose.yml",
+      "matchFileNames": [
+        "docker/docker-compose-zigbee.yml",
+        "docker/docker-compose-satellite.yml"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Images used only by services under the retired `wordpress` compose profile (blog, wordpress_db). A per-service deploy would start them, so they are not updated (docs/AUTOMERGE.md)",
+      "matchFileNames": [
+        "docker/docker-compose.yml"
+      ],
+      "matchPackageNames": [
+        "mysql",
+        "wordpress"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Auto-merge class (docs/AUTOMERGE.md): non-major updates in the deployed compose files, which the auto-merge sweep merges on its own. Proposed daily (digest refreshes too) and outside the MR limits, so updates waiting for a human (majors, GitLab) cannot hold them back. Excludes the denylisted images and the images whose update kinds are restricted; keep in sync with ci/automerge-policy.yml (checked by ci/automerge/test_fast_track.py)",
+      "matchFileNames": [
+        "docker/docker-compose.yml",
+        "docker/docker-compose-observability.yml",
+        "docker/docker-compose-zwave.yml"
+      ],
+      "matchPackageNames": [
+        "/.+/",
+        "!gitlab/gitlab-ee",
+        "!gitlab/gitlab-ce",
+        "!gitlab/gitlab-runner",
+        "!hashicorp/vault",
+        "!tecnativa/docker-socket-proxy",
+        "!homeassistant/home-assistant",
+        "!influxdb",
+        "!nextcloud",
+        "!vaultwarden/server"
+      ],
+      "matchUpdateTypes": [
+        "patch",
+        "minor",
+        "digest",
+        "pinDigest"
+      ],
+      "schedule": [
+        "after 1am and before 7am"
+      ],
+      "prConcurrentLimit": 0,
+      "branchConcurrentLimit": 0,
+      "prHourlyLimit": 4,
+      "prPriority": 5
+    },
+    {
+      "description": "Auto-merge class, restricted kinds (docs/AUTOMERGE.md): InfluxDB digest and patch updates (its minor releases stay reviewed). Same treatment as the rule above",
+      "matchFileNames": [
+        "docker/docker-compose.yml"
+      ],
+      "matchPackageNames": [
+        "influxdb"
+      ],
+      "matchUpdateTypes": [
+        "patch",
+        "digest",
+        "pinDigest"
+      ],
+      "schedule": [
+        "after 1am and before 7am"
+      ],
+      "prConcurrentLimit": 0,
+      "branchConcurrentLimit": 0,
+      "prHourlyLimit": 4,
+      "prPriority": 5
+    },
+    {
+      "description": "Auto-merge denylist (docs/AUTOMERGE.md): the sweep never merges these. Labelled so the pending update stays visible; keep in sync with denylist.images in ci/automerge-policy.yml (checked by ci/automerge/test_fast_track.py)",
+      "matchPackageNames": [
+        "gitlab/gitlab-ee",
+        "gitlab/gitlab-ce",
+        "gitlab/gitlab-runner",
+        "hashicorp/vault",
+        "tecnativa/docker-socket-proxy"
+      ],
+      "addLabels": [
+        "automerge-manual"
+      ],
+      "prBodyNotes": [
+        "**Manual merge.** This image is on the auto-merge denylist (`ci/automerge-policy.yml`, reason there), so the sweep will not merge it. See \"GitLab updates\" in docs/AUTOMERGE.md before merging a GitLab update."
+      ]
+    },
+    {
       "description": "Locally built images (pushed by CI) have no upstream to track",
       "matchPackageNames": [
         "gitlab-registry.lab.nkontur.com:443/**"
@@ -236,7 +328,7 @@
       "separateMinorPatch": true
     },
     {
-      "description": "Fast track (docs/AUTOMERGE.md): digest refreshes and patch releases of these images are proposed at any hour and outside the MR limits; the auto-merge sweep merges them once the MR pipeline passes. Keep this list identical to fast_track.images in ci/automerge-allowlist.yml (checked by ci/automerge/test_fast_track.py)",
+      "description": "Fast track (docs/AUTOMERGE.md): digest refreshes and patch releases of these images are proposed at any hour and outside the MR limits; the auto-merge sweep merges them once the MR pipeline passes. Keep this list identical to fast_track.images in ci/automerge-policy.yml (checked by ci/automerge/test_fast_track.py)",
       "matchFileNames": [
         "docker/docker-compose.yml"
       ],

@@ -59,7 +59,7 @@ ALLOW = {
     "allowed_files": [policy.COMPOSE_PATH],
     "services": {
         "plex": {}, "nginx": {}, "lab_nginx": {}, "iot_nginx": {}, "bluebubbles-relay": {},
-        "prowlarr": {}, "homeassistant": {},
+        "prowlarr": {}, "homeassistant": {"updates": ["digest", "patch"]},
         "bitwarden": {"updates": ["digest"]},
         "nextcloud": {"updates": ["digest"]},
     },
@@ -122,11 +122,12 @@ class FastTrackMatcherTests(unittest.TestCase):
         self.assertFalse(v.eligible)
         self.assertFalse(v.fast_track)
 
-    def test_database_digest_not_fast_tracked(self):
+    def test_database_digest_is_general_class(self):
+        # databases are no longer left to a human, but never fast-tracked
         v = evaluate(edit(BASE, f"mariadb:13.0.2@{D1}", f"mariadb:13.0.2@{D2}"))
-        self.assertFalse(v.eligible)
+        self.assertTrue(v.eligible, v.reasons)
         self.assertFalse(v.fast_track)
-        self.assertIn("'nextcloud_db' is not on the auto-merge allowlist", " ".join(v.reasons))
+        self.assertIn("mariadb is not a fast-track image", " ".join(v.notes))
 
     def test_nginx_digest_on_every_service_qualifies(self):
         v = evaluate(BASE.replace(f"1.31.2-alpine3.23-perl@{D1}", f"1.31.2-alpine3.23-perl@{D2}"))
@@ -139,14 +140,23 @@ class FastTrackMatcherTests(unittest.TestCase):
         self.assertTrue(v.fast_track, v.reasons + v.notes)
         self.assertEqual(v.changes[0].kind, "patch")
 
-    def test_fast_track_image_minor_needs_human_in_every_class(self):
+    def test_fast_track_image_minor_goes_to_general_class(self):
+        # minors of fast-track images are not fast-tracked, but merge in the
+        # general class unless the service restricts its update kinds
         for old, new in ((f"pms-docker:1.43.4.10903-e5521bd8c@{D1}", f"pms-docker:1.44.0.11100-0a1b2c3d4@{D2}"),
-                         (f"home-assistant:2026.10.2@{D1}", f"home-assistant:2026.11.0@{D2}"),
                          (f"nginx:1.31.2-alpine3.23-perl@{D1}", f"nginx:1.32.0-alpine3.23-perl@{D2}")):
-            with self.subTest(new=new):
-                v = evaluate(BASE.replace(old, new), author="moltbot")
-                self.assertFalse(v.eligible)
-                self.assertIn("minor update", " ".join(v.reasons))
+            for author in (RENOVATE, "moltbot"):
+                with self.subTest(new=new, author=author):
+                    v = evaluate(BASE.replace(old, new), author=author)
+                    self.assertTrue(v.eligible, v.reasons)
+                    self.assertFalse(v.fast_track)
+
+    def test_restricted_minor_needs_human(self):
+        # homeassistant: updates [digest, patch] (monthly releases migrate its database)
+        v = evaluate(edit(BASE, f"home-assistant:2026.10.2@{D1}", f"home-assistant:2026.11.0@{D2}"))
+        self.assertFalse(v.eligible)
+        self.assertTrue(v.manual)
+        self.assertIn("minor update of homeassistant/home-assistant is not allowed", " ".join(v.reasons))
 
     def test_non_fast_track_image_keeps_general_rules(self):
         v = evaluate(edit(BASE, f"prowlarr:latest@{D1}", f"prowlarr:latest@{D2}"))
@@ -254,7 +264,7 @@ class RepoConfigTests(unittest.TestCase):
     def setUpClass(cls):
         if yaml is None:
             raise unittest.SkipTest("PyYAML not installed")
-        cls.allow = yaml.safe_load((REPO / "ci" / "automerge-allowlist.yml").read_text())
+        cls.allow = yaml.safe_load((REPO / "ci" / "automerge-policy.yml").read_text())
         cls.allow["services"] = {k: (v or {}) for k, v in cls.allow["services"].items()}
         cls.ft = policy.fast_track_config(cls.allow)
         compose = (REPO / policy.COMPOSE_PATH).read_text()
@@ -293,21 +303,21 @@ class RepoConfigTests(unittest.TestCase):
         weekly = next(i for i, r in enumerate(rules) if r.get("matchUpdateTypes") == ["digest"])
         self.assertGreater(rules.index(prompt[0]), weekly)
 
-    def test_every_service_of_a_fast_track_image_is_allowlisted(self):
-        # Renovate changes every line of an image in one MR; one unlisted
-        # service would make every such MR ineligible.
+    def test_every_service_of_a_fast_track_image_qualifies(self):
+        # Renovate changes every line of an image in one MR; one denylisted
+        # or profile-gated service would make every such MR ineligible.
+        info = policy.compose_service_info((REPO / policy.COMPOSE_PATH).read_text())
         for image in self.ft["images"]:
             users = [s for s, i in self.service_image.items() if i == image]
             self.assertTrue(users, f"{image} is not used in the compose file")
             for svc in users:
-                self.assertIn(svc, self.allow["services"], f"{svc} uses fast-track image {image}")
+                self.assertIsNone(policy.deny_reason(svc, image, self.allow), svc)
+                self.assertFalse(info[svc].profiles, svc)
 
     def test_no_database_image_is_fast_tracked(self):
         for image in self.ft["images"]:
             for db in ("mariadb", "mysql", "postgres", "redis", "mongo", "influxdb"):
                 self.assertNotIn(db, image)
-        for svc in ("nextcloud_db", "wordpress_db", "influxdb", "paperless-redis"):
-            self.assertNotIn(svc, self.allow["services"])
 
     def test_migrating_apps_are_digest_only(self):
         for svc in ("nextcloud", "bitwarden"):
