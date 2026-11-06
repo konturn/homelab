@@ -57,7 +57,7 @@ All VLANs use macvlan Docker networks, allowing containers to have their own IP 
 - **Bitwarden** (Vaultwarden) — Password manager (LAN + tailnet only)
 - **Audioserve** — Audiobook streaming (LAN + tailnet only)
 - **Blog** — static files served by nginx (WordPress retired, see docker/wordpress/README.md)
-- **Ombi** — Media request management (LAN + tailnet only)
+- **Ombi** — Media request management (public: friends use it without Tailscale)
 
 **Egress:** Direct to WAN (not through Mullvad VPN).
 
@@ -250,7 +250,7 @@ Internet
 - Port 443 → nginx (10.2.32.1):443
 - Port 32400 → nginx (10.2.32.1):32400 (Plex direct)
 
-Behind 443, Vaultwarden, Audioserve, Home Assistant and Ombi answer only LAN and
+Behind 443, Vaultwarden, Audioserve and Home Assistant answer only LAN and
 tailnet sources (see "Services restricted to LAN + tailnet" below).
 
 ### Internal Service → Internet (via Mullvad)
@@ -367,8 +367,8 @@ tailscale debug prefs | jq '{RouteAll, CorpDNS, AdvertiseRoutes}'
 
 ### Services restricted to LAN + tailnet
 
-Vaultwarden (`bitwarden.`), Audioserve (`booksonic.`), Home Assistant
-(`homeassistant.`) and Ombi (`/plex-requests/`) are served by the external nginx under
+Vaultwarden (`bitwarden.`), Audioserve (`booksonic.`) and Home Assistant
+(`homeassistant.`) are served by the external nginx under
 their public `nkontur.com` names and are reachable over Tailscale through the
 `10.2.0.0/16` subnet route. Tailnet split DNS sends `nkontur.com` queries to Pi-hole,
 which answers every `*.nkontur.com` name with the external nginx address, so clients

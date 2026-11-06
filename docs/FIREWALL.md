@@ -76,7 +76,7 @@ shared with them) rather than a port forward.
 
 | Public | LAN + tailnet only |
 |--------|--------------------|
-| Nextcloud, Plex (`:32400`, `/plex/`), blog, `nkontur.com` site, Telegram webhook (Telegram ranges only) | Vaultwarden (`bitwarden.`), Audioserve (`booksonic.`), Home Assistant (`homeassistant.`), Ombi (`/plex-requests/`) |
+| Nextcloud, Plex (`:32400`, `/plex/`), Ombi (`/plex-requests/`, used by friends without Tailscale), blog, `nkontur.com` site, Telegram webhook (Telegram ranges only) | Vaultwarden (`bitwarden.`), Audioserve (`booksonic.`), Home Assistant (`homeassistant.`) |
 
 WAN SSH to the router stays (key-only, rate-limited) as the out-of-band path for when
 Tailscale itself is down; tailscaled runs on the router, so it cannot be its own fallback.
@@ -114,7 +114,7 @@ Internet-facing services proxied through nginx:
 | Bitwarden | `bitwarden` | Password manager | LAN + tailnet |
 | Nextcloud | `nextcloud` | File sync/share | internet |
 | ~~WordPress~~ | `wordpress` | Retired: blog is static files on nginx (docker/wordpress/README.md) | internet (blog) |
-| Ombi | `ombi` | Plex requests | LAN + tailnet |
+| Ombi | `ombi` | Plex requests | internet |
 | AudioServe | `audioserve` | Audiobook streaming | LAN + tailnet |
 | Home Assistant | `homeassistant` | Smart home (also on internal/iot) | LAN + tailnet |
 
@@ -344,4 +344,4 @@ iptables -A FORWARD -j LOG --log-prefix "FWD-DROPPED: "
 | 2026-03 | Document Docker iptables disabled on router |
 | 2026-10 | excel-vm routes via WAN for client M365 sign-in |
 | 2026-10 | Tailscale: role installs from the pinned apt repo; tailnet → nginx:443 rule; ts-* hooks documented |
-| 2026-10 | Vaultwarden, Audioserve, Home Assistant, Ombi restricted to LAN + tailnet; game-server and port 22 forwards removed |
+| 2026-10 | Vaultwarden, Audioserve, Home Assistant restricted to LAN + tailnet (Ombi stays public); game-server and port 22 forwards removed |
