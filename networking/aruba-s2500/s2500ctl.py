@@ -282,7 +282,8 @@ class Session:
             self.shell.send("enable\n")
             out = self._read(15, extra=r"[Pp]assword:\s*$")
             if re.search(r"[Pp]assword:\s*$", out):
-                self.shell.send((enable_secret or "") + "\n")
+                # ArubaOS password prompts end on "\r"; a "\n" becomes part of the secret.
+                self.shell.send((enable_secret or "") + "\r")
                 out = self._read(15)
             if not out.rstrip().endswith("#"):
                 raise S2500Error("enable mode refused (enable_secret in Vault?)")

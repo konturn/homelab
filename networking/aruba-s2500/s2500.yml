@@ -1,0 +1,35 @@
+# Desired state for the Aruba S2500-48P core switch (edge ports only).
+# s2500cfg.py plan/apply/drift compare it with the switch; see README.md, "Configuration".
+#
+# Only edge copper ports 0/0/0-0/0/47 are managed: their access switching-profile,
+# PoE and description. A port not listed here should have no switching-profile
+# (VLAN 1), PoE on (the default interface-group) and no description.
+# The uplinks 0/1/0-0/1/3, interface mgmt, VLAN interfaces, users, AAA, SNMP,
+# firmware and boot settings are never written by the tool; drift in them shows up
+# against s2500.running-config.txt only.
+name: s2500
+vault_path: homelab/network/aruba-s2500
+vlans: [1, 2, 3, 4, 5, 6]
+# Access switching-profiles (vlan<N> -> access-vlan N). The tool creates a missing
+# one; it never changes an existing profile.
+access_profiles:
+  vlan2: 2
+  vlan3: 3
+  vlan4: 4
+  vlan5: 5
+  vlan6: 6
+# Management VLAN access ports (IPMI, Mac mini, UPS card, spare): never changed by apply.
+protected_ports: ["0/0/0", "0/0/1", "0/0/2", "0/0/3"]
+ports:
+  "0/0/0": {profile: vlan4}   # router IPMI
+  "0/0/1": {profile: vlan4}   # Mac mini
+  "0/0/2": {profile: vlan4}   # UPS network card
+  "0/0/3": {profile: vlan4}
+  "0/0/34": {profile: vlan3}
+  "0/0/35": {profile: vlan3}
+  "0/0/36": {profile: vlan3}
+  "0/0/37": {profile: vlan3}
+  "0/0/44": {profile: vlan2}
+  "0/0/45": {profile: vlan2}
+  "0/0/46": {profile: vlan6}
+  "0/0/47": {profile: vlan6, poe: true, description: "upstairs PoE switch (IoT)"}

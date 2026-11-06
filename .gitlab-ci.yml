@@ -43,6 +43,7 @@
 #   ARUBA S2500 CORE SWITCH (see networking/aruba-s2500/README.md)
 #   aruba-s2500:test (MR + main, offline), aruba-s2500:firmware (main, manual only;
 #   refuses without S2500_FIRMWARE_CONFIRM=I-AM-HOME)
+#   aruba-s2500:drift (scheduled with the AP drift check, IAP_TASK=drift; opens an issue)
 #
 #   DENON AVR (see docs/denon.md; read-only, CI never changes the receiver)
 #   denon:test (MR + main, offline), denon:drift (scheduled, DENON_TASK=drift)
@@ -1569,16 +1570,51 @@ aruba-s2500:test:
   needs: []
   script:
     - python3 -m unittest discover -s networking/aruba-s2500 -p 'test_*.py' -v
+    - python3 networking/aruba-s2500/s2500cfg.py check
   rules:
     - !reference [.automerge_task_skip, rules]
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - networking/aruba-s2500/**/*
+        - networking/switches/aruba-config
         - networking/firmware_night.py
         - .gitlab-ci.yml
     - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
       changes:
         - networking/aruba-s2500/**/*
+        - networking/switches/aruba-config
+
+# Daily, read-only: compares the live running-config with s2500.running-config.txt
+# and s2500.yml, and opens, updates or closes the `s2500-drift` issue
+# (ci/ipmi/drift_issue.py). It runs on the Aruba AP drift schedule
+# (IAP_TASK=drift), so it needs no pipeline schedule of its own; run it by hand
+# with Run pipeline and SCHEDULED_TASK=s2500-drift. It never sends a config
+# command: s2500cfg.py apply refuses under CI.
+aruba-s2500:drift:
+  extends: .aruba_iap_live
+  stage: deploy
+  needs: []
+  resource_group: aruba-s2500
+  script:
+    - pip3 install -q --break-system-packages --cache-dir /cache/pip paramiko
+    - rc=0; python3 networking/aruba-s2500/s2500cfg.py drift --report s2500-drift.md --export s2500-live.running-config.txt || rc=$?
+    - |
+      python3 ci/ipmi/drift_issue.py --rc "$rc" --report s2500-drift.md --label s2500-drift \
+        --title "Aruba S2500 configuration differs from the repo (s2500cfg.py drift)" \
+        --check-name "s2500cfg.py drift"
+    - |
+      if [ "$rc" -ne 0 ]; then
+        echo "s2500cfg.py drift exited with $rc (2 = drift; see networking/aruba-s2500/README.md)"
+        exit 1
+      fi
+  artifacts:
+    when: always
+    paths:
+      - s2500-drift.md
+      - s2500-live.running-config.txt
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && ($IAP_TASK == "drift" || $SCHEDULED_TASK == "s2500-drift") && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
 
 # Manual only. Run pipeline / play with S2500_FIRMWARE_CONFIRM=I-AM-HOME (and be at
 # home, with the serial console); S2500_FIRMWARE_DRY_RUN=1 checks everything and

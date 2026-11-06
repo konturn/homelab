@@ -66,5 +66,22 @@ class Tests(unittest.TestCase):
         self.assertEqual(drift_issue.main(["--rc", "1", "--report", "/nonexistent"]), 1)
 
 
+
+class ConfigureTests(unittest.TestCase):
+    def tearDown(self):
+        drift_issue.configure("ipmi-drift", "Router BMC settings differ from the desired state (ipmictl)",
+                              "ipmictl check")
+
+    def test_other_label(self):
+        drift_issue.configure("s2500-drift", "S2500 drift", "s2500cfg.py drift")
+        gl = FakeGl()
+        drift_issue.run(gl, 2, "x", "j")
+        (m, p, body), = [c for c in gl.calls if c[0] == "POST"]
+        self.assertEqual((body["labels"], body["title"]), ("s2500-drift", "S2500 drift"))
+        self.assertIn("<!-- s2500-drift-report -->", body["description"])
+        gl = FakeGl(issues=[{"iid": 3}])
+        drift_issue.run(gl, 0, "", "j")
+        self.assertIn("`s2500cfg.py drift` passed", gl.calls[1][2]["body"])
+
 if __name__ == "__main__":
     unittest.main()

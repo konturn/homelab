@@ -3,15 +3,24 @@
 The S2500-48P (ArubaOS-MAS 7.4) is the core switch: the router's uplinks
 (port-channel 0) and both NETGEAR switches hang off it. Its own address is
 10.100.0.1 on the out-of-band `interface mgmt` port, cabled straight to the
-router's `enp2s0f1` (10.100.0.2/24). Its configuration is the template in
-`networking/switches/aruba-config`; this directory covers inventory and firmware.
+router's `enp2s0f1` (10.100.0.2/24). This directory covers its configuration
+(desired state, a committed snapshot, drift checks and a narrow `apply`),
+inventory and firmware.
 
 | File | Purpose |
 |---|---|
 | `s2500ctl.py` | Read-only inventory over the SSH CLI; firmware status, check-latest, manual upgrade |
+| `s2500cfg.py` | Configuration: `export`, `plan`, `drift`, `apply` (allow-listed edge-port changes only), `check` |
+| `s2500.yml` | Desired state: access switching-profiles and edge ports (profile, PoE, description) |
+| `s2500.running-config.txt` | Sanitized `show running-config` (secrets replaced by `<redacted>`), the drift baseline |
 | `firmware.yml` | Desired firmware: release, image file name, SHA-256 |
 | `known_hosts` | The switch's SSH host key (pinned; ssh-rsa is the only type it offers) |
-| `test_s2500ctl.py`, `testdata/` | Offline unit tests |
+| `test_s2500ctl.py`, `test_s2500cfg.py`, `testdata/` | Offline unit tests |
+
+`networking/switches/aruba-config` is the same configuration as an Ansible
+template (`enable secret` from `ARUBA_CONFIG_SECRET`, the other redacted lines
+left out). `s2500cfg.py render-template` writes it from the snapshot, and
+`s2500cfg.py check` (in `aruba-s2500:test`) fails when the two disagree.
 
 **Rebooting the S2500 takes down the entire LAN**: every VLAN, the APs, the
 NETGEAR switches, and the router's own uplinks. A bad image can leave it
@@ -20,27 +29,94 @@ unless a person asks for it explicitly (below).
 
 ## Credentials
 
-The tool reads Vault `homelab/network/aruba-s2500`:
+`homelab/network/aruba-s2500` in Vault is the canonical entry:
 
 | Field | Value |
 |---|---|
 | `host` | `10.100.0.1` (optional; the default) |
-| `username` | a management user (`mgmt-user`); a read-only role is enough for `inventory` and `status`, `upgrade` needs root |
+| `username` | `admin` (`mgmt-user`, root role) |
 | `password` | its password |
-| `enable_secret` | the `enable` secret, if the user lands in `>` mode and `enable` asks for one |
+| `enable_secret` | the `enable` secret (plain text) |
 
-The path does not exist yet, so the tool is inert: `inventory` and `upgrade`
-exit 4 with "no S2500 credentials", and `firmware status` falls back to SNMP
-for the running version. The switch accepts password logins only (no public
-key). `homelab/infrastructure/aruba` (`password`, `config_secret`) predates
-this tool and is not used by it.
+`admin` logs in to `>` (user) mode, where almost nothing works: `show
+running-config`, `show interface` and `configure terminal` all need `enable`.
+The tools send `enable` and the secret on login. Two ArubaOS quirks:
+
+- The enable secret is at most **15 characters**. A longer one is not accepted.
+- Interactive password prompts (the `enable` prompt, `enable secret`) take the
+  input up to `\r`. A `\n` after the secret becomes part of it, and `enable` fails.
+
+The switch accepts password logins only (no public key). The older entries
+`homelab/infrastructure/aruba` (`password`, `config_secret`) and
+`homelab/infrastructure/switch` (`admin_password`) predate this directory and are
+not used; `config_secret` is the hashed form from a config export, not the
+enable secret. Keep `network/aruba-s2500` current; the old entries are left in
+place for history only.
 
 Locally: `S2500_HOST`, `S2500_USER`, `S2500_PASS`, `S2500_ENABLE` instead of Vault.
+
+## Configuration
+
+`s2500.yml` manages the 48 edge copper ports (0/0/0-0/0/47): each port's access
+switching-profile (`vlan<N>`, or `default` = VLAN 1), PoE (on by default through
+the `default` interface-group) and description. A port not listed is expected to
+have no switching-profile, PoE on and no description. `access_profiles` lists the
+`vlan<N>` access profiles; a missing one is created, an existing one is never
+changed.
+
+```sh
+python3 s2500cfg.py check               # offline: s2500.yml, snapshot and template agree
+python3 s2500cfg.py plan --offline      # commands for s2500.yml against the snapshot
+python3 s2500cfg.py plan                # ... against the live switch
+python3 s2500cfg.py drift [--report f]  # live vs snapshot and s2500.yml (exit 2 on drift)
+python3 s2500cfg.py export              # rewrite the snapshot from the live switch
+python3 s2500cfg.py apply [--yes]       # dry run without --yes
+```
+
+### What `apply` may change
+
+Every command is checked against an allow-list before anything is sent:
+
+- `interface gigabitethernet 0/0/<0-47>` with `switching-profile "vlan<N>"` /
+  `no switching-profile`, `poe-profile "poe-factory-initial"` / `no poe-profile`,
+  `description "..."` / `no description`;
+- `interface-profile switching-profile "vlan<N>"` with `access-vlan <N>` (new profiles only).
+
+It refuses anything touching port-channels, the uplinks 0/1/x, `interface mgmt`,
+VLANs and VLAN interfaces, trunk or LACP settings, spanning tree, users, AAA,
+SNMP, logging, the enable secret, firmware or boot settings, `write erase`,
+`reload` and interface-groups. `protected_ports` (the management-VLAN access
+ports) are never changed. Turning PoE off is not supported (the switch has no
+PoE-off profile); do it by hand and record it.
+
+`apply` reads the running-config, sends the planned commands, reads it again
+and checks that only the planned blocks changed and nothing is left to do. Only
+then does it `write memory`. If either check fails it stops without saving;
+look at the switch by hand. It never runs in CI. To change a port: edit
+`s2500.yml`, `plan`, `apply --yes`, then `export` and commit the snapshot (and
+`render-template`) in the same MR.
+
+### Drift check
+
+`aruba-s2500:drift` runs daily on `main` on the Aruba AP drift schedule
+(`IAP_TASK=drift`, so it needs no pipeline schedule of its own), or by hand with
+Run pipeline and `SCHEDULED_TASK=s2500-drift`. It runs `s2500cfg.py drift` and
+opens, updates or closes the `s2500-drift` issue (`ci/ipmi/drift_issue.py`). The
+issue shows the edge ports that differ from `s2500.yml` and a diff of the live
+running-config against `s2500.running-config.txt`, which also covers everything
+the tool never writes. Its artifact `s2500-live.running-config.txt` is the
+sanitized live config: to accept a change made by hand, copy it over the
+snapshot, update `s2500.yml`, run `render-template`, and commit.
+
+`controller config <N>` is a revision counter that every `write memory` bumps,
+so the snapshot stores it as `controller config <revision>`. The
+`# ArubaOS Version` header line comes from the running firmware, so an upgrade
+shows up as drift until the snapshot is refreshed.
 
 ## SNMP
 
 The switch answers SNMPv2c (community `public`, read-only view, see
-`networking/switches/aruba-config`) from the router: Telegraf polls it and the
+`s2500.running-config.txt`) from the router: Telegraf polls it and the
 firmware report reads `sysDescr` (`ArubaOS (MODEL: ArubaS2500-48P-US), Version
 7.4.1.12 (72393)`). That gives the running version only; the image partitions
 and the boot partition need the CLI. No switch configuration change is needed.
@@ -116,6 +192,6 @@ and the switch reaches the router over `enp2s0f1`. Add, in
 ```
 
 The TFTP server only runs during the transfer and serves only the one file.
-The CLI syntax above follows the ArubaOS 7.x CLI reference; it has not been run
-against this switch (no credentials yet). Check it with `inventory` and a dry
-run once the credentials are in Vault.
+The `copy tftp:` / `boot system partition` syntax above follows the ArubaOS 7.x
+CLI reference and has not been run against this switch yet; check it with a dry
+run first.
