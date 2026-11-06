@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Router heartbeat every 5 minutes (docs/DEADMAN.md)
+
+[Timer]
+OnCalendar={{ deadman_on_calendar }}
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target

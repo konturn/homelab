@@ -2,6 +2,8 @@
 
 The observability stack covers three pillars — **logs**, **metrics**, and **traces** — plus **alerting** via Grafana.
 
+Grafana alerting runs on the router itself, so it cannot report the router (or its Docker disk) going down. An off-box heartbeat to healthchecks.io covers that: see [DEADMAN.md](DEADMAN.md).
+
 ## Architecture
 
 ```mermaid
