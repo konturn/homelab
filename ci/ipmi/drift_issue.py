@@ -6,6 +6,9 @@ Used by the scheduled ipmi:drift job after it ran ``ipmictl check
 
   drift_issue.py --rc <exit code of ipmictl check> --report <markdown file>
 
+  drift_issue.py --rc N --report FILE --label s2500-drift --title "..." --check-name "s2500cfg.py drift"
+                (other drift jobs, e.g. aruba-s2500:drift, reuse it with their own label)
+
 rc 0: no drift. An open drift issue gets a note and is closed.
 rc 2: drift. The open drift issue gets the report as a note, or a new issue
       is opened (label ``ipmi-drift``). A note is added only when the report
@@ -32,6 +35,7 @@ PROJECT = os.environ.get("CI_PROJECT_ID", "4")
 LABEL = "ipmi-drift"
 TITLE = "Router BMC settings differ from the desired state (ipmictl)"
 MARKER = "<!-- ipmi-drift-report -->"
+CHECK = "ipmictl check"
 
 
 class GitLab:
@@ -80,6 +84,17 @@ def _strip(body):
     return body.split("\nJob: ")[0].strip()
 
 
+def configure(label=None, title=None, check=None):
+    """Point the module at another drift issue (label, title, report marker)."""
+    global LABEL, TITLE, MARKER, CHECK
+    if label:
+        LABEL, MARKER = label, "<!-- %s-report -->" % label
+    if title:
+        TITLE = title
+    if check:
+        CHECK = check
+
+
 def run(gl, rc, report, job_url):
     issues = gl.req("GET", "projects/%s/issues" % PROJECT,
                     {"state": "opened", "labels": LABEL, "per_page": 20}) or []
@@ -87,8 +102,8 @@ def run(gl, rc, report, job_url):
     if rc == 0:
         if issue:
             gl.req("POST", "projects/%s/issues/%s/notes" % (PROJECT, issue["iid"]),
-                   body={"body": "No drift any more: `ipmictl check` passed.%s" %
-                         ((" Job: %s" % job_url) if job_url else "")})
+                   body={"body": "No drift any more: `%s` passed.%s" %
+                         (CHECK, (" Job: %s" % job_url) if job_url else "")})
             gl.req("PUT", "projects/%s/issues/%s" % (PROJECT, issue["iid"]), body={"state_event": "close"})
             print("closed issue #%s" % issue["iid"])
         else:
@@ -112,9 +127,13 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--rc", type=int, required=True)
     ap.add_argument("--report", required=True)
+    ap.add_argument("--label", help="issue label (default %s)" % LABEL)
+    ap.add_argument("--title", help="issue title")
+    ap.add_argument("--check-name", help="the check named in notes (default %s)" % CHECK)
     a = ap.parse_args(argv)
+    configure(a.label, a.title, a.check_name)
     if a.rc not in (0, 2):
-        print("ipmictl check failed (exit %d); no issue update" % a.rc, file=sys.stderr)
+        print("%s failed (exit %d); no issue update" % (CHECK, a.rc), file=sys.stderr)
         return 1
     token = os.environ.get("AUTOMERGE_TOKEN") or os.environ.get("GITLAB_TOKEN")
     if not token:

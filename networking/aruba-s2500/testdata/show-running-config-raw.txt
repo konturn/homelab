@@ -1,0 +1,54 @@
+(ArubaS2500-48P-US) #show running-config
+
+Building Configuration...
+version 7.4
+enable secret 0000000000000000000000000000000000000000000000fake
+hostname "ArubaS2500-48P-US"
+mgmt-user admin root 0000000000000000000000000000000000000000000000fake
+ntp server 192.0.2.1
+interface-profile switching-profile "default"
+!
+interface-profile switching-profile "trunk-main"
+   switchport-mode trunk
+   trunk allowed vlan 1-7
+!
+interface-profile switching-profile "vlan4"
+   access-vlan 4
+!
+interface-profile poe-profile "poe-factory-initial"
+   enable
+!
+interface-profile poe-profile "nopoe"
+!
+interface-profile lacp-profile "test"
+   group-id 0
+   mode active
+!
+interface gigabitethernet "0/0/0"
+   switching-profile "vlan4"
+!
+interface gigabitethernet "0/0/5"
+   description "old printer"
+   poe-profile "nopoe"
+!
+interface gigabitethernet "0/1/0"
+   switching-profile "trunk-main"
+!
+interface gigabitethernet "0/1/2"
+   lacp-profile "test"
+!
+interface mgmt
+   ip address 10.100.0.1 255.255.255.0
+!
+interface port-channel "0"
+   switching-profile "trunk-main"
+!
+interface-group gigabitethernet "default"
+   apply-to ALL
+   poe-profile "poe-factory-initial"
+!
+snmp-server community fakecommunity view ALL
+snmp-server engine-id 0000000000000000000fake
+end
+
+(ArubaS2500-48P-US) #
