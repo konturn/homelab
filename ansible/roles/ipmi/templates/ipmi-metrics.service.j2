@@ -1,0 +1,12 @@
+# {{ ansible_managed }}
+[Unit]
+Description=BMC sensors, chassis and SEL metrics for Telegraf (ansible/roles/ipmi, docs/IPMI.md)
+
+[Service]
+Type=oneshot
+# Read-only on the BMC: in-band reads only (ipmitool -I open).
+ExecStart=/usr/local/sbin/ipmictl metrics --out {{ ipmi_metrics_file }} --state {{ ipmi_state_file }} --desired {{ ipmi_desired_file }}
+TimeoutStartSec=3min
+Nice=10
+IOSchedulingClass=idle
+SyslogIdentifier=ipmi-metrics

@@ -28,6 +28,9 @@
   # when a later role fails (docs/DEADMAN.md).
   - role: deadman
     tags: [deadman]
+  # BMC as code, in-band (docs/IPMI.md): ipmictl, desired state, metrics timer.
+  - role: ipmi
+    tags: [ipmi]
   - role: claude-user
     tags: [claude-user]
     vars:

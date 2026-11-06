@@ -1,0 +1,69 @@
+# Router BMC (Supermicro X9DR3-F) desired state, managed in-band with
+# ipmictl (docs/IPMI.md). Rendered to /etc/ipmictl/desired.yaml.
+#
+# `ipmictl check` compares the BMC with ipmi_desired; the scheduled CI job
+# ipmi:drift runs it daily and opens an issue on drift. Nothing applies it
+# automatically: `ipmictl apply --execute` is run by hand on the router.
+
+# Power restore policy after AC loss. Source of truth for docs/POWER.md
+# ("Restart behaviour"): the server must boot when the UPS restores its
+# outlets after a power-fail shutdown.
+ipmi_power_restore_policy: always-on
+
+# Supermicro fan mode: standard | full | optimal | heavyio.
+ipmi_fan_mode: full
+
+ipmi_desired:
+  schema: 1
+  chassis:
+    power_restore_policy: "{{ ipmi_power_restore_policy }}"
+  fan:
+    mode: "{{ ipmi_fan_mode }}"
+  # Serial over LAN (channel 1). Bit rates in kbps, as `ipmitool sol info`
+  # prints them.
+  sol:
+    channel: 1
+    enabled: true
+    privilege_level: operator
+    volatile_bit_rate: "115.2"
+    non_volatile_bit_rate: "115.2"
+    character_accumulate_level_ms: 50
+    character_send_threshold: 80
+    retry_count: 0
+    retry_interval_ms: 0
+  sel:
+    logging_enabled: true
+  # Check-only: ipmictl never changes LAN settings. The address comes from
+  # the DHCP reservation (networking/dhcp/dhcpd.conf, host ipmi).
+  lan:
+    channel: 1
+    ip_source: dhcp
+    ip_address: "{{ ipmi_address }}"
+    netmask: 255.255.0.0
+    default_gateway: 10.4.0.1
+    vlan: disabled
+    cipher_suite_0: disabled
+  # Check-only.
+  channel_access:
+    channel: 1
+    access_mode: always available
+    privilege_limit: administrator
+  # [lnr, lcr, lnc] / [unc, ucr, unr], as `ipmitool sensor` prints them.
+  # The BMC raises SEL events and fan/temperature status from these.
+  sensor_thresholds:
+    FAN1: {lower: [150, 225, 300]}
+    FAN2: {lower: [150, 225, 300]}
+    FAN3: {lower: [150, 225, 300]}
+    FAN4: {lower: [300, 450, 600]}
+    FAN5: {lower: [300, 450, 600]}
+    FAN6: {lower: [300, 450, 600]}
+    CPU1 Temp: {upper: [86, 89, 91]}
+    CPU2 Temp: {upper: [86, 89, 91]}
+    System Temp: {upper: [80, 85, 90]}
+    PCH Temp: {upper: [90, 95, 100]}
+
+# Metrics export (Telegraf [[inputs.file]] reads ipmi_metrics_file).
+ipmi_metrics_on_calendar: "*:0/2"
+ipmi_metrics_file: /var/lib/ipmictl/bmc.influx
+ipmi_state_file: /var/lib/ipmictl/sel-state.json
+ipmi_desired_file: /etc/ipmictl/desired.yaml

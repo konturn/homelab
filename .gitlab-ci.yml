@@ -50,6 +50,9 @@
 #   UPS (see docs/POWER.md; CI never sends a command to the UPS or its card)
 #   ups:test (MR + main, offline), ups-card:drift (scheduled, SCHEDULED_TASK=ups-card-drift)
 #
+#   ROUTER BMC (see docs/IPMI.md; CI never writes to the BMC)
+#   ipmi:test (MR + main, offline), ipmi:drift (scheduled, SCHEDULED_TASK=ipmi-drift; opens an issue)
+#
 #   AUTO-MERGE (see docs/AUTOMERGE.md)
 #   automerge:test + automerge:eligibility (MR, informational)
 #   automerge:sweep / automerge:report (scheduled on main, AUTOMERGE_TASK=sweep|report)
@@ -1726,6 +1729,62 @@ ups-card:drift:
     expire_in: 30 days
   rules:
     - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "ups-card-drift" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+
+# =============================================================================
+# Router BMC (ansible/roles/ipmi, see docs/IPMI.md)
+# =============================================================================
+# The BMC is read in-band on the router by ipmictl (installed by the ipmi
+# role). No job here changes a BMC setting: ipmi:drift runs `ipmictl check`
+# only, and `ipmictl apply` refuses to write under CI.
+
+ipmi:test:
+  extends: .interruptible
+  stage: validate
+  image: willhallonline/ansible:latest
+  needs: []
+  script:
+    - python3 -m unittest discover -s ansible/roles/ipmi/files -p 'test_*.py' -v
+    - python3 -m unittest discover -s ci/ipmi -p 'test_*.py' -v
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - ansible/roles/ipmi/**/*
+        - ci/ipmi/**/*
+        - .gitlab-ci.yml
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - ansible/roles/ipmi/**/*
+        - ci/ipmi/**/*
+
+# Scheduled daily with SCHEDULED_TASK=ipmi-drift (protected runner): runs
+# `ipmictl check` on the router over SSH and opens, updates or closes the
+# `ipmi-drift` issue. Fails on drift or when the check cannot run.
+ipmi:drift:
+  extends: .ansible
+  stage: deploy
+  needs: []
+  resource_group: router-bmc
+  script:
+    - rc=0
+    - |
+      ssh -i tmp -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 \
+        -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$CI_PROJECT_DIR/ansible/known_hosts" -o LogLevel=ERROR \
+        root@10.4.0.1 "/usr/local/sbin/ipmictl check --markdown" > ipmi-drift.md || rc=$?
+    - cat ipmi-drift.md
+    - python3 ci/ipmi/drift_issue.py --rc "$rc" --report ipmi-drift.md
+    - |
+      if [ "$rc" -ne 0 ]; then
+        echo "ipmictl check exited with $rc (2 = drift; see docs/IPMI.md)"
+        exit 1
+      fi
+  artifacts:
+    when: always
+    paths:
+      - ipmi-drift.md
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "ipmi-drift" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
 
 # =============================================================================
 # Scheduled read-only reports for the OpenClaw Morning Digest (ci/reports/README.md)

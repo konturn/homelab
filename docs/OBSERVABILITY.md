@@ -4,6 +4,8 @@ The observability stack covers three pillars — **logs**, **metrics**, and **tr
 
 Grafana alerting runs on the router itself, so it cannot report the router (or its Docker disk) going down. An off-box heartbeat to healthchecks.io covers that: see [DEADMAN.md](DEADMAN.md).
 
+Server hardware events from the BMC (SEL entries, PSU, fan and temperature status) are exported in-band by `ipmi-metrics.timer` and alerted on by the `bmc-*` rules: see [IPMI.md](IPMI.md).
+
 ## Architecture
 
 ```mermaid
