@@ -145,7 +145,7 @@ class TestBumpMr(unittest.TestCase):
 
 
 class TestRollout(unittest.TestCase):
-    def run_rollout(self, rc, output, env=None, issues=None):
+    def run_rollout(self, rc, output, env=None, issues=None, night=None):
         gl = FakeGitLab({"/issues": issues or []})
         am, mails = fake_am(gl)
         script = f"import sys; sys.stdout.write({output!r}); sys.exit({rc})"
@@ -155,17 +155,18 @@ class TestRollout(unittest.TestCase):
         def popen(cmd, **kw):
             seen.append(cmd)
             return real_popen([sys.executable, "-c", script], **kw)
-        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, env or {"CI_PIPELINE_SOURCE": "schedule"},
-                                                                    clear=True), \
-                mock.patch.object(fc, "_am", return_value=am), mock.patch.object(fc.subprocess, "Popen", popen), \
-                redirect_stdout(io.StringIO()):
-            cwd = os.getcwd()
-            os.chdir(tmp)
-            try:
-                got = fc.cmd_rollout(types.SimpleNamespace(cache_dir="/c"))
-                alerted = Path(fc.ALERTED).exists()
-            finally:
-                os.chdir(cwd)
+        with tempfile.TemporaryDirectory() as tmp:
+            env = dict(env or {"CI_PIPELINE_SOURCE": "schedule"}, FIRMWARE_NIGHT_DIR=night or os.path.join(tmp, "night"))
+            with mock.patch.dict(os.environ, env, clear=True), \
+                    mock.patch.object(fc, "_am", return_value=am), mock.patch.object(fc.subprocess, "Popen", popen), \
+                    redirect_stdout(io.StringIO()):
+                cwd = os.getcwd()
+                os.chdir(tmp)
+                try:
+                    got = fc.cmd_rollout(types.SimpleNamespace(cache_dir="/c"))
+                    alerted = Path(fc.ALERTED).exists()
+                finally:
+                    os.chdir(cwd)
         return got, gl, mails, seen, alerted
 
     def test_open_issue_pauses_rollouts(self):
@@ -203,6 +204,42 @@ class TestRollout(unittest.TestCase):
         rc, gl, mails, seen, _ = self.run_rollout(1, "ERROR: x\n", env={"NETGEAR_FIRMWARE_DRY_RUN": "1"})
         self.assertEqual((rc, gl.writes, mails), (1, [], []))
         self.assertIn("--dry-run", seen[0])
+
+
+class TestNightLock(unittest.TestCase):
+    """One firmware rollout per night across NETGEAR and Aruba (networking/firmware_night.py)."""
+
+    def test_upgrade_claims_the_night(self):
+        import json
+        with tempfile.TemporaryDirectory() as night:
+            TestRollout.run_rollout(self, 0, "netgear-movie: upgraded 6.7.0.42 -> 6.7.0.52 in 200s; no drift\n",
+                                    night=night)
+            last = json.loads((Path(night) / "last.json").read_text())
+            self.assertEqual((last["family"], last["night"]), ("netgear", time.strftime("%Y-%m-%d")))
+
+    def test_nothing_upgraded_leaves_the_night_free(self):
+        with tempfile.TemporaryDirectory() as night:
+            TestRollout.run_rollout(self, 0, "netgear-movie: already running 6.7.0.52; nothing to upgrade\n",
+                                    night=night)
+            self.assertFalse((Path(night) / "last.json").exists())
+
+    def test_scheduled_run_skips_a_night_used_by_aruba(self):
+        import firmware_night
+        with tempfile.TemporaryDirectory() as night:
+            with firmware_night.NightLock("aruba-iap", scheduled=False, directory=night) as lk:
+                lk.used("upgraded")
+            rc, gl, mails, seen, _ = TestRollout.run_rollout(self, 1, "ERROR\n", night=night)
+            self.assertEqual((rc, seen, gl.writes, mails), (0, [], [], []))
+            # started by hand, it only waits for a running rollout
+            rc, _, _, seen, _ = TestRollout.run_rollout(self, 0, "", env={"CI_PIPELINE_SOURCE": "web"}, night=night)
+            self.assertEqual(len(seen), 1)
+
+    def test_running_rollout_blocks(self):
+        import firmware_night
+        with tempfile.TemporaryDirectory() as night, firmware_night.NightLock("aruba-iap", False, directory=night):
+            rc, gl, mails, seen, _ = TestRollout.run_rollout(self, 0, "", env={"CI_PIPELINE_SOURCE": "web"},
+                                                            night=night)
+            self.assertEqual((rc, seen), (0, []))
 
 
 if __name__ == "__main__":

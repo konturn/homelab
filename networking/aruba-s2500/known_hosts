@@ -1,0 +1,3 @@
+# S2500 management address (direct link to the router's enp2s0f1, 10.100.0.2).
+# Recorded 2026-11-06 from the router over that link (ssh-rsa is the only host key type the switch offers).
+10.100.0.1 ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAxqmu3LE81hrGC2yoG5Vs9MhUcBe+k+n2uqVYnQh6jB8BOnRYwk0l/7WReu6l8ONOfMBzIg55yxZ4D9fDYOix3qRJNrz8oK22nlICXbxXALa9EyixUNeJSBmyXt9DpzlO9zN4V9p5BaZjOY19B2QxrTdgC2M8uuqOaUnK19O7dDxtqzNVw/BGKslDt1s3iqC3qHtAsJ4lIyIlm6oDTMlQwVOcS/9PNMw6JUy2GLE1jEEDxA+vTg96cYI9FVvwdIEnA+C9mD0N0mLzwEMIFjjP2YupoVKeSLj/nFENniqVkj0ckeh6VhnHBKH5MDZhTrM1yh8S1e/q2ZgUUFS+DDVJOw==

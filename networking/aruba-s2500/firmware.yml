@@ -1,0 +1,9 @@
+# Firmware the S2500 core switch should run (README.md, "Firmware").
+# The upgrade is manual only (aruba-s2500:firmware, S2500_FIRMWARE_CONFIRM=I-AM-HOME).
+# Images are never committed: stage them on the router (README, "Staging an image").
+model: S2500
+# image and sha256 are null for a release whose image was never downloaded here
+# (7.4.1.12 was installed before this file existed).
+version: "7.4.1.12_72393"
+image: null
+sha256: null

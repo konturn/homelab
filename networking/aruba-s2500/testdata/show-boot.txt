@@ -1,0 +1,5 @@
+(ArubaS2500-48P-US) #show boot
+
+Config File: default.cfg
+Boot Partition: PARTITION 0
+(ArubaS2500-48P-US) #

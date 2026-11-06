@@ -1,0 +1,14 @@
+# Firmware the Instant cluster should run (README.md, "Firmware").
+# Instant runs one release per cluster, so this is for every AP.
+# `iapctl.py firmware bump` rewrites version, image and sha256; merging that
+# change is the approval for `aruba-iap:firmware` to upgrade the cluster.
+# Images are never committed: stage them on the router (README, "Staging an image").
+model: AP-515
+image_class: Draco        # Instant image class of the AP-515 (show image version)
+branch: "8.13"            # stay on this release train (8.13.x LSR)
+aps: 2                    # APs expected in the cluster before and after an upgrade
+# sha256 is that of the image file; null only for a release whose image was
+# never downloaded here (8.13.1.0 was installed before this file existed).
+version: "8.13.1.0_93688"
+image: "ArubaInstant_Draco_8.13.1.0_93688"
+sha256: null

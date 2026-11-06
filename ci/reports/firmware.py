@@ -2,10 +2,12 @@
 """Monthly read-only firmware inventory (runs on the router).
 
 NETGEAR switches (web UI config download header), the Aruba Instant cluster
-(REST `show version`), the Aruba S2500 (SNMPv2c sysDescr), and the router's
-BIOS/BMC (dmidecode, ipmitool) and drives (smartctl -i). Nothing is changed on
-any device. Compared against KNOWN_LATEST where an entry exists; that table is
-maintained by hand and dated. Writes firmware.{md,json}.
+(REST `show version`), the Aruba S2500 (SSH CLI through
+networking/aruba-s2500/s2500ctl.py when its credentials are in Vault, else
+SNMPv2c sysDescr), and the router's BIOS/BMC (dmidecode, ipmitool) and drives
+(smartctl -i). Nothing is changed on any device. Compared against KNOWN_LATEST
+where an entry exists; the firmware bump jobs update the MS510TXPP and AP-515
+entries, the others are maintained by hand and dated. Writes firmware.{md,json}.
 """
 
 from __future__ import annotations
@@ -26,8 +28,14 @@ sys.path.insert(0, HERE)
 import common  # noqa: E402
 
 # Latest firmware known for each model: (version, date this entry was checked).
+# AP-515: the release declared in networking/aruba-iap/firmware.yml (the HPE portal
+# cannot be checked automatically; `iapctl.py firmware bump` updates this entry).
+# S2500: ArubaOS-MAS 7.4 is the last train for the S2500 and 7.4.1.12 the newest
+# release known (networking/aruba-s2500/README.md).
 KNOWN_LATEST: Dict[str, Tuple[str, str]] = {
     "MS510TXPP": ("6.7.0.52", "2026-10-19"),
+    "AP-515": ("8.13.1.0", "2026-11-06"),
+    "S2500": ("7.4.1.12", "2026-11-06"),
 }
 
 S2500_HOST = os.environ.get("S2500_HOST", "10.100.0.1")
@@ -121,13 +129,39 @@ def aruba_iap(secrets: dict) -> dict:
         return {"name": "aruba-iap", "error": common.clip(f"{type(e).__name__}: {e}", 80)}
 
 
-def aruba_s2500() -> dict:
+def _s2500ctl():
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(HERE)), "networking", "aruba-s2500"))
+    import s2500ctl  # type: ignore
+    return s2500ctl
+
+
+def aruba_s2500(secrets: Optional[dict] = None) -> dict:
+    """Running version and both image partitions over SSH when the S2500 credentials
+    are in Vault (homelab/network/aruba-s2500), else the running version from SNMP."""
+    s = (secrets or {}).get("aruba-s2500")
+    out = {"name": "aruba-s2500", "model": "S2500"}
+    if s and s.get("username") and s.get("password"):
+        try:
+            ctl = _s2500ctl()
+            sess = ctl.Session(s.get("host") or S2500_HOST, s["username"], s["password"], s.get("enable_secret"))
+            try:
+                st = ctl.read_state(sess)
+            finally:
+                sess.close()
+            out.update(version=st["running"].release if st["running"] else None, variant=st.get("model"),
+                       source="ssh", partitions=[f"{p['partition']} {p['parsed'] or 'empty'}"
+                                                 + (" (boot)" if p["default_boot"] else "") for p in st["partitions"]])
+            return out
+        except Exception as e:  # noqa: BLE001 - fall back to SNMP below
+            out["ssh_error"] = common.clip(f"{type(e).__name__}: {e}", 80)
     r = common.run(["snmpget", "-v2c", "-c", "public", "-t", "3", "-r", "1", "-Oqv", S2500_HOST, SYS_DESCR],
                    timeout=20)
     if r.returncode != 0 or not r.stdout.strip():
-        return {"name": "aruba-s2500", "model": "S2500", "error": "not reachable without credentials (credentials pending)"}
+        out["error"] = "no answer over SNMP" + ("" if s else " and no CLI credentials in Vault (homelab/network/aruba-s2500)")
+        return out
     ver, model = parse_aruba_version(r.stdout)
-    return {"name": "aruba-s2500", "model": model or "S2500", "version": ver}
+    out.update(version=ver, variant=model, source="snmp")
+    return out
 
 
 def router_platform() -> dict:
@@ -163,6 +197,8 @@ def build_report(d: dict) -> Tuple[str, List[str]]:
             return f"{x['name']} ({x.get('model', '?')}): {x['error']}"
         latest, checked, newer = compare(x.get("model", ""), x.get("version"))
         s = f"{x['name']} ({x.get('model')}): {x.get('version') or '?'}"
+        if x.get("partitions"):
+            s += f" [partitions: {', '.join(x['partitions'])}]"
         if newer:
             updates.append(x["name"])
             s += f" → {latest} available (known-latest table {checked})"
@@ -210,7 +246,8 @@ def main() -> int:
     secrets = common.read_secrets()
     data = {"known_latest": KNOWN_LATEST}
     for key, fn in (("netgear", lambda: netgear(secrets)), ("aruba_iap", lambda: aruba_iap(secrets)),
-                    ("aruba_s2500", aruba_s2500), ("router", router_platform), ("drives", router_drives)):
+                    ("aruba_s2500", lambda: aruba_s2500(secrets)), ("router", router_platform),
+                    ("drives", router_drives)):
         try:
             data[key] = fn()
         except Exception as e:  # noqa: BLE001
