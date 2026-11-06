@@ -36,6 +36,13 @@
 #   ARUBA INSTANT APs (see networking/aruba-iap/README.md)
 #   aruba-iap:test (MR + main, offline) -> aruba-iap:apply (main, on changes)
 #   aruba-iap:apply-protected (main, manual), aruba-iap:drift (scheduled, IAP_TASK=drift)
+#   aruba-iap:firmware-check (scheduled weekly, IAP_TASK=firmware-check; opens a bump MR)
+#   aruba-iap:firmware (scheduled daily in the window, IAP_TASK=firmware; reboots every AP)
+#   (one firmware rollout per night across NETGEAR and Aruba: networking/firmware_night.py)
+#
+#   ARUBA S2500 CORE SWITCH (see networking/aruba-s2500/README.md)
+#   aruba-s2500:test (MR + main, offline), aruba-s2500:firmware (main, manual only;
+#   refuses without S2500_FIRMWARE_CONFIRM=I-AM-HOME)
 #
 #   DENON AVR (see docs/denon.md; read-only, CI never changes the receiver)
 #   denon:test (MR + main, offline), denon:drift (scheduled, DENON_TASK=drift)
@@ -189,8 +196,8 @@ variables:
 # Auto-merge rule fragments (used via !reference).
 # Scheduled pipelines that set AUTOMERGE_TASK, NETGEAR_TASK, IAP_TASK,
 # DENON_TASK or SCHEDULED_TASK run only their own jobs (automerge:* /
-# netgear:drift / aruba-iap:drift / denon:drift / the job whose rule names that
-# SCHEDULED_TASK, e.g. renovate).
+# netgear:drift / aruba-iap:drift / denon:drift / the firmware jobs / the job
+# whose rule names that SCHEDULED_TASK, e.g. renovate).
 .automerge_task_skip:
   rules:
     - if: $AUTOMERGE_TASK || $NETGEAR_TASK || $IAP_TASK || $DENON_TASK || $SCHEDULED_TASK
@@ -1229,6 +1236,7 @@ netgear:test:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - networking/switches/netgear/**/*
+        - networking/firmware_night.py
         - .gitlab-ci.yml
     - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
       changes:
@@ -1390,10 +1398,14 @@ aruba-iap:test:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - networking/aruba-iap/**/*
+        - networking/firmware_night.py
+        - networking/switches/netgear/ngswitch.py
+        - ci/reports/firmware.py
         - .gitlab-ci.yml
     - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
       changes:
         - networking/aruba-iap/**/*
+        - networking/firmware_night.py
 
 .aruba_iap_live:
   image: willhallonline/ansible:latest
@@ -1471,6 +1483,127 @@ aruba-iap:drift:
     expire_in: 30 days
   rules:
     - if: $CI_COMMIT_BRANCH == "main" && $IAP_TASK == "drift" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+
+# Firmware (networking/aruba-iap/README.md, "Firmware updates in CI").
+# aruba-iap:firmware-check: weekly schedule with IAP_TASK=firmware-check. The HPE
+# portal cannot be read without an account, so it looks for a newer image staged
+# on the router and opens a bump MR; "cannot check" exits 3 (a warning, not a failure).
+aruba-iap:firmware-check:
+  extends:
+    - .ansible
+    - .aruba_iap_live
+  image: willhallonline/ansible:2.21.4-alpine-3.22@sha256:6bf175ba6d000691b017a099277ac6cebe6254d99a49670a321e1c6742fd551e
+  stage: deploy
+  needs: []
+  variables:
+    IAP_FIRMWARE_DIR: "/cache/aruba-iap-firmware"
+  script:
+    - python3 networking/aruba-iap/firmware_ci.py bump-mr
+  allow_failure:
+    exit_codes: [3]
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $IAP_TASK == "firmware-check" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+
+# aruba-iap:firmware: upgrades the whole Instant cluster (both APs reboot together;
+# Wi-Fi down ~5-10 min) to the release in networking/aruba-iap/firmware.yml. Runs
+# from the daily schedule with IAP_TASK=firmware at 05:20, only inside
+# IAP_FIRMWARE_WINDOW, and not on a night when a NETGEAR rollout changed anything
+# (shared lock, networking/firmware_night.py); a no-op when the cluster is current.
+# Merging a bump MR is the approval. Started by hand or by OpenClaw (web/API/trigger
+# pipeline with IAP_TASK=firmware) it runs at once; IAP_FIRMWARE_DRY_RUN=1 checks
+# everything without upgrading. Root: the job serves the image on UDP 69.
+aruba-iap:firmware:
+  extends:
+    - .ansible
+    - .aruba_iap_live
+  image:
+    name: willhallonline/ansible:2.21.4-alpine-3.22@sha256:6bf175ba6d000691b017a099277ac6cebe6254d99a49670a321e1c6742fd551e
+    docker:
+      user: root
+  stage: deploy
+  needs: []
+  timeout: 60m
+  variables:
+    IAP_FIRMWARE_WINDOW: "04:45-06:00"
+    # Local time; the job image has no tzdata (see netgear:firmware).
+    TZ: "EST5EDT,M3.2.0,M11.1.0"
+    IAP_TFTP_SERVER: "10.4.0.1"
+    IAP_FIRMWARE_DIR: "/cache/aruba-iap-firmware"
+  script:
+    - pip3 install -q --break-system-packages --cache-dir /cache/pip paramiko
+    - python3 networking/aruba-iap/firmware_ci.py rollout
+  after_script:
+    - |
+      if [ "$CI_JOB_STATUS" != success ] && [ ! -e .aruba-iap-firmware-alerted ] && [ "$IAP_FIRMWARE_DRY_RUN" != 1 ]; then
+        python3 ci/automerge/automerge.py notify \
+          --subject "Homelab: aruba-iap:firmware ${CI_JOB_STATUS}" \
+          --message "aruba-iap:firmware ended (${CI_JOB_STATUS}) without reporting an outcome. The APs may be mid-upgrade: check iapctl.py firmware status and the job log." || true
+      fi
+    - rm -f tmp
+  artifacts:
+    when: always
+    paths:
+      - aruba-iap-firmware.log
+      - aruba-iap-backup/
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $IAP_TASK == "firmware" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "trigger")
+
+# =============================================================================
+# Aruba S2500 core switch (networking/aruba-s2500, see README.md there)
+# =============================================================================
+# Read-only except aruba-s2500:firmware, which is manual only: it refuses unless
+# S2500_FIRMWARE_CONFIRM=I-AM-HOME is set on the run and it is outside the backup
+# window. Rebooting the S2500 drops every network service, CI included.
+
+aruba-s2500:test:
+  extends: .interruptible
+  stage: validate
+  image: willhallonline/ansible:latest
+  needs: []
+  script:
+    - python3 -m unittest discover -s networking/aruba-s2500 -p 'test_*.py' -v
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - networking/aruba-s2500/**/*
+        - networking/firmware_night.py
+        - .gitlab-ci.yml
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - networking/aruba-s2500/**/*
+
+# Manual only. Run pipeline / play with S2500_FIRMWARE_CONFIRM=I-AM-HOME (and be at
+# home, with the serial console); S2500_FIRMWARE_DRY_RUN=1 checks everything and
+# sends nothing (no confirmation needed). Never scheduled.
+aruba-s2500:firmware:
+  extends: .aruba_iap_live
+  image:
+    name: willhallonline/ansible:2.21.4-alpine-3.22@sha256:6bf175ba6d000691b017a099277ac6cebe6254d99a49670a321e1c6742fd551e
+    docker:
+      user: root
+  stage: deploy
+  needs: []
+  resource_group: aruba-s2500
+  timeout: 60m
+  variables:
+    TZ: "EST5EDT,M3.2.0,M11.1.0"
+    S2500_TFTP_SERVER: "10.100.0.2"
+    S2500_FIRMWARE_DIR: "/cache/aruba-s2500-firmware"
+  script:
+    - pip3 install -q --break-system-packages --cache-dir /cache/pip paramiko
+    - |
+      if [ "$S2500_FIRMWARE_DRY_RUN" = 1 ]; then
+        python3 networking/aruba-s2500/s2500ctl.py firmware upgrade --dry-run
+      else
+        python3 networking/aruba-s2500/s2500ctl.py firmware upgrade --night-lock
+      fi
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
 
 # =============================================================================
 # Denon AVR-X6700H (networking/denon, see docs/denon.md)
@@ -1618,6 +1751,9 @@ report:firmware:
       --secret netgear-movie=network/netgear-movie
       --secret netgear-office=network/netgear-office
       --secret aruba-iap=network/aruba-iap
+      --extra networking/aruba-s2500/s2500ctl.py
+      --extra networking/aruba-s2500/known_hosts
+      --secret aruba-s2500=network/aruba-s2500
   rules:
     - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "firmware-report" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
 

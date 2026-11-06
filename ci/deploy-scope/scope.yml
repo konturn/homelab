@@ -50,6 +50,8 @@ shared:
     - ci/reports/**
     - networking/switches/**
     - networking/aruba-iap/**
+    - networking/aruba-s2500/**
+    - networking/firmware_night.py
     - networking/denon/**
     - ansible/tests/**
     - ansible/bootstrap.yml

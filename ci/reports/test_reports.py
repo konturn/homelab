@@ -207,6 +207,35 @@ class FirmwareTest(unittest.TestCase):
         self.assertIn("netgear-movie", summary)
         self.assertIn("6.7.0.52 available", lines[0])
         self.assertIn("2x A fw 1", lines[-1])
+        self.assertIn("aruba-iap (AP-515): 8.13.1.0 LSR (current; checked", lines[1])
+
+    def test_s2500_over_snmp_without_cli_credentials(self):
+        from unittest import mock
+        import subprocess
+        out = subprocess.CompletedProcess([], 0, stdout='"ArubaOS (MODEL: ArubaS2500-48P-US), Version 7.4.1.12 (72393)"\n')
+        with mock.patch.object(firmware.common, "run", return_value=out):
+            x = firmware.aruba_s2500({})
+        self.assertEqual((x["model"], x["version"], x["source"], x["variant"]),
+                         ("S2500", "7.4.1.12", "snmp", "ArubaS2500-48P-US"))
+        _, lines = firmware.build_report({"aruba_s2500": x})
+        self.assertIn("aruba-s2500 (S2500): 7.4.1.12 (current; checked", "\n".join(lines))
+        with mock.patch.object(firmware.common, "run", return_value=subprocess.CompletedProcess([], 1, stdout="")):
+            x = firmware.aruba_s2500({})
+        self.assertIn("no CLI credentials", x["error"])
+
+    def test_s2500_over_ssh(self):
+        from unittest import mock
+        import types
+        ctl = types.SimpleNamespace(
+            Session=lambda *a: types.SimpleNamespace(close=lambda: None),
+            read_state=lambda sess: {"running": types.SimpleNamespace(release="7.4.1.12"), "model": "ArubaS2500-48P-US",
+                                     "partitions": [{"partition": "0:0", "parsed": "7.4.1.12_72393", "default_boot": True},
+                                                    {"partition": "0:1", "parsed": None, "default_boot": False}]})
+        with mock.patch.object(firmware, "_s2500ctl", return_value=ctl):
+            x = firmware.aruba_s2500({"aruba-s2500": {"username": "u", "password": "p"}})
+        self.assertEqual((x["version"], x["source"]), ("7.4.1.12", "ssh"))
+        _, lines = firmware.build_report({"aruba_s2500": x})
+        self.assertIn("[partitions: 0:0 7.4.1.12_72393 (boot), 0:1 empty]", "\n".join(lines))
 
 
 class OsPatchesTest(unittest.TestCase):

@@ -11,6 +11,8 @@ Subcommands
            second file with --current)
   apply    send only the changed blocks, ``commit apply``, re-export, verify
   drift    compare the live config with the desired file; exit 2 on drift
+  firmware status | check-latest | bump | upgrade (see iapfw.py and README,
+           "Firmware"); upgrade reboots every AP
 
 Credentials (live subcommands only)
   IAP_HOST / IAP_USER / IAP_PASS from the environment, or Vault:
@@ -18,7 +20,7 @@ Credentials (live subcommands only)
   VAULT_JWT_ROLE (default "ci-deploy"). Secrets are never printed.
 
 Exit codes: 0 ok / no changes, 1 error, 2 drift or pending changes (plan
-with --detailed-exitcode, drift), 3 refused by a guard.
+with --detailed-exitcode, drift), 3 refused by a guard. firmware: see iapfw.py.
 """
 
 from __future__ import annotations
@@ -32,6 +34,7 @@ import sys
 import time
 import urllib.request
 from dataclasses import dataclass, field
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_DESIRED = os.path.join(HERE, "running-config.conf")
@@ -637,6 +640,83 @@ def compute(current, desired):
     return changes, guards
 
 
+# --------------------------------------------------------------------------
+# Firmware (iapfw.py)
+# --------------------------------------------------------------------------
+
+def _connect(host, user, password):
+    return Session(host, user, password)
+
+
+def _live_drift(creds, desired_path: str, connect=_connect) -> int:
+    sess = connect(*creds)
+    try:
+        changes, guards = compute(live_config(sess), load(desired_path))
+    finally:
+        sess.close()
+    if changes:
+        print(format_plan(changes, guards))
+        print("\nDRIFT: the live configuration differs from %s" % os.path.relpath(desired_path))
+        return 2
+    print("   drift: none (live configuration matches %s)" % os.path.relpath(desired_path))
+    return 0
+
+
+def _backup(creds, backup_dir: str, connect=_connect) -> str:
+    sess = connect(*creds)
+    try:
+        text = HEADER_COMMENT + "\n" + render(live_config(sess))
+    finally:
+        sess.close()
+    os.makedirs(backup_dir, exist_ok=True)
+    path = os.path.join(backup_dir, "running-config-%s.conf" % time.strftime("%Y%m%d-%H%M%S"))
+    with open(path, "w") as f:
+        f.write(text)
+    return path
+
+
+def cmd_firmware(args) -> int:
+    import iapfw
+    try:
+        if args.fwcmd == "bump":
+            iapfw.bump(Path(args.file), version=args.version, image=Path(args.image) if args.image else None,
+                       sha256=args.sha256, known_latest=Path(args.known_latest) if args.known_latest
+                       else iapfw.KNOWN_LATEST_PATH)
+            return 0
+        fw = iapfw.load_firmware(Path(args.file))
+        if args.fwcmd == "check-latest":
+            res = iapfw.check_latest(fw, Path(args.image_dir), vault_kv_read)
+            print("\n".join(iapfw.format_check(res)))
+            if args.json:
+                with open(args.json, "w") as f:
+                    json.dump(res, f, indent=2)
+                    f.write("\n")
+            if res["newer"]:
+                return iapfw.EXIT_NEWER if args.detailed_exitcode else 0
+            return iapfw.EXIT_CANNOT_CHECK if (res["vendor_error"] and args.detailed_exitcode) else 0
+        creds = iap_credentials()
+        if args.fwcmd == "status":
+            state = iapfw.gather(*creds, connect=_connect, log=print)
+            print("== Instant cluster %s: declared %s (%s, branch %s)" % (creds[0], fw["version"], fw["image_class"],
+                                                                          fw["branch"]))
+            for ln in iapfw.describe_state(fw, state):
+                print("   " + ln)
+            plan = iapfw.plan_upgrade(fw, state)
+            print("== " + {"noop": "every AP runs the declared release",
+                           "upgrade": "BEHIND: `firmware upgrade` would upgrade the cluster",
+                           "refuse": "an upgrade would be refused: " + "; ".join(plan["reasons"])}[plan["action"]])
+            return 0
+        # upgrade
+        return iapfw.run_upgrade(
+            fw, Path(args.image_dir), args.tftp_server, args.dry_run, creds, _connect,
+            drift=lambda: _live_drift(creds, args.desired),
+            backup=(lambda: _backup(creds, args.backup_dir)) if args.backup_dir else None,
+            url=args.url)
+    except iapfw.FwError as e:
+        print("ERROR: %s" % e, file=sys.stderr)
+        return 1
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -656,7 +736,37 @@ def main(argv=None) -> int:
                            default=os.environ.get("IAP_ALLOW_PROTECTED", "") in ("1", "true", "yes"),
                            help="allow changes to management VLAN, uplink, mesh, VC address, membership")
             p.add_argument("--dry-run", action="store_true", help="connect and plan, send nothing")
+    f = sub.add_parser("firmware", help="firmware status / check-latest / bump / upgrade (upgrade reboots every AP)")
+    fsub = f.add_subparsers(dest="fwcmd", required=True)
+    fw_file = os.path.join(HERE, "firmware.yml")
+    image_dir = os.environ.get("IAP_FIRMWARE_DIR", "/cache/aruba-iap-firmware")
+    fs = fsub.add_parser("status", help="running and backup partition per AP, upgrade status")
+    fs.add_argument("--file", default=fw_file)
+    fs = fsub.add_parser("check-latest", help="newest release on the declared branch (vendor, staged images)")
+    fs.add_argument("--file", default=fw_file)
+    fs.add_argument("--image-dir", default=image_dir, help="where images are staged (default %(default)s)")
+    fs.add_argument("--json", help="write the result as JSON")
+    fs.add_argument("--detailed-exitcode", action="store_true",
+                    help="exit 2 when a newer release is found, 3 when the vendor cannot be checked")
+    fs = fsub.add_parser("bump", help="declare a newer release in firmware.yml and KNOWN_LATEST")
+    fs.add_argument("--file", default=fw_file)
+    fs.add_argument("--image", help="downloaded image file (hash computed from it)")
+    fs.add_argument("--version", help="e.g. 8.13.1.1_94000 (without --image, with --sha256)")
+    fs.add_argument("--sha256", help="expected SHA-256 (from the download page)")
+    fs.add_argument("--known-latest", help="path of ci/reports/firmware.py")
+    fs = fsub.add_parser("upgrade", help="upgrade the whole cluster to the declared release (reboots every AP)")
+    fs.add_argument("--file", default=fw_file)
+    fs.add_argument("--desired", default=DEFAULT_DESIRED, help="config for the drift checks")
+    fs.add_argument("--image-dir", default=image_dir)
+    fs.add_argument("--tftp-server", default=os.environ.get("IAP_TFTP_SERVER"),
+                    help="router IPv4 the APs reach; serves the verified image on UDP 69 during the transfer")
+    fs.add_argument("--url", help="serve the image elsewhere: an ftp/tftp/http URL for upgrade-image (no hash check)")
+    fs.add_argument("--backup-dir", help="write the live configuration here before upgrading")
+    fs.add_argument("--dry-run", action="store_true", help="read, verify, check drift; send nothing")
     args = ap.parse_args(argv)
+
+    if args.cmd == "firmware":
+        return cmd_firmware(args)
 
     if args.cmd == "export":
         if args.from_file:

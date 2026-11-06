@@ -1,0 +1,12 @@
+(ArubaS2500-48P-US) #show version
+Aruba Operating System Software.
+ArubaOS (MODEL: ArubaS2500-48P-US), Version 7.4.1.12 (72393)
+Website: http://www.arubanetworks.com
+Copyright (c) 2002-2019, Aruba Networks, an HP company.
+Compiled on 2019-08-26 at 05:56:21 UTC (build 72393) by p4build
+
+ROM: System Bootstrap, Version CPBoot 1.2.0.0 (build 39183)
+Switch uptime is 120 days 4 hours 10 minutes 3 seconds
+Reboot Cause: User reboot.
+Supervisor Card
+(ArubaS2500-48P-US) #

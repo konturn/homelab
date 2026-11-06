@@ -1,0 +1,14 @@
+(ArubaS2500-48P-US) #show image version
+----------------------------------
+Partition               : 0:0 (/dev/ud1) **Default boot**
+Software Version        : ArubaOS 7.4.1.12 (Digitally Signed - Production Build)
+Build number            : 72393
+Label                   : 72393
+Built on                : Mon Aug 26 05:56:21 UTC 2019
+----------------------------------
+Partition               : 0:1 (/dev/ud2)
+Software Version        : ArubaOS 7.4.1.11 (Digitally Signed - Production Build)
+Build number            : 71710
+Label                   : 71710
+Built on                : Tue Mar 19 02:10:45 UTC 2019
+(ArubaS2500-48P-US) #

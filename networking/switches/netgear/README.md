@@ -201,6 +201,14 @@ python3 ngswitch.py firmware upgrade --tftp-server 10.4.0.1 netgear-movie.yml
   could not report is mailed by the job's `after_script`.
 - The job runs on the protected runner (host network), as root, so its TFTP
   server can bind 10.4.0.1:69. `NETGEAR_TFTP_SERVER` sets the address.
+- **One firmware rollout per night.** The NETGEAR, Aruba Instant and S2500
+  firmware jobs share a lock in the runner's cache
+  (`networking/firmware_night.py`, `/cache/firmware-night`). A rollout never
+  starts while another one runs, and a scheduled rollout does nothing on a
+  night when another family already changed devices. `netgear:firmware` runs
+  at 04:45; `aruba-iap:firmware` runs at 05:20 and stays off on a night when
+  the switches were upgraded. A NETGEAR run that upgrades nothing leaves the
+  night free.
 
 ### Starting it by hand, or from OpenClaw
 

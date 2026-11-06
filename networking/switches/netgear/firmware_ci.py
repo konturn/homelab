@@ -9,6 +9,8 @@ Subcommands
             person or OpenClaw: upgrade the switches one at a time with
             `ngswitch.py firmware rollout`, then mail the result. A failure opens
             an issue labelled netgear-firmware; while one is open, rollouts do not run.
+            One firmware rollout per night across the NETGEAR and Aruba jobs
+            (networking/firmware_night.py).
 
 GitLab writes use AUTOMERGE_TOKEN and mail goes through the router like the
 auto-merge jobs (ci/automerge/automerge.py), so this runs only from main.
@@ -29,7 +31,9 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(REPO / "ci" / "automerge"))
+sys.path.insert(0, str(REPO / "networking"))
 import ngswitch as ng  # noqa: E402
+import firmware_night  # noqa: E402
 
 LABEL = "netgear-firmware"            # bump MRs and rollout failure issues
 LABEL_FAILED = "netgear-firmware-failed"
@@ -37,6 +41,7 @@ SWITCH_ORDER = ["netgear-movie", "netgear-office"]   # movie first: office carri
 DEFAULT_WINDOW = "04:45-06:00"
 ALERTED = ".netgear-firmware-alerted"   # the job's after_script mails root unless this exists
 SUPPORT_URL = "https://www.netgear.com/support/product/{model}/"
+FAMILY = "netgear"
 
 
 def log(msg: str = "") -> None:
@@ -195,16 +200,26 @@ def cmd_rollout(args) -> int:
     if plan["window"]:
         log(f"maintenance window {plan['window']}, local time now {time.strftime('%H:%M %Z')} "
             f"(TZ={os.environ.get('TZ', 'unset')})")
-    log("$ " + " ".join(cmd))
-    out: List[str] = []
-    with open("netgear-firmware.log", "w") as fh:
-        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        for line in p.stdout:
-            sys.stdout.write(line)
-            fh.write(line)
-            out.append(line)
-        rc = p.wait()
-    text = "".join(out)
+    import contextlib
+    lock = contextlib.nullcontext() if plan["dry_run"] else firmware_night.NightLock(
+        FAMILY, scheduled=os.environ.get("CI_PIPELINE_SOURCE") == "schedule", log=log)
+    try:
+        with lock as lk:
+            log("$ " + " ".join(cmd))
+            out: List[str] = []
+            with open("netgear-firmware.log", "w") as fh:
+                p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                for line in p.stdout:
+                    sys.stdout.write(line)
+                    fh.write(line)
+                    out.append(line)
+                rc = p.wait()
+            text = "".join(out)
+            if lk is not None and ("upgraded " in text or rc != 0):
+                lk.used("upgraded" if rc == 0 else f"rollout exited {rc}")
+    except firmware_night.Busy as e:
+        log(f"== not starting: {e}")
+        return 0
     job = os.environ.get("CI_JOB_URL", "n/a")
     summary = "\n".join(summarize(text)) or "(no output)"
     if plan["dry_run"]:

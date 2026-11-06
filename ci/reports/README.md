@@ -42,9 +42,13 @@ or moltbot) for images with fixable HIGH/CRITICAL findings, using
 
 Nothing here changes a host or device: no upgrades, restarts, reboots or
 configuration writes. The firmware report reads the NETGEAR configuration
-download header, the Aruba Instant `show version` (REST), the S2500 SNMP
-`sysDescr`, `dmidecode`, `ipmitool mc info` and `smartctl -i`. Latest versions
-are compared only where `KNOWN_LATEST` in `firmware.py` has an entry.
+download header, the Aruba Instant `show version` (REST), the S2500 (read-only
+SSH CLI through `networking/aruba-s2500/s2500ctl.py`, both image partitions,
+when `homelab/network/aruba-s2500` is in Vault; otherwise the SNMP `sysDescr`),
+`dmidecode`, `ipmitool mc info` and `smartctl -i`. Latest versions are compared
+only where `KNOWN_LATEST` in `firmware.py` has an entry. The NETGEAR and Aruba
+Instant entries are updated by the firmware bump MRs; the S2500 entry is the
+last ArubaOS-MAS 7.4 release known (`networking/aruba-s2500/README.md`).
 
 Run a report by hand: CI/CD > Pipelines > Run pipeline on `main` with
 `SCHEDULED_TASK=<value>`. Tests: `python3 -m unittest discover -s ci/reports -v`.
