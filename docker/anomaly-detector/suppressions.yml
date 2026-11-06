@@ -37,6 +37,6 @@ suppressions:
     reason: dead since 2024-11; likely removed hardware still in the Z-Wave network
     until: 2026-11-30
   - signal: zwave_dead_nodes
-    series: "sensor.test_node_status"
-    reason: test node, not a real device
+    series: "sensor.front_vestibule_lights_node_status"
+    reason: front vestibule switch (entity id was sensor.test_node_status before the rename)
     until: 2027-04-30
