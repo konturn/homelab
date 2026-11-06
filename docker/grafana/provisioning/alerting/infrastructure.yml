@@ -1064,8 +1064,8 @@ groups:
     folder: General Alerting
     interval: 1m
     rules:
-      # The UPS is monitored over SNMP by telegraf ([[inputs.snmp]], UPS-MIB via
-      # CyberPower) and lands in the "snmp" measurement. These rules were left
+      # The UPS is monitored over SNMP by telegraf ([[inputs.snmp]], UPS-MIB and
+      # APC PowerNet-MIB, APC Smart-UPS 1500 / AP9631) and lands in the "snmp" measurement. These rules were left
       # commented out with "snmp measurement not available"; that reason is no
       # longer true — the input has been collecting percent_charge, load,
       # batterySeconds and minutes on a 30s interval. Nothing else writes to the
@@ -1236,6 +1236,145 @@ groups:
           summary: "UPS load above 80%"
         labels:
           severity: warning
+
+      # Battery health (docs/POWER.md "Battery health"). Fields come from the
+      # PowerNet-MIB inputs and the starlark processor in telegraf.conf.
+      # selftest_result: 1 ok, 2 failed, 3 invalidTest, 4 in progress.
+      - uid: ups-selftest-failed
+        title: UPS Self-Test Failed
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -15m)
+                  |> filter(fn: (r) => r._measurement == "snmp")
+                  |> filter(fn: (r) => r._field == "selftest_result")
+                  |> last()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: within_range, params: [1.5, 2.5]}}]}
+        noDataState: OK
+        execErrState: KeepLast
+        for: 5m
+        annotations:
+          summary: "UPS battery self-test FAILED"
+          description: "upsAdvTestDiagnosticsResults = failed. The battery may not carry the load: replace it (docs/POWER.md, Battery health)."
+        labels:
+          severity: warning
+
+      # Paused: the last self-test on record is from 2017 (InvalidTest), so this
+      # would fire from the first evaluation. Unpause it (isPaused: false) after
+      # the first supervised self-test passes, together with
+      # ups_selftest_enabled (docs/POWER.md, supervised test plan step 1).
+      - uid: ups-selftest-stale
+        title: UPS Self-Test Not Run or Not Passed in 45 Days
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -15m)
+                  |> filter(fn: (r) => r._measurement == "snmp")
+                  |> filter(fn: (r) => r._field == "selftest_stale")
+                  |> last()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: KeepLast
+        for: 1h
+        isPaused: true
+        annotations:
+          summary: "No passing UPS self-test in the last 45 days"
+          description: "selftest_stale = 1: the last self-test is older than 45 days or did not pass. Run the supervised self-test (docs/POWER.md)."
+        labels:
+          severity: warning
+
+      # battery_age_days is -1 while the age is unknown (it is today: the card's
+      # battery date is in the future), which does not fire.
+      - uid: ups-battery-old
+        title: UPS Battery Older Than 4 Years
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -15m)
+                  |> filter(fn: (r) => r._measurement == "snmp")
+                  |> filter(fn: (r) => r._field == "battery_age_days")
+                  |> last()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [1461]}}]}
+        noDataState: OK
+        execErrState: KeepLast
+        for: 1h
+        annotations:
+          summary: "UPS battery is more than 4 years old"
+          description: "battery_age_days comes from ups_battery_install_date (role defaults) or the card's battery date when plausible; -1 (unknown) does not fire. Plan a replacement (docs/POWER.md)."
+        labels:
+          severity: warning
+
+      # upsAdvBatteryReplaceIndicator: 1 no, 2 batteryNeedsReplacing.
+      - uid: ups-replace-battery
+        title: UPS Reports Battery Needs Replacing
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -15m)
+                  |> filter(fn: (r) => r._measurement == "snmp")
+                  |> filter(fn: (r) => r._field == "battery_replace_indicator")
+                  |> last()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [1]}}]}
+        noDataState: OK
+        execErrState: KeepLast
+        for: 5m
+        annotations:
+          summary: "UPS says the battery needs replacing"
+          description: "upsAdvBatteryReplaceIndicator = batteryNeedsReplacing. Replace the battery cartridge (docs/POWER.md, Battery health)."
+        labels:
+          severity: critical
 
   # =========================================================================
   # Backup Alerts

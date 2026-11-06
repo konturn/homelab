@@ -5,7 +5,16 @@
     password = {{ vault_nut_monitor_password }}
     upsmon primary
 
-# Read-only user for Telegraf/monitoring
+# Read-only user for monitoring and NUT secondaries on other hosts
 [monitor]
     password = {{ vault_nut_monitor_password }}
     upsmon secondary
+{% if ups_selftest_enabled | default(false) | bool and vault_nut_selftest_password | default('') | length > 0 %}
+
+# Monthly battery self-test (ups-selftest.timer). Present only while
+# ups_selftest_enabled is true; may run this one instant command and nothing
+# else.
+[selftest]
+    password = {{ vault_nut_selftest_password }}
+    instcmds = test.battery.start
+{% endif %}

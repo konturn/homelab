@@ -53,6 +53,7 @@ shared:
     - networking/aruba-s2500/**
     - networking/firmware_night.py
     - networking/denon/**
+    - networking/ups/**
     - ansible/tests/**
     - ansible/bootstrap.yml
     - ansible/os-patch-report.yml

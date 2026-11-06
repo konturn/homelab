@@ -1,0 +1,14 @@
+# Monthly UPS battery self-test. Shipped DISABLED: Ansible keeps it enabled
+# only while ups_selftest_enabled is true in ansible/inventory.yml, which
+# Noah sets after the first supervised self-test (docs/POWER.md).
+[Unit]
+Description=Monthly UPS battery self-test
+
+[Timer]
+# First Sunday of the month, mid-morning (someone is likely home)
+OnCalendar=Sun *-*-01..07 10:30:00
+RandomizedDelaySec=15m
+Persistent=false
+
+[Install]
+WantedBy=timers.target

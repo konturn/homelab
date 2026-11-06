@@ -500,6 +500,8 @@
       dest: "{{ docker_persistent_data_path }}/grafana/provisioning/dashboards/homelab.yml"
     - src: "docker/grafana/provisioning/dashboards/json/anomaly-detector.json"
       dest: "{{ docker_persistent_data_path }}/grafana/provisioning/dashboards/json/anomaly-detector.json"
+    - src: "docker/grafana/provisioning/dashboards/json/ups.json"
+      dest: "{{ docker_persistent_data_path }}/grafana/provisioning/dashboards/json/ups.json"
   when: "'router' in inventory_hostname"
 
 # Vaultwarden's admin-panel settings (/data/config.json) take precedence over
@@ -678,7 +680,8 @@
 
 ### NUT (Network UPS Tools) — baremetal installation
 # Runs directly on the host so upsmon can call shutdown without container tricks.
-# Monitors CyberPower UPS via SNMP and shuts down the host on critical battery.
+# Monitors the APC Smart-UPS (AP9631 card) via SNMP. Early graceful shutdown
+# via upssched, killpower/return-of-power and the outage plan: docs/POWER.md.
 
 - name: Install NUT packages
   ansible.builtin.apt:
@@ -693,11 +696,17 @@
     - "'router' in inventory_hostname"
     - _apt_packages | difference(installed_packages | default([])) | length > 0
 
+# POWEROFF_WAIT is read by /lib/systemd/system-shutdown/nutshutdown at the
+# end of a power-fail shutdown: after commanding the UPS it sleeps this long
+# and then reboots. If mains came back during the shutdown the UPS ignores
+# shutdown.return (it only accepts it on battery), so without this the host
+# would stay halted with power present.
 - name: Set NUT mode to netserver
   ansible.builtin.copy:
     content: |
       # Managed by Ansible
       MODE=netserver
+      POWEROFF_WAIT={{ ups_poweroff_wait }}
     dest: /etc/nut/nut.conf
     owner: root
     group: nut
@@ -720,9 +729,103 @@
     - { src: "upsd.conf", dest: "upsd.conf", mode: "0640" }
     - { src: "upsd.users", dest: "upsd.users", mode: "0640", validate: "/usr/local/sbin/homelab-config-check nut-users %s" }
     - { src: "upsmon.conf", dest: "upsmon.conf", mode: "0640", validate: "/usr/local/sbin/homelab-config-check nut-upsmon %s" }
+    - { src: "upssched.conf", dest: "upssched.conf", mode: "0640" }
     - { src: "notify.sh", dest: "notify.sh", mode: "0755" }
   register: nut_configs
   when: "'router' in inventory_hostname"
+
+# Read by ups-power at every run; no NUT restart needed.
+- name: Deploy ups-power settings
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/base/nut/ups-power.conf"
+    dest: /etc/nut/ups-power.conf
+    owner: root
+    group: nut
+    mode: "0640"
+  when: "'router' in inventory_hostname"
+
+- name: Deploy UPS shutdown scripts
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/base/nut/{{ item.src }}"
+    dest: "/usr/local/sbin/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - { src: "ups-power.py", dest: "ups-power" }
+    - { src: "ups-orderly-shutdown.sh", dest: "ups-orderly-shutdown" }
+  when: "'router' in inventory_hostname"
+
+# /etc/nut/ups-power.dry-run turns the early-shutdown timers into log-only
+# for a supervised rehearsal (docs/POWER.md). A deploy (incl. the nightly full
+# deploy) removes it so a forgotten rehearsal flag cannot linger.
+- name: Remove a leftover UPS rehearsal flag
+  ansible.builtin.file:
+    path: /etc/nut/ups-power.dry-run
+    state: absent
+  when: "'router' in inventory_hostname"
+
+- name: Write UPS self-test password file
+  ansible.builtin.copy:
+    content: "{{ vault_nut_selftest_password }}\n"
+    dest: /etc/nut/ups-selftest.secret
+    owner: root
+    group: nut
+    mode: "0640"
+  no_log: true
+  when:
+    - "'router' in inventory_hostname"
+    - ups_selftest_enabled | bool
+    - vault_nut_selftest_password | default('') | length > 0
+
+- name: Remove UPS self-test password file while the self-test is disabled
+  ansible.builtin.file:
+    path: /etc/nut/ups-selftest.secret
+    state: absent
+  when:
+    - "'router' in inventory_hostname"
+    - not (ups_selftest_enabled | bool) or vault_nut_selftest_password | default('') | length == 0
+
+- name: Ensure nut-server drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/system/nut-server.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: "'router' in inventory_hostname"
+
+- name: Deploy UPS systemd units
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/base/nut/{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - { src: "ups-selftest.service", dest: "/etc/systemd/system/ups-selftest.service" }
+    - { src: "ups-selftest.timer", dest: "/etc/systemd/system/ups-selftest.timer" }
+    - { src: "nut-server-online.conf", dest: "/etc/systemd/system/nut-server.service.d/10-after-network-online.conf" }
+  register: ups_units
+  when: "'router' in inventory_hostname"
+
+- name: Reload systemd for UPS units
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when:
+    - "'router' in inventory_hostname"
+    - not ansible_check_mode
+    - ups_units.changed
+
+# Disabled unless ups_selftest_enabled (first self-test is supervised).
+- name: UPS self-test timer enabled only when ups_selftest_enabled
+  ansible.builtin.systemd:
+    name: ups-selftest.timer
+    enabled: "{{ ups_selftest_enabled | bool }}"
+    state: "{{ 'started' if ups_selftest_enabled | bool else 'stopped' }}"
+  when:
+    - "'router' in inventory_hostname"
+    - not ansible_check_mode
 
 # nut-driver-enumerator.service is a oneshot (no RemainAfterExit): it is
 # never "active", so state=started ran it on every deploy. It is enabled
@@ -783,7 +886,42 @@
   when:
     - "'router' in inventory_hostname"
     - not ansible_check_mode
-    - nut_configs.changed or nut_conf.changed
+    - nut_configs.changed or nut_conf.changed or ups_units.changed
+    - vault_nut_monitor_password | default('') | length > 0
+
+# The device was called "cyberpower" until 2026-11. The enumerator creates
+# nut-driver@<name> for each ups.conf section; stop a leftover instance for
+# the old name so only one driver talks to the card.
+- name: Find leftover NUT driver instances
+  ansible.builtin.shell: >-
+    systemctl list-units --all --plain --no-legend 'nut-driver@*.service'
+    | awk '{print $1}'
+  register: nut_driver_units
+  changed_when: false
+  check_mode: false
+  when: "'router' in inventory_hostname"
+
+- name: Stop NUT driver instances not in ups.conf
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: false
+    state: stopped
+  loop: "{{ nut_driver_units.stdout_lines | default([]) | reject('equalto', 'nut-driver@' ~ ups_nut_name ~ '.service') | list }}"
+  when:
+    - "'router' in inventory_hostname"
+    - not ansible_check_mode
+
+- name: Check NUT sees the UPS after the deploy
+  ansible.builtin.command:
+    cmd: "upsc {{ ups_nut_name }}@localhost ups.status"
+  register: nut_status
+  retries: 6
+  delay: 5
+  until: nut_status.rc == 0
+  changed_when: false
+  when:
+    - "'router' in inventory_hostname"
+    - not ansible_check_mode
     - vault_nut_monitor_password | default('') | length > 0
 
 - name: Warn if NUT password not in Vault

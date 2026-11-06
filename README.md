@@ -52,6 +52,8 @@ ansible-playbook -i ansible/inventory.yml ansible/zwave.yml
 
 > 📊 **See [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md)** for the full observability stack — logs (Loki), metrics (Telegraf/InfluxDB), traces (OpenTelemetry/Tempo), and alerting (Grafana).
 
+> 🔌 **See [docs/POWER.md](docs/POWER.md)** for the UPS, what happens in a power outage (shutdown and restart), battery health and the supervised UPS test plan.
+
 ## Services
 
 ### External (10.2.x.x)

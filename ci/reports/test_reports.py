@@ -197,6 +197,22 @@ class FirmwareTest(unittest.TestCase):
         self.assertEqual(firmware.parse_smart_info("Device Model:     WDC X\nFirmware Version: 83.00A83\n"),
                          {"model": "WDC X", "firmware": "83.00A83"})
 
+    def test_apc_description(self):
+        desc = ("APC Web/SNMP Management Card (MB:v4.1.0 PF:v6.8.2 PN:apc_hw05_aos_682.bin AF1:v6.8.0 "
+                "AN1:apc_hw05_sumx_680.bin MN:AP9631 HR:05 SN: X MD:08/18/2014)")
+        self.assertEqual(firmware.parse_apc_description(desc),
+                         {"model": "AP9631", "aos": "6.8.2", "app": "6.8.0", "app_name": "sumx", "hw": "05"})
+        self.assertEqual(firmware.parse_apc_description(""), {})
+
+    def test_report_ups_card(self):
+        d = {"ups_card": {"name": "ups-card", "model": "AP9631", "version": "6.8.0", "aos": "6.8.2",
+                          "ups_model": "Smart-UPS 1500", "ups_firmware": "UPS 09.3 (ID18)"}}
+        summary, lines = firmware.build_report(d)
+        line = [l for l in lines if l.startswith("ups-card")][0]
+        self.assertIn("7.2.2 available", line)
+        self.assertIn("AOS 6.8.2", line)
+        self.assertIn("ups-card", summary)
+
     def test_report(self):
         d = {"netgear": [{"name": "netgear-movie", "model": "MS510TXPP", "version": "6.7.0.42"}],
              "aruba_iap": {"name": "aruba-iap", "model": "AP-515", "version": "8.13.1.0 LSR"},

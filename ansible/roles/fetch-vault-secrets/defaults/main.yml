@@ -186,6 +186,10 @@ vault_secret_paths:
   - path: "infrastructure/nut"
     fields:
       vault_nut_monitor_password: "password"
+      # NUT user that may run test.battery.start (ups-selftest.timer); only
+      # rendered while ups_selftest_enabled is true (docs/POWER.md)
+      vault_nut_selftest_password: "selftest_password"
+    optional_fields: [vault_nut_selftest_password]
 
   # MQTT secrets
   - path: "mqtt/mosquitto"
