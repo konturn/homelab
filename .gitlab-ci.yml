@@ -1329,6 +1329,9 @@ netgear:firmware:
   timeout: 90m
   variables:
     NETGEAR_FIRMWARE_WINDOW: "04:45-06:00"
+    # The window is local time. The job image has no tzdata, so a POSIX TZ rule
+    # (US Eastern, as the schedules) rather than America/New_York.
+    TZ: "EST5EDT,M3.2.0,M11.1.0"
     NETGEAR_TFTP_SERVER: "10.4.0.1"
     NETGEAR_FIRMWARE_DIR: "/cache/netgear-firmware"
   script:

@@ -192,6 +192,9 @@ def cmd_rollout(args) -> int:
     if plan["dry_run"]:
         cmd.append("--dry-run")
     cmd += [str(HERE / f"{t}.yml") for t in plan["targets"]]
+    if plan["window"]:
+        log(f"maintenance window {plan['window']}, local time now {time.strftime('%H:%M %Z')} "
+            f"(TZ={os.environ.get('TZ', 'unset')})")
     log("$ " + " ".join(cmd))
     out: List[str] = []
     with open("netgear-firmware.log", "w") as fh:
