@@ -1,0 +1,18 @@
+---
+# UPS / NUT on the router (base/nut, docs/POWER.md). Override per host in
+# ansible/inventory.yml if needed.
+ups_nut_name: apc
+ups_nut_mgmt_listen: 10.4.0.1       # upsd for NUT secondaries (mgmt VLAN, bond0.4)
+ups_onbatt_confirm_seconds: 30      # on battery this long before the runtime watch starts
+ups_onbatt_shutdown_minutes: 5      # forced shutdown after this long on battery
+ups_runtime_shutdown_seconds: 600   # ... or when battery.runtime stays below this
+ups_poweroff_wait: 10m              # nutshutdown: reboot after this if the UPS did not cut power
+# Monthly self-test timer (ups-selftest.timer). Keep false until the first
+# supervised self-test has passed; also needs the Vault field
+# infrastructure/nut selftest_password (docs/POWER.md).
+ups_selftest_enabled: false
+# Battery install date (MM/DD/YYYY) when known. Empty: use the card's
+# battery.date if it is plausible. It is not (12/15/2026, after today), so the
+# battery age is unknown until this is set.
+ups_battery_install_date: ""
+ups_manufacture_date: "01/06/2016"

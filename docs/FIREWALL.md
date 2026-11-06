@@ -269,6 +269,7 @@ Controls traffic TO the router itself:
 | ICMP | any | - |
 | NFS | mgmt, iot | 2049, 111 |
 | SMB | mgmt | 139, 445 |
+| NUT (upsd, to 10.4.0.1) | mgmt | 3493 |
 | TFTP | mgmt | 69 |
 | mDNS | !internet | 5353 |
 

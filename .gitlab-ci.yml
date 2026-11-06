@@ -47,6 +47,9 @@
 #   DENON AVR (see docs/denon.md; read-only, CI never changes the receiver)
 #   denon:test (MR + main, offline), denon:drift (scheduled, DENON_TASK=drift)
 #
+#   UPS (see docs/POWER.md; CI never sends a command to the UPS or its card)
+#   ups:test (MR + main, offline), ups-card:drift (scheduled, SCHEDULED_TASK=ups-card-drift)
+#
 #   AUTO-MERGE (see docs/AUTOMERGE.md)
 #   automerge:test + automerge:eligibility (MR, informational)
 #   automerge:sweep / automerge:report (scheduled on main, AUTOMERGE_TASK=sweep|report)
@@ -1657,6 +1660,72 @@ denon:drift:
     expire_in: 30 days
   rules:
     - if: $CI_COMMIT_BRANCH == "main" && $DENON_TASK == "drift" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+
+# =============================================================================
+# UPS: NUT shutdown logic (base/nut) and the AP9631 card (networking/ups)
+# See docs/POWER.md. Nothing here sends a command to the UPS.
+# =============================================================================
+
+ups:test:
+  extends: .interruptible
+  stage: validate
+  # python + root apk (the ansible image runs as a non-root user)
+  image: python:3.13-alpine3.22@sha256:e81548ac35b07a3bd4805f275107592ef458b1e893c0e04d45aedaa19416cca5
+  needs: []
+  script:
+    # the orderly-shutdown script tests run it under bash (not in the image)
+    - apk add --no-cache bash >/dev/null
+    - python3 -m unittest discover -s base/nut -p 'test_*.py' -v
+    - python3 -m unittest discover -s networking/ups -p 'test_*.py' -v
+    - python3 networking/ups/apcctl.py check
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - base/nut/**/*
+        - networking/ups/**/*
+        - .gitlab-ci.yml
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - base/nut/**/*
+        - networking/ups/**/*
+
+# Scheduled daily with SCHEDULED_TASK=ups-card-drift (protected runner, host
+# network): downloads the card's config.ini (read-only SCP), sanitizes it and
+# compares it with networking/ups/apc-config.ini. Fails and mails root on
+# drift. Exits 0 with a notice while the card credentials
+# (homelab/infrastructure/ups-card) or the baseline are not there yet.
+ups-card:drift:
+  extends: .ansible
+  stage: deploy
+  needs: []
+  resource_group: ups-card
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: https://vault.lab.nkontur.com:8200
+  variables:
+    VAULT_ADDR: "https://10.3.32.6:8200"
+    VAULT_SKIP_VERIFY: "true"
+    VAULT_JWT_ROLE: "ci-deploy"
+  script:
+    - rc=0; python3 networking/ups/apcctl.py drift --report ups-card-drift.txt || rc=$?
+    - |
+      if [ "$rc" -ne 0 ]; then
+        [ -s ups-card-drift.txt ] || echo "apcctl drift exited with $rc before writing a report." > ups-card-drift.txt
+        printf '\nExit code: %s\nJob: %s\n' "$rc" "$CI_JOB_URL" >> ups-card-drift.txt
+        ssh -i tmp -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 \
+          -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$CI_PROJECT_DIR/ansible/known_hosts" -o LogLevel=ERROR \
+          root@10.4.0.1 "mail -s 'Homelab: UPS card config drift' root" < ups-card-drift.txt \
+          || echo "WARN: sending mail failed"
+        exit 1
+      fi
+  artifacts:
+    when: always
+    paths:
+      - ups-card-drift.txt
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "ups-card-drift" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
 
 # =============================================================================
 # Scheduled read-only reports for the OpenClaw Morning Digest (ci/reports/README.md)

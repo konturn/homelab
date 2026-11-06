@@ -1,0 +1,12 @@
+[Unit]
+Description=UPS battery self-test (APC test.battery.start)
+Documentation=file:///root/repos/homelab/docs/POWER.md
+After=nut-server.service
+Requires=nut-server.service
+
+[Service]
+Type=oneshot
+User=nut
+Group=nut
+# ups-power refuses unless ups.status is exactly OL and battery.charge >= 95.
+ExecStart=/usr/local/sbin/ups-power selftest

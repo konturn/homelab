@@ -4,8 +4,8 @@
 NETGEAR switches (web UI config download header), the Aruba Instant cluster
 (REST `show version`), the Aruba S2500 (SSH CLI through
 networking/aruba-s2500/s2500ctl.py when its credentials are in Vault, else
-SNMPv2c sysDescr), and the router's BIOS/BMC (dmidecode, ipmitool) and drives
-(smartctl -i). Nothing is changed on any device. Compared against KNOWN_LATEST
+SNMPv2c sysDescr), the APC UPS and its AP9631 card (local NUT upsc), and the
+router's BIOS/BMC (dmidecode, ipmitool) and drives (smartctl -i). Nothing is changed on any device. Compared against KNOWN_LATEST
 where an entry exists; the firmware bump jobs update the MS510TXPP and AP-515
 entries, the others are maintained by hand and dated. Writes firmware.{md,json}.
 """
@@ -36,6 +36,9 @@ KNOWN_LATEST: Dict[str, Tuple[str, str]] = {
     "MS510TXPP": ("6.7.0.52", "2026-10-19"),
     "AP-515": ("8.13.1.0", "2026-11-06"),
     "S2500": ("7.4.1.12", "2026-11-06"),
+    # NMC2 (AP9630/31) Smart-UPS application (sumx); AOS ships with it.
+    # Newest listed on se.com: v7.2.2 (2025-09). Verify there before flashing.
+    "AP9631": ("7.2.2", "2026-11-06"),
 }
 
 S2500_HOST = os.environ.get("S2500_HOST", "10.100.0.1")
@@ -54,6 +57,18 @@ def parse_aruba_version(text: str) -> Tuple[Optional[str], Optional[str]]:
     v = re.search(r"Version\s+([\d.]+(?:[-_][\w.]+)?(?:\s+(?:LSR|SSR|LTS|ESR))?)", text)
     m = re.search(r"MODEL:\s*([\w-]+)", text)
     return (v.group(1).strip() if v else None), (m.group(1) if m else None)
+
+
+def parse_apc_description(text: str) -> Dict[str, str]:
+    """AP9631 sysDescr / NUT device.description ->
+    {'model': 'AP9631', 'aos': '6.8.2', 'app': '6.8.0', 'app_name': 'sumx', 'hw': '05'}"""
+    out = {}
+    for key, pat in (("model", r"\bMN:(\S+)"), ("aos", r"\bPF:v([\d.]+)"), ("app", r"\bAF1:v([\d.]+)"),
+                     ("app_name", r"\bAN1:apc_hw\d+_([a-z]+)_\d+\.bin"), ("hw", r"\bHR:(\S+)")):
+        m = re.search(pat, text or "")
+        if m:
+            out[key] = m.group(1)
+    return out
 
 
 def parse_smart_info(text: str) -> Dict[str, str]:
@@ -164,6 +179,22 @@ def aruba_s2500(secrets: Optional[dict] = None) -> dict:
     return out
 
 
+def ups_card() -> dict:
+    """Read from the local NUT server (upsd caches the card's sysDescr); no
+    credentials needed. The NUT device was renamed cyberpower -> apc in 2026-11."""
+    for ups in ("apc@localhost", "cyberpower@localhost"):
+        r = common.run(["upsc", ups], timeout=20)
+        if r.returncode == 0 and "device.description" in r.stdout:
+            break
+    else:
+        return {"name": "ups-card", "model": "AP9631", "error": "NUT upsc not available"}
+    vals = dict(line.split(": ", 1) for line in r.stdout.splitlines() if ": " in line)
+    d = parse_apc_description(vals.get("device.description", ""))
+    return {"name": "ups-card", "model": d.get("model", "AP9631"), "version": d.get("app"),
+            "aos": d.get("aos"), "app_name": d.get("app_name"),
+            "ups_model": vals.get("ups.model"), "ups_firmware": (vals.get("ups.firmware") or "").strip() or None}
+
+
 def router_platform() -> dict:
     d = {}
     for k in ("bios-version", "bios-release-date", "baseboard-product-name", "system-product-name"):
@@ -212,6 +243,12 @@ def build_report(d: dict) -> Tuple[str, List[str]]:
         lines.append(device_line(x))
     lines.append(device_line(d.get("aruba_iap", {"name": "aruba-iap", "error": "not run"})))
     lines.append(device_line(d.get("aruba_s2500", {"name": "aruba-s2500", "error": "not run"})))
+    u = d.get("ups_card")
+    if u:
+        line = device_line(u)
+        if "error" not in u:
+            line += f"; AOS {u.get('aos') or '?'}; UPS {u.get('ups_model') or '?'} fw {u.get('ups_firmware') or '?'}"
+        lines.append(line)
     p = d.get("router", {})
     if p:
         lines.append(f"router {p.get('baseboard-product-name') or '?'}: BIOS {p.get('bios-version') or '?'} "
@@ -228,7 +265,7 @@ def build_report(d: dict) -> Tuple[str, List[str]]:
     else:
         summary_bits.append("no newer firmware known")
     inv = []
-    for key, label in (("aruba_iap", "IAP"), ("aruba_s2500", "S2500")):
+    for key, label in (("aruba_iap", "IAP"), ("aruba_s2500", "S2500"), ("ups_card", "UPS card")):
         x = d.get(key, {})
         if x.get("version"):
             inv.append(f"{label} {x['version']}")
@@ -246,8 +283,8 @@ def main() -> int:
     secrets = common.read_secrets()
     data = {"known_latest": KNOWN_LATEST}
     for key, fn in (("netgear", lambda: netgear(secrets)), ("aruba_iap", lambda: aruba_iap(secrets)),
-                    ("aruba_s2500", lambda: aruba_s2500(secrets)), ("router", router_platform),
-                    ("drives", router_drives)):
+                    ("aruba_s2500", lambda: aruba_s2500(secrets)), ("ups_card", ups_card),
+                    ("router", router_platform), ("drives", router_drives)):
         try:
             data[key] = fn()
         except Exception as e:  # noqa: BLE001

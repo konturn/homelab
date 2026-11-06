@@ -195,6 +195,10 @@ COMMIT
 # Ports: 139 (NetBIOS), 445 (SMB direct)
 -A INPUT -i {{ local_interface_name }}.4 -p tcp -m tcp -m multiport --dports 139,445 -j ACCEPT
 
+# NUT (upsd) from mgmt VLAN only: NUT secondaries on other hosts read the UPS
+# status from the router (base/nut/upsd.conf, docs/POWER.md)
+-A INPUT -i {{ local_interface_name }}.4 -s 10.4.0.0/16 -d 10.4.0.1/32 -p tcp -m tcp --dport 3493 -j ACCEPT
+
 # TFTP access from mgmt VLAN (for PXE boot)
 -A INPUT -i {{ local_interface_name }}.4 -p udp -m udp --dport 69 -j ACCEPT
 
