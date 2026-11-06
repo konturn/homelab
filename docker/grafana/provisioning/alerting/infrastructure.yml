@@ -1559,9 +1559,8 @@ groups:
           severity: critical
 
       # The SEL holds 512 entries and stops logging when full, so new events
-      # would be lost and bmc-sel-critical could not see them. Paused while
-      # the SEL is full from older entries: unpause it (isPaused: false) once
-      # the SEL has been saved and cleared (docs/IPMI.md, "SEL").
+      # would be lost and bmc-sel-critical could not see them. When this fires,
+      # save and clear the SEL (docs/IPMI.md, "SEL").
       - uid: bmc-sel-full
         title: BMC Event Log (SEL) Nearly Full
         condition: C
@@ -1589,7 +1588,7 @@ groups:
         noDataState: OK
         execErrState: KeepLast
         for: 1h
-        isPaused: true
+        isPaused: false
         annotations:
           summary: "The BMC event log is {{ $values.B }}% full"
           description: "A full SEL drops new events. Save it (`ipmitool sel elist > file`) and clear it by hand; see docs/IPMI.md, SEL."
