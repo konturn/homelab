@@ -130,11 +130,9 @@ services:
     updates: [digest]
     probe: https://bitwarden.nkontur.com/alive
     probe_via: external
-  blog:
-    updates: [digest]
-    probe: https://blog.nkontur.com/
-    probe_via: external
   # Not listed: databases (nextcloud_db, wordpress_db, influxdb, paperless-redis).
+  # Not listed: blog (WordPress). It runs only under the "wordpress" compose
+  # profile for edit sessions, so a per-service deploy must not start it.
 
 # Fast track: images of services published through the external reverse proxy
 # (docker/nginx/router.lab.nkontur.com/external_*.conf) or a WAN port forward
@@ -162,7 +160,6 @@ fast_track:
     izderadicka/audioserve: {}                  # booksonic (floating tag: digest only in practice)
     nextcloud: {updates: [digest]}              # nextcloud
     vaultwarden/server: {updates: [digest]}     # bitwarden
-    wordpress: {updates: [digest]}              # blog
   # Not listed: nginx. nginx, lab_nginx, iot_nginx and bluebubbles-relay run
   # the local build from docker/images/nginx, whose base image updates are
   # Dockerfile changes and always reviewed.
