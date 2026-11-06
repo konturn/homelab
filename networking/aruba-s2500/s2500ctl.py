@@ -255,7 +255,8 @@ ERROR_RE = re.compile(r"% ?Invalid|Invalid input|Parse error|% ?Incomplete|^Erro
 
 class Session:
     """SSH CLI session. The host key must be in known_hosts (pinned; the switch's
-    OpenSSH 5.8 offers only ssh-rsa host keys and CBC ciphers, which paramiko accepts)."""
+    OpenSSH 5.8 offers only ssh-rsa host keys and CBC ciphers, which paramiko < 4
+    accepts; paramiko 4+ dropped ssh-rsa, so CI pins paramiko<4)."""
 
     def __init__(self, host, user, password, enable_secret=None, known_hosts=KNOWN_HOSTS, timeout=20):
         import paramiko  # lazily, so offline use needs no dependency
