@@ -1,6 +1,6 @@
 config-file-header
 
-v6.7.0.42 / RNG510_923_071_017
+v6.7.0.52 / RNG510_923_071_026
 CLI v1.0
 @
 vlan database
@@ -20,10 +20,8 @@ qos advanced ports-trusted
 qos advanced-mode trust cos
 priority-queue out num-of-queues 0
 logging origin-id ip
-snmp-server group default v3 noauth notify Default write Default
 snmp-server group default v3 auth notify Default write Default
 snmp-server group default v3 priv notify Default write Default
-snmp-server user admin default v3
 service cpu-counters
 !
 interface vlan 1

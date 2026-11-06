@@ -11,7 +11,10 @@ Subcommands
   render-snapshot  update the managed lines of a snapshot from the desired state (offline)
   firmware status  running / stored image versions against the desired firmware
   firmware set-next-boot  choose the image slot for the next boot (no reboot)
-  firmware upgrade upload the desired firmware, reboot into it, verify, check drift
+  firmware upgrade load the desired firmware, reboot into it, verify, roll back, check drift
+  firmware rollout upgrade several switches in order, one at a time
+  firmware check-latest   newest release on the vendor download server
+  firmware bump    declare a new release (URL and hashes) in every desired-state file
 
 Managed settings: VLANs (id, name), per-port VLAN membership (untagged/tagged),
 port PVID and per-port PoE (enabled, priority, power limit). Everything else in
@@ -32,8 +35,11 @@ import http.cookiejar
 import json
 import os
 import re
+import socket
 import ssl
+import struct
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -939,6 +945,20 @@ class Switch:
                 time.sleep(10 * (n + 1))
         raise NgError(f"login to {self.host} failed: {last}")
 
+    def relogin(self, log=None) -> bool:
+        """Start a new session after the switch dropped the current one. Never raises."""
+        self.cs = None
+        self.cj.clear()
+        try:
+            self.login(attempts=1)
+        except (NgError, urllib.error.URLError, OSError) as e:
+            if log:
+                log(f"   new login failed ({e}); retrying")
+            return False
+        if log:
+            log("   logged in again (new session)")
+        return True
+
     def logout(self):
         if not self.cs:
             return
@@ -1027,10 +1047,45 @@ class Switch:
                        headers={"Content-Type": ctype})
         finally:
             self.timeout = old
+        return self.wait_for_load(timeout, progress)
+
+    def tftp_download(self, server: str, image: Path, timeout: int = 1200, progress=None) -> dict:
+        """TFTP File Download (Maintenance > Download), file type Software, then wait for the flash write.
+
+        Serves <image> read-only from a TFTP server on the local address <server>
+        for the duration of the transfer; the switch fetches it from there. Returns
+        the final LoadStatus; check it the same way as an HTTP upload before
+        booting the image."""
+        with TftpServer(server, image, log=progress) as srv:
+            self.post(tftp_download_payload(server, image.name))
+            st = self.wait_for_load(timeout, progress)
+        if progress:
+            progress(f"   TFTP server sent {srv.sent} bytes in {srv.transfers} transfer(s)")
+        return st
+
+    def wait_for_load(self, timeout: int, progress=None) -> dict:
+        """Poll LoadStatus until the transfer and flash write finish; return the final status.
+
+        Once the transfer reaches the flash write, the switch drops the web
+        session: every further read of it answers HTTP 404. After a few failed
+        reads this logs in again (a new session sees the status as normal) and
+        keeps polling until the deadline."""
         deadline = time.time() + timeout
         last = None
+        errors = 0
         while time.time() < deadline:
-            st = self.load_status()
+            try:
+                st = self.load_status()
+            except (urllib.error.URLError, OSError) as e:  # HTTPError is a URLError
+                errors += 1
+                if progress and errors % 12 == 1:
+                    progress(f"   status read failed ({getattr(e, 'code', None) or type(e).__name__}); "
+                             "the switch drops the session during the flash write")
+                if errors % 3 == 0:
+                    self.relogin(progress)
+                time.sleep(5)
+                continue
+            errors = 0
             code = int(st.get("copyStatusType") or 0) if st else 0
             if code in (3, 4):
                 msg = st.get("errorMessage") or "transfer failed"
@@ -1048,13 +1103,41 @@ class Switch:
             time.sleep(5)
         raise NgError(f"firmware upload did not finish within {timeout}s")
 
+    def show_tech(self, timeout: int = 300) -> str:
+        """Maintenance > Tech Support Info: the text of show version, show bootvar and the rest."""
+        self._open(f"{self.cfg}/device/wcd?{{ConfigInfoExecute}}",
+                   data=build_xml("ConfigInfoExecute", "set", _el("type", "2")),
+                   headers={"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                            "X-Requested-With": "XMLHttpRequest"})
+        out: List[str] = []
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            state = _children(self.read("ConfigInfoStatus")).get("state")
+            if state in ("4", "5", "6"):
+                out += [e.findtext("text") or "" for e in self.read("ConfigInfoOutputList")]
+                if state == "6":
+                    return "".join(out)
+            elif state != "3":
+                raise NgError(f"tech support output failed (state {state})")
+            time.sleep(1)
+        raise NgError(f"tech support output did not finish within {timeout}s")
+
+    def stored_images(self) -> Dict[str, dict]:
+        """show bootvar: {"active": {...}, "inactive": {...}} with name, version, md5 of each image."""
+        return parse_bootvar(self.show_tech())
+
     def set_next_boot(self, slot: int) -> None:
         """Dual Image Configuration: activate image<slot> for the next boot (keeps its description)."""
         entry = _children(self.read("ImageUnitList").find("Entry"))
         self.post(next_boot_payload(slot, entry.get("currentImage", ""), entry.get(f"image{slot}Description", "")))
 
     def reboot(self) -> None:
-        xml = build_xml("Reload", "set", _el("UnitList", None, _el("UnitEntry", None, _el("unitID", 1))))
+        """Maintenance > Reset > Device Reboot.
+
+        The page sends unit 0 on a standalone switch. Unit 1 also restarts the
+        switch, but it comes back on the image it was running and ignores the
+        next-boot image, so a firmware upgrade never takes effect."""
+        xml = build_xml("Reload", "set", _el("UnitList", None, _el("UnitEntry", None, _el("unitID", REBOOT_UNIT))))
         try:
             self.post(xml)
         except (NgError, urllib.error.URLError, OSError):
@@ -1150,6 +1233,7 @@ def build_xml(section: str, action: str, *items: ET.Element) -> bytes:
 
 
 FW_FILE_TYPE_SOFTWARE = "8"   # rlCopyDestinationFileType on the HTTP File Download page
+REBOOT_UNIT = 0               # Device Reboot page on a standalone (not stacked) switch
 
 
 def next_boot_payload(slot: int, current: str, description: str) -> bytes:
@@ -1162,6 +1246,139 @@ def next_boot_payload(slot: int, current: str, description: str) -> bytes:
         _el(tag, description)))
     # The UI sends an empty element as an open/close pair; do the same.
     return x.replace(f"<{tag} />".encode(), f"<{tag}></{tag}>".encode())
+
+
+def tftp_download_payload(server: str, filename: str) -> bytes:
+    """Same XML as the TFTP File Download page (file type Software, IPv4 server, transfer started)."""
+    if not re.fullmatch(r"\d{1,3}(\.\d{1,3}){3}", server):
+        raise NgError(f"TFTP server must be an IPv4 address, not {server!r}")
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", filename):
+        raise NgError(f"TFTP file name {filename!r} is not a plain file name of at most 64 characters")
+    return build_xml("TFTPDownload", "set", _el("destFileType", FW_FILE_TYPE_SOFTWARE),
+                     _el("srcIPAddr", server), _el("srcFileName", filename))
+
+
+class TftpServer:
+    """Minimal read-only TFTP server (RFC 1350, blksize/tsize options) for one file.
+
+    Only a read request for exactly that file name is served; every other request
+    and every write request gets an error. Runs in a background thread while used
+    as a context manager."""
+
+    TIMEOUT = 2.0
+    RETRIES = 8
+
+    def __init__(self, address: str, path: Path, port: int = 69, log=None):
+        self.address, self.port, self.path = address, port, Path(path)
+        self.log = log or (lambda m: None)
+        self.sent = 0
+        self.transfers = 0
+        self.errors: List[str] = []
+        self._stop = threading.Event()
+        self._sock: Optional[socket.socket] = None
+        self._thread: Optional[threading.Thread] = None
+
+    def __enter__(self):
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            self._sock.bind((self.address, self.port))
+        except OSError as e:
+            self._sock.close()
+            raise NgError(f"cannot start the TFTP server on {self.address}:{self.port}: {e}") from None
+        self.port = self._sock.getsockname()[1]
+        self._sock.settimeout(0.5)
+        self._thread = threading.Thread(target=self._serve, daemon=True)
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        self._stop.set()
+        if self._thread:
+            self._thread.join(10)
+        if self._sock:
+            self._sock.close()
+        return False
+
+    @staticmethod
+    def _error(code: int, msg: str) -> bytes:
+        return struct.pack("!HH", 5, code) + msg.encode() + b"\0"
+
+    def _serve(self):
+        while not self._stop.is_set():
+            try:
+                pkt, peer = self._sock.recvfrom(2048)
+            except socket.timeout:
+                continue
+            except OSError:
+                return
+            threading.Thread(target=self._handle, args=(pkt, peer), daemon=True).start()
+
+    def _handle(self, pkt: bytes, peer):
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.bind((self.address, 0))
+            s.settimeout(self.TIMEOUT)
+            opcode = struct.unpack("!H", pkt[:2])[0] if len(pkt) >= 2 else 0
+            parts = pkt[2:].split(b"\0")
+            if opcode != 1 or len(parts) < 2:
+                s.sendto(self._error(4, "read requests only"), peer)
+                return
+            name = parts[0].decode("latin-1")
+            if name.lstrip("/") != self.path.name:
+                self.errors.append(f"refused request for {name!r} from {peer[0]}")
+                s.sendto(self._error(1, "file not found"), peer)
+                return
+            opts = {}
+            for k, v in zip(parts[2::2], parts[3::2]):
+                if k:
+                    opts[k.decode("latin-1").lower()] = v.decode("latin-1")
+            data = self.path.read_bytes()
+            blksize = 512
+            oack = {}
+            if "blksize" in opts and opts["blksize"].isdigit():
+                blksize = max(8, min(int(opts["blksize"]), 1428))
+                oack["blksize"] = str(blksize)
+            if "tsize" in opts:
+                oack["tsize"] = str(len(data))
+            self.transfers += 1
+            self.log(f"   TFTP read request for {name} from {peer[0]}"
+                     + (f" (options {oack})" if oack else ""))
+            if oack:
+                body = b"".join(k.encode() + b"\0" + v.encode() + b"\0" for k, v in oack.items())
+                if not self._send(s, peer, struct.pack("!H", 6) + body, 0):
+                    return
+            n_blocks = len(data) // blksize + 1  # the last block is short (possibly empty)
+            for i in range(1, n_blocks + 1):
+                if self._stop.is_set():
+                    return
+                chunk = data[(i - 1) * blksize:i * blksize]
+                if not self._send(s, peer, struct.pack("!HH", 3, i & 0xFFFF) + chunk, i & 0xFFFF):
+                    return
+                self.sent += len(chunk)
+        finally:
+            s.close()
+
+    def _send(self, s: socket.socket, peer, pkt: bytes, block: int) -> bool:
+        """Send one packet and wait for its ACK, retransmitting on timeout."""
+        for _ in range(self.RETRIES):
+            s.sendto(pkt, peer)
+            end = time.time() + self.TIMEOUT
+            while time.time() < end:
+                try:
+                    reply, src = s.recvfrom(2048)
+                except socket.timeout:
+                    break
+                if src != peer or len(reply) < 4:
+                    continue
+                op, num = struct.unpack("!HH", reply[:4])
+                if op == 5:
+                    msg = reply[4:].rstrip(b"\0").decode("latin-1")
+                    self.errors.append(f"client error {num}: {msg}")
+                    return False
+                if op == 4 and num == block:
+                    return True
+        self.errors.append(f"no ACK for block {block} from {peer[0]}")
+        return False
 
 
 def multipart_body(fields: List[Tuple[str, str]], file_field: str, filename: str, data: bytes) -> Tuple[bytes, str]:
@@ -1292,6 +1509,31 @@ def fetch_firmware(fw: dict, cache: Path, log=print) -> Path:
     return ipath
 
 
+_BOOTVAR_RE = re.compile(r"^(Active|Inactive)-image:\s*(\S+)\s*\n\s*Version:\s*(\S+)\s*\n\s*MD5 Digest:\s*([0-9a-fA-F]{32})",
+                         re.M)
+
+
+def parse_bootvar(text: str) -> Dict[str, dict]:
+    """Image entries from `show bootvar` / `show version` (tech support output).
+
+    The MD5 digest is that of the whole .bin file as loaded, so it can be compared
+    with the local image."""
+    out: Dict[str, dict] = {}
+    for kind, name, ver, md5 in _BOOTVAR_RE.findall(text):
+        out.setdefault(kind.lower(), {"name": name, "version": ver, "md5": md5.lower()})
+    if not out:
+        raise NgError("could not find the image list (show bootvar) in the tech support output")
+    return out
+
+
+def md5_file(path: Path) -> str:
+    h = hashlib.md5()  # noqa: S324 - compared with the digest the switch reports, not for security
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def parse_image_status(el: ET.Element) -> dict:
     """ImageUnitList -> {"image1", "image2", "current", "next"} (slots are 1 or 2)."""
     entry = el.find("Entry")
@@ -1305,13 +1547,21 @@ def parse_image_status(el: ET.Element) -> dict:
             "image1_name": d.get("image1Name"), "image2_name": d.get("image2Name")}
 
 
+# A complete image file name. The switch keeps each image under the name it was
+# loaded with (image1.bin, image2.bin, or the vendor file name for a TFTP load
+# such as MS510TX_TXPP_V6.7.0.52.bin), and after a boot it numbers the slots
+# from the running image, so slot 2 can hold "image1.bin". Images stored under
+# vendor file names boot normally.
+IMAGE_FILE_RE = re.compile(r"flash://system/images/[A-Za-z0-9._-]+\.bin")
+
+
 def slot_problems(img: dict, slot: int, version: Optional[str] = None) -> List[str]:
     """Reasons image<slot> is not safe to boot; empty when it looks complete.
 
-    The switch stores image<n> as flash://system/images/image<n>.bin. An HTTP upload
-    that fails part-way can still report "done" and a plausible version while
-    leaving a truncated file name (seen on the MS510TXPP: ".../images/rs"); the
-    switch then refuses that image at boot."""
+    An HTTP upload that fails part-way can still report "done" and a plausible
+    version while leaving a truncated file name (seen on the MS510TXPP:
+    ".../images/rs"); the switch then refuses that image at boot. Any complete
+    ".../images/<name>.bin" file name is accepted."""
     out = []
     v = img.get(f"image{slot}") or ""
     if not v:
@@ -1321,8 +1571,8 @@ def slot_problems(img: dict, slot: int, version: Optional[str] = None) -> List[s
     name = img.get(f"image{slot}_name")
     if not name:
         out.append(f"switch does not report the image{slot} file name, so it cannot be verified")
-    elif not name.endswith(f"/image{slot}.bin"):
-        out.append(f"image{slot} file name is {name!r}, expected .../image{slot}.bin (incomplete write)")
+    elif not IMAGE_FILE_RE.fullmatch(name):
+        out.append(f"image{slot} file name is {name!r}, not a complete .../images/<name>.bin (incomplete write)")
     return out
 
 
@@ -1658,100 +1908,217 @@ def _stamp(t0: float):
     return log
 
 
+UPGRADED_WITH_DRIFT = 3   # exit code: new firmware runs, managed state is right, unmanaged config differs
+
+
+def _login_after_boot(creds: dict, log, timeout: int = 300) -> "Switch":
+    """The web UI answers before login works; keep trying for a while."""
+    sw = Switch(**creds, log=log)
+    deadline = time.time() + timeout
+    while True:
+        try:
+            sw.login(attempts=1)
+            return sw
+        except NgError:
+            if time.time() > deadline:
+                raise
+            time.sleep(15)
+
+
+def _reboot_and_wait(sw: "Switch", creds: dict, args, log) -> Tuple["Switch", dict]:
+    """Reboot, wait for the web UI to go down and come back, log in again; return (session, images)."""
+    sw.reboot()
+    sw.logout()
+    sw.wait_for_return(args.reboot_timeout, log=log)
+    sw2 = _login_after_boot(creds, log)
+    return sw2, sw2.image_status()
+
+
+def _health_problems(sw: "Switch", d: dict) -> List[str]:
+    """Managed state (VLANs, ports, PoE) and the management interface after a boot."""
+    current, mgmt = sw.read_state()
+    changes, _ = plan(current, d["state"])
+    out = [describe(c) for c in changes]
+    if d["management"]["vlan"] not in mgmt:
+        out.append(f"management IP interface is not on VLAN {d['management']['vlan']}")
+    return out
+
+
+def _roll_back(sw: "Switch", creds: dict, img: dict, old_version: str, name: str, args, log) -> str:
+    """Boot the slot holding old_version again. Returns a description of the outcome."""
+    old_slot = next((s for s in (1, 2) if img[f"image{s}"] == old_version), None)
+    if old_slot is None:
+        return f"no slot holds {old_version} any more, so there is nothing to roll back to"
+    log(f"{name}: ROLLING BACK: image{old_slot} ({old_version}) as next boot, then reboot")
+    sw.set_next_boot(old_slot)
+    if sw.image_status()["next"] != old_slot:
+        return f"could not set image{old_slot} as the next boot image; the switch still runs the new firmware"
+    sw2, after = _reboot_and_wait(sw, creds, args, log)
+    try:
+        run = running_version(after)
+        log(f"{name}: after rollback: {describe_images(after)}")
+    finally:
+        sw2.logout()
+    if run != old_version:
+        return f"rollback reboot came back on {run}, not {old_version}"
+    return f"rolled back to {old_version}"
+
+
 def cmd_firmware_upgrade(args) -> int:
+    """Bring one switch to the firmware in its desired-state file. Idempotent; see README.md, Firmware."""
     t0 = time.time()
     log = _stamp(t0)
     f = Path(args.file)
     d = load_desired(f)
     name, fw = d["name"], d["firmware"]
+    dry = args.dry_run
     if fw is None:
         raise NgError(f"{f.name}: no firmware block in the desired state")
     image = fetch_firmware(fw, firmware_cache_dir(args.cache_dir), log)
+    size, md5 = image.stat().st_size, md5_file(image)
+    tftp = getattr(args, "tftp_server", None)
     creds = credentials(d)
     sw = Switch(**creds, log=log)
     sw.login()
     try:
         img = sw.image_status()
-        run = running_version(img)
         log(f"{name}: {describe_images(img)}")
-        if run == fw["version"]:
-            raise NgError(f"{name}: already running {run}; refusing to upgrade to the same version")
         if img["current"] is None:
             raise NgError(f"{name}: could not tell which image is running")
-        if img["next"] != img["current"]:
-            raise NgError(f"{name}: next boot image{img['next']} is not the running image{img['current']}; "
-                          f"check both slots and fix it first (firmware set-next-boot {f.name} {img['current']})")
-        current, mgmt = sw.read_state()
-        changes, _ = plan(current, d["state"])
-        if changes:
-            raise NgError(f"{name}: live switch differs from the desired state ({len(changes)} change(s)); "
+        run = running_version(img)
+        if run == fw["version"]:
+            if img["next"] != img["current"]:
+                log(f"{name}: already running {run}; next boot image{img['next']} is not the running image"
+                    + ("; dry run, leaving it" if dry else f", setting image{img['current']}"))
+                if not dry:
+                    sw.set_next_boot(img["current"])
+            # Nothing to do. No drift check here: netgear:drift covers that daily, and a
+            # switch that failed its post-upgrade check keeps rollouts paused (issue).
+            log(f"{name}: already running {run}; nothing to upgrade")
+            return 0
+        problems = _health_problems(sw, d)
+        if problems:
+            raise NgError(f"{name}: live switch differs from the desired state ({'; '.join(problems)}); "
                           "run apply or drift first so a post-upgrade check means something")
-        if d["management"]["vlan"] not in mgmt:
-            raise NgError(f"{name}: management IP interface is not on VLAN {d['management']['vlan']}")
+        old_slot, new_slot, old_version = img["current"], 3 - img["current"], run
         backup = Path(args.backup_dir) / f"{name}.pre-{fw['version']}.{time.strftime('%Y%m%dT%H%M%S')}.running-config.txt"
         backup.parent.mkdir(parents=True, exist_ok=True)
         backup.write_text(sw.export())
         log(f"{name}: sanitized pre-upgrade export written to {backup}")
-        if args.dry_run:
-            log(f"{name}: dry run; would upload {image.name}, boot it and verify")
-            return 0
-        sw.clear_load_status()
-        log(f"{name}: uploading {image.name} ({image.stat().st_size} bytes)")
-        st = sw.upload_firmware(image, timeout=args.upload_timeout, progress=log)
-        img = sw.image_status()
-        log(f"{name}: after upload: {describe_images(img)}")
-        problems = upload_problems(st, image.stat().st_size)
-        try:
-            new_slot = slot_after_upload(img, fw["version"])
+        if img["next"] != old_slot:
+            log(f"{name}: next boot is image{img['next']}, not the running image{old_slot}"
+                + ("" if dry else "; resetting it before loading anything"))
+            if not dry:
+                sw.set_next_boot(old_slot)
+                img = sw.image_status()
+        stored = sw.stored_images().get("inactive") or {}
+        reuse = (stored.get("version") == fw["version"] and stored.get("md5") == md5
+                 and not slot_problems(img, new_slot, fw["version"]))
+        how = f"by TFTP from {tftp}" if tftp else "by HTTP upload"
+        if reuse:
+            log(f"{name}: image{new_slot} already holds {fw['version']} with the image's MD5 {md5}; not loading it again")
+        elif dry:
+            log(f"{name}: dry run; would load {image.name} ({size} bytes) into image{new_slot} {how} "
+                f"(replacing {img[f'image{new_slot}'] or 'nothing'}), keeping {old_version} in image{old_slot}")
+        else:
+            sw.clear_load_status()
+            log(f"{name}: loading {image.name} ({size} bytes) into image{new_slot} {how}")
+            if tftp:
+                st = sw.tftp_download(tftp, image, timeout=args.upload_timeout, progress=log)
+            else:
+                st = sw.upload_firmware(image, timeout=args.upload_timeout, progress=log)
+            img = sw.image_status()
+            log(f"{name}: after load: {describe_images(img)}")
+            problems = upload_problems(st, size)
+            if img["current"] != old_slot or img[f"image{old_slot}"] != old_version:
+                problems.append(f"the running slot changed during the load ({describe_images(img)})")
             problems += slot_problems(img, new_slot, fw["version"])
-        except NgError as e:
-            problems.append(str(e))
-        if problems:
-            restore_next_boot(sw, img, name, log)
-            raise NgError(f"{name}: UPLOADED IMAGE DID NOT VERIFY, NOT REBOOTING: {'; '.join(problems)}. "
-                          "The HTTP upload is unreliable on this model (see README.md, Firmware); "
-                          "do not boot the new slot")
-        fallback = 2 if new_slot == 1 else 1
-        if not img[f"image{fallback}"] or img[f"image{fallback}"] == fw["version"]:
-            raise NgError(f"{name}: no previous firmware left in image{fallback} to fall back to; not rebooting")
-        old_slot, old_version = fallback, img[f"image{fallback}"]
+            stored = sw.stored_images().get("inactive") or {}
+            if stored.get("md5") != md5:
+                problems.append(f"the switch reports MD5 {stored.get('md5') or 'none'} for the inactive image, "
+                                f"the local image is {md5}")
+            if problems:
+                restore_next_boot(sw, img, name, log)
+                raise NgError(f"{name}: LOADED IMAGE DID NOT VERIFY, NOT REBOOTING: {'; '.join(problems)}")
+            log(f"{name}: image{new_slot} verified: {fw['version']}, {size} bytes, MD5 {md5}")
+        if dry:
+            log(f"{name}: dry run; would set image{new_slot} as next boot, reboot, check that {fw['version']} runs "
+                f"and the managed state matches (rolling back to {old_version} if not), then run drift")
+            return 0
         if img["next"] != new_slot:
-            log(f"{name}: setting image{new_slot} as the next boot image")
             sw.set_next_boot(new_slot)
             img = sw.image_status()
             if img["next"] != new_slot:
                 raise NgError(f"{name}: next boot image is still image{img['next']} after setting image{new_slot}")
-        log(f"{name}: rebooting into image{new_slot} ({fw['version']}); previous {old_version} stays in image{old_slot}")
-        sw.reboot()
+        log(f"{name}: rebooting into image{new_slot} ({fw['version']}); {old_version} stays in image{old_slot}")
+        sw, img = _reboot_and_wait(sw, creds, args, log)
+        run = running_version(img)
+        log(f"{name}: after reboot: {describe_images(img)}")
+        if run != fw["version"]:
+            # The switch fell back to the old image by itself. Point the next boot at
+            # it as well, so a later reboot does not try the new image again.
+            restore_next_boot(sw, img, name, log)
+            raise NgError(f"{name}: switch came back running {run}, not {fw['version']}; "
+                          f"it still runs {old_version} and the next boot is that image again")
+        problems = _health_problems(sw, d)
+        if problems:
+            outcome = _roll_back(sw, creds, img, old_version, name, args, log)
+            sw.cs = None
+            raise NgError(f"{name}: {fw['version']} booted but the switch is not healthy ({'; '.join(problems)}); "
+                          f"{outcome}")
     finally:
         sw.logout()
-    sw.wait_for_return(args.reboot_timeout, log=log)
-    sw2 = Switch(**creds, log=log)
-    deadline = time.time() + 300
-    while True:  # the web UI answers before login works
-        try:
-            sw2.login(attempts=1)
-            break
-        except NgError:
-            if time.time() > deadline:
-                raise
-            time.sleep(15)
-    try:
-        img = sw2.image_status()
-    finally:
-        sw2.logout()
-    run = running_version(img)
-    log(f"{name}: after reboot: {describe_images(img)}")
-    if run != fw["version"]:
-        raise NgError(f"{name}: switch came back running {run}, not {fw['version']}")
-    log(f"{name}: running {run}; checking for drift")
+    old_slot = next((s for s in (1, 2) if s != img["current"] and img[f"image{s}"] == old_version), None)
+    log(f"{name}: running {run}, managed state matches; previous {old_version} is in "
+        f"image{old_slot or '?'}; checking for drift")
     drc = cmd_drift(argparse.Namespace(files=[str(f)], report=args.report, export_dir=args.export_dir))
     if drc != 0:
-        print(f"!! {name}: configuration drift after the upgrade (see above). To fall back to {old_version}:\n"
-              f"   web UI: Maintenance > File Management > Dual Image > Dual Image Configuration,\n"
-              f"   make image{old_slot} the active image, then Maintenance > Reset > Device Reboot.")
-        return 1
+        print(f"!! {name}: {run} runs and VLANs, ports and PoE match, but the configuration differs from the "
+              f"snapshot (see above). Not rolling back: if the difference is new firmware defaults, refresh "
+              f"{snapshot_path(f).name}; otherwise fall back to {old_version} with\n"
+              f"   ngswitch.py firmware set-next-boot {f.name} {old_slot or '<slot>'}, then reboot the switch "
+              f"(web UI: Maintenance > Reset > Device Reboot).")
+        return UPGRADED_WITH_DRIFT
     log(f"{name}: upgraded {old_version} -> {run} in {time.time() - t0:.0f}s; no drift")
+    return 0
+
+
+def in_window(window: str, now: Optional[time.struct_time] = None) -> bool:
+    """"HH:MM-HH:MM" in local time; a window may cross midnight."""
+    m = re.fullmatch(r"(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})", window or "")
+    if not m:
+        raise NgError(f"maintenance window must look like 04:30-06:00, not {window!r}")
+    a = int(m.group(1)) * 60 + int(m.group(2))
+    b = int(m.group(3)) * 60 + int(m.group(4))
+    if not (0 <= a < 1440 and 0 <= b < 1440) or a == b:
+        raise NgError(f"maintenance window {window!r} is not a valid range")
+    t = now or time.localtime()
+    cur = t.tm_hour * 60 + t.tm_min
+    return a <= cur < b if a < b else (cur >= a or cur < b)
+
+
+def cmd_firmware_rollout(args) -> int:
+    """Upgrade the given switches one at a time, in order; stop at the first that does not finish clean."""
+    files = [Path(x) for x in args.files]
+    if not files:
+        raise NgError("name the desired-state files to roll out, in order")
+    for i, f in enumerate(files):
+        if args.window and not in_window(args.window):
+            print(f"== outside the maintenance window {args.window} (local time {time.strftime('%H:%M %Z')}); "
+                  f"not starting {f.stem}" + (f" or the {len(files) - i - 1} after it" if len(files) - i > 1 else ""))
+            return 0  # the next scheduled run carries on where this one stopped
+        print(f"== firmware rollout: {f.stem} ({i + 1}/{len(files)})", flush=True)
+        ns = argparse.Namespace(**{**vars(args), "file": str(f),
+                                   "report": f"{args.report_prefix}{f.stem}.txt" if args.report_prefix else None,
+                                   "export_dir": args.export_dir})
+        rc = cmd_firmware_upgrade(ns)
+        if rc != 0:
+            print(f"!! {f.stem}: firmware upgrade exited {rc}; not touching "
+                  + (", ".join(x.stem for x in files[i + 1:]) or "any other switch"))
+            return rc
+        if i + 1 < len(files) and args.settle and not args.dry_run:
+            print(f"   {f.stem} done; waiting {args.settle}s for devices behind it before the next switch", flush=True)
+            time.sleep(args.settle)
     return 0
 
 
@@ -1781,6 +2148,225 @@ def slot_after_upload(img: dict, version: str) -> int:
         raise NgError(f"neither image slot holds {version} after the upload ({describe_images(img)})")
     other = [s for s in slots if s != img["current"]]
     return other[0] if other else slots[0]
+
+
+# -- newer firmware ------------------------------------------------------------
+# NETGEAR's support pages are rendered in the browser and have no listing that
+# can be read without running their scripts. The download server is plain:
+# every release is a zip at a fixed URL that differs only in the version
+# (.../MS510TX/MS510TX_TXPP_V6.7.0.52.zip), it answers 200 for a release and
+# 403 for a file that does not exist. check-latest probes the URLs of the
+# versions that could follow the declared one.
+
+KNOWN_LATEST_PATH = HERE.parent.parent.parent / "ci" / "reports" / "firmware.py"
+_FW_KEYS = ("version", "url", "sha256", "image", "image_sha256")
+
+
+def version_tuple(v: str) -> Tuple[int, ...]:
+    if not _FW_VERSION_RE.match(v or ""):
+        raise NgError(f"not a firmware version: {v!r}")
+    return tuple(int(x) for x in v.split("."))
+
+
+def candidate_versions(version: str, span: int = 40) -> List[str]:
+    """Versions that could follow <version>, nearest first: a later build of the
+    same release, then the first builds of the next maintenance, minor and major release."""
+    p = version_tuple(version)
+    if len(p) != 4:
+        raise NgError(f"expected a four-part version like 6.7.0.52, not {version}")
+    a, b, c, d = p
+    out = [f"{a}.{b}.{c}.{d + i}" for i in range(1, span + 1)]
+    for head in (f"{a}.{b}.{c + 1}", f"{a}.{b + 1}.0", f"{a + 1}.0.0"):
+        out += [f"{head}.{i}" for i in range(span)]
+    return out
+
+
+def release_url(url: str, old: str, new: str) -> str:
+    """The declared download URL with its version replaced (the vendor names every release the same way)."""
+    if url.count(old) != 1:
+        raise NgError(f"cannot derive release URLs: {url} does not contain {old} exactly once")
+    return url.replace(old, new)
+
+
+def _head(url: str, timeout: int = 20) -> Tuple[int, dict]:
+    req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "Mozilla/5.0 (ngswitch)"})
+    last: Optional[Exception] = None
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.status, {k.lower(): v for k, v in r.headers.items()}
+        except urllib.error.HTTPError as e:
+            if e.code >= 500:
+                last = e
+            else:
+                return e.code, {k.lower(): v for k, v in (e.headers or {}).items()}
+        except (urllib.error.URLError, OSError) as e:
+            last = e
+        time.sleep(2 * (attempt + 1))
+    raise NgError(f"download server did not answer for {url}: {last}")
+
+
+def _release_exists(url: str, head=_head) -> bool:
+    code, hdrs = head(url)
+    if code in (403, 404):
+        return False
+    if code != 200:
+        raise NgError(f"unexpected HTTP {code} from the download server for {url}")
+    ctype = hdrs.get("content-type", "")
+    length = int(hdrs.get("content-length") or 0)
+    if "zip" not in ctype and "octet-stream" not in ctype:
+        raise NgError(f"{url} answered 200 but with content type {ctype!r}, not a zip; "
+                      "the download server changed, check the release by hand")
+    if length and length < 1 << 20:
+        raise NgError(f"{url} is only {length} bytes, not a firmware zip; check the release by hand")
+    return True
+
+
+def find_latest(fw: dict, head=_head, log=lambda m: None) -> Tuple[str, str]:
+    """(newest version, its zip URL) on the download server; the declared one when nothing is newer.
+
+    Fails when the declared release itself is not found, or when a version that
+    cannot exist is reported as present: either means the server changed and the
+    probe would silently report nothing new."""
+    cur = fw["version"]
+    if not _release_exists(fw["url"], head):
+        raise NgError(f"the declared release {fw['url']} is not on the download server any more; "
+                      "its URL scheme may have changed")
+    if _release_exists(release_url(fw["url"], cur, "0.0.0.0"), head):
+        raise NgError("the download server reports a nonexistent release as present; cannot probe for releases")
+    best = cur
+    for v in candidate_versions(cur):
+        u = release_url(fw["url"], cur, v)
+        if _release_exists(u, head):
+            log(f"   found {u}")
+            if version_tuple(v) > version_tuple(best):
+                best = v
+    return best, release_url(fw["url"], cur, best)
+
+
+def _html_text(html: str) -> str:
+    import html as _h
+    t = re.sub(r"(?is)<(script|style).*?</\1>", "", html)
+    t = re.sub(r"(?i)<br\s*/?>|</p>|</li>|</h\d>|</tr>", "\n", t)
+    t = re.sub(r"(?i)<li[^>]*>", "- ", t)
+    t = _h.unescape(re.sub(r"<[^>]+>", "", t))
+    lines = [re.sub(r"[ \t\xa0]+", " ", x).strip() for x in t.splitlines()]
+    return "\n".join(x for x in lines if x)
+
+
+def describe_release(zpath: Path, version: str, url: str) -> Tuple[dict, str]:
+    """Firmware block for a downloaded release zip, plus its release notes as text.
+
+    Hashes are those of the file as downloaded (NETGEAR publishes none). The .bin
+    is the one member whose name contains the version and whose header names it."""
+    with zipfile.ZipFile(zpath) as z:
+        bins = [n for n in z.namelist() if n.endswith(".bin") and "/" not in n and version in n]
+        if len(bins) != 1:
+            raise NgError(f"{zpath.name}: expected one .bin named for {version}, found {bins or z.namelist()}")
+        name = bins[0]
+        h = hashlib.sha256()
+        with z.open(name) as src:
+            head = src.read(256)
+            h.update(head)
+            for chunk in iter(lambda: src.read(1 << 20), b""):
+                h.update(chunk)
+        if image_version(head) != version:
+            raise NgError(f"{name}: image header names version {image_version(head)}, not {version}")
+        notes = [n for n in z.namelist() if n.lower().endswith((".htm", ".html", ".txt"))]
+        text = "\n\n".join(_html_text(z.read(n).decode("utf-8", "replace")) for n in notes)
+    fw = {"version": version, "url": url, "sha256": sha256_file(zpath), "image": name, "image_sha256": h.hexdigest()}
+    return fw, text
+
+
+def download(url: str, dest: Path) -> Path:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".part")
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (ngswitch)"})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r, open(tmp, "wb") as out:
+            for chunk in iter(lambda: r.read(1 << 20), b""):
+                out.write(chunk)
+    except (urllib.error.URLError, OSError) as e:
+        raise NgError(f"download of {url} failed: {type(e).__name__}: {e}") from None
+    tmp.replace(dest)
+    return dest
+
+
+def replace_firmware_block(text: str, fw: dict) -> str:
+    """Rewrite the five firmware keys in a desired-state file, keeping its comments and layout."""
+    m = re.search(r"(?m)^firmware:\n((?:[ \t]+.*\n)+)", text)
+    if not m:
+        raise NgError("no firmware: block to update")
+    body = m.group(1)
+    for k in _FW_KEYS:
+        # quoted where YAML could read the value as a number (a version, or a hash of digits)
+        val = f'"{fw[k]}"' if k in ("version", "sha256", "image_sha256") else fw[k]
+        body, n = re.subn(rf"(?m)^(\s+{k}:)[ \t]*.*$", lambda mm: f"{mm.group(1)} {val}", body, count=1)
+        if n != 1:
+            raise NgError(f"firmware block has no {k}: line")
+    return text[:m.start(1)] + body + text[m.end(1):]
+
+
+def replace_known_latest(text: str, model: str, version: str, date: str) -> str:
+    pat = rf'(?m)^(\s*"{re.escape(model)}":\s*\(")[^"]*(",\s*")[^"]*("\),)'
+    new, n = re.subn(pat, lambda m: f"{m.group(1)}{version}{m.group(2)}{date}{m.group(3)}", text)
+    if n != 1:
+        raise NgError(f"KNOWN_LATEST has no single entry for {model}")
+    return new
+
+
+def _declared(files: List[Path]) -> Tuple[dict, List[Tuple[Path, dict]]]:
+    """The firmware block the files share (all switches run the same model and release)."""
+    ds = [(f, load_desired(f)) for f in files]
+    fws = {json.dumps(d["firmware"], sort_keys=True) for _, d in ds if d["firmware"]}
+    if len(fws) != 1:
+        raise NgError("the desired-state files do not all declare the same firmware; bump them by hand")
+    models = {d["model"] for _, d in ds}
+    if len(models) != 1:
+        raise NgError(f"the desired-state files are for different models: {sorted(models)}")
+    return json.loads(fws.pop()), ds
+
+
+def cmd_firmware_check_latest(args) -> int:
+    files = _desired_files(args.files)
+    fw, ds = _declared(files)
+    model = ds[0][1]["model"]
+    latest, url = find_latest(fw, log=print)
+    newer = version_tuple(latest) > version_tuple(fw["version"])
+    result = {"model": model, "declared": fw["version"], "latest": latest, "url": url, "newer": newer}
+    if args.json:
+        Path(args.json).write_text(json.dumps(result, indent=2) + "\n")
+    print(f"== {model}: declared {fw['version']}, newest on the download server {latest}"
+          + (f": NEWER RELEASE {url}" if newer else " (up to date)"))
+    return 2 if newer and args.detailed_exitcode else 0
+
+
+def cmd_firmware_bump(args) -> int:
+    """Point every desired-state file (and KNOWN_LATEST) at a new release, with hashes of the download."""
+    files = _desired_files(args.files)
+    fw, ds = _declared(files)
+    model = ds[0][1]["model"]
+    if version_tuple(args.version) <= version_tuple(fw["version"]):
+        raise NgError(f"{args.version} is not newer than the declared {fw['version']}")
+    url = args.url or release_url(fw["url"], fw["version"], args.version)
+    cache = firmware_cache_dir(args.cache_dir)
+    zpath = download(url, cache / url.rsplit("/", 1)[-1])
+    new, notes = describe_release(zpath, args.version, url)
+    for f, _ in ds:
+        f.write_text(replace_firmware_block(f.read_text(), new))
+        load_desired(f)  # still valid
+        print(f"{f.name}: firmware {fw['version']} -> {new['version']}")
+    kl = Path(args.known_latest or KNOWN_LATEST_PATH)
+    if kl.exists():
+        kl.write_text(replace_known_latest(kl.read_text(), model, new["version"], time.strftime("%Y-%m-%d")))
+        print(f"{kl.name}: KNOWN_LATEST[{model}] = {new['version']}")
+    if args.notes:
+        Path(args.notes).write_text(notes + "\n")
+    if args.json:
+        Path(args.json).write_text(json.dumps({"model": model, "old": fw, "new": new}, indent=2) + "\n")
+    for k in ("sha256", "image", "image_sha256"):
+        print(f"   {k}: {new[k]}")
+    return 0
 
 
 def cmd_export(args) -> int:
@@ -1889,9 +2475,42 @@ def main(argv: Optional[List[str]] = None) -> int:
     fs.add_argument("--export-dir", help="write the post-upgrade sanitized export here")
     fs.add_argument("--report", help="write the post-upgrade drift report here")
     fs.add_argument("--upload-timeout", type=int, default=1200)
+    fs.add_argument("--tftp-server", metavar="IPV4",
+                    help="load the image by TFTP instead of the HTTP upload: serve the verified image from a "
+                         "built-in read-only TFTP server on this local address (UDP 69) and have the switch fetch it")
     fs.add_argument("--reboot-timeout", type=int, default=900)
-    fs.add_argument("--dry-run", action="store_true", help="checks and backup only; no upload or reboot")
+    fs.add_argument("--dry-run", action="store_true",
+                    help="every check (download, hashes, live state, stored image MD5) and the backup; "
+                         "reports each step it would take, loads nothing and does not reboot")
     fs.set_defaults(fn=cmd_firmware_upgrade)
+    fs = fsub.add_parser("rollout", help="upgrade several switches one at a time, stopping at the first failure")
+    fs.add_argument("files", nargs="+", help="desired-state files, in the order to upgrade")
+    fs.add_argument("--window", metavar="HH:MM-HH:MM",
+                    help="local-time maintenance window; no switch is started outside it")
+    fs.add_argument("--settle", type=int, default=120, help="seconds to wait between switches (default 120)")
+    fs.add_argument("--cache-dir")
+    fs.add_argument("--backup-dir", default="netgear-backup")
+    fs.add_argument("--export-dir")
+    fs.add_argument("--report-prefix", help="write each switch's drift report to <prefix><name>.txt")
+    fs.add_argument("--upload-timeout", type=int, default=1200)
+    fs.add_argument("--tftp-server", metavar="IPV4")
+    fs.add_argument("--reboot-timeout", type=int, default=900)
+    fs.add_argument("--dry-run", action="store_true")
+    fs.set_defaults(fn=cmd_firmware_rollout)
+    fs = fsub.add_parser("check-latest", help="look for a newer release on the vendor download server")
+    fs.add_argument("files", nargs="*")
+    fs.add_argument("--json", help="write the result here")
+    fs.add_argument("--detailed-exitcode", action="store_true", help="exit 2 when a newer release exists")
+    fs.set_defaults(fn=cmd_firmware_check_latest)
+    fs = fsub.add_parser("bump", help="declare a new release in every desired-state file (downloads it for the hashes)")
+    fs.add_argument("files", nargs="*")
+    fs.add_argument("--version", required=True)
+    fs.add_argument("--url", help="zip URL (default: the declared URL with the version replaced)")
+    fs.add_argument("--cache-dir")
+    fs.add_argument("--known-latest", help="path of ci/reports/firmware.py (KNOWN_LATEST)")
+    fs.add_argument("--notes", help="write the release notes from the zip here (text)")
+    fs.add_argument("--json", help="write old and new firmware blocks here")
+    fs.set_defaults(fn=cmd_firmware_bump)
 
     s = sub.add_parser("generate", help="write a desired-state file and snapshot from the live switch")
     s.add_argument("--name", required=True)

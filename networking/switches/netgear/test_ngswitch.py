@@ -1,8 +1,13 @@
 """Unit tests for ngswitch.py (offline; no switch or Vault access)."""
 import argparse
 import copy
+import hashlib
 import io
+import json
+import re
 import tempfile
+import time
+import zipfile
 from contextlib import redirect_stdout
 from unittest import mock
 import sys
@@ -526,6 +531,11 @@ class TestFirmwareStatus(unittest.TestCase):
         bad = self.img(v2="6.7.0.52", nb="2", n2="rs")
         self.assertIn("incomplete write", " ".join(ng.slot_problems(bad, 2, "6.7.0.52")))
         self.assertEqual(ng.slot_problems(bad, 1), [])
+        # names the switch really uses: the vendor file name, or image1.bin in slot 2
+        for n2 in ("MS510TX_MS510TXPP_V6.7.0.42.bin", "image1.bin", "MS510TX_TXPP_V6.7.0.52.bin"):
+            self.assertEqual(ng.slot_problems(self.img(v2="6.7.0.52", n2=n2), 2, "6.7.0.52"), [], n2)
+        for n2 in ("image2", "image2.bi", "", "sub/image2.bin"):
+            self.assertTrue(ng.slot_problems(self.img(v2="6.7.0.52", n2=n2), 2, "6.7.0.52"), n2)
         self.assertIn("expected 6.7.0.52", " ".join(ng.slot_problems(self.img(), 2, "6.7.0.52")))
         self.assertIn("cannot be verified", " ".join(ng.slot_problems(self.img(names=False), 2)))
         self.assertIn("no version", " ".join(ng.slot_problems(self.img(v2=""), 2)))
@@ -537,6 +547,15 @@ class TestFirmwareStatus(unittest.TestCase):
         line, flagged = ng.firmware_status_line("sw", dict(FW, version="6.7.0.42"), bad)
         self.assertTrue(flagged)
         self.assertIn("NEXT BOOT IMAGE IS INVALID", line)
+
+    def test_tftp_download_payload(self):
+        x = ng.tftp_download_payload("192.0.2.1", "MS510TX_TXPP_V6.7.0.52.bin").decode()
+        self.assertIn('<TFTPDownload action="set"><destFileType>8</destFileType>'
+                      '<srcIPAddr>192.0.2.1</srcIPAddr><srcFileName>MS510TX_TXPP_V6.7.0.52.bin</srcFileName>'
+                      '</TFTPDownload>', x)
+        for server, fname in (("host.example", "a.bin"), ("192.0.2.1", "../a.bin"), ("192.0.2.1", "a" * 65)):
+            with self.assertRaises(ng.NgError):
+                ng.tftp_download_payload(server, fname)
 
     def test_upload_problems(self):
         self.assertEqual(ng.upload_problems({"bytesTransfered": "100", "copyStatusType": "5"}, 100), [])
@@ -615,16 +634,27 @@ class TestCommittedFiles(unittest.TestCase):
                 self.assertEqual(ng.check_guard([], d, cur, None), [])
 
 
-if __name__ == "__main__":
-    unittest.main()
+
+IMAGE_BYTES = b"x" * 10
+IMAGE_MD5 = hashlib.md5(IMAGE_BYTES).hexdigest()
 
 
 class FakeSwitch:
-    """Stands in for Switch in the firmware command tests (no network)."""
+    """Stands in for Switch in the firmware command tests (no network).
+
+    Tracks two slots like the real switch: after a reboot into the next-boot slot,
+    that image becomes image1 (the switch numbers slots from the running image)."""
+
     def __init__(self, images, upload_status=None, **_):
         self.images = images
         self.upload_status = upload_status
         self.calls = []
+        self.state = None
+        self.mgmt = [4]
+        self.after_upload = {}
+        self.md5 = {}            # slot -> MD5 of the stored image
+        self.boots = []          # what each reboot does: "next" (boot the next-boot slot) or "fallback"
+        self.healthy_after_boot = True
 
     def __enter__(self):
         return self
@@ -641,12 +671,21 @@ class FakeSwitch:
     def image_status(self):
         return dict(self.images)
 
+    def stored_images(self):
+        cur = self.images["current"]
+        out = {}
+        for kind, s in (("active", cur), ("inactive", 3 - cur)):
+            if self.images[f"image{s}"]:
+                out[kind] = {"name": self.images[f"image{s}_name"], "version": self.images[f"image{s}"],
+                             "md5": self.md5.get(s, "0" * 32)}
+        return out
+
     def set_next_boot(self, slot):
         self.calls.append(("set_next_boot", slot))
         self.images["next"] = slot
 
     def read_state(self):
-        return self.state, [4]
+        return self.state, self.mgmt
 
     def export(self):
         return "exported"
@@ -654,13 +693,39 @@ class FakeSwitch:
     def clear_load_status(self):
         pass
 
+    def _loaded(self):
+        self.images.update(self.after_upload)
+        self.md5.setdefault(3 - self.images["current"], IMAGE_MD5)
+
     def upload_firmware(self, image, timeout=0, progress=None):
         self.calls.append(("upload", image.name))
-        self.images.update(self.after_upload)
+        self._loaded()
+        return self.upload_status
+
+    def tftp_download(self, server, image, timeout=0, progress=None):
+        self.calls.append(("tftp", server, image.name))
+        self._loaded()
         return self.upload_status
 
     def reboot(self):
         self.calls.append(("reboot",))
+        if not self.boots:
+            raise RuntimeError("stop after reboot")  # the test ends here
+        what = self.boots.pop(0)
+        cur = self.images["current"]
+        boot = self.images["next"] if what == "next" else cur
+        other = 3 - boot
+        im = self.images
+        new = {"image1": im[f"image{boot}"], "image1_name": im[f"image{boot}_name"],
+               "image2": im[f"image{other}"], "image2_name": im[f"image{other}_name"], "current": 1}
+        new["next"] = 1 if im["next"] == boot else 2
+        self.md5 = {1: self.md5.get(boot), 2: self.md5.get(other)}
+        self.images = new
+        if not self.healthy_after_boot and new["image1"] == "6.7.0.52":
+            self.mgmt = []
+
+    def wait_for_return(self, timeout, down_timeout=180, log=None):
+        return 0
 
 
 def _images(v2="6.7.0.42", n2="image2.bin", nb=2):
@@ -668,12 +733,15 @@ def _images(v2="6.7.0.42", n2="image2.bin", nb=2):
             "image1_name": "flash://system/images/image1.bin", "image2_name": f"flash://system/images/{n2}"}
 
 
+GOOD_LOAD = {"image2": "6.7.0.52", "image2_name": "flash://system/images/MS510TX_TXPP_V6.7.0.52.bin", "next": 2}
+DONE = {"bytesTransfered": "10", "copyStatusType": "5"}
+
+
 class TestFirmwareCommands(unittest.TestCase):
     def setUp(self):
         self.desired = HERE / "netgear-movie.yml"
-        self.patches = [mock.patch.object(ng, "credentials", return_value={"host": "h", "username": "u", "password": "p"})]
-        for pt in self.patches:
-            pt.start()
+        mock.patch.object(ng, "credentials", return_value={"host": "h", "username": "u", "password": "p"}).start()
+        self.drift = mock.patch.object(ng, "cmd_drift", return_value=0).start()
 
     def tearDown(self):
         mock.patch.stopall()
@@ -699,38 +767,486 @@ class TestFirmwareCommands(unittest.TestCase):
         self.assertEqual(self.run_set(sw, 2, dry=True), 0)
         self.assertEqual(sw.calls, [])
 
-    def _upgrade(self, sw, tmp):
+    def _args(self, tmp, tftp="192.0.2.1", dry=False, file=None):
+        return argparse.Namespace(file=str(file or self.desired), cache_dir=tmp, backup_dir=tmp, export_dir=None,
+                                  report=None, upload_timeout=1, reboot_timeout=1, dry_run=dry, tftp_server=tftp)
+
+    def _upgrade(self, sw, tftp="192.0.2.1", dry=False, out=None):
         d = ng.load_desired(self.desired)
         sw.state = d["state"]
-        image = Path(tmp) / d["firmware"]["image"]
-        image.write_bytes(b"x" * 10)
-        args = argparse.Namespace(file=str(self.desired), cache_dir=tmp, backup_dir=tmp, export_dir=None,
-                                  report=None, upload_timeout=1, reboot_timeout=1, dry_run=False)
-        with mock.patch.object(ng, "Switch", return_value=sw), \
-                mock.patch.object(ng, "fetch_firmware", return_value=image), redirect_stdout(io.StringIO()):
-            return ng.cmd_firmware_upgrade(args)
+        with tempfile.TemporaryDirectory() as tmp:
+            image = Path(tmp) / d["firmware"]["image"]
+            image.write_bytes(IMAGE_BYTES)
+            with mock.patch.object(ng, "Switch", return_value=sw), \
+                    mock.patch.object(ng, "fetch_firmware", return_value=image), \
+                    redirect_stdout(out if out is not None else io.StringIO()):
+                return ng.cmd_firmware_upgrade(self._args(tmp, tftp, dry))
 
-    def test_upgrade_refuses_when_next_boot_is_not_running(self):
-        sw = FakeSwitch(_images(nb=2))
-        with tempfile.TemporaryDirectory() as tmp, self.assertRaises(ng.NgError) as cm:
-            self._upgrade(sw, tmp)
-        self.assertIn("is not the running image1", str(cm.exception))
-        self.assertNotIn(("upload", ng.load_desired(self.desired)["firmware"]["image"]), sw.calls)
+    def test_full_upgrade_by_tftp(self):
+        sw = FakeSwitch(_images(nb=1), upload_status=DONE)
+        sw.after_upload = GOOD_LOAD
+        sw.boots = ["next"]
+        self.assertEqual(self._upgrade(sw), 0)
+        image = ng.load_desired(self.desired)["firmware"]["image"]
+        self.assertEqual(sw.calls, [("tftp", "192.0.2.1", image), ("reboot",)])
+        self.assertEqual(ng.running_version(sw.images), "6.7.0.52")
+        self.drift.assert_called_once()
 
-    def test_upgrade_truncated_image_restores_next_boot_and_does_not_reboot(self):
-        sw = FakeSwitch(_images(nb=1), upload_status={"bytesTransfered": "10", "copyStatusType": "5"})
+    def test_dry_run_covers_the_flow_without_writing(self):
+        sw = FakeSwitch(_images(nb=2), upload_status=DONE)
+        out = io.StringIO()
+        self.assertEqual(self._upgrade(sw, dry=True, out=out), 0)
+        self.assertEqual(sw.calls, [])
+        text = out.getvalue()
+        for step in ("next boot is image2, not the running image1", "would load", "by TFTP from 192.0.2.1",
+                     "would set image2 as next boot, reboot", "rolling back to 6.7.0.42"):
+            self.assertIn(step, text)
+        self.drift.assert_not_called()
+
+    def test_already_on_desired_version_is_a_noop(self):
+        sw = FakeSwitch({**_images(v2="6.7.0.42", nb=1), "image1": "6.7.0.52"})
+        self.assertEqual(self._upgrade(sw), 0)
+        self.assertEqual(sw.calls, [])
+        self.drift.assert_not_called()
+
+    def test_already_on_desired_version_fixes_next_boot(self):
+        sw = FakeSwitch({**_images(v2="6.7.0.42", nb=2), "image1": "6.7.0.52"})
+        self.assertEqual(self._upgrade(sw), 0)
+        self.assertEqual(sw.calls, [("set_next_boot", 1)])
+
+    def test_rerun_reuses_verified_image_in_inactive_slot(self):
+        sw = FakeSwitch(_images(v2="6.7.0.52", n2="MS510TX_TXPP_V6.7.0.52.bin", nb=2))
+        sw.md5 = {2: IMAGE_MD5}
+        sw.boots = ["next"]
+        self.assertEqual(self._upgrade(sw), 0)
+        # next boot is reset to the running image first, then set to the new one for the reboot
+        self.assertEqual(sw.calls, [("set_next_boot", 1), ("set_next_boot", 2), ("reboot",)])
+
+    def test_stale_image_in_inactive_slot_is_loaded_again(self):
+        sw = FakeSwitch(_images(v2="6.7.0.52", n2="MS510TX_TXPP_V6.7.0.52.bin", nb=1), upload_status=DONE)
+        sw.md5 = {2: "f" * 32}  # same version, different file
+        sw.after_upload = GOOD_LOAD
+
+        def load(server, image, timeout=0, progress=None):
+            sw.calls.append(("tftp", server, image.name))
+            sw.images.update(GOOD_LOAD)
+            sw.md5[2] = IMAGE_MD5
+            return DONE
+        sw.tftp_download = load
+        with self.assertRaises(RuntimeError):
+            self._upgrade(sw)
+        self.assertEqual([c[0] for c in sw.calls], ["tftp", "reboot"])
+
+    def test_truncated_image_restores_next_boot_and_does_not_reboot(self):
+        sw = FakeSwitch(_images(nb=1), upload_status=DONE)
         sw.after_upload = {"image2": "6.7.0.52", "image2_name": "flash://system/images/rs", "next": 2}
-        with tempfile.TemporaryDirectory() as tmp, self.assertRaises(ng.NgError) as cm:
-            self._upgrade(sw, tmp)
+        with self.assertRaises(ng.NgError) as cm:
+            self._upgrade(sw, tftp=None)
         self.assertIn("DID NOT VERIFY", str(cm.exception))
         self.assertIn(("set_next_boot", 1), sw.calls)
         self.assertNotIn(("reboot",), sw.calls)
         self.assertEqual(sw.images["next"], 1)
 
-    def test_upgrade_size_mismatch_does_not_reboot(self):
+    def test_size_mismatch_does_not_reboot(self):
         sw = FakeSwitch(_images(nb=1), upload_status={"bytesTransfered": "9", "copyStatusType": "5"})
-        sw.after_upload = {"image2": "6.7.0.52", "next": 2}
-        with tempfile.TemporaryDirectory() as tmp, self.assertRaises(ng.NgError) as cm:
-            self._upgrade(sw, tmp)
+        sw.after_upload = GOOD_LOAD
+        with self.assertRaises(ng.NgError) as cm:
+            self._upgrade(sw)
         self.assertIn("bytes transferred", str(cm.exception))
         self.assertNotIn(("reboot",), sw.calls)
+        self.assertEqual(sw.images["next"], 1)
+
+    def test_md5_mismatch_does_not_reboot(self):
+        sw = FakeSwitch(_images(nb=1), upload_status=DONE)
+        sw.after_upload = GOOD_LOAD
+        sw.md5 = {2: "e" * 32}
+        with self.assertRaises(ng.NgError) as cm:
+            self._upgrade(sw)
+        self.assertIn("MD5", str(cm.exception))
+        self.assertNotIn(("reboot",), sw.calls)
+
+    def test_switch_falls_back_by_itself(self):
+        sw = FakeSwitch(_images(nb=1), upload_status=DONE)
+        sw.after_upload = GOOD_LOAD
+        sw.boots = ["fallback"]
+        with self.assertRaises(ng.NgError) as cm:
+            self._upgrade(sw)
+        self.assertIn("came back running 6.7.0.42", str(cm.exception))
+        self.assertEqual(ng.running_version(sw.images), "6.7.0.42")
+        self.assertEqual(sw.images["next"], sw.images["current"])  # will not try the new image again
+        self.drift.assert_not_called()
+
+    def test_unhealthy_after_boot_rolls_back(self):
+        sw = FakeSwitch(_images(nb=1), upload_status=DONE)
+        sw.after_upload = GOOD_LOAD
+        sw.boots = ["next", "next"]
+        sw.healthy_after_boot = False
+        with self.assertRaises(ng.NgError) as cm:
+            self._upgrade(sw)
+        self.assertIn("rolled back to 6.7.0.42", str(cm.exception))
+        self.assertEqual(ng.running_version(sw.images), "6.7.0.42")
+        self.assertEqual(sw.calls.count(("reboot",)), 2)
+        self.assertIn(("set_next_boot", 2), sw.calls[-2:])  # the old image is image2 after the first boot
+        self.drift.assert_not_called()
+
+    def test_unmanaged_drift_after_upgrade_is_reported_not_rolled_back(self):
+        sw = FakeSwitch(_images(nb=1), upload_status=DONE)
+        sw.after_upload = GOOD_LOAD
+        sw.boots = ["next"]
+        self.drift.return_value = 2
+        out = io.StringIO()
+        self.assertEqual(self._upgrade(sw, out=out), ng.UPGRADED_WITH_DRIFT)
+        self.assertEqual(sw.calls.count(("reboot",)), 1)
+        self.assertIn("set-next-boot netgear-movie.yml 2", out.getvalue())
+
+    def _rollout(self, results, window=None):
+        files = [str(HERE / "netgear-movie.yml"), str(HERE / "netgear-office.yml")]
+        args = argparse.Namespace(files=files, window=window, settle=0, cache_dir=None, backup_dir="b",
+                                  export_dir=None, report_prefix="r-", upload_timeout=1, tftp_server=None,
+                                  reboot_timeout=1, dry_run=False)
+        seen = []
+
+        def up(ns):
+            seen.append((Path(ns.file).stem, ns.report))
+            return results.pop(0)
+        with mock.patch.object(ng, "cmd_firmware_upgrade", side_effect=up), redirect_stdout(io.StringIO()):
+            return ng.cmd_firmware_rollout(args), seen
+
+    def test_rollout_in_order(self):
+        rc, seen = self._rollout([0, 0])
+        self.assertEqual(rc, 0)
+        self.assertEqual(seen, [("netgear-movie", "r-netgear-movie.txt"), ("netgear-office", "r-netgear-office.txt")])
+
+    def test_rollout_stops_at_first_failure(self):
+        for first in (1, ng.UPGRADED_WITH_DRIFT):
+            rc, seen = self._rollout([first, 0])
+            self.assertEqual(rc, first)
+            self.assertEqual([s for s, _ in seen], ["netgear-movie"])
+
+    def test_rollout_outside_window_does_nothing(self):
+        with mock.patch.object(ng, "in_window", return_value=False):
+            rc, seen = self._rollout([0, 0], window="04:45-06:00")
+        self.assertEqual((rc, seen), (0, []))
+
+    def test_in_window(self):
+        def at(h, m):
+            return time.struct_time((2026, 11, 5, h, m, 0, 3, 309, 0))
+        self.assertTrue(ng.in_window("04:45-06:00", at(4, 45)))
+        self.assertTrue(ng.in_window("04:45-06:00", at(5, 59)))
+        self.assertFalse(ng.in_window("04:45-06:00", at(6, 0)))
+        self.assertFalse(ng.in_window("04:45-06:00", at(3, 0)))
+        self.assertTrue(ng.in_window("23:00-01:00", at(0, 30)))
+        self.assertFalse(ng.in_window("23:00-01:00", at(12, 0)))
+        for bad in ("4-6", "25:00-26:00", "05:00-05:00", ""):
+            with self.assertRaises(ng.NgError):
+                ng.in_window(bad, at(5, 0))
+
+
+BOOTVAR = """------------------ show bootvar ------------------
+Active-image: flash://system/images/image1.bin
+  Version: 6.7.0.42
+  MD5 Digest: 4c04bb2e4a5d783f6399a790e69a1b63
+  Date: 17-Dec-2019
+  Time: 12:31:41
+  Inactive after reboot
+Inactive-image: flash://system/images/MS510TX_TXPP_V6.7.0.52.bin
+  Version: 6.7.0.52
+  MD5 Digest: d9ceb309108378b437fa9ebb958750b4
+  Date: 15-Nov-2021
+  Time: 15:32:03
+  Active after reboot
+------------------ buffers info ------------------
+"""
+
+
+class TestBootvar(unittest.TestCase):
+    def test_parse(self):
+        b = ng.parse_bootvar("------ show version ------\n" + BOOTVAR.split("\n", 1)[1] + BOOTVAR)
+        self.assertEqual(b["active"], {"name": "flash://system/images/image1.bin", "version": "6.7.0.42",
+                                       "md5": "4c04bb2e4a5d783f6399a790e69a1b63"})
+        self.assertEqual(b["inactive"]["version"], "6.7.0.52")
+        self.assertEqual(b["inactive"]["md5"], "d9ceb309108378b437fa9ebb958750b4")
+
+    def test_missing(self):
+        with self.assertRaises(ng.NgError):
+            ng.parse_bootvar("no images here")
+
+    def test_md5_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "a.bin"
+            p.write_bytes(IMAGE_BYTES)
+            self.assertEqual(ng.md5_file(p), IMAGE_MD5)
+
+
+HEAD_FIXTURE = json.loads((HERE / "testdata" / "download-server-head.json").read_text())
+REAL_FW = {"version": "6.7.0.42",
+           "url": "https://www.downloads.netgear.com/files/GDC/MS510TX/MS510TX_TXPP_V6.7.0.42.zip"}
+
+
+def fixture_head(fixture=HEAD_FIXTURE):
+    def head(url):
+        m = re.search(r"_V(\d+\.\d+\.\d+\.\d+)\.zip$", url)
+        e = fixture.get(m.group(1)) if m else None
+        if e is None:
+            return 403, {"content-type": "application/xml"}
+        return e["status"], e["headers"]
+    return head
+
+
+class TestCheckLatest(unittest.TestCase):
+    def test_versions(self):
+        self.assertLess(ng.version_tuple("6.7.0.9"), ng.version_tuple("6.7.0.10"))
+        with self.assertRaises(ng.NgError):
+            ng.version_tuple("6.7.0")
+        c = ng.candidate_versions("6.7.0.52", span=3)
+        self.assertEqual(c, ["6.7.0.53", "6.7.0.54", "6.7.0.55", "6.7.1.0", "6.7.1.1", "6.7.1.2",
+                             "6.8.0.0", "6.8.0.1", "6.8.0.2", "7.0.0.0", "7.0.0.1", "7.0.0.2"])
+
+    def test_release_url(self):
+        self.assertEqual(ng.release_url(REAL_FW["url"], "6.7.0.42", "6.7.0.52"),
+                         "https://www.downloads.netgear.com/files/GDC/MS510TX/MS510TX_TXPP_V6.7.0.52.zip")
+        with self.assertRaises(ng.NgError):
+            ng.release_url("https://x/fw.zip", "6.7.0.42", "6.7.0.52")
+
+    def test_finds_newest_against_captured_server_answers(self):
+        self.assertEqual(ng.find_latest(REAL_FW, head=fixture_head()),
+                         ("6.7.0.52", REAL_FW["url"].replace("6.7.0.42", "6.7.0.52")))
+        cur = dict(REAL_FW, version="6.7.0.52", url=REAL_FW["url"].replace("6.7.0.42", "6.7.0.52"))
+        self.assertEqual(ng.find_latest(cur, head=fixture_head())[0], "6.7.0.52")
+
+    def test_finds_next_minor_release(self):
+        fx = dict(HEAD_FIXTURE)
+        fx["6.7.1.3"] = fx["6.7.0.52"]
+        self.assertEqual(ng.find_latest(REAL_FW, head=fixture_head(fx))[0], "6.7.1.3")
+
+    def test_fails_loudly_when_the_server_changes(self):
+        fx = {k: v for k, v in HEAD_FIXTURE.items() if k != "6.7.0.42"}
+        with self.assertRaises(ng.NgError) as cm:  # declared release gone: URL scheme changed
+            ng.find_latest(REAL_FW, head=fixture_head(fx))
+        self.assertIn("not on the download server", str(cm.exception))
+        fx = dict(HEAD_FIXTURE)
+        fx["0.0.0.0"] = fx["6.7.0.52"]  # everything answers 200
+        with self.assertRaises(ng.NgError):
+            ng.find_latest(REAL_FW, head=fixture_head(fx))
+        fx = dict(HEAD_FIXTURE)
+        fx["6.7.0.53"] = {"status": 200, "headers": {"content-type": "text/html"}}  # a soft-404 page
+        with self.assertRaises(ng.NgError) as cm:
+            ng.find_latest(REAL_FW, head=fixture_head(fx))
+        self.assertIn("not a zip", str(cm.exception))
+        fx = dict(HEAD_FIXTURE)
+        fx["6.7.0.53"] = {"status": 500, "headers": {}}
+        with self.assertRaises(ng.NgError):
+            ng.find_latest(REAL_FW, head=fixture_head(fx))
+
+
+def _image_blob(version: str) -> bytes:
+    head = bytearray(256)
+    head[12:16] = b"NG10"
+    head[0x14:0x14 + len(version)] = version.encode()
+    return bytes(head) + b"payload"
+
+
+NOTES_HTML = """<html><body><h2>MS510TX/MS510TXPP Firmware version 6.7.0.60</h2><p>Release Date: May 1, 2027</p>
+<h3>Bug Fixes</h3><ul><li>Fixed&nbsp;one thing.</li><li>Fixed another.</li></ul><script>x()</script></body></html>"""
+
+
+class TestBump(unittest.TestCase):
+    def make_zip(self, tmp, version="6.7.0.60", header=None, extra=()):
+        z = Path(tmp) / f"MS510TX_TXPP_V{version}.zip"
+        with zipfile.ZipFile(z, "w") as zf:
+            zf.writestr(f"MS510TX_TXPP_V{version}.bin", _image_blob(header or version))
+            zf.writestr(f"MS510TX_TXPP_{version}.htm", NOTES_HTML)
+            for n in extra:
+                zf.writestr(n, b"x")
+        return z
+
+    def test_describe_release(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            z = self.make_zip(tmp)
+            fw, notes = ng.describe_release(z, "6.7.0.60", "https://example.invalid/MS510TX_TXPP_V6.7.0.60.zip")
+            self.assertEqual(fw["image"], "MS510TX_TXPP_V6.7.0.60.bin")
+            self.assertEqual(fw["sha256"], ng.sha256_file(z))
+            self.assertEqual(fw["image_sha256"], hashlib.sha256(_image_blob("6.7.0.60")).hexdigest())
+            self.assertIn("- Fixed one thing.", notes)
+            self.assertNotIn("x()", notes)
+
+    def test_describe_release_checks_header_and_members(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ng.NgError):
+                ng.describe_release(self.make_zip(tmp, header="6.7.0.52"), "6.7.0.60", "u")
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ng.NgError):
+                ng.describe_release(self.make_zip(tmp, extra=["other_6.7.0.60.bin"]), "6.7.0.60", "u")
+
+    def test_replace_firmware_block_on_committed_files(self):
+        new = {"version": "6.7.0.60", "url": "https://example.invalid/MS510TX_TXPP_V6.7.0.60.zip",
+               "sha256": "1" * 64, "image": "MS510TX_TXPP_V6.7.0.60.bin", "image_sha256": "2" * 64}
+        for f in sorted(HERE.glob("netgear-*.yml")):
+            text = f.read_text()
+            out = ng.replace_firmware_block(text, new)
+            self.assertEqual(len(out.splitlines()), len(text.splitlines()))
+            with tempfile.TemporaryDirectory() as tmp:
+                p = Path(tmp) / f.name
+                p.write_text(out)
+                d = ng._load_yaml(p)
+            self.assertEqual(d["firmware"], new)
+            self.assertEqual({k: v for k, v in d.items() if k != "firmware"},
+                             {k: v for k, v in ng._load_yaml(f).items() if k != "firmware"})
+
+    def test_replace_known_latest_on_committed_report(self):
+        text = ng.KNOWN_LATEST_PATH.read_text()
+        out = ng.replace_known_latest(text, "MS510TXPP", "6.7.0.60", "2027-05-02")
+        self.assertIn('"MS510TXPP": ("6.7.0.60", "2027-05-02"),', out)
+        self.assertEqual(len(out), len(text))
+        with self.assertRaises(ng.NgError):
+            ng.replace_known_latest(text, "GS108", "1.0.0.1", "2027-05-02")
+
+    def test_bump_command(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for f in HERE.glob("netgear-*.yml"):
+                (Path(tmp) / f.name).write_text(f.read_text())
+                (Path(tmp) / f.name.replace(".yml", ".running-config.txt")).write_text(
+                    ng.snapshot_path(f).read_text())
+            kl = Path(tmp) / "firmware.py"
+            kl.write_text(ng.KNOWN_LATEST_PATH.read_text())
+            z = self.make_zip(tmp)
+
+            def fake_download(url, dest):
+                self.assertTrue(url.endswith("MS510TX_TXPP_V6.7.0.60.zip"))
+                return z
+            args = argparse.Namespace(files=[str(p) for p in sorted(Path(tmp).glob("netgear-*.yml"))],
+                                      version="6.7.0.60", url=None, cache_dir=tmp, known_latest=str(kl),
+                                      notes=str(Path(tmp) / "notes.txt"), json=None)
+            with mock.patch.object(ng, "download", side_effect=fake_download), redirect_stdout(io.StringIO()):
+                self.assertEqual(ng.cmd_firmware_bump(args), 0)
+            for p in Path(tmp).glob("netgear-*.yml"):
+                self.assertEqual(ng.load_desired(p)["firmware"]["version"], "6.7.0.60")
+            self.assertIn('"MS510TXPP": ("6.7.0.60"', kl.read_text())
+            self.assertIn("Bug Fixes", (Path(tmp) / "notes.txt").read_text())
+            args.version = "6.7.0.52"
+            with self.assertRaises(ng.NgError):
+                ng.cmd_firmware_bump(args)
+
+
+class TestTftpServer(unittest.TestCase):
+    """The built-in TFTP server, exercised over loopback with a minimal client."""
+
+    def fetch(self, port, name, opts=None, ack_first_block_twice=False):
+        import socket
+        import struct
+        c = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        c.settimeout(5)
+        req = struct.pack("!H", 1) + name.encode() + b"\0octet\0"
+        for k, v in (opts or {}).items():
+            req += k.encode() + b"\0" + v.encode() + b"\0"
+        c.sendto(req, ("127.0.0.1", port))
+        out, blksize, expect, oack = b"", 512, 1, {}
+        try:
+            while True:
+                pkt, peer = c.recvfrom(70000)
+                op = struct.unpack("!H", pkt[:2])[0]
+                if op == 5:
+                    return None, pkt[4:].rstrip(b"\0").decode()
+                if op == 6:
+                    f = pkt[2:].split(b"\0")
+                    oack = {f[i].decode(): f[i + 1].decode() for i in range(0, len(f) - 1, 2)}
+                    blksize = int(oack.get("blksize", 512))
+                    c.sendto(struct.pack("!HH", 4, 0), peer)
+                    continue
+                num = struct.unpack("!H", pkt[2:4])[0]
+                if num == expect:
+                    out += pkt[4:]
+                    expect += 1
+                    if ack_first_block_twice and num == 1:
+                        ack_first_block_twice = False
+                        continue  # drop this ACK: the server must retransmit block 1
+                c.sendto(struct.pack("!HH", 4, num), peer)
+                if num == expect - 1 and len(pkt) - 4 < blksize:
+                    return out, oack
+        finally:
+            c.close()
+
+    def serve(self, data):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        p = Path(tmp.name) / "fw.bin"
+        p.write_bytes(data)
+        srv = ng.TftpServer("127.0.0.1", p, port=0)
+        srv.TIMEOUT = 0.3
+        srv.__enter__()
+        self.addCleanup(srv.__exit__)
+        return srv
+
+    def test_serves_file(self):
+        data = bytes(range(256)) * 9 + b"tail"
+        srv = self.serve(data)
+        got, _ = self.fetch(srv.port, "fw.bin")
+        self.assertEqual(got, data)
+        import time
+        for _ in range(50):  # the server counts the last block once its ACK arrives
+            if srv.sent == len(data):
+                break
+            time.sleep(0.02)
+        self.assertEqual((srv.sent, srv.transfers), (len(data), 1))
+
+    def test_exact_block_multiple_ends_with_empty_block(self):
+        data = b"a" * 1024
+        srv = self.serve(data)
+        got, _ = self.fetch(srv.port, "fw.bin")
+        self.assertEqual(got, data)
+
+    def test_options_and_retransmit(self):
+        data = b"z" * 5000
+        srv = self.serve(data)
+        got, oack = self.fetch(srv.port, "fw.bin", {"blksize": "1024", "tsize": "0"}, ack_first_block_twice=True)
+        self.assertEqual(got, data)
+        self.assertEqual(oack, {"blksize": "1024", "tsize": "5000"})
+
+    def test_other_files_refused(self):
+        srv = self.serve(b"x")
+        got, msg = self.fetch(srv.port, "../etc/passwd")
+        self.assertIsNone(got)
+        self.assertIn("not found", msg)
+        self.assertTrue(srv.errors)
+
+
+class TestSwitchFirmwareCalls(unittest.TestCase):
+    def sw(self):
+        s = ng.Switch("192.0.2.1", "u", "p")
+        s.cs = "cs0"
+        return s
+
+    def test_reboot_sends_unit_0_like_the_device_reboot_page(self):
+        s = self.sw()
+        with mock.patch.object(s, "post") as post:
+            s.reboot()
+        self.assertIn(b"<Reload action=\"set\"><UnitList><UnitEntry><unitID>0</unitID>", post.call_args[0][0])
+        self.assertIsNone(s.cs)
+
+    def test_wait_for_load_tolerates_404_during_flash_write(self):
+        import urllib.error
+        s = self.sw()
+        err = urllib.error.HTTPError("http://x", 404, "Site or Page Not Found", {}, None)
+        seq = [{"copyStatusType": "2", "bytesTransfered": "512"}, err, err,
+               {"copyStatusType": "5", "bytesTransfered": "1024"}]
+
+        def status():
+            v = seq.pop(0)
+            if isinstance(v, Exception):
+                raise v
+            return v
+        with mock.patch.object(s, "load_status", side_effect=status), \
+                mock.patch.object(s, "clear_load_status"), mock.patch.object(ng.time, "sleep"):
+            st = s.wait_for_load(60)
+        self.assertEqual(st["bytesTransfered"], "1024")
+
+    def test_wait_for_load_still_reports_failure(self):
+        s = self.sw()
+        with mock.patch.object(s, "load_status", return_value={"copyStatusType": "4", "errorMessage": "boom"}), \
+                mock.patch.object(s, "clear_load_status"), self.assertRaises(ng.NgError) as cm:
+            s.wait_for_load(60)
+        self.assertIn("boom", str(cm.exception))
+
+
+if __name__ == "__main__":
+    unittest.main()
