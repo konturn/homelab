@@ -286,7 +286,7 @@ router:bootstrap:
 nginx:validate:
   extends: .interruptible
   stage: validate
-  image: nginx:1.31.1-alpine3.23-perl@sha256:b4f40fc790074a4af0d6fc81923a30459910d6f01efc048246ef288b14654354
+  image: nginx:1.31.2-alpine3.23-perl@sha256:b3b337e1ef5b1bc8253dec68bc4522d9027920666a428bf51a022ceb7e3396bc
   needs: []
   before_script:
     - apk add --no-cache openssl
