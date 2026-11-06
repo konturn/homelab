@@ -1590,13 +1590,15 @@ aruba-s2500:test:
 # (IAP_TASK=drift), so it needs no pipeline schedule of its own; run it by hand
 # with Run pipeline and SCHEDULED_TASK=s2500-drift. It never sends a config
 # command: s2500cfg.py apply refuses under CI.
+# paramiko<4 (also in aruba-s2500:firmware): the switch offers only ssh-rsa
+# (SHA-1) host keys, which paramiko 4+ no longer accepts.
 aruba-s2500:drift:
   extends: .aruba_iap_live
   stage: deploy
   needs: []
   resource_group: aruba-s2500
   script:
-    - pip3 install -q --break-system-packages --cache-dir /cache/pip paramiko
+    - pip3 install -q --break-system-packages --cache-dir /cache/pip "paramiko<4"
     - rc=0; python3 networking/aruba-s2500/s2500cfg.py drift --report s2500-drift.md --export s2500-live.running-config.txt || rc=$?
     - |
       python3 ci/ipmi/drift_issue.py --rc "$rc" --report s2500-drift.md --label s2500-drift \
@@ -1634,7 +1636,7 @@ aruba-s2500:firmware:
     S2500_TFTP_SERVER: "10.100.0.2"
     S2500_FIRMWARE_DIR: "/cache/aruba-s2500-firmware"
   script:
-    - pip3 install -q --break-system-packages --cache-dir /cache/pip paramiko
+    - pip3 install -q --break-system-packages --cache-dir /cache/pip "paramiko<4"
     - |
       if [ "$S2500_FIRMWARE_DRY_RUN" = 1 ]; then
         python3 networking/aruba-s2500/s2500ctl.py firmware upgrade --dry-run

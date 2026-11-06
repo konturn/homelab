@@ -46,7 +46,9 @@ The tools send `enable` and the secret on login. Two ArubaOS quirks:
 - Interactive password prompts (the `enable` prompt, `enable secret`) take the
   input up to `\r`. A `\n` after the secret becomes part of it, and `enable` fails.
 
-The switch accepts password logins only (no public key). The older entries
+The switch accepts password logins only (no public key) and offers only an
+`ssh-rsa` (SHA-1) host key, which paramiko 4+ rejects: use `paramiko<4` (CI pins it).
+The older entries
 `homelab/infrastructure/aruba` (`password`, `config_secret`) and
 `homelab/infrastructure/switch` (`admin_password`) predate this directory and are
 not used; `config_secret` is the hashed form from a config export, not the
