@@ -4,9 +4,12 @@ Everything in this module operates on plain data (file contents, path lists,
 label lists) so it can be unit tested without GitLab or a host. The CLI in
 automerge.py fetches that data and calls in here.
 
-The core rule: an MR qualifies only if its compose change is a set of
-in-place edits to `image:` lines, each keeping the same image name and moving
-only the tag (patch/minor) and/or the digest, for services on the allowlist.
+The core rule: an MR qualifies only if its change is a set of in-place edits
+to `image:` lines of deployed compose files, each keeping the same image name
+and moving only the tag (patch/minor) and/or the digest. Every service
+qualifies except those on the denylist, those that run only under a compose
+profile, and update kinds a service's options restrict. Major versions, and
+tag changes whose version scheme is ambiguous, never qualify.
 """
 
 from __future__ import annotations
@@ -16,7 +19,10 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
+# The router's compose file. Other deployed compose files are listed under
+# `compose_files` in the policy file (see `compose_files`).
 COMPOSE_PATH = "docker/docker-compose.yml"
+COMPOSE_GLOB = re.compile(r"^docker/docker-compose(-[^/]+)?\.ya?ml$")
 
 _DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 _NAME_RE = re.compile(r"^[a-z0-9][a-z0-9._/:-]*$")
@@ -33,7 +39,8 @@ class PolicyError(Exception):
 
 
 class MajorVersionChange(PolicyError):
-    """A major-version tag change (or a 0.x minor one). Never auto-merged; for a
+    """A major-version tag change, a 0.x minor one, or a tag change whose
+    version scheme is ambiguous (treated as major). Never auto-merged; for a
     stateful service it is also a heavy change (see `is_stateful`)."""
 
     def __init__(self, msg: str, service: Optional[str] = None, image: Optional[str] = None):
@@ -116,14 +123,20 @@ def parse_version(tag: str) -> Optional[Version]:
 
 
 def classify_tag_change(old_tag: str, new_tag: str) -> str:
-    """Return 'patch' or 'minor', or raise PolicyError."""
+    """Return 'patch' or 'minor', or raise PolicyError.
+
+    Anything that cannot be shown to stay within one major version raises
+    MajorVersionChange: a different major, a 0.x minor, a tag that is not a
+    major.minor[.patch] version (`latest`, `18993091-ls1`, a date), or a
+    changed flavor. Where the scheme is ambiguous, the change counts as major."""
     old_v, new_v = parse_version(old_tag), parse_version(new_tag)
     if old_v is None or new_v is None:
-        raise PolicyError(
-            f"tag {old_tag!r} -> {new_tag!r} is not a recognisable version; "
-            "only digest-only updates qualify for non-version tags")
+        raise MajorVersionChange(
+            f"tag {old_tag!r} -> {new_tag!r} is not a recognisable major.minor version; "
+            "ambiguous version scheme, treated as major (only digest-only updates qualify)")
     if old_v.flavor != new_v.flavor:
-        raise PolicyError(f"tag flavor changed ({old_tag!r} -> {new_tag!r})")
+        raise MajorVersionChange(
+            f"tag flavor changed ({old_tag!r} -> {new_tag!r}); treated as major")
     if (new_v.nums, new_v.suffix_nums) <= (old_v.nums, old_v.suffix_nums):
         raise PolicyError(f"tag {old_tag!r} -> {new_tag!r} is not an upgrade")
     o_major, o_minor = old_v.nums[0], old_v.nums[1]
@@ -187,6 +200,62 @@ def compose_line_services(text: str) -> Tuple[List[Optional[str]], Dict[int, str
 
 
 @dataclass
+class ServiceInfo:
+    profiles: List[str] = field(default_factory=list)
+    healthcheck: bool = False
+
+
+_CHILD_KEY_RE = re.compile(r"^(\s+)([A-Za-z0-9_.-]+):\s*(.*?)\s*$")
+
+
+def compose_service_info(text: str) -> Dict[str, ServiceInfo]:
+    """Per service: its compose `profiles` and whether it defines a healthcheck.
+
+    A service with `profiles` starts only when one of them is enabled (the
+    retired `wordpress` profile, for example). A per-service deploy names the
+    service explicitly, which starts it whatever its profiles, so such a
+    service must never be auto-merged."""
+    owner, _ = compose_line_services(text)
+    lines = text.split("\n")
+    info: Dict[str, ServiceInfo] = {}
+    svc_indent: Dict[str, int] = {}
+    child_indent: Dict[str, int] = {}
+    for i, line in enumerate(lines):
+        svc = owner[i]
+        if svc is None or not line.strip() or line.lstrip().startswith("#"):
+            continue
+        info.setdefault(svc, ServiceInfo())
+        indent = len(line) - len(line.lstrip(" "))
+        if svc not in svc_indent:          # the service's own key line
+            svc_indent[svc] = indent
+            continue
+        m = _CHILD_KEY_RE.match(line)
+        if not m:
+            continue
+        # direct children only: the first deeper indent seen for the service
+        if indent != child_indent.setdefault(svc, indent):
+            continue
+        key, value = m.group(2), m.group(3)
+        if key == "healthcheck":
+            info[svc].healthcheck = True
+        elif key == "profiles":
+            value = value.split("#", 1)[0].strip()
+            if value.startswith("["):
+                names = [n.strip().strip("'\"") for n in value.strip("[]").split(",") if n.strip()]
+            else:
+                names = []
+                for nxt in lines[i + 1:]:
+                    t = nxt.strip()
+                    if not t or t.startswith("#"):
+                        continue
+                    if not t.startswith("- "):
+                        break
+                    names.append(t[2:].strip().strip("'\""))
+            info[svc].profiles = names or ["(unparsed)"]
+    return info
+
+
+@dataclass
 class ImageChange:
     service: str
     line: int              # 1-based
@@ -195,10 +264,11 @@ class ImageChange:
     kind: str              # 'digest' | 'patch' | 'minor'
     old_line: str
     new_line: str
+    file: str = COMPOSE_PATH
 
     def as_dict(self) -> dict:
         return {
-            "service": self.service, "line": self.line, "kind": self.kind,
+            "file": self.file, "service": self.service, "line": self.line, "kind": self.kind,
             "old": str(self.old), "new": str(self.new),
             "old_line": self.old_line, "new_line": self.new_line,
         }
@@ -210,13 +280,13 @@ def _image_value(line: str) -> Tuple[str, str]:
     return m.group(1), m.group(2)
 
 
-def diff_compose(base: str, head: str) -> List[ImageChange]:
-    """Compare two versions of the compose file. Raise PolicyError unless every
+def diff_compose(base: str, head: str, path: str = COMPOSE_PATH) -> List[ImageChange]:
+    """Compare two versions of a compose file. Raise PolicyError unless every
     difference is an in-place, same-image tag/digest edit of a service image line."""
     b_lines, h_lines = base.split("\n"), head.split("\n")
     if len(b_lines) != len(h_lines):
         raise PolicyError(
-            f"compose line count changed ({len(b_lines)} -> {len(h_lines)}); "
+            f"{path}: line count changed ({len(b_lines)} -> {len(h_lines)}); "
             "only in-place image line edits qualify")
     b_owner, b_images = compose_line_services(base)
     h_owner, h_images = compose_line_services(head)
@@ -224,7 +294,7 @@ def diff_compose(base: str, head: str) -> List[ImageChange]:
     for i, (bl, hl) in enumerate(zip(b_lines, h_lines)):
         if bl == hl:
             continue
-        where = f"line {i + 1}"
+        where = (f"{path} " if path != COMPOSE_PATH else "") + f"line {i + 1}"
         if i not in b_images or i not in h_images:
             svc = h_owner[i] or b_owner[i]
             raise PolicyError(
@@ -257,7 +327,7 @@ def diff_compose(base: str, head: str) -> List[ImageChange]:
                 raise MajorVersionChange(f"{where} ({service}): {e}", service=service, image=new.name)
             except PolicyError as e:
                 raise PolicyError(f"{where} ({service}): {e}")
-        changes.append(ImageChange(service, i + 1, old, new, kind, bl, hl))
+        changes.append(ImageChange(service, i + 1, old, new, kind, bl, hl, path))
     # Every service whose image changed must be fully accounted for by those lines.
     seen = {}
     for c in changes:
@@ -306,12 +376,66 @@ def protected_paths(paths: List[str], codeowners_text: str) -> List[str]:
 
 
 # ---------------------------------------------------------------------------
-# Update types and the fast-track class
+# Deployed compose files and their hosts
 # ---------------------------------------------------------------------------
-# Every allowlisted service may take these update kinds unless its entry sets
-# `updates:` to fewer. A fast-track image (allowlist `fast_track.images`) is
-# further limited to digest/patch on every service that uses it, in every mode:
-# its minor and major updates always go to a human.
+# Which host renders which compose file comes from `docker_compose_file_names`
+# in ansible/inventory.yml (host vars over group vars over `all` vars, as in
+# Ansible). The policy file maps each host to the prefix of its per-service
+# deploy job (`<prefix>:deploy-service` in .gitlab-ci.yml) under `deploy_hosts`.
+
+@dataclass(frozen=True)
+class Deployment:
+    host: str              # inventory host name
+    job: Optional[str]     # deploy job prefix (None: no per-service deploy)
+    project: str           # compose project name on the host
+    address: str           # ansible_host (for the reachability check)
+
+
+def compose_deployments(inventory: dict, allowlist: dict) -> Dict[str, List[Deployment]]:
+    """Compose file (repo path) -> the hosts that render and run it."""
+    jobs = allowlist.get("deploy_hosts") or {}
+    out: Dict[str, List[Deployment]] = {}
+
+    def walk(group: dict, inherited: dict) -> None:
+        group = group or {}
+        gvars = {**inherited, **(group.get("vars") or {})}
+        for host, hvars in (group.get("hosts") or {}).items():
+            eff = {**gvars, **(hvars or {})}
+            for name in eff.get("docker_compose_file_names") or []:
+                path = "docker/" + str(name).strip()
+                dep = Deployment(host=host, job=jobs.get(host),
+                                 project=str(eff.get("docker_compose_project_name") or "docker"),
+                                 address=str(eff.get("ansible_host") or host))
+                if dep not in out.setdefault(path, []):
+                    out[path].append(dep)
+        for child in (group.get("children") or {}).values():
+            walk(child, gvars)
+
+    walk(inventory.get("all") or {}, {})
+    return out
+
+
+def compose_files(allowlist: dict) -> List[str]:
+    """Compose files the sweep may merge (`compose_files`; each must also be
+    deployed by a host with a per-service deploy)."""
+    return list(allowlist.get("compose_files") or allowlist.get("allowed_files") or [COMPOSE_PATH])
+
+
+def default_deployments(allowlist: dict) -> Dict[str, List[Deployment]]:
+    """Used when no inventory is given (unit tests): every listed compose file
+    runs on the router."""
+    return {f: [Deployment("router.lab.nkontur.com", "router", "docker", "10.4.0.1")]
+            for f in compose_files(allowlist)}
+
+
+# ---------------------------------------------------------------------------
+# Update kinds, denylist and the fast-track class
+# ---------------------------------------------------------------------------
+# Every service may take digest, patch and minor updates unless it is on the
+# denylist, runs only under a compose profile, or its entry under `services`
+# sets `updates:` to fewer. Majors never qualify (classify_tag_change). A
+# fast-track image (`fast_track.images`) is merged promptly for the kinds it
+# lists; its other non-major kinds go through the general class.
 
 UPDATE_KINDS = ("digest", "patch", "minor")
 FAST_TRACK_KINDS = ("digest", "patch")
@@ -345,16 +469,34 @@ def fast_track_config(allowlist: dict) -> dict:
     }
 
 
+def denylist(allowlist: dict) -> Dict[str, Dict[str, str]]:
+    """{'services': {name: reason}, 'images': {name: reason}}. Every entry needs
+    a reason; a malformed section raises PolicyError (fails closed)."""
+    d = allowlist.get("denylist") or {}
+    out: Dict[str, Dict[str, str]] = {"services": {}, "images": {}}
+    for kind in ("services", "images"):
+        for name, reason in (d.get(kind) or {}).items():
+            if not isinstance(reason, str) or not reason.strip():
+                raise PolicyError(f"denylist {kind} {name}: a reason is required")
+            out[kind][name] = " ".join(reason.split())
+    return out
+
+
+def deny_reason(service: str, image: Optional[str], allowlist: dict) -> Optional[str]:
+    d = denylist(allowlist)
+    if service in d["services"]:
+        return d["services"][service]
+    if image and image in d["images"]:
+        return d["images"][image]
+    return None
+
+
 def allowed_kinds(service: str, image: str, allowlist: dict) -> Tuple[str, ...]:
-    """Update kinds an allowlisted service may take for this image (empty: none)."""
-    svc = (allowlist.get("services") or {}).get(service)
-    if svc is None:
+    """Update kinds a service may take for this image (empty: none)."""
+    if deny_reason(service, image, allowlist):
         return ()
-    kinds = _kinds((svc or {}).get("updates"), UPDATE_KINDS, f"service {service}")
-    ft = fast_track_config(allowlist)["images"].get(image)
-    if ft is not None:
-        kinds = tuple(k for k in kinds if k in ft)
-    return kinds
+    svc = (allowlist.get("services") or {}).get(service) or {}
+    return _kinds(svc.get("updates"), UPDATE_KINDS, f"service {service}")
 
 
 def fast_track_verdict(author: str, changes: List["ImageChange"], allowlist: dict) -> Tuple[bool, str]:
@@ -362,8 +504,9 @@ def fast_track_verdict(author: str, changes: List["ImageChange"], allowlist: dic
 
     All of: the class is enabled; the author is a fast-track author; the MR
     changes exactly one image (one name, one old and one new reference, on
-    one or more services); that image is listed; and every change is a kind
-    the listed image allows. Returns (qualifies, explanation)."""
+    one or more services) in the router compose file; that image is listed;
+    and every change is a kind the listed image allows. Returns
+    (qualifies, explanation)."""
     ft = fast_track_config(allowlist)
     if not ft["enabled"]:
         return False, "fast track is disabled"
@@ -371,6 +514,8 @@ def fast_track_verdict(author: str, changes: List["ImageChange"], allowlist: dic
         return False, f"author {author!r} is not a fast-track author"
     if not changes:
         return False, "no image changes"
+    if any(c.file != COMPOSE_PATH for c in changes):
+        return False, f"fast track covers {COMPOSE_PATH} only"
     names = {c.new.name for c in changes}
     if len(names) != 1:
         return False, "changes more than one image: " + ", ".join(sorted(names))
@@ -391,11 +536,11 @@ def fast_track_verdict(author: str, changes: List["ImageChange"], allowlist: dic
 # Heavy changes
 # ---------------------------------------------------------------------------
 # A heavy change is a major-version upgrade of a stateful service: one listed
-# under `stateful.services` in the allowlist, or running an image listed under
+# under `stateful.services` in the policy file, or running an image listed under
 # `stateful.images` (databases). A heavy change would need last night's backup
 # to have succeeded and a fresh ZFS snapshot of the service's dataset. The bot
-# cannot verify either reliably, so heavy changes stay manual-only (and rule 3
-# already refuses every major-version change).
+# cannot verify either reliably, so heavy changes stay manual-only (and every
+# major-version change is refused anyway).
 
 HEAVY_MANUAL_REASON = ("heavy change (major version of a stateful service): manual only; "
                        "the bot cannot verify last night's backup or a fresh snapshot of the dataset")
@@ -415,6 +560,10 @@ def is_stateful(service: Optional[str], image: Optional[str], allowlist: dict) -
 # Whole-MR evaluation (MR-local checks; global gates are added by the caller)
 # ---------------------------------------------------------------------------
 
+LABEL_MAJOR = "major"
+DENIED_MARK = "on the auto-merge denylist"
+
+
 @dataclass
 class Verdict:
     eligible: bool = True
@@ -423,15 +572,27 @@ class Verdict:
     changes: List[ImageChange] = field(default_factory=list)
     fast_track: bool = False                           # eligible AND in the fast-track class
     heavy: bool = False                                # major version of a stateful service
+    major: bool = False                                # a major (or ambiguous) version change
+    denied: bool = False                               # touches a denylisted service/image
+    frozen: bool = False                               # carries the freeze label
+    deploy_jobs: List[str] = field(default_factory=list)   # per-service deploy job prefixes
+    deploy_hosts: List[Deployment] = field(default_factory=list)
 
     def reject(self, reason: str) -> None:
         self.eligible = False
         self.fast_track = False
         self.reasons.append(reason)
 
+    @property
+    def manual(self) -> bool:
+        """Not eligible for a lasting policy reason (not only a freeze): the MR
+        waits for a human, and the sweep labels it so it stays visible."""
+        return not self.eligible and len(self.reasons) > (1 if self.frozen else 0)
+
     def as_dict(self) -> dict:
         return {"eligible": self.eligible, "fast_track": self.fast_track, "heavy": self.heavy,
-                "reasons": self.reasons,
+                "major": self.major, "denied": self.denied, "manual": self.manual,
+                "deploy_jobs": self.deploy_jobs, "reasons": self.reasons,
                 "notes": self.notes, "changes": [c.as_dict() for c in self.changes]}
 
 
@@ -445,13 +606,34 @@ class FileChange:
     mode_changed: bool = False
 
 
+ComposePair = Tuple[Optional[str], Optional[str]]
+
+
 def evaluate_mr(*, author: str, target_branch: str, labels: List[str],
-                files: List[FileChange], base_compose: Optional[str],
-                head_compose: Optional[str], allowlist: dict,
-                codeowners_text: str, merger: Optional[str] = None) -> Verdict:
-    """`merger` is the identity that would merge (the sweep's token user). When
-    given, an MR authored by that identity is rejected: author != merger."""
+                files: List[FileChange], allowlist: dict, codeowners_text: str,
+                base_compose: Optional[str] = None, head_compose: Optional[str] = None,
+                composes: Optional[Dict[str, ComposePair]] = None,
+                deployments: Optional[Dict[str, List[Deployment]]] = None,
+                merger: Optional[str] = None) -> Verdict:
+    """`composes` maps each changed compose file to its (base, head) text;
+    `base_compose`/`head_compose` are shorthand for the router file.
+    `deployments` comes from `compose_deployments` (default: every listed
+    compose file on the router). `merger` is the identity that would merge
+    (the sweep's token user); an MR authored by it is rejected."""
     v = Verdict()
+    composes = dict(composes or {})
+    if base_compose is not None or head_compose is not None:
+        composes.setdefault(COMPOSE_PATH, (base_compose, head_compose))
+    if deployments is None:
+        deployments = default_deployments(allowlist)
+
+    # A malformed policy section fails closed for every MR.
+    for check in (fast_track_config, denylist):
+        try:
+            check(allowlist)
+        except PolicyError as e:
+            v.reject(f"policy: {e}")
+
     authors = allowlist.get("authors") or []
     if author not in authors:
         v.reject(f"author {author!r} is not in the auto-merge author list")
@@ -461,47 +643,80 @@ def evaluate_mr(*, author: str, target_branch: str, labels: List[str],
         v.reject(f"target branch {target_branch!r} is not {allowlist.get('target_branch', 'main')!r}")
     freeze_label = allowlist.get("freeze_label", "freeze")
     if freeze_label in labels:
+        v.frozen = True
         v.reject(f"MR has the {freeze_label!r} label")
+    if LABEL_MAJOR in labels:
+        v.major = True
+        v.reject(f"labelled {LABEL_MAJOR!r} by Renovate: major updates are never auto-merged")
 
-    allowed_files = set(allowlist.get("allowed_files") or [COMPOSE_PATH])
+    allowed = set(compose_files(allowlist))
     paths = sorted({f.path for f in files} | {f.old_path for f in files if f.old_path})
     if not files:
         v.reject("MR has no file changes")
     for f in files:
         if f.new_file or f.deleted_file or f.renamed_file or f.mode_changed:
             v.reject(f"{f.path}: file added, deleted, renamed or mode-changed")
-    extra = [p for p in paths if p not in allowed_files]
-    if extra:
-        v.reject("touches files outside the auto-merge scope: " + ", ".join(extra))
+    for p in paths:
+        if p in allowed:
+            continue
+        if COMPOSE_GLOB.match(p):
+            if not deployments.get(p):
+                v.reject(f"{p} is not deployed by any host (docker_compose_file_names in "
+                         "ansible/inventory.yml), so nothing would deploy or health-check it")
+            else:
+                v.reject(f"{p} is not listed under compose_files in the auto-merge policy")
+        else:
+            v.reject(f"touches files outside the auto-merge scope: {p}")
 
-    # CODEOWNERS: compose is special-cased (allowed only for image-only diffs,
-    # verified below); any other code-owned path disqualifies.
-    owned = [p for p in protected_paths(paths, codeowners_text) if p != COMPOSE_PATH]
+    # CODEOWNERS: the listed compose files are special-cased (allowed only for
+    # image-only diffs, verified below); any other code-owned path disqualifies.
+    owned = [p for p in protected_paths(paths, codeowners_text) if p not in allowed]
     if owned:
         v.reject("touches CODEOWNERS-protected paths: " + ", ".join(owned))
 
-    if COMPOSE_PATH in paths:
-        if base_compose is None or head_compose is None:
-            v.reject("could not read both versions of the compose file")
-        else:
-            try:
-                v.changes = diff_compose(base_compose, head_compose)
-            except MajorVersionChange as e:
-                v.reject(f"compose: {e}")
-                if is_stateful(e.service, e.image, allowlist):
-                    v.heavy = True
-                    v.reject(HEAVY_MANUAL_REASON)
-            except PolicyError as e:
-                v.reject(f"compose: {e}")
-            for r in change_kind_reasons(v.changes, allowlist):
-                v.reject(r)
-            for c in v.changes:
-                v.notes.append(f"{c.service}: {c.kind} update {c.old.tag or ''} -> {c.new.tag or ''}"
-                               f" ({(c.new.digest or '')[:19]})")
-            if not v.changes and v.eligible:
-                v.reject("compose file changed but no image updates were found")
-    elif v.eligible:
-        v.reject("MR does not change the compose file")
+    changed_composes = [p for p in paths if p in allowed]
+    for path in changed_composes:
+        base, head = composes.get(path, (None, None))
+        if base is None or head is None:
+            v.reject(f"could not read both versions of {path}")
+            continue
+        try:
+            file_changes = diff_compose(base, head, path)
+        except MajorVersionChange as e:
+            v.major = True
+            v.reject(f"compose: {e}")
+            if is_stateful(e.service, e.image, allowlist):
+                v.heavy = True
+                v.reject(HEAVY_MANUAL_REASON)
+            continue
+        except PolicyError as e:
+            v.reject(f"compose: {e}")
+            continue
+        v.changes += file_changes
+        for r in change_reasons(file_changes, allowlist, {path: compose_service_info(head)},
+                                {path: compose_service_info(base)}):
+            v.reject(r)
+            if DENIED_MARK in r:
+                v.denied = True
+        hosts = deployments.get(path) or []
+        if not hosts:
+            v.reject(f"{path} is not deployed by any host")
+        for d in hosts:
+            if not d.job:
+                v.reject(f"{path} runs on {d.host}, which has no per-service deploy (deploy_hosts)")
+            elif d.job not in v.deploy_jobs:
+                v.deploy_jobs.append(d.job)
+                v.deploy_hosts.append(d)
+    for c in v.changes:
+        v.notes.append(f"{c.service}: {c.kind} update {c.old.tag or ''} -> {c.new.tag or ''}"
+                       f" ({(c.new.digest or '')[:19]})"
+                       + (f" [{c.file}]" if c.file != COMPOSE_PATH else ""))
+    if v.deploy_jobs:
+        v.notes.append("deploys via " + ", ".join(f"{j}:deploy-service" for j in v.deploy_jobs))
+    if not changed_composes and v.eligible:
+        v.reject("MR does not change a deployed compose file")
+    elif changed_composes and not v.changes and v.eligible:
+        v.reject("compose file changed but no image updates were found")
 
     if v.eligible:
         try:
@@ -512,19 +727,35 @@ def evaluate_mr(*, author: str, target_branch: str, labels: List[str],
     return v
 
 
-def change_kind_reasons(changes: List[ImageChange], allowlist: dict) -> List[str]:
-    """Per-change allowlist check (service listed, update kind allowed). Used by
-    evaluate_mr and again by plan-deploy on the merged commit."""
+def change_reasons(changes: List[ImageChange], allowlist: dict,
+                   head_info: Optional[Dict[str, Dict[str, ServiceInfo]]] = None,
+                   base_info: Optional[Dict[str, Dict[str, ServiceInfo]]] = None) -> List[str]:
+    """Per-change checks: denylist, compose profiles, update kind. Used by
+    evaluate_mr and again by plan-deploy on the merged commit. `*_info` map a
+    compose path to `compose_service_info` of that version of the file."""
     reasons = []
-    services = allowlist.get("services") or {}
     for c in changes:
-        if c.service not in services:
-            reasons.append(f"service {c.service!r} is not on the auto-merge allowlist")
+        try:
+            why = deny_reason(c.service, c.new.name, allowlist)
+        except PolicyError as e:
+            reasons.append(f"policy: {e}")
+            continue
+        if why:
+            reasons.append(f"{c.service}: {DENIED_MARK} ({why})")
+            continue
+        profiles: List[str] = []
+        for info in (head_info or {}, base_info or {}):
+            si = info.get(c.file, {}).get(c.service)
+            if si and si.profiles:
+                profiles = si.profiles
+        if profiles:
+            reasons.append(f"{c.service}: runs only under compose profile(s) {', '.join(profiles)}; "
+                           "a per-service deploy would start it")
             continue
         try:
             kinds = allowed_kinds(c.service, c.new.name, allowlist)
         except PolicyError as e:
-            reasons.append(f"allowlist: {e}")
+            reasons.append(f"policy: {e}")
             continue
         if c.kind not in kinds:
             reasons.append(f"{c.service}: {c.kind} update of {c.new.name} is not allowed "

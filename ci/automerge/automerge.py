@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Auto-merge for low-risk image updates. See docs/AUTOMERGE.md.
+"""Auto-merge for image updates: everything but majors and the denylist. See docs/AUTOMERGE.md.
 
 Subcommands
   mr-check      Informational check inside an MR pipeline (local git only, no token).
   evaluate      Read-only evaluation of one MR via the API (dry run; any state).
-  sweep         Scheduled on main: label eligible MRs, merge at most one ready MR.
+  sweep         Scheduled on main: label eligible MRs (and update MRs the policy
+                leaves to a human `automerge-manual`), merge at most one ready MR.
                 AUTOMERGE_DRY_RUN=1 dry-runs the general class only (fast track
                 stays live); AUTOMERGE_DRY_RUN=all or --dry-run dry-runs both.
-  plan-deploy   main pipeline: verify an auto-merged commit, write the deploy plan.
+  plan-deploy   main pipeline: verify an auto-merged commit, write the deploy
+                plan for one host (--host <deploy job prefix>).
   deploy-report main pipeline: record the deploy outcome (note / issue / revert MR / mail).
   notify        Mail root from a CI job (used when a deploy fails before deploy-report).
   daily-report  Scheduled on main: mail a summary of the last 24h.
@@ -42,17 +44,23 @@ except ImportError:  # pragma: no cover
     yaml = None
 
 REPO_ROOT = Path(os.environ.get("CI_PROJECT_DIR") or Path(__file__).resolve().parents[2])
-ALLOWLIST_PATH = REPO_ROOT / "ci" / "automerge-allowlist.yml"
+POLICY_PATH = REPO_ROOT / "ci" / "automerge-policy.yml"
+INVENTORY_PATH = REPO_ROOT / "ansible" / "inventory.yml"
 FREEZE_FILE = REPO_ROOT / "ci" / "automerge-freeze"
 CODEOWNERS_PATH = REPO_ROOT / "CODEOWNERS"
 
 LABEL_ELIGIBLE = "automerge-eligible"
+LABEL_MANUAL = "automerge-manual"
+LABEL_RENOVATE = "renovate"
 LABEL_MERGED = "automerged"
 LABEL_ROLLBACK = "automerge-rollback"
 LABEL_SECURITY = "security"
 LABEL_FAST_TRACK = "automerge-fast-track"
 TRAILER = "Automerge-Policy: image-update"
 CLASS_TRAILER = "Automerge-Class: fast-track"
+# Selects the per-service deploy jobs: "Automerge-Deploy: [router] [zwave]".
+# plan-deploy re-derives the hosts from main's policy and refuses a mismatch.
+DEPLOY_TRAILER = "Automerge-Deploy:"
 
 API = os.environ.get("CI_API_V4_URL", "https://gitlab.lab.nkontur.com/api/v4").rstrip("/")
 PROJECT = os.environ.get("CI_PROJECT_ID", "4")
@@ -94,13 +102,19 @@ def dry_modes(cli_dry_run: bool = False) -> Tuple[bool, bool]:
 
 
 def load_allowlist() -> dict:
+    """The auto-merge policy file (ci/automerge-policy.yml)."""
     if yaml is None:
         raise SystemExit("PyYAML is required")
-    with open(ALLOWLIST_PATH) as f:
+    with open(POLICY_PATH) as f:
         data = yaml.safe_load(f) or {}
-    data.setdefault("services", {})
-    data["services"] = {k: (v or {}) for k, v in data["services"].items()}
+    data["services"] = {k: (v or {}) for k, v in (data.get("services") or {}).items()}
     return data
+
+
+def load_deployments(allow: dict) -> Dict[str, List[policy.Deployment]]:
+    """Compose file -> hosts, from this checkout's ansible/inventory.yml."""
+    with open(INVENTORY_PATH) as f:
+        return policy.compose_deployments(yaml.safe_load(f) or {}, allow)
 
 
 def read_codeowners() -> str:
@@ -184,6 +198,8 @@ class GitLab:
             LABEL_MERGED: ("#1f75cb", "Merged by the auto-merge policy"),
             LABEL_ROLLBACK: ("#dd2b0e", "Auto-merged deploy failed health checks and was rolled back"),
             LABEL_FAST_TRACK: ("#6699cc", "Merged under the fast-track class (docs/AUTOMERGE.md)"),
+            LABEL_MANUAL: ("#e9be74", "Update the auto-merge policy leaves to a human: major, denylist "
+                                      "(e.g. GitLab) or restricted kind. Reason in the MR notes"),
             "freeze": ("#808080", "Block auto-merge for this MR"),
         }
         existing = {l["name"] for l in self.get_all(f"projects/{PROJECT}/labels")}
@@ -220,7 +236,29 @@ def global_gates(gl: GitLab, allow: dict) -> List[str]:
     open_rb = gl.get(f"projects/{PROJECT}/issues", state="opened", labels=LABEL_ROLLBACK, per_page=20)
     if open_rb:
         reasons.append("open rollback issue(s): " + ", ".join(f"#{i['iid']}" for i in open_rb))
+    busy = deploys_in_progress(gl)
+    if busy:
+        reasons.append("per-service deploy still running: " + ", ".join(busy))
     return reasons
+
+
+def deploys_in_progress(gl: GitLab) -> List[str]:
+    """Per-service deploy jobs that have not finished. The next merge waits
+    for them, so a failing deploy pauses auto-merge (rollback issue) before
+    another update lands on top of it."""
+    jobs = gl.get(f"projects/{PROJECT}/jobs",
+                  **{"scope[]": ["created", "pending", "running", "waiting_for_resource"]}, per_page=100)
+    return [f"{j['name']} (job {j['id']})" for j in jobs or []
+            if str(j.get("name", "")).endswith(":deploy-service")]
+
+
+def host_unreachable(address: str, port: int = 22, timeout: float = 5.0) -> Optional[str]:
+    """None if the host accepts a TCP connection on `port` (its deploy uses SSH)."""
+    try:
+        with socket.create_connection((address, port), timeout=timeout):
+            return None
+    except OSError as e:
+        return f"{address}:{port} unreachable ({e.__class__.__name__})"
 
 
 def rate_gate(recent: List[dict], allow: dict, fast_track: bool) -> Optional[str]:
@@ -261,17 +299,19 @@ def mr_file_changes(gl: GitLab, iid: int) -> List[policy.FileChange]:
     return out
 
 
-def evaluate_api(gl: GitLab, mr: dict, allow: dict, merger: Optional[str] = None) -> policy.Verdict:
+def evaluate_api(gl: GitLab, mr: dict, allow: dict, merger: Optional[str] = None,
+                 deployments: Optional[Dict[str, List[policy.Deployment]]] = None) -> policy.Verdict:
     refs = mr.get("diff_refs") or {}
     base_sha, head_sha = refs.get("base_sha"), refs.get("head_sha")
     files = mr_file_changes(gl, mr["iid"])
-    base = head = None
-    if base_sha and head_sha and any(f.path == policy.COMPOSE_PATH for f in files):
-        base = gl.file_at(policy.COMPOSE_PATH, base_sha)
-        head = gl.file_at(policy.COMPOSE_PATH, head_sha)
+    composes: Dict[str, policy.ComposePair] = {}
+    if base_sha and head_sha:
+        for path in sorted({f.path for f in files} & set(policy.compose_files(allow))):
+            composes[path] = (gl.file_at(path, base_sha), gl.file_at(path, head_sha))
     return policy.evaluate_mr(
         author=mr["author"]["username"], target_branch=mr["target_branch"],
-        labels=mr.get("labels") or [], files=files, base_compose=base, head_compose=head,
+        labels=mr.get("labels") or [], files=files, composes=composes,
+        deployments=deployments if deployments is not None else load_deployments(allow),
         allowlist=allow, codeowners_text=read_codeowners(), merger=merger)
 
 
@@ -356,10 +396,12 @@ def cmd_mr_check(args: argparse.Namespace) -> int:
         status, _, path = line.partition("\t")
         files.append(policy.FileChange(path=path, new_file=status == "A", deleted_file=status == "D",
                                        mode_changed=status == "T"))
+    listed = set(policy.compose_files(allow))
+    composes = {f.path: (git_show(base, f.path), git_show(head, f.path)) for f in files if f.path in listed}
     v = policy.evaluate_mr(
         author=args.author or "", target_branch=args.target or "",
         labels=[l for l in (args.labels or "").split(",") if l], files=files,
-        base_compose=git_show(base, policy.COMPOSE_PATH), head_compose=git_show(head, policy.COMPOSE_PATH),
+        composes=composes, deployments=load_deployments(allow),
         allowlist=allow, codeowners_text=read_codeowners())
     for n in v.notes:
         log(f"  + {n}")
@@ -374,10 +416,11 @@ def cmd_mr_check(args: argparse.Namespace) -> int:
 def cmd_evaluate(args: argparse.Namespace) -> int:
     gl = gitlab_from_env(dry_run=True)
     allow = load_allowlist()
+    deployments = load_deployments(allow)
     merger = token_user(gl)
     for iid in args.iids:
         mr = gl.get(f"projects/{PROJECT}/merge_requests/{iid}")
-        v = evaluate_api(gl, mr, allow, merger=merger)
+        v = evaluate_api(gl, mr, allow, merger=merger, deployments=deployments)
         if args.json:
             log(json.dumps({"iid": iid, "title": mr["title"], **v.as_dict()}))
         else:
@@ -390,6 +433,7 @@ def cmd_sweep(args: argparse.Namespace) -> int:
     gl = gitlab_from_env(dry_run=dry)            # writes for the general class
     gl_ft = GitLab(gl.token, dry_run=ft_dry)     # writes for fast-track MRs
     allow = load_allowlist()
+    deployments = load_deployments(allow)
     (gl_ft if dry else gl).ensure_labels()
     merger = token_user(gl)
     log(f"Merging identity: {merger}")
@@ -411,7 +455,7 @@ def cmd_sweep(args: argparse.Namespace) -> int:
     for iid in sorted(candidates):
         mr = fetch_mr(gl, iid)  # full record (pipeline, merge status)
         candidates[iid] = mr
-        verdicts[iid] = evaluate_api(gl, mr, allow, merger=merger)
+        verdicts[iid] = evaluate_api(gl, mr, allow, merger=merger, deployments=deployments)
 
     gates: List[str] = []
     rate: Dict[bool, Optional[str]] = {False: None, True: None}
@@ -446,9 +490,15 @@ def cmd_sweep(args: argparse.Namespace) -> int:
             # remove a stale label with whichever client is live
             (gl if not dry else gl_ft).write("PUT", f"projects/{PROJECT}/merge_requests/{iid}",
                                              {"remove_labels": LABEL_ELIGIBLE})
+        mark_manual(gl, mr, v)
         if not eligible:
             continue
         blockers = readiness(mr)
+        for d in v.deploy_hosts:
+            if d.job != "router":
+                down = host_unreachable(d.address)
+                if down:
+                    blockers.append(f"{d.host} ({down})")
         if blockers:
             log("  not ready to merge: " + "; ".join(blockers))
             continue
@@ -460,10 +510,40 @@ def cmd_sweep(args: argparse.Namespace) -> int:
     return 0
 
 
+def is_update_mr(mr: dict, v: policy.Verdict) -> bool:
+    """A dependency-update MR: opened by Renovate, or an image change in a
+    compose file. Other MRs by the listed authors (moltbot's config changes)
+    are simply not eligible and get no label or note."""
+    return LABEL_RENOVATE in (mr.get("labels") or []) or bool(v.changes) or v.major
+
+
+def mark_manual(gl: GitLab, mr: dict, v: policy.Verdict) -> None:
+    """Keep updates the policy leaves to a human visible: label them
+    `automerge-manual` and say why once (the dependency dashboard and the
+    daily report list them too). Drop the label when the MR qualifies again."""
+    iid, labels = mr["iid"], mr.get("labels") or []
+    manual = v.manual and is_update_mr(mr, v)
+    if manual and LABEL_MANUAL not in labels:
+        gl.write("PUT", f"projects/{PROJECT}/merge_requests/{iid}", {"add_labels": LABEL_MANUAL})
+        body = ["This update is left to a human by the auto-merge policy (docs/AUTOMERGE.md):", ""]
+        body += [f"- {r}" for r in v.reasons]
+        body += ["", "Review and merge it by hand, or close it. The sweep will not merge it."]
+        gl.write("POST", f"projects/{PROJECT}/merge_requests/{iid}/notes", {"body": "\n".join(body)})
+    elif not manual and LABEL_MANUAL in labels and not v.frozen:
+        gl.write("PUT", f"projects/{PROJECT}/merge_requests/{iid}", {"remove_labels": LABEL_MANUAL})
+
+
+def deploy_trailer(v: policy.Verdict) -> str:
+    return DEPLOY_TRAILER + " " + " ".join(f"[{j}]" for j in v.deploy_jobs)
+
+
 def do_merge(gl: GitLab, mr: dict, v: policy.Verdict) -> bool:
     iid, sha = mr["iid"], mr["sha"]
     services = ", ".join(c.service for c in v.changes)
-    trailers = (CLASS_TRAILER + "\n" if v.fast_track else "") + TRAILER
+    if not v.deploy_jobs:
+        log(f"  not merging !{iid}: no per-service deploy target")
+        return False
+    trailers = (CLASS_TRAILER + "\n" if v.fast_track else "") + deploy_trailer(v) + "\n" + TRAILER
     message = (f"Merge branch '{mr['source_branch']}' into '{mr['target_branch']}'\n\n"
                f"Image update: {services}\n\n"
                f"See merge request {PROJECT_PATH}!{iid}\n\n{trailers}\n")
@@ -493,8 +573,9 @@ def do_merge(gl: GitLab, mr: dict, v: policy.Verdict) -> bool:
     cls = " under the fast-track class" if v.fast_track else ""
     lines = [f"Merged by the auto-merge policy{cls} (pipeline {os.environ.get('CI_PIPELINE_URL', 'n/a')}).", ""]
     lines += [f"- `{c.service}`: {c.kind} `{c.old}` -> `{c.new}`" for c in v.changes]
-    lines += ["", "The main pipeline deploys only these services, waits for them to become healthy, "
-                  "and rolls back automatically on failure."]
+    lines += ["", "The main pipeline deploys only these services (" +
+              ", ".join(f"`{j}:deploy-service`" for j in v.deploy_jobs) +
+              "), waits for them to become healthy, and rolls back automatically on failure."]
     gl.write("POST", f"projects/{PROJECT}/merge_requests/{iid}/notes", {"body": "\n".join(lines)})
     return True
 
@@ -502,11 +583,13 @@ def do_merge(gl: GitLab, mr: dict, v: policy.Verdict) -> bool:
 def cmd_plan_deploy(args: argparse.Namespace) -> int:
     gl = gitlab_from_env(dry_run=False)
     allow = load_allowlist()
+    deployments = load_deployments(allow)
     sha = os.environ.get("CI_COMMIT_SHA") or git("rev-parse", "HEAD").strip()
 
     def abort(msg: str) -> int:
         log(f"ERROR: {msg}")
-        log("Nothing was deployed. Run the manual router:deploy job on this pipeline if a full deploy is wanted.")
+        log(f"Nothing was deployed. Run the manual {args.host}:deploy job on this pipeline "
+            "if a full deploy is wanted.")
         return 1
 
     parents = git("rev-list", "--parents", "-n", "1", sha).split()
@@ -526,20 +609,26 @@ def cmd_plan_deploy(args: argparse.Namespace) -> int:
     if merged_by != token_user(gl) or merged_by == mr["author"]["username"]:
         return abort(f"!{mr['iid']} was not merged by the auto-merge identity")
 
+    listed = set(policy.compose_files(allow))
     changed = [p for p in git("diff", "--name-only", first_parent, sha).splitlines() if p]
-    if changed != [policy.COMPOSE_PATH]:
-        return abort("merge changes files other than the compose file: " + ", ".join(changed))
-    base, head = git_show(first_parent, policy.COMPOSE_PATH), git_show(sha, policy.COMPOSE_PATH)
-    try:
-        changes = policy.diff_compose(base or "", head or "")
-    except policy.PolicyError as e:
-        return abort(f"merged compose change is outside the policy: {e}")
-    services = allow["services"]
+    outside = [p for p in changed if p not in listed]
+    if not changed or outside:
+        return abort("merge changes files other than the deployed compose files: " + ", ".join(outside or ["none"]))
+    changes: List[policy.ImageChange] = []
+    head_info: Dict[str, Dict[str, policy.ServiceInfo]] = {}
+    base_info: Dict[str, Dict[str, policy.ServiceInfo]] = {}
+    for path in changed:
+        base, head = git_show(first_parent, path) or "", git_show(sha, path) or ""
+        try:
+            changes += policy.diff_compose(base, head, path)
+        except policy.PolicyError as e:
+            return abort(f"merged change to {path} is outside the policy: {e}")
+        head_info[path], base_info[path] = policy.compose_service_info(head), policy.compose_service_info(base)
     if not changes:
         return abort("no image changes")
-    off = policy.change_kind_reasons(changes, allow)
+    off = policy.change_reasons(changes, allow, head_info, base_info)
     if off:
-        return abort("merged change is outside the allowlist: " + "; ".join(off))
+        return abort("merged change is outside the policy: " + "; ".join(off))
     if LABEL_FAST_TRACK in (mr.get("labels") or []):
         try:
             ok, why = policy.fast_track_verdict(mr["author"]["username"], changes, allow)
@@ -548,24 +637,46 @@ def cmd_plan_deploy(args: argparse.Namespace) -> int:
         if not ok:
             return abort(f"!{mr['iid']} is labelled {LABEL_FAST_TRACK} but does not qualify: {why}")
 
+    # The hosts this commit deploys to, from main's inventory and policy.
+    targets: Dict[str, Tuple[policy.Deployment, List[str]]] = {}
+    for path in changed:
+        deps = deployments.get(path) or []
+        if not deps:
+            return abort(f"{path} is not deployed by any host")
+        for d in deps:
+            if not d.job:
+                return abort(f"{path} runs on {d.host}, which has no per-service deploy")
+            targets.setdefault(d.job, (d, []))[1].append(path)
+    if args.host not in targets:
+        return abort(f"this commit does not deploy to {args.host} (targets: {', '.join(sorted(targets))})")
+    dep, host_files = targets[args.host]
+    host_changes = [c for c in changes if c.file in host_files]
+
     out = Path(args.out)
     prev_dir = out.parent / "prev"
     prev_dir.mkdir(parents=True, exist_ok=True)
-    (prev_dir / "docker-compose.yml").write_text(base or "")
+    # Every compose file as of the first parent: the rollback renders the
+    # host's whole set (docker_compose_file_names) from this directory.
+    for path in git("ls-tree", "--name-only", first_parent, "docker/").splitlines():
+        if policy.COMPOSE_GLOB.match(path):
+            (prev_dir / Path(path).name).write_text(git_show(first_parent, path) or "")
     timeout_default = int(allow.get("default_health_timeout", 600))
+    services = allow["services"]
     plan = {
         "mr_iid": mr["iid"], "mr_url": mr["web_url"], "mr_title": mr["title"],
         "merge_sha": sha, "first_parent": first_parent, "prev_compose_dir": str(prev_dir),
+        "host": dep.host, "job": args.host, "project": dep.project,
+        "changed_files": changed, "host_files": host_files,
         "services": [{
-            "service": c.service, "kind": c.kind, "old": str(c.old), "new": str(c.new),
+            "service": c.service, "file": c.file, "kind": c.kind, "old": str(c.old), "new": str(c.new),
             "old_digest": c.old.digest or "", "new_digest": c.new.digest or "",
-            "probe": services[c.service].get("probe") or "",
-            "probe_via": services[c.service].get("probe_via") or "",
-            "timeout": int(services[c.service].get("timeout") or timeout_default),
-        } for c in changes],
+            "probe": (services.get(c.service) or {}).get("probe") or "",
+            "probe_via": (services.get(c.service) or {}).get("probe_via") or "",
+            "timeout": int((services.get(c.service) or {}).get("timeout") or timeout_default),
+        } for c in host_changes],
     }
     out.write_text(json.dumps(plan, indent=2))
-    log(f"Deploy plan for !{mr['iid']} ({sha[:12]}):")
+    log(f"Deploy plan for !{mr['iid']} ({sha[:12]}) on {dep.host}:")
     for s in plan["services"]:
         log(f"  {s['service']}: {s['old']} -> {s['new']} (probe: {s['probe'] or 'none'}, timeout {s['timeout']}s)")
     return 0
@@ -581,10 +692,11 @@ def cmd_deploy_report(args: argparse.Namespace) -> int:
         pass
     iid = plan["mr_iid"]
     job = os.environ.get("CI_JOB_URL", "n/a")
+    host = plan.get("host") or "router.lab.nkontur.com"
     svc_list = ", ".join(s["service"] for s in plan["services"])
     if args.status == "success":
         gl.write("POST", f"projects/{PROJECT}/merge_requests/{iid}/notes",
-                 {"body": f"Deployed and healthy: {svc_list} ({job})."})
+                 {"body": f"Deployed and healthy on {host}: {svc_list} ({job})."})
         return 0
 
     gl.ensure_labels()
@@ -592,9 +704,10 @@ def cmd_deploy_report(args: argparse.Namespace) -> int:
     rb_text = {True: "rolled back to the previous image and healthy again",
                False: "rolled back to the previous image but STILL UNHEALTHY - needs attention",
                None: "rollback status unknown (deploy job did not finish) - check the host"}[rolled_back]
-    title = f"Auto-merge rollback: {svc_list} (!{iid})"
+    title = f"Auto-merge rollback: {svc_list} on {host.split('.')[0]} (!{iid})"
     body = [
-        f"The per-service deploy of !{iid} ({plan['mr_title']}) failed its health gate and was {rb_text}.",
+        f"The per-service deploy of !{iid} ({plan['mr_title']}) on {host} failed its health gate "
+        f"and was {rb_text}.",
         "",
         f"- Deploy job: {job}",
         f"- Merge commit: {plan['merge_sha']}",
@@ -623,7 +736,7 @@ def cmd_deploy_report(args: argparse.Namespace) -> int:
     gl.write("POST", f"projects/{PROJECT}/merge_requests/{iid}/notes",
              {"body": f"Deploy failed health checks; {rb_text}. See {job}."})
     issue_ref = f"#{issue['iid']}" if issue else "(see job)"
-    mail_root(f"Homelab auto-merge ROLLBACK: {svc_list} (!{iid})",
+    mail_root(f"Homelab auto-merge ROLLBACK: {svc_list} on {host.split('.')[0]} (!{iid})",
               "\n".join(body + ["", f"Issue: {issue_ref}", f"MR: {plan['mr_url']}"]) + "\n")
     return 0
 
@@ -636,14 +749,17 @@ def open_revert_mr(gl: GitLab, plan: dict) -> Optional[int]:
         found = gl.get(f"projects/{PROJECT}/merge_requests", source_branch=branch, state="opened")
         if found:
             return found[0]["iid"]
-        prev = Path(plan["prev_compose_dir"], "docker-compose.yml").read_text()
+        changed = plan.get("changed_files") or [policy.COMPOSE_PATH]
+        actions = [{"action": "update", "file_path": path,
+                    "content": Path(plan["prev_compose_dir"], Path(path).name).read_text()}
+                   for path in changed]
         try:
             gl.get(f"projects/{PROJECT}/repository/branches/{urllib.parse.quote(branch, safe='')}")
         except RuntimeError:
             gl.write("POST", f"projects/{PROJECT}/repository/commits", {
                 "branch": branch, "start_sha": plan["merge_sha"],
                 "commit_message": "Revert image update for " + ", ".join(s["service"] for s in plan["services"]),
-                "actions": [{"action": "update", "file_path": policy.COMPOSE_PATH, "content": prev}],
+                "actions": actions,
             })
         mr = gl.write("POST", f"projects/{PROJECT}/merge_requests", {
             "source_branch": branch, "target_branch": "main", "remove_source_branch": True,
@@ -667,6 +783,7 @@ def cmd_daily_report(args: argparse.Namespace) -> int:
                                     created_after=since.isoformat())]
     rb_open = gl.get_all(f"projects/{PROJECT}/issues", labels=LABEL_ROLLBACK, state="opened")
     eligible_open = gl.get_all(f"projects/{PROJECT}/merge_requests", state="opened", labels=LABEL_ELIGIBLE)
+    manual_open = gl.get_all(f"projects/{PROJECT}/merge_requests", state="opened", labels=LABEL_MANUAL)
     lines = [f"Auto-merge summary for the 24h ending {now():%Y-%m-%d %H:%M} UTC", ""]
     lines.append(f"Auto-merged: {len(merged)}")
     lines += [f"  !{m['iid']} {m['title']}  {m['web_url']}"
@@ -677,9 +794,16 @@ def cmd_daily_report(args: argparse.Namespace) -> int:
     lines += [f"  #{i['iid']} {i['title']}  {i['web_url']}" for i in rb_open]
     lines.append(f"Open MRs currently labelled {LABEL_ELIGIBLE}: {len(eligible_open)}")
     lines += [f"  !{m['iid']} {m['title']}" for m in eligible_open]
+    manual_security = [m for m in manual_open if LABEL_SECURITY in (m.get("labels") or [])]
+    lines.append(f"Updates waiting for a human ({LABEL_MANUAL}: major, denylist, restricted kind): "
+                 f"{len(manual_open)}")
+    for m in sorted(manual_open, key=lambda m: m.get("created_at") or ""):
+        age = now() - (parse_ts(m.get("created_at")) or now())
+        sec = "  [security]" if m in manual_security else ""
+        lines.append(f"  !{m['iid']} {m['title']}  (open {age.days}d){sec}  {m['web_url']}")
     body = "\n".join(lines) + "\n"
     log(body)
-    if not (merged or rb_new or rb_open) and not truthy(os.environ.get("AUTOMERGE_REPORT_ALWAYS")):
+    if not (merged or rb_new or rb_open or manual_security) and not truthy(os.environ.get("AUTOMERGE_REPORT_ALWAYS")):
         log("Nothing to report; not sending mail.")
         return 0
     if dry:
@@ -740,6 +864,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     s = sub.add_parser("plan-deploy")
     s.add_argument("--out", required=True)
+    s.add_argument("--host", default="router", help="deploy job prefix (deploy_hosts in the policy file)")
     s.set_defaults(fn=cmd_plan_deploy)
 
     s = sub.add_parser("deploy-report")

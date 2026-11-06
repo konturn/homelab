@@ -30,8 +30,8 @@ set -euo pipefail
 API="${CI_API_V4_URL:-https://gitlab.lab.nkontur.com/api/v4}"
 PROJECT_ID="${CI_PROJECT_ID:-4}"
 WANT_MODE=newest_ready_first
-# The resource_group keys of router:deploy / router:deploy-service,
-# zwave:deploy, satellite-2:deploy and macmini:deploy in .gitlab-ci.yml.
+# The resource_group keys of the <host>:deploy / <host>:deploy-service jobs,
+# for router, zwave and satellite-2, and macmini:deploy, in .gitlab-ci.yml.
 RESOURCE_GROUPS=(deploy-router deploy-zwave deploy-satellite-2 deploy-macmini)
 # Instance limit on pipeline schedules per project (GitLab default: 10).
 # The project has 11 schedules (docs/GITLAB_SETTINGS.md).

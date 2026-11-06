@@ -75,9 +75,12 @@
 # approves moltbot/Renovate MRs only via the automerge:sweep job on main, for
 # MRs that pass ci/automerge/policy.py. Root-authored MRs (root cannot approve
 # its own) get its approval via scripts/approve-root-mr.sh, which refuses any
-# other author. See docs/AUTOMERGE.md.
+# other author. See docs/AUTOMERGE.md. Every file under `compose_files` in
+# ci/automerge-policy.yml lists the bot (checked by test_codeowners.py).
 /docker/docker-compose.yml               @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
 /docker/docker-compose-*.yml             @root
+/docker/docker-compose-observability.yml @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+/docker/docker-compose-zwave.yml         @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
 /docker/daemon.json                      @root
 
 # === MOLTBOT SELF-MODIFICATION ===

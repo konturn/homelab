@@ -1,21 +1,22 @@
-# Targeted deploy for auto-merged image updates (see docs/AUTOMERGE.md).
+# Targeted deploy for auto-merged image updates (see docs/AUTOMERGE.md), on
+# any host with compose files (router, zwave, satellite-2).
 #
-# Renders the compose file exactly like the full deploy, then pulls and
-# recreates ONLY the services listed in the plan (no dependencies, no orphan
-# removal), and waits for them to become healthy. On any failure it renders the
-# pre-merge compose file, recreates the same services on their previous image,
-# re-checks health, records the outcome and fails.
+# Renders the host's compose files exactly like the full deploy, then pulls
+# and recreates ONLY the services listed in the plan (no dependencies, no
+# orphan removal), and waits for them to become healthy. On any failure it
+# renders the pre-merge compose files, recreates the same services on their
+# previous image, re-checks health, records the outcome and fails.
 #
-# Inputs (environment):
-#   AUTOMERGE_PLAN    JSON plan written by `ci/automerge/automerge.py plan-deploy`
+# Inputs:
+#   -e automerge_host=<inventory host>  the plan's `host` (selects the play's host)
+#   AUTOMERGE_PLAN    JSON plan written by `ci/automerge/automerge.py plan-deploy --host`
 #   AUTOMERGE_RESULT  path where the outcome JSON is written (on the controller)
-- hosts: router.lab.nkontur.com
+- hosts: "{{ automerge_host }}"
   vars:
     automerge_plan: "{{ lookup('file', lookup('env', 'AUTOMERGE_PLAN')) | from_json }}"
     automerge_result_file: "{{ lookup('env', 'AUTOMERGE_RESULT') }}"
     automerge_services: "{{ automerge_plan.services | map(attribute='service') | list }}"
     automerge_project: "{{ docker_compose_project_name | default('docker') }}"
-    automerge_compose_file: "{{ docker_compose_dest_path }}/docker-compose.yml"
     automerge_health_script: "{{ lookup('env', 'CI_PROJECT_DIR') }}/ci/automerge/wait-healthy.sh"
 
   pre_tasks:
@@ -24,7 +25,12 @@
         that:
           - automerge_services | length > 0
           - automerge_result_file | length > 0
-        fail_msg: "AUTOMERGE_PLAN has no services or AUTOMERGE_RESULT is unset"
+          - automerge_plan.host | default('router.lab.nkontur.com') == inventory_hostname
+          - automerge_plan.host_files | default(['docker/docker-compose.yml'])
+            | map('basename') | difference(docker_compose_file_names | map('trim')) | length == 0
+        fail_msg: >-
+          AUTOMERGE_PLAN has no services, AUTOMERGE_RESULT is unset, or the plan is for
+          another host or for compose files this host does not render
 
     - name: Show deploy plan
       ansible.builtin.debug:
@@ -80,7 +86,6 @@
             cmd: >-
               {{ automerge_health_script }}
               --project {{ automerge_project | quote }}
-              --file {{ automerge_compose_file | quote }}
               --service {{ item.service | quote }}
               --expect-digest {{ item.new_digest | quote }}
               --timeout {{ item.timeout | int }}
@@ -151,7 +156,6 @@
             cmd: >-
               {{ automerge_health_script }}
               --project {{ automerge_project | quote }}
-              --file {{ automerge_compose_file | quote }}
               --service {{ item.service | quote }}
               --expect-digest {{ item.old_digest | quote }}
               --timeout {{ item.timeout | int }}

@@ -4,6 +4,11 @@
 Reads cves.json from the router (written by trivy_scan.py) and adds the
 `security` label to open update MRs (Renovate bot or moltbot) whose title or
 branch names an affected image or service. Adds labels only; never removes.
+
+Updates for those images that Renovate holds back (its schedule, e.g. the
+weekly digest batching, or its MR limits) are ticked on the Renovate
+dependency dashboard, so Renovate creates them on its next hourly run instead
+of waiting (docs/RENOVATE.md).
 """
 
 from __future__ import annotations
@@ -25,6 +30,10 @@ PROJECT = os.environ.get("CI_PROJECT_ID", "4")
 LABEL = "security"
 RENOVATE_AUTHOR = os.environ.get("REPORT_RENOVATE_AUTHOR", "project_4_bot_af78a2ea227eba9e10006515fbde375e")
 UPDATE_AUTHORS = {RENOVATE_AUTHOR, "moltbot"}
+DASHBOARD_TITLE = "Renovate dependency dashboard"
+# Dashboard checkboxes that make Renovate create a held-back update now.
+_HELD_BACK_RE = re.compile(
+    r"^(?P<pre>\s*- )\[ \](?P<post> <!-- (?:unschedule|unlimit)-branch=(?P<branch>[^ ]+) -->(?P<title>.*))$")
 REPORT_JSON = os.environ.get(
     "CVE_REPORT_JSON", "/persistent_data/application/openclaw/workspace/reports/updates/cves.json")
 
@@ -58,6 +67,19 @@ def mr_matches(title: str, branch: str, repos: Iterable[str], services: Iterable
         if re.match(r"^image-update/(?:major/)?" + re.escape(s.lower()) + r"(?:$|/|-v?\d)", b):
             return True
     return False
+
+
+def tick_held_back(description: str, repos: Iterable[str], services: Iterable[str]):
+    """Tick the dashboard's "Awaiting Schedule" / "Rate-Limited" boxes whose
+    update is for an affected image. Returns (new description, ticked branches)."""
+    out, ticked = [], []
+    for line in description.split("\n"):
+        m = _HELD_BACK_RE.match(line)
+        if m and mr_matches(m.group("title"), m.group("branch"), repos, services):
+            line = f"{m.group('pre')}[x]{m.group('post')}"
+            ticked.append(m.group("branch"))
+        out.append(line)
+    return "\n".join(out), ticked
 
 
 def api(method: str, path: str, token: str, params=None, body=None):
@@ -102,6 +124,15 @@ def main() -> int:
             print(f"  !{m['iid']}: add label {LABEL}{' (dry run)' if dry else ''}")
             if not dry:
                 api("PUT", f"projects/{PROJECT}/merge_requests/{m['iid']}", token, body={"add_labels": LABEL})
+    dashboards = [i for i in api("GET", f"projects/{PROJECT}/issues", token,
+                                 {"state": "opened", "search": DASHBOARD_TITLE, "per_page": 20})
+                  if i["title"] == DASHBOARD_TITLE]
+    for issue in dashboards:
+        desc, ticked = tick_held_back(issue.get("description") or "", repos, services)
+        for b in ticked:
+            print(f"  dashboard #{issue['iid']}: create {b} now{' (dry run)' if dry else ''}")
+        if ticked and not dry:
+            api("PUT", f"projects/{PROJECT}/issues/{issue['iid']}", token, body={"description": desc})
     return 0
 
 

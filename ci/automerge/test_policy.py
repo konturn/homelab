@@ -49,6 +49,7 @@ ALLOW = {
     "allowed_files": [policy.COMPOSE_PATH],
     "services": {s: {} for s in ["radarr", "prowlarr", "grafana", "homeassistant", "jackett",
                                  "lab_nginx", "plex"]},
+    "denylist": {"services": {"vault": "deploy jobs read their secrets from it"}},
 }
 
 CODEOWNERS = """
@@ -141,11 +142,14 @@ class DiffParserTests(unittest.TestCase):
         self.assertFalse(v.eligible)
         self.assertIn("not a service image line", " ".join(v.reasons))
 
-    def test_non_allowlisted_service_rejected(self):
+    def test_denylisted_service_rejected(self):
         head = edit(BASE, f"vault:2.0.4@{D1}", f"vault:2.0.5@{D2}")
         v = evaluate(head)
         self.assertFalse(v.eligible)
-        self.assertIn("'vault' is not on the auto-merge allowlist", " ".join(v.reasons))
+        self.assertTrue(v.denied)
+        self.assertTrue(v.manual)
+        self.assertIn("vault: on the auto-merge denylist (deploy jobs read their secrets from it)",
+                      " ".join(v.reasons))
 
     def test_mixed_change_rejected(self):
         head = edit(BASE, f"prowlarr:latest@{D1}", f"prowlarr:latest@{D2}")
@@ -162,9 +166,9 @@ class DiffParserTests(unittest.TestCase):
 
     def test_codeowned_extra_path_rejected(self):
         head = edit(BASE, f"prowlarr:latest@{D1}", f"prowlarr:latest@{D2}")
-        v = evaluate(head, files=[FileChange(path=policy.COMPOSE_PATH), FileChange(path="ci/automerge-allowlist.yml")])
+        v = evaluate(head, files=[FileChange(path=policy.COMPOSE_PATH), FileChange(path="ci/automerge-policy.yml")])
         self.assertFalse(v.eligible)
-        self.assertIn("CODEOWNERS-protected paths: ci/automerge-allowlist.yml", " ".join(v.reasons))
+        self.assertIn("CODEOWNERS-protected paths: ci/automerge-policy.yml", " ".join(v.reasons))
 
     def test_image_name_change_rejected(self):
         head = edit(BASE, f"lscr.io/linuxserver/prowlarr:latest@{D1}", f"evil/prowlarr:latest@{D2}")

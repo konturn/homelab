@@ -46,7 +46,7 @@ shared:
     - .gitignore
     - terraform/**
     - ci/automerge/**
-    - ci/automerge-allowlist.yml
+    - ci/automerge-policy.yml
     - ci/reports/**
     - networking/switches/**
     - networking/aruba-iap/**
@@ -58,7 +58,7 @@ shared:
     - ansible/tests/**
     - ansible/bootstrap.yml
     - ansible/os-patch-report.yml
-    - ansible/router-service-update.yml
+    - ansible/service-update.yml
     - ansible/router.yml
     - ansible/zwave.yml
     - ansible/satellite-2.yml
