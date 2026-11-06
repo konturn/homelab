@@ -3,7 +3,7 @@
   "private": true,
   "description": "CLI tools baked into the OpenClaw image. Installed with npm ci from package-lock.json (exact versions, integrity hashes).",
   "dependencies": {
-    "agent-browser": "0.35.1",
+    "agent-browser": "0.41.2",
     "playwright": "1.62.1"
   }
 }
