@@ -4,6 +4,7 @@ import io
 import os
 import sys
 import tempfile
+import time
 import types
 import unittest
 from contextlib import redirect_stdout
@@ -69,6 +70,28 @@ class TestPlan(unittest.TestCase):
         a, b = fc.DEFAULT_WINDOW.split("-")
         self.assertGreaterEqual(a, "04:00")  # backups run 02:15-04:00
         self.assertLess(a, b)
+
+    def test_ci_job_sets_a_local_time_zone(self):
+        # The window is evaluated in local time; without TZ the job container runs in UTC.
+        import yaml
+
+        class Loader(yaml.SafeLoader):
+            pass
+        Loader.add_constructor("!reference", lambda loader, node: None)
+        ci = yaml.load((HERE.parents[2] / ".gitlab-ci.yml").read_text(), Loader=Loader)
+        env = ci["netgear:firmware"]["variables"]
+        self.assertEqual(env["NETGEAR_FIRMWARE_WINDOW"], fc.DEFAULT_WINDOW)
+        tz = env.get("TZ", "")
+        self.assertRegex(tz, r"^EST5EDT,M3\.2\.0,M11\.1\.0$")
+        os.environ["TZ"] = tz
+        try:
+            time.tzset()
+            import calendar
+            t = time.localtime(calendar.timegm((2026, 11, 6, 5, 0, 0)))  # 05:00 UTC = 00:00 EST
+            self.assertEqual((t.tm_hour, t.tm_min), (0, 0))
+        finally:
+            del os.environ["TZ"]
+            time.tzset()
 
     def test_order(self):
         self.assertEqual(fc.SWITCH_ORDER[0], "netgear-movie")
