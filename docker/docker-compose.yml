@@ -1097,10 +1097,16 @@ services:
         ipv4_address: {{ vault_ip }}
     ports:
       - "8200:8200"
+    # mlock is enabled (disable_mlock = false), so every page Vault maps is
+    # locked and counted against this limit, including its ~540 MB binary.
+    # Anonymous memory is ~140 MB, but a start with a cold page cache charges
+    # the binary's pages to this container and can't reclaim them: 256M was
+    # hit twice on 2026-11-05 (unevictable ~265 MB at the kill). 768M covers
+    # the full binary plus heap.
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 768M
     cap_drop:
       - ALL
     cap_add:
