@@ -1376,6 +1376,267 @@ groups:
         labels:
           severity: critical
 
+      # =====================================================================
+      # Router BMC (in-band, docs/IPMI.md). ipmi-metrics.timer writes
+      # bmc_sel / bmc_sensor / bmc_chassis every 2 minutes; Telegraf reads
+      # them with [[inputs.file]]. Every point carries the time it was
+      # collected, so sums over a window count each run once.
+      # =====================================================================
+
+      # new_critical: SEL entries asserted since the previous run that are a
+      # critical/non-recoverable threshold crossing, an uncorrectable ECC
+      # error, a PSU failure or AC loss (ipmictl classify_sel).
+      - uid: bmc-sel-critical
+        title: BMC Logged a Critical Hardware Event
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -15m)
+                  |> filter(fn: (r) => r._measurement == "bmc_sel")
+                  |> filter(fn: (r) => r._field == "new_critical")
+                  |> group(columns: ["host"])
+                  |> sum()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: KeepLast
+        for: 0s
+        annotations:
+          summary: "The server's BMC logged {{ $values.B }} new critical SEL event(s) in the last 15 minutes"
+          description: "On the router: `journalctl -t ipmi-metrics -n 50` lists the new entries; measurement bmc_sel_event has them too. docs/IPMI.md."
+        labels:
+          severity: critical
+
+      # Correctable ECC errors are logged per occurrence; a few in a day is a
+      # DIMM to watch, not an outage.
+      - uid: bmc-sel-ecc
+        title: BMC Logged Correctable Memory (ECC) Errors
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 3600, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -1h)
+                  |> filter(fn: (r) => r._measurement == "bmc_sel")
+                  |> filter(fn: (r) => r._field == "new_ecc")
+                  |> group(columns: ["host"])
+                  |> sum()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: KeepLast
+        for: 0s
+        annotations:
+          summary: "The server's BMC logged correctable ECC memory errors in the last hour"
+          description: "The SEL entry names the DIMM slot: `journalctl -t ipmi-metrics | grep ecc`. Repeated errors on one DIMM mean it should be reseated or replaced. docs/IPMI.md."
+        labels:
+          severity: warning
+
+      # PSU sensor: not present, or a failure / predictive failure / AC-lost
+      # bit set (status 2 from ipmictl).
+      - uid: bmc-psu-fault
+        title: Server Power Supply Fault (BMC)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -10m)
+                  |> filter(fn: (r) => r._measurement == "bmc_sensor" and r.type == "psu")
+                  |> filter(fn: (r) => r._field == "status")
+                  |> group(columns: ["host", "sensor"])
+                  |> last()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [1]}}]}
+        noDataState: OK
+        execErrState: KeepLast
+        for: 2m
+        annotations:
+          summary: "{{ $labels.sensor }} reports a fault (BMC)"
+          description: "Power supply not present, failed, or lost AC input. `ipmitool sdr type 'Power Supply'` on the router. docs/IPMI.md."
+        labels:
+          severity: critical
+
+      # Fan below its lower critical threshold (status 2 critical, 3
+      # non-recoverable). Fans without a reading are not exported.
+      - uid: bmc-fan-failure
+        title: Server Fan Below Critical Speed (BMC)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -10m)
+                  |> filter(fn: (r) => r._measurement == "bmc_sensor" and r.type == "fan")
+                  |> filter(fn: (r) => r._field == "status")
+                  |> group(columns: ["host", "sensor"])
+                  |> last()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [1]}}]}
+        noDataState: OK
+        execErrState: KeepLast
+        for: 4m
+        annotations:
+          summary: "{{ $labels.sensor }} is below its critical speed (BMC)"
+          description: "A failed or stalled fan. `ipmitool sensor | grep -i fan` on the router. docs/IPMI.md."
+        labels:
+          severity: critical
+
+      # Any temperature sensor at or above its upper critical threshold.
+      - uid: bmc-temp-critical
+        title: Server Temperature Critical (BMC)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -10m)
+                  |> filter(fn: (r) => r._measurement == "bmc_sensor" and r.type == "temperature")
+                  |> filter(fn: (r) => r._field == "status")
+                  |> group(columns: ["host", "sensor"])
+                  |> last()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [1]}}]}
+        noDataState: OK
+        execErrState: KeepLast
+        for: 4m
+        annotations:
+          summary: "{{ $labels.sensor }} is at or above its critical temperature (BMC)"
+          description: "`ipmitool sensor | grep -i temp` on the router; check the fans and airflow. docs/IPMI.md."
+        labels:
+          severity: critical
+
+      # The SEL holds 512 entries and stops logging when full, so new events
+      # would be lost and bmc-sel-critical could not see them. Paused while
+      # the SEL is full from older entries: unpause it (isPaused: false) once
+      # the SEL has been saved and cleared (docs/IPMI.md, "SEL").
+      - uid: bmc-sel-full
+        title: BMC Event Log (SEL) Nearly Full
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -15m)
+                  |> filter(fn: (r) => r._measurement == "bmc_sel")
+                  |> filter(fn: (r) => r._field == "used_pct")
+                  |> group(columns: ["host"])
+                  |> last()
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [90]}}]}
+        noDataState: OK
+        execErrState: KeepLast
+        for: 1h
+        isPaused: true
+        annotations:
+          summary: "The BMC event log is {{ $values.B }}% full"
+          description: "A full SEL drops new events. Save it (`ipmitool sel elist > file`) and clear it by hand; see docs/IPMI.md, SEL."
+        labels:
+          severity: warning
+
+      # ipmi-metrics stopped writing (timer, ipmitool or BMC not answering).
+      # No data at all for 24h also fires.
+      - uid: bmc-metrics-stale
+        title: BMC Metrics Not Updating
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 86400, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -24h)
+                  |> filter(fn: (r) => r._measurement == "bmc_sel")
+                  |> filter(fn: (r) => r._field == "collected_at")
+                  |> group(columns: ["host"])
+                  |> last()
+                  |> map(fn: (r) => ({
+                      host: r.host,
+                      _time: now(),
+                      _value: float(v: int(v: now()) - int(v: r._time)) / 1000000000.0,
+                    }))
+                  |> keep(columns: ["_time", "_value", "host"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [900]}}]}
+        noDataState: Alerting
+        execErrState: KeepLast
+        for: 10m
+        annotations:
+          summary: "No BMC metrics for {{ $values.B }} s"
+          description: "`systemctl status ipmi-metrics.timer` and `journalctl -t ipmi-metrics -n 20` on the router. docs/IPMI.md."
+        labels:
+          severity: warning
+
   # =========================================================================
   # Backup Alerts
   # =========================================================================

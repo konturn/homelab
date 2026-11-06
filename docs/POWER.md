@@ -155,7 +155,10 @@ ups-orderly-shutdown                  # no --execute: prints the plan only
    `always-off` until 2026-11-06; set with `ipmitool chassis policy always-on`,
    which on the X9DR3-F is the same setting as BIOS "Restore on AC Power
    Loss"). The server boots when the UPS restores its outlets.
-   Check: `ipmitool chassis status | grep Restore`.
+   Source of truth: `ipmi_power_restore_policy` in
+   `ansible/roles/ipmi/defaults/main.yml`. The daily `ipmi:drift` job opens an
+   issue if the BMC ever differs ([IPMI.md](IPMI.md)).
+   Check: `ipmictl check` or `ipmitool chassis status | grep Restore`.
 3. **Boot stops at the root LUKS passphrase.** The root volume
    (`sda5_crypt`, in `/etc/crypttab` with key file `none`) has no automatic
    unlock: no keyfile, clevis/tang, TPM, or dropbear-initramfs. After every
@@ -341,7 +344,7 @@ Do this in order; stop at the first surprise. Have a laptop on wired LAN
 
 **0. Preflight (read-only)**
 - `upsc apc@localhost` shows `ups.status: OL` and `battery.charge: 100`.
-- `ipmitool chassis status | grep Restore` shows `always-on`.
+- `ipmitool chassis status | grep Restore` shows `always-on` (`ipmictl check` passes).
 - `ups-power status`; `ups-orderly-shutdown` (dry plan); Grafana UPS dashboard.
 - In the card UI, note the outlet-group delays and which device is plugged into
   which group.

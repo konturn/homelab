@@ -54,6 +54,7 @@ shared:
     - networking/firmware_night.py
     - networking/denon/**
     - networking/ups/**
+    - ci/ipmi/**
     - ansible/tests/**
     - ansible/bootstrap.yml
     - ansible/os-patch-report.yml

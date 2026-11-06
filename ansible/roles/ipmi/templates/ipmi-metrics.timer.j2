@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+[Unit]
+Description=BMC metrics every 2 minutes (docs/IPMI.md)
+
+[Timer]
+OnCalendar={{ ipmi_metrics_on_calendar }}
+AccuracySec=15s
+OnBootSec=2min
+
+[Install]
+WantedBy=timers.target

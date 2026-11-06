@@ -1,0 +1,73 @@
+# Router BMC as code, in-band only (docs/IPMI.md). Installs ipmictl, its
+# desired state, and the metrics timer that feeds Telegraf (SEL events,
+# sensors, chassis). The deploy never changes a BMC setting: drift is
+# reported by the scheduled ipmi:drift CI job, and `ipmictl apply --execute`
+# is run by hand.
+
+- name: Install ipmitool and PyYAML for ipmictl
+  ansible.builtin.apt:
+    name: "{{ _ipmi_packages }}"
+    state: present
+  vars:
+    _ipmi_packages: [ipmitool, python3-yaml]
+  when: _ipmi_packages | difference(installed_packages | default([])) | length > 0
+
+- name: Load the in-band IPMI driver at boot
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/ipmi.conf
+    content: "# {{ ansible_managed }}\nipmi_si\nipmi_devintf\n"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install ipmictl
+  ansible.builtin.copy:
+    src: ipmictl.py
+    dest: /usr/local/sbin/ipmictl
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create the ipmictl directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ ipmi_desired_file | dirname }}"
+    - "{{ ipmi_metrics_file | dirname }}"
+
+- name: Write the BMC desired state
+  ansible.builtin.copy:
+    dest: "{{ ipmi_desired_file }}"
+    content: |
+      # {{ ansible_managed }}
+      # Source: ansible/roles/ipmi/defaults/main.yml (ipmi_desired). docs/IPMI.md
+      {{ ipmi_desired | to_nice_yaml(indent=2, sort_keys=false) }}
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install the ipmi-metrics units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - ipmi-metrics.service
+    - ipmi-metrics.timer
+  notify: Reload systemd for ipmi-metrics
+
+- name: Flush handlers (units must be loaded before the timer is changed)
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable the ipmi-metrics timer
+  ansible.builtin.systemd:
+    name: ipmi-metrics.timer
+    state: started
+    enabled: true
+  when: not ansible_check_mode  # unit files are not written in check mode
