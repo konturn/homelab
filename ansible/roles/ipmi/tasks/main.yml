@@ -15,7 +15,7 @@
 - name: Load the in-band IPMI driver at boot
   ansible.builtin.copy:
     dest: /etc/modules-load.d/ipmi.conf
-    content: "# {{ ansible_managed }}\nipmi_si\nipmi_devintf\n"
+    content: "# Managed by Ansible (ansible/roles/ipmi)\nipmi_si\nipmi_devintf\n"
     owner: root
     group: root
     mode: "0644"
@@ -43,7 +43,7 @@
   ansible.builtin.copy:
     dest: "{{ ipmi_desired_file }}"
     content: |
-      # {{ ansible_managed }}
+      # Managed by Ansible (ansible/roles/ipmi). Do not edit here.
       # Source: ansible/roles/ipmi/defaults/main.yml (ipmi_desired). docs/IPMI.md
       {{ ipmi_desired | to_nice_yaml(indent=2, sort_keys=false) }}
     owner: root
