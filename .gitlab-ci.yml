@@ -1672,6 +1672,8 @@ ups:test:
   image: willhallonline/ansible:latest
   needs: []
   script:
+    # the orderly-shutdown script tests run it under bash (not in the image)
+    - apk add --no-cache bash >/dev/null
     - python3 -m unittest discover -s base/nut -p 'test_*.py' -v
     - python3 -m unittest discover -s networking/ups -p 'test_*.py' -v
     - python3 networking/ups/apcctl.py check
