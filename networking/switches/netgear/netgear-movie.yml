@@ -4,7 +4,7 @@ name: netgear-movie
 model: MS510TXPP
 vault_path: homelab/network/netgear-movie
 # Firmware the switch should run (Maintenance > File Management > Dual Image).
-# Upgrades reboot the switch: run the manual netgear:firmware job (see README.md).
+# Upgrades reboot the switch; netgear:firmware applies them in the maintenance window (README.md).
 # Hashes from the vendor download (NETGEAR publishes none to compare against).
 firmware:
   version: "6.7.0.52"

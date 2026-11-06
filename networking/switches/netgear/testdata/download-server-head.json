@@ -1,0 +1,9 @@
+{
+  "_comment": "HEAD responses of www.downloads.netgear.com for MS510TX_TXPP_V<version>.zip, captured 2026-11-05. Versions not listed answered 403.",
+  "6.7.0.42": {"status": 200, "headers": {"content-type": "application/zip", "content-length": "26570194"}},
+  "6.7.0.50": {"status": 200, "headers": {"content-type": "application/zip", "content-length": "26574820"}},
+  "6.7.0.51": {"status": 200, "headers": {"content-type": "application/zip", "content-length": "26481193"}},
+  "6.7.0.52": {"status": 200, "headers": {"content-type": "application/zip", "content-length": "26480503"}},
+  "6.7.0.53": {"status": 403, "headers": {"content-type": "application/xml"}},
+  "0.0.0.0": {"status": 403, "headers": {"content-type": "application/xml"}}
+}

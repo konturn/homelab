@@ -30,7 +30,8 @@
 #   NETGEAR SWITCHES (see networking/switches/netgear/README.md)
 #   netgear:test (MR + main, offline) -> netgear:apply (main, on changes)
 #   netgear:drift (scheduled on main, NETGEAR_TASK=drift)
-#   netgear:firmware (main, manual; NETGEAR_FIRMWARE_TARGET=<switch>, reboots it)
+#   netgear:firmware-check (scheduled weekly, NETGEAR_TASK=firmware-check; opens a bump MR)
+#   netgear:firmware (scheduled daily in the window, NETGEAR_TASK=firmware; reboots switches)
 #
 #   ARUBA INSTANT APs (see networking/aruba-iap/README.md)
 #   aruba-iap:test (MR + main, offline) -> aruba-iap:apply (main, on changes)
@@ -1293,37 +1294,64 @@ netgear:drift:
   rules:
     - if: $CI_COMMIT_BRANCH == "main" && $NETGEAR_TASK == "drift" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
 
-# Firmware upgrade to the version in <name>.yml. Reboots the switch (outage of a
-# few minutes), so it is manual only and never part of a scheduled pipeline.
-# Run it with NETGEAR_FIRMWARE_TARGET set to one switch name, e.g. netgear-movie.
-netgear:firmware:
-  extends: .netgear_vault
+# Firmware (networking/switches/netgear/README.md, "Firmware updates in CI").
+# netgear:firmware-check: weekly schedule with NETGEAR_TASK=firmware-check. Looks
+# for a newer release on NETGEAR's download server and opens a bump MR.
+netgear:firmware-check:
+  extends: .ansible
   stage: deploy
-  image: willhallonline/ansible:latest
+  needs: []
+  script:
+    - python3 networking/switches/netgear/firmware_ci.py bump-mr
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $NETGEAR_TASK == "firmware-check" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+
+# netgear:firmware: brings the switches to the firmware declared in netgear-*.yml,
+# netgear-movie first, one at a time, each passing its post-upgrade checks before
+# the next starts. Reboots the switches. Runs from the daily schedule with
+# NETGEAR_TASK=firmware, only inside NETGEAR_FIRMWARE_WINDOW (outside the 02:15-04:00
+# backup window); a no-op when both are current. Merging a bump MR is the approval.
+# Started by hand or by OpenClaw (web/API/trigger pipeline with NETGEAR_TASK=firmware)
+# it runs at once; NETGEAR_FIRMWARE_TARGET=<switch> limits it to one switch and
+# NETGEAR_FIRMWARE_DRY_RUN=1 checks everything without loading or rebooting.
+# Root: the job serves the image to the switch from a built-in TFTP server on UDP 69.
+netgear:firmware:
+  extends:
+    - .ansible
+    - .netgear_vault
+  image:
+    name: willhallonline/ansible:2.21.4-alpine-3.22@sha256:6bf175ba6d000691b017a099277ac6cebe6254d99a49670a321e1c6742fd551e
+    docker:
+      user: root
+  stage: deploy
   needs: []
   resource_group: netgear-switches
-  timeout: 45m
+  timeout: 90m
+  variables:
+    NETGEAR_FIRMWARE_WINDOW: "04:45-06:00"
+    NETGEAR_TFTP_SERVER: "10.4.0.1"
+    NETGEAR_FIRMWARE_DIR: "/cache/netgear-firmware"
   script:
+    - python3 networking/switches/netgear/firmware_ci.py rollout
+  # A failure the script did not report itself (timeout, cancellation, crash) still mails root.
+  after_script:
     - |
-      if [ -z "$NETGEAR_FIRMWARE_TARGET" ]; then
-        echo "ERROR: set NETGEAR_FIRMWARE_TARGET to one switch name, e.g. netgear-movie"
-        exit 1
+      if [ "$CI_JOB_STATUS" != success ] && [ ! -e .netgear-firmware-alerted ] && [ "$NETGEAR_FIRMWARE_DRY_RUN" != 1 ]; then
+        python3 ci/automerge/automerge.py notify \
+          --subject "Homelab: netgear:firmware ${CI_JOB_STATUS}" \
+          --message "netgear:firmware ended (${CI_JOB_STATUS}) without reporting an outcome. A switch may be mid-upgrade: check ngswitch.py firmware status and the job log." || true
       fi
-    - python3 networking/switches/netgear/ngswitch.py firmware upgrade "networking/switches/netgear/${NETGEAR_FIRMWARE_TARGET}.yml" --cache-dir .netgear-firmware --backup-dir netgear-backup --export-dir netgear-export --report netgear-drift.txt
+    - rm -f tmp
   artifacts:
     when: always
     paths:
+      - netgear-firmware.log
       - netgear-backup/
       - netgear-export/
-      - netgear-drift.txt
+      - netgear-drift-*.txt
     expire_in: 30 days
   rules:
-    - !reference [.automerge_task_skip, rules]
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: never
-    - if: $CI_COMMIT_BRANCH == "main" && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web")
-      when: manual
-      allow_failure: true
+    - if: $CI_COMMIT_BRANCH == "main" && $NETGEAR_TASK == "firmware" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "trigger")
 
 # =============================================================================
 # Aruba Instant AP cluster (networking/aruba-iap, see README.md there)
