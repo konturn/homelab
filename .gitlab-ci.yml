@@ -122,6 +122,7 @@ variables:
         - ansible/roles/restic/**/*
         - ansible/roles/configure-excel-vm/**/*
         - ansible/roles/zwave-backup/**/*
+        - ansible/roles/deadman/**/*
         - docker/docker-compose.yml
         - docker/**/*
         - networking/**/*

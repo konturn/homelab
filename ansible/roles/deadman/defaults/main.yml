@@ -1,0 +1,31 @@
+# Off-box heartbeat for the router (docs/DEADMAN.md).
+#
+# Ping URL of the healthchecks.io check, from Vault
+# homelab/monitoring/healthchecks (field ping_url, optional in
+# fetch-vault-secrets). Empty: everything is installed, but the timer stays
+# stopped and disabled.
+deadman_ping_url: "{{ vault_healthchecks_ping_url | default('') | trim }}"
+
+# Every 5 minutes. The healthchecks.io check uses period 5 min, grace 10 min.
+deadman_on_calendar: "*:0/5"
+
+# Per-check limit in seconds (deadman-check aborts a hung check after this + 10s).
+deadman_check_timeout: 20
+
+# Containers that must be running and healthy (container_name in
+# docker/docker-compose.yml).
+deadman_containers:
+  - nginx
+  - lab_nginx
+  - grafana
+  - homeassistant
+  - vault
+  - gitlab
+
+deadman_persistent_path: /persistent_data
+deadman_zpool: mpool
+deadman_vault_url: "https://{{ vault_ip }}:8200/v1/sys/health"
+deadman_grafana_url: "https://grafana.lab.nkontur.com/api/health"
+deadman_grafana_resolve: "grafana.lab.nkontur.com:443:{{ lab_nginx_ip }}"
+
+deadman_env_file: /etc/deadman-check.env

@@ -1,0 +1,25 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Router heartbeat to healthchecks.io (ansible/roles/deadman, docs/DEADMAN.md)
+After=network-online.target
+Wants=network-online.target
+# Must not wait on /persistent_data, Docker or the ZFS pool: those are what it checks.
+
+[Service]
+Type=oneshot
+Environment=DEADMAN_ENV_FILE={{ deadman_env_file }}
+Environment=DEADMAN_CHECK_TIMEOUT={{ deadman_check_timeout }}
+Environment="DEADMAN_CONTAINERS={{ deadman_containers | join(' ') }}"
+Environment=DEADMAN_PERSISTENT_PATH={{ deadman_persistent_path }}
+Environment=DEADMAN_ZPOOL={{ deadman_zpool }}
+Environment=DEADMAN_VAULT_URL={{ deadman_vault_url }}
+Environment=DEADMAN_GRAFANA_URL={{ deadman_grafana_url }}
+Environment=DEADMAN_GRAFANA_RESOLVE={{ deadman_grafana_resolve }}
+ExecStart=/usr/local/sbin/deadman-check
+# Backstop only: each check already gives up on its own. A run killed here
+# sends no ping, which healthchecks.io reports after the grace time.
+TimeoutStartSec=4min
+# A check stuck in uninterruptible I/O is abandoned by the script; leave it
+# behind rather than holding the unit in "deactivating" and blocking the next run.
+KillMode=process
+SyslogIdentifier=deadman-check
