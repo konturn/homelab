@@ -8,7 +8,20 @@ policies:
     group_interval: 5m
     repeat_interval: 24h
     routes:
-      # Agent notification. MUST be first and MUST stay a child route.
+      # zigbee2mqtt log floods: agent only, no email. Its log volume swings with
+      # normal Zigbee activity (OTA firmware updates, interviews, re-pairing),
+      # so the 10x-baseline rule fires on routine work. This route delivers it
+      # to the agent; continue: false keeps it out of the email routes. It sits
+      # ahead of the agent catch-all so openclaw-webhook gets it exactly once.
+      - receiver: openclaw-webhook
+        matchers:
+          - alertname = "Container Log Flood (rate 10x its own 24h baseline)"
+          - container = "zigbee2mqtt"
+        group_wait: 30s
+        group_interval: 10m
+        repeat_interval: 24h
+        continue: false
+      # Agent notification. MUST be the first catch-all and MUST stay a child route.
       #
       # The root `receiver:` above is Alertmanager's *fallback* -- it notifies only
       # alerts that match no child route. `continue: true` continues to sibling
