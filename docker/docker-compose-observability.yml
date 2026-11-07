@@ -21,7 +21,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: 64M
+          # Enforced once the Pis have the memory cgroup (#140). Measured
+          # 2026-11-07 without limits: telegraf ~48M anonymous memory,
+          # promtail ~20M, plus page cache, so 64M would OOM-kill telegraf.
+          memory: 128M
           cpus: '0.15'
     logging:
       driver: json-file
@@ -69,7 +72,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: 64M
+          # Enforced once the Pis have the memory cgroup (#140). Measured
+          # 2026-11-07 without limits: telegraf ~48M anonymous memory,
+          # promtail ~20M, plus page cache, so 64M would OOM-kill telegraf.
+          memory: 128M
           cpus: '0.15'
     logging:
       driver: json-file

@@ -1,1 +1,9 @@
 nvidia_container_runtime: false
+
+# Weekly removal of images no container uses (#118). Every image bump leaves
+# the previous image behind, which on the SD-card Pis filled the root
+# filesystem. Empty = no timer (the default). An OnCalendar expression turns
+# it on; images created within docker_image_prune_until are kept, so a recent
+# previous version stays available for a rollback.
+docker_image_prune_on_calendar: ""
+docker_image_prune_until: "168h"
