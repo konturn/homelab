@@ -105,6 +105,7 @@ To rotate a secret:
 | `GRAFANA_SMTP_PASSWORD` | `docker/grafana` | `smtp_password` | Grafana |
 | `WORDPRESS_DB_PASSWORD` | `docker/wordpress` | `db_password` | WordPress, MySQL |
 | `NEXTCLOUD_DB_PASSWORD` | `docker/nextcloud` | `db_password` | Nextcloud, MariaDB |
+| `NEXTCLOUD_DB_ROOT_PASSWORD` | `docker/nextcloud` | `db_root_password` | MariaDB root, restic-db-dumps |
 | `DOORBELL_PASS` | `cameras/doorbell` | `password` | amcrest2mqtt |
 | `MQTT_PASS` | `mqtt/mosquitto` | `password` | amcrest2mqtt, ambientweather |
 | `AUDIOSERVE_SECRET` | `docker/audioserve` | `secret` | audioserve |
@@ -298,7 +299,14 @@ To rotate a secret:
 
 **Used by:**
 - `nextcloud` container (via internal config)
-- `nextcloud_db` (MariaDB) container (`MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD`)
+- `nextcloud_db` (MariaDB) container (`MYSQL_PASSWORD`, the `nextcloud` user)
+
+The MariaDB root password is a separate field, `db_root_password`
+(`MYSQL_ROOT_PASSWORD`). Only `restic-db-dumps` logs in as root, with the
+container's own `MYSQL_ROOT_PASSWORD`. To rotate it: patch the Vault field,
+run `ALTER USER 'root'@'localhost' IDENTIFIED BY ...` and the same for
+`'root'@'%'` in `nextcloud_database`, then deploy so the container env
+matches, and run the nightly `restic-db-dumps` to check.
 
 **How to rotate:**
 1. Stop Nextcloud container
