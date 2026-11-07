@@ -2357,12 +2357,15 @@ services:
   chromium-browser:
     image: gitlab-registry.lab.nkontur.com:443/root/homelab/chromium-browser:latest
     container_name: chromium-browser
+    # Chromium sandbox via unprivileged user namespaces: Docker's default seccomp
+    # profile plus clone/unshare/setns/chroot (docker/chromium-browser/seccomp.json,
+    # copied by ansible). No CAP_SYS_ADMIN.
     security_opt:
       - no-new-privileges=true
+      - "seccomp={{ docker_persistent_data_path }}/chromium-browser/seccomp/chromium.json"
     cap_drop:
       - ALL
     cap_add:
-      - SYS_ADMIN
       - CHOWN
       - SETUID
       - SETGID
