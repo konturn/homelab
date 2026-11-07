@@ -1,0 +1,9 @@
+[Unit]
+Description=Weekly logical database dumps for restic (large databases)
+
+[Timer]
+OnCalendar={{ restic_db_dumps_weekly_on_calendar }}
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target

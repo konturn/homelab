@@ -94,6 +94,26 @@
         - {path: "/var/log"}
         - {path: "/root"}
       restic_password: "{{ vault_restic_password | trim }}"
+      # Logical dumps before every backup (docs/backups.md, "Logical database
+      # dumps"), next to the raw data files restic already copies. Credentials
+      # stay inside the database containers; nothing here is secret.
+      restic_db_dumps_dir: /persistent_data/application/db-dumps
+      restic_db_dumps:
+        - {name: gitlab, type: postgres-omnibus, container: gitlab, target: gitlabhq_production}
+        - {name: gitlab-registry, type: postgres-omnibus, container: gitlab, target: registry}
+        - {name: nextcloud, type: mysql, container: nextcloud_database, target: nextcloud}
+        # Compose profile "wordpress": normally stopped, and the volume of a
+        # stopped server is already consistent, so a stopped one is skipped.
+        - {name: wordpress, type: mysql, container: wordpress_db, target: wordpress, required: false}
+        - {name: vaultwarden, type: sqlite, target: /persistent_data/application/bitwarden/data/db.sqlite3}
+        - {name: paperless, type: sqlite, target: /persistent_data/application/paperless/db.sqlite3}
+        - {name: grafana, type: sqlite, target: /persistent_data/docker/volumes/docker_grafana-storage/_data/grafana.db}
+        - {name: navidrome, type: sqlite, target: /persistent_data/application/navidrome/navidrome.db}
+        - {name: ombi, type: sqlite, target: /persistent_data/docker/volumes/docker_ombi/_data/Ombi.db}
+        - {name: ombi-external, type: sqlite, target: /persistent_data/docker/volumes/docker_ombi/_data/OmbiExternal.db}
+        # ~35G of TSM data, ~25 min and 15G of output per run: weekly, on
+        # its own timer outside the backup window.
+        - {name: influxdb, type: influxdb, container: influxdb, target: all, group: weekly}
   # Last: pulls can take long on a fresh host, and a failed pull or create
   # must not hold up the other roles.
   - role: configure-ollama-models
