@@ -40,7 +40,7 @@ deploy_hosts:
 # Maximum general-class auto-merges in any rolling 24h window (fast track has
 # its own budget below). The sweep merges at most one MR per run and none
 # while a per-service deploy is still running.
-max_per_24h: 12
+max_per_24h: 24
 
 # Never auto-merged, whatever the update kind. Each entry needs a reason; the
 # sweep prints it on the MR and labels the MR `automerge-manual`. Renovate
