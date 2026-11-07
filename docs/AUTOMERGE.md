@@ -82,7 +82,7 @@ these hold:
 5. No CODEOWNERS-protected path is touched (the listed compose files are the
    exception, and only under rule 3).
 6. Nothing is frozen (see below) and the MR is not labelled `major`.
-7. Fewer than `max_per_24h` (12) general-class MRs, or fewer than
+7. Fewer than `max_per_24h` (24) general-class MRs, or fewer than
    `fast_track.max_per_24h` (4) fast-track MRs, carry the `automerged` label
    with a merge time in the last 24 hours. Each class has its own budget.
 
