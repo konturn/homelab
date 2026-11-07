@@ -760,6 +760,145 @@ groups:
         labels:
           severity: warning
 
+      # A disk that drops off the bus stops writing smart_device entirely.
+      # smart-disk-error and smart-prefail-sectors only read series that still
+      # exist, so a vanished disk is silent to both (noDataState OK). On
+      # 2026-11-05 the WD260 s/n SZGDNA4M (sda, resilvering in for FAULTED
+      # sdk) disappeared at 08:00Z and nothing fired.
+      #
+      # Compares each serial's last sample with the newest smart sample from
+      # the SAME host, not with now(). If telegraf or influx is down, every
+      # serial ages together and nothing fires here (that outage is a
+      # different alert's job). Keyed on serial_no, so a /dev/sdX rename (sdc
+      # coming back as sdaa) is not a vanish. smart runs every 5m, so 20m is
+      # four missed polls. Self-clears 24h after the disk was last seen, so a
+      # disk pulled on purpose stops alerting the next day. A dead one does
+      # too, which is why this is critical and fires at once.
+      - uid: smart-disk-vanished
+        title: Disk Vanished
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 86400, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                import "join"
+                data = from(bucket: "metrics")
+                  |> range(start: -24h)
+                  |> filter(fn: (r) => r._measurement == "smart_device")
+                  |> filter(fn: (r) => r._field == "health_ok")
+                  |> group(columns: ["host", "serial_no"])
+                  |> last()
+                  |> group()
+                hostLatest = data
+                  |> group(columns: ["host"])
+                  |> max(column: "_time")
+                  |> group()
+                  |> keep(columns: ["host", "_time"])
+                join.inner(
+                    left: data,
+                    right: hostLatest,
+                    on: (l, r) => l.host == r.host,
+                    as: (l, r) => ({l with host_last: r._time}),
+                  )
+                  |> map(fn: (r) => ({r with _value: (int(v: r.host_last) - int(v: r._time)) / 60000000000}))
+                  |> filter(fn: (r) => r._value > 20)
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "host", "serial_no", "device", "model"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [20]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Disk {{ $labels.model }} s/n {{ $labels.serial_no }} (last seen as {{ $labels.device }}) on {{ $labels.host }} stopped reporting {{ $values.B }} min ago while the host's other disks still report — it dropped off the bus. Check zpool status."
+        labels:
+          severity: critical
+
+      # Pool state from telegraf's zpool-health.sh (zpool list -H -o
+      # name,health). healthy=0 means anything other than ONLINE: DEGRADED,
+      # FAULTED, UNAVAIL, SUSPENDED. A degraded mpool has lost redundancy and
+      # nothing else in this file says so. pool=_collect is the collector's
+      # own failure marker and is handled by zpool-collection-failed.
+      - uid: zpool-unhealthy
+        title: ZFS Pool Unhealthy
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -15m)
+                  |> filter(fn: (r) => r._measurement == "zpool_health")
+                  |> filter(fn: (r) => r._field == "healthy")
+                  |> filter(fn: (r) => r.pool != "_collect")
+                  |> last()
+                  |> map(fn: (r) => ({r with _value: if r._value == 0 then 1 else 0}))
+                  |> keep(columns: ["_time", "_value", "host", "pool"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 2m
+        annotations:
+          summary: "ZFS pool {{ $labels.pool }} on {{ $labels.host }} is not ONLINE — redundancy is reduced. Run zpool status {{ $labels.pool }}."
+        labels:
+          severity: critical
+
+      # Collector health for zpool-unhealthy above. Fires if the script
+      # reports zpool failing (collect_ok=0) OR if no zpool_health points
+      # arrive at all (noDataState Alerting) -- otherwise a broken collector
+      # leaves zpool-unhealthy with no series, which reads as healthy.
+      - uid: zpool-collection-failed
+        title: ZFS Pool Health Collection Failed
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -15m)
+                  |> filter(fn: (r) => r._measurement == "zpool_health")
+                  |> filter(fn: (r) => r._field == "collect_ok")
+                  |> group(columns: ["host"])
+                  |> last()
+                  |> keep(columns: ["_time", "_value", "host"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: min, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [1]}}]}
+        noDataState: Alerting
+        execErrState: Error
+        for: 30m
+        annotations:
+          summary: "zpool-health.sh is failing or not reporting on {{ $labels.host }} — ZFS Pool Unhealthy is blind"
+        labels:
+          severity: warning
+
       # -----------------------------------------------------------------
       # Counts systemd unit FAILURE EVENTS from the journal instead of
       # sampling unit state, because state is the wrong instrument class for
