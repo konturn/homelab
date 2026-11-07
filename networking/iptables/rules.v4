@@ -57,6 +57,51 @@
 -A CI-EGRESS -d 172.16.0.0/12 -j DROP
 -A CI-EGRESS -d 192.168.0.0/16 -j DROP
 -A CI-EGRESS -d 224.0.0.0/3 -j DROP
+
+# -----------------------------------------------------------------------------
+# Protected CI job network (docker network "gitlab-ci-protected", bridge
+# br-ci-prot, 172.28.1.0/24)
+# -----------------------------------------------------------------------------
+# Egress allowlist for containers of the "router-protected" runner (main and
+# scheduled pipelines: deploys, drift checks, reports). Same placement and
+# reasoning as CI-EGRESS. Allowed: what CI-EGRESS allows, plus the docker
+# socket proxy, SSH to the deploy targets and the API ports of the devices the
+# drift/apply jobs manage. The firmware rollouts (TFTP server on the router's
+# addresses) run on the separate host-network "router-firmware" runner.
+:CI-PROT-EGRESS - [0:0]
+-A PREROUTING -i br-ci-prot -j CI-PROT-EGRESS
+# DNS, GitLab/registry (nginx 443), docker-socket-proxy (nginx 2376), Vault
+-A CI-PROT-EGRESS -d {{ pihole_ip }}/32 -p udp -m udp --dport 53 -j RETURN
+-A CI-PROT-EGRESS -d {{ pihole_ip }}/32 -p tcp -m tcp --dport 53 -j RETURN
+-A CI-PROT-EGRESS -d {{ lab_nginx_ip }}/32 -p tcp -m tcp -m multiport --dports 443,2376 -j RETURN
+-A CI-PROT-EGRESS -d {{ vault_ip }}/32 -p tcp -m tcp --dport 8200 -j RETURN
+# SSH: Ansible deploys and reports (router, Pis, Mac mini), mail/ipmictl/
+# run_remote and the Home Assistant config deploy (router)
+-A CI-PROT-EGRESS -d 10.4.0.1/32 -p tcp -m tcp --dport 22 -j RETURN
+-A CI-PROT-EGRESS -d {{ zwave_address }}/32 -p tcp -m tcp --dport 22 -j RETURN
+-A CI-PROT-EGRESS -d {{ satellite_2_address }}/32 -p tcp -m tcp --dport 22 -j RETURN
+-A CI-PROT-EGRESS -d {{ mac_mini_address }}/32 -p tcp -m tcp --dport 22 -j RETURN
+# Devices: NETGEAR switches (HTTP API), Aruba Instant VC + APs (SSH), S2500
+# core switch (SSH, direct link), Denon AVR (telnet control + HTTP), UPS
+# network card (SSH/SCP)
+-A CI-PROT-EGRESS -d {{ movie_switch_address }}/32 -p tcp -m tcp --dport 80 -j RETURN
+-A CI-PROT-EGRESS -d {{ office_switch_address }}/32 -p tcp -m tcp --dport 80 -j RETURN
+-A CI-PROT-EGRESS -d {{ iap_vc_address }}/32 -p tcp -m tcp --dport 22 -j RETURN
+-A CI-PROT-EGRESS -d {{ movie_ap_address }}/32 -p tcp -m tcp --dport 22 -j RETURN
+-A CI-PROT-EGRESS -d {{ office_ap_address }}/32 -p tcp -m tcp --dport 22 -j RETURN
+-A CI-PROT-EGRESS -d 10.100.0.1/32 -p tcp -m tcp --dport 22 -j RETURN
+-A CI-PROT-EGRESS -d {{ denon_address }}/32 -p tcp -m tcp -m multiport --dports 23,8080 -j RETURN
+-A CI-PROT-EGRESS -d {{ ups_address }}/32 -p tcp -m tcp --dport 22 -j RETURN
+-A CI-PROT-EGRESS -m addrtype --dst-type LOCAL -j DROP
+-A CI-PROT-EGRESS -m addrtype --dst-type BROADCAST -j DROP
+-A CI-PROT-EGRESS -d 0.0.0.0/8 -j DROP
+-A CI-PROT-EGRESS -d 10.0.0.0/8 -j DROP
+-A CI-PROT-EGRESS -d 100.64.0.0/10 -j DROP
+-A CI-PROT-EGRESS -d 127.0.0.0/8 -j DROP
+-A CI-PROT-EGRESS -d 169.254.0.0/16 -j DROP
+-A CI-PROT-EGRESS -d 172.16.0.0/12 -j DROP
+-A CI-PROT-EGRESS -d 192.168.0.0/16 -j DROP
+-A CI-PROT-EGRESS -d 224.0.0.0/3 -j DROP
 COMMIT
 
 # =============================================================================
@@ -133,6 +178,10 @@ COMMIT
 # GitLab CI job network (br-ci): masquerade everything leaving the bridge
 -A POSTROUTING -s 172.28.0.0/24 ! -o br-ci -j MASQUERADE
 
+# Protected CI job network (br-ci-prot): same. Devices see the router's own
+# address on the egress interface, as they did with the host-network runner.
+-A POSTROUTING -s 172.28.1.0/24 ! -o br-ci-prot -j MASQUERADE
+
 # Hairpin NAT needs no SNAT: the hairpinned clients are on other subnets than
 # nginx, so nginx's replies already return via the router (its gateway) and
 # are un-DNATed there, and nginx keeps seeing the real client address.
@@ -157,6 +206,12 @@ COMMIT
 # GitLab CI job network (br-ci): no access to the router itself (see raw
 # CI-EGRESS; containers use Docker's embedded DNS inside their own netns)
 -A INPUT -i br-ci -j DROP
+
+# Protected CI job network (br-ci-prot): SSH to the router's mgmt address
+# only (deploys, reports, mail, ipmictl, HA config deploy); see raw
+# CI-PROT-EGRESS
+-A INPUT -i br-ci-prot -d 10.4.0.1/32 -p tcp -m tcp --dport 22 -j ACCEPT
+-A INPUT -i br-ci-prot -j DROP
 
 # SSH access to router — restricted to trusted sources
 # mgmt VLAN (10.4.0.0/16): infrastructure management network
@@ -249,6 +304,25 @@ COMMIT
 -A FORWARD -i br-ci -d {{ vault_ip }} -p tcp -m tcp --dport 8200 -j ACCEPT
 -A FORWARD -i br-ci -o {{ inet_interface_name }} -j ACCEPT
 -A FORWARD -i br-ci -j DROP
+
+# Protected CI job network (br-ci-prot): allowlist, mirrors raw CI-PROT-EGRESS
+-A FORWARD -i br-ci-prot -d {{ pihole_ip }} -p udp -m udp --dport 53 -j ACCEPT
+-A FORWARD -i br-ci-prot -d {{ pihole_ip }} -p tcp -m tcp --dport 53 -j ACCEPT
+-A FORWARD -i br-ci-prot -d {{ lab_nginx_ip }} -p tcp -m tcp -m multiport --dports 443,2376 -j ACCEPT
+-A FORWARD -i br-ci-prot -d {{ vault_ip }} -p tcp -m tcp --dport 8200 -j ACCEPT
+-A FORWARD -i br-ci-prot -d {{ zwave_address }} -p tcp -m tcp --dport 22 -j ACCEPT
+-A FORWARD -i br-ci-prot -d {{ satellite_2_address }} -p tcp -m tcp --dport 22 -j ACCEPT
+-A FORWARD -i br-ci-prot -d {{ mac_mini_address }} -p tcp -m tcp --dport 22 -j ACCEPT
+-A FORWARD -i br-ci-prot -d {{ movie_switch_address }} -p tcp -m tcp --dport 80 -j ACCEPT
+-A FORWARD -i br-ci-prot -d {{ office_switch_address }} -p tcp -m tcp --dport 80 -j ACCEPT
+-A FORWARD -i br-ci-prot -d {{ iap_vc_address }} -p tcp -m tcp --dport 22 -j ACCEPT
+-A FORWARD -i br-ci-prot -d {{ movie_ap_address }} -p tcp -m tcp --dport 22 -j ACCEPT
+-A FORWARD -i br-ci-prot -d {{ office_ap_address }} -p tcp -m tcp --dport 22 -j ACCEPT
+-A FORWARD -i br-ci-prot -d 10.100.0.1 -p tcp -m tcp --dport 22 -j ACCEPT
+-A FORWARD -i br-ci-prot -d {{ denon_address }} -p tcp -m tcp -m multiport --dports 23,8080 -j ACCEPT
+-A FORWARD -i br-ci-prot -d {{ ups_address }} -p tcp -m tcp --dport 22 -j ACCEPT
+-A FORWARD -i br-ci-prot -o {{ inet_interface_name }} -j ACCEPT
+-A FORWARD -i br-ci-prot -j DROP
 
 # Management VLAN (bond0.4) - Full access to all networks
 # Trusted infrastructure management network

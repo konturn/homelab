@@ -320,6 +320,24 @@
     quiet: true
   no_log: true
 
+# Same for the firmware runner (host network, firmware rollout jobs only).
+- name: Read firmware runner token
+  ansible.builtin.slurp:
+    src: /etc/gitlab-runner/firmware-runner.token
+  register: _firmware_runner_token
+  no_log: true
+
+- name: Set firmware runner token fact
+  ansible.builtin.set_fact:
+    gitlab_runner_firmware_token: "{{ _firmware_runner_token.content | b64decode | trim }}"
+  no_log: true
+
+- name: Check firmware runner token is set
+  ansible.builtin.assert:
+    that: gitlab_runner_firmware_token | length > 0
+    quiet: true
+  no_log: true
+
 - name: Gitlab runner config file
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/gitlab-runner/config.toml' }}"

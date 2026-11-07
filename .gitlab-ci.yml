@@ -1340,6 +1340,9 @@ netgear:firmware:
     docker:
       user: root
   stage: deploy
+  # Host-network runner (base/gitlab-runner/config.toml, router-firmware):
+  # the TFTP server binds the router's own address.
+  tags: [firmware-hostnet]
   needs: []
   resource_group: netgear-switches
   timeout: 90m
@@ -1528,6 +1531,9 @@ aruba-iap:firmware:
     docker:
       user: root
   stage: deploy
+  # Host-network runner (base/gitlab-runner/config.toml, router-firmware):
+  # the TFTP server binds the router's own address.
+  tags: [firmware-hostnet]
   needs: []
   timeout: 60m
   variables:
@@ -1628,6 +1634,9 @@ aruba-s2500:firmware:
     docker:
       user: root
   stage: deploy
+  # Host-network runner (base/gitlab-runner/config.toml, router-firmware):
+  # the TFTP server binds the router's own address.
+  tags: [firmware-hostnet]
   needs: []
   resource_group: aruba-s2500
   timeout: 60m
