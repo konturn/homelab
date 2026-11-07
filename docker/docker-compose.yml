@@ -173,7 +173,7 @@ services:
       retries: 3
 
   # Read-only Docker API for promtail's container discovery and log tailing:
-  # GET on containers (list, inspect, logs) and events only. No POST, so
+  # GET on containers (list, inspect, logs), networks and events only. No POST, so
   # nothing can be started, changed or exec'd through it. Separate from
   # docker-socket-proxy, which CI builds use with POST enabled.
   docker-socket-proxy-ro:
@@ -200,7 +200,7 @@ services:
       - COMMIT=0
       - IMAGES=0
       - EXEC=0
-      - NETWORKS=0
+      - NETWORKS=1  # promtail docker_sd reads network labels (GET only)
       - VOLUMES=0
       - AUTH=0
     healthcheck:
