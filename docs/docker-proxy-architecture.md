@@ -7,7 +7,7 @@ CI/CD jobs need Docker access on the lab host, but exposing the Docker socket di
 ## Request Flow
 
 ```
-CI Runner (host network)
+CI Runner (gitlab-ci-protected network)
   │
   │  mTLS :2376
   ▼
@@ -26,7 +26,7 @@ docker-socket-proxy (proxy-internal network)
 
 ### CI Runner
 
-- Runs with `network_mode: host` (single runner instance)
+- The `router-protected` runner, Docker network `gitlab-ci-protected`; its egress allowlist permits lab_nginx :2376 (docs/FIREWALL.md)
 - Connects to `lab.nkontur.com:2376` using mTLS client certificates
 - Environment: `DOCKER_HOST=tcp://lab.nkontur.com:2376`, `DOCKER_TLS_VERIFY=1`
 

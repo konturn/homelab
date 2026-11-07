@@ -236,7 +236,7 @@ management, as it will conflict with the existing ruleset.
 
 Jobs from MR and branch pipelines run on the `main.nkontur.com` runner in the Docker
 network `gitlab-ci` (bridge `br-ci`, 172.28.0.0/24, created by `configure-docker`); jobs from
-`main` run on the `router-protected` runner with host networking (see
+`main` run on the `router-protected` runner in `gitlab-ci-protected` (below; see
 `base/gitlab-runner/config.toml`). Rules for `br-ci` in `rules.v4`:
 
 | Table / chain | Rule |

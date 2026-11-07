@@ -122,8 +122,8 @@ re-calibration), run `export`, review `git diff`, and commit.
 `denon:drift` in `.gitlab-ci.yml` runs on the pipeline schedule
 **"denon: daily AVR settings drift check"** (`DENON_TASK=drift`, daily at
 20:45 America/New_York, when the receiver is most likely on). It runs on the
-protected runner, which uses the router's host network and so reaches the IoT
-VLAN. It is strictly read-only.
+protected runner, whose job network (`gitlab-ci-protected`, docs/FIREWALL.md)
+allows the receiver's telnet and HTTP ports. It is strictly read-only.
 
 | Result | Exit | Effect |
 |---|---|---|

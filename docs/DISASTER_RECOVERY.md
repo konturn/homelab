@@ -129,9 +129,13 @@ The script walks through 7 steps in order:
    gitlab-runner register \
      --url https://gitlab.lab.nkontur.com/ \
      --executor docker \
-     --docker-image ubuntu:20.04 \
-     --docker-network-mode host
+     --docker-image ubuntu:24.04
    ```
+   Then put the runner token in `/etc/gitlab-runner/protected-runner.token` (and
+   the firmware runner's in `firmware-runner.token`) and run the router deploy:
+   `configure-base` renders `/etc/gitlab-runner/config.toml` (job networks, tags,
+   limits) from `base/gitlab-runner/config.toml`; `configure-docker` creates the
+   `gitlab-ci*` job networks. Do not register with host networking.
 3. **Push the repo** (if needed):
    ```bash
    cd /root/homelab
