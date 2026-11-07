@@ -31,6 +31,8 @@
       claude_user_principal: claude-zwave
   - role: configure-zwave
     tags: [configure-zwave]
+  - role: configure-pi-boot
+    tags: [configure-pi-boot]
   - role: configure-pi-watchdog
     tags: [configure-pi-watchdog]
   - role: configure-snapclient

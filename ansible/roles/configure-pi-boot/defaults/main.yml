@@ -1,0 +1,15 @@
+# Packages for the bookworm boot layout: the Debian-style kernel, and
+# raspi-firmware, whose kernel/initramfs hooks copy kernel8.img, initramfs8,
+# the dtbs and the overlays into /boot/firmware on every kernel update.
+pi_boot_kernel_packages:
+  - linux-image-rpi-v8
+  - raspi-firmware
+
+# Parameters kept on the kernel command line (/boot/firmware/cmdline.txt).
+# Each replaces any existing parameter of the same name; everything else on
+# the line is left as it is.
+#   panic=10: a kernel panic reboots after 10s instead of hanging. These Pis
+#   are remote-only, and after a `reboot "0 tryboot"` the reboot also lands
+#   back on the known-good config.txt.
+pi_boot_cmdline_params:
+  - panic=10

@@ -1,3 +1,10 @@
+# Load initramfs8 next to kernel8.img (Debian kernel packages + raspi-firmware).
+auto_initramfs=1
+
+# Hardware watchdog (see configure-pi-watchdog). It is in this template because
+# the template replaces the whole file.
+dtparam=watchdog=on
+
 # uncomment if you get no picture on HDMI for a default "safe" mode
 #hdmi_safe=1
 
@@ -47,7 +54,7 @@
 #dtoverlay=gpio-ir,gpio_pin=17
 #dtoverlay=gpio-ir-tx,gpio_pin=18
 
-# Additional overlays and parameters are documented /boot/overlays/README
+# Additional overlays and parameters are documented in overlays/README on the boot partition
 
 # Enable audio (loads snd_bcm2835)
 #dtparam=audio=on
