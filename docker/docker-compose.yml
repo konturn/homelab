@@ -281,7 +281,7 @@ services:
       - SETGID         # s6-overlay drops to PGID/configured group
       - CHOWN          # s6-overlay chowns data directories at startup
       - DAC_OVERRIDE   # s6-overlay reads/writes files across users during init
-    image: lscr.io/linuxserver/tautulli:18993091-ls1@sha256:597e4c4992917f5499179406ad6d5ac3304024dd246f1d371fb30f55d35b1535
+    image: lscr.io/linuxserver/tautulli:18993091-ls1@sha256:9d4cd2f0342d4a2e31f4bcf22d9acad1b2e13fc5997a55ceec11344d699c0976
     networks:
       - internal
       - external
