@@ -93,7 +93,13 @@ Before merging, the sweep also requires:
 - the MR pipeline for the current head commit succeeded;
 - the MR is not a draft and has no conflicts;
 - no per-service deploy job is still created, pending or running, so a failing
-  deploy pauses auto-merge (rollback issue) before the next update lands;
+  deploy opens its rollback issue before the next update lands;
+- no open `automerge-rollback` issue covers a service the MR updates on the
+  same host. The hold is per service: other services keep auto-merging, since
+  their per-service deploys recreate only their own containers. The issue body
+  carries the scope (`<!-- automerge-rollback job=router services=tautulli -->`);
+  an older issue without it is read from its title, and one that matches
+  neither holds every MR;
 - for an MR that deploys to a Pi (zwave, satellite-2), the Pi answers on
   port 22.
 

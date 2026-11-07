@@ -24,6 +24,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import re
 import shlex
 import socket
 import subprocess
@@ -33,7 +34,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import policy  # noqa: E402
@@ -233,13 +234,48 @@ def global_gates(gl: GitLab, allow: dict) -> List[str]:
         reasons.append("AUTOMERGE_FREEZE variable is set")
     if FREEZE_FILE.exists():
         reasons.append(f"{FREEZE_FILE.relative_to(REPO_ROOT)} exists on main")
-    open_rb = gl.get(f"projects/{PROJECT}/issues", state="opened", labels=LABEL_ROLLBACK, per_page=20)
-    if open_rb:
-        reasons.append("open rollback issue(s): " + ", ".join(f"#{i['iid']}" for i in open_rb))
     busy = deploys_in_progress(gl)
     if busy:
         reasons.append("per-service deploy still running: " + ", ".join(busy))
     return reasons
+
+
+# Machine-readable scope of a rollback issue, written by deploy-report.
+ROLLBACK_MARKER = re.compile(r"<!--\s*automerge-rollback\s+job=(\S+)\s+services=(\S+)\s*-->")
+# Issues opened before the marker existed: "Auto-merge rollback: a, b on router (!123)".
+ROLLBACK_TITLE = re.compile(r"^Auto-merge rollback: (.+) on (\S+) \(!\d+\)$")
+
+
+def rollback_scope(issue: dict) -> Optional[Set[Tuple[str, str]]]:
+    """The (deploy job, service) pairs an open rollback issue holds back, or
+    None when the issue does not say (the hold then applies to every MR)."""
+    m = ROLLBACK_MARKER.search(issue.get("description") or "")
+    if m:
+        job, services = m.group(1), m.group(2).split(",")
+    else:
+        t = ROLLBACK_TITLE.match((issue.get("title") or "").strip())
+        if not t:
+            return None
+        job, services = t.group(2), [s.strip() for s in t.group(1).split(",")]
+    scope = {(job, s) for s in services if s}
+    return scope or None
+
+
+def rollback_holds(gl: GitLab) -> List[Tuple[dict, Optional[Set[Tuple[str, str]]]]]:
+    issues = gl.get_all(f"projects/{PROJECT}/issues", state="opened", labels=LABEL_ROLLBACK)
+    return [(i, rollback_scope(i)) for i in issues]
+
+
+def rollback_gate(holds: List[Tuple[dict, Optional[Set[Tuple[str, str]]]]],
+                  v: policy.Verdict) -> Optional[str]:
+    """An open rollback issue holds back only MRs that update one of its
+    services on the same host. Other services keep auto-merging: their
+    per-service deploys recreate only their own containers."""
+    mine = {(j, c.service) for j in v.deploy_jobs for c in v.changes}
+    hits = [f"#{i['iid']}" for i, scope in holds if scope is None or scope & mine]
+    if hits:
+        return "open rollback issue(s) for this service: " + ", ".join(hits)
+    return None
 
 
 def deploys_in_progress(gl: GitLab) -> List[str]:
@@ -458,12 +494,17 @@ def cmd_sweep(args: argparse.Namespace) -> int:
         verdicts[iid] = evaluate_api(gl, mr, allow, merger=merger, deployments=deployments)
 
     gates: List[str] = []
+    holds: List[Tuple[dict, Optional[Set[Tuple[str, str]]]]] = []
     rate: Dict[bool, Optional[str]] = {False: None, True: None}
     if any(v.eligible for v in verdicts.values()):
         gates = global_gates(gl, allow)
         log("Global gates: " + ("CLOSED" if gates else "open"))
         for g in gates:
             log(f"  - {g}")
+        holds = rollback_holds(gl)
+        for i, scope in holds:
+            held = ", ".join(f"{s} on {j}" for j, s in sorted(scope)) if scope else "ALL MRs (scope unknown)"
+            log(f"  - rollback #{i['iid']} holds: {held}")
         recent = recent_automerges(gl)
         rate = {ft: rate_gate(recent, allow, ft) for ft in (False, True)}
         for ft, r in rate.items():
@@ -476,7 +517,8 @@ def cmd_sweep(args: argparse.Namespace) -> int:
     merged_one = False
     for iid in order:
         mr, v = candidates[iid], verdicts[iid]
-        mr_gates = gates + ([rate[v.fast_track]] if rate[v.fast_track] else [])
+        rb = rollback_gate(holds, v) if v.eligible else None
+        mr_gates = gates + [g for g in (rate[v.fast_track], rb) if g]
         eligible = v.eligible and not mr_gates
         print_verdict(mr, v, mr_gates if v.eligible else [])
         if v.eligible:
@@ -716,8 +758,12 @@ def cmd_deploy_report(args: argparse.Namespace) -> int:
         "| service | from | to |", "|---|---|---|",
     ] + [f"| {s['service']} | `{s['old']}` | `{s['new']}` |" for s in plan["services"]] + [
         "",
-        "While this issue is open, auto-merge is paused for all MRs. `main` still references the new",
-        "image, so the next full router deploy would re-apply it; merge or close the revert MR first.",
+        f"While this issue is open, auto-merge is paused for {svc_list} on {host.split('.')[0]}; other",
+        "services keep auto-merging. `main` still references the new image, so the next full deploy of",
+        "this host would re-apply it; merge the revert MR or fix forward, then close this issue.",
+        "",
+        f"<!-- automerge-rollback job={plan.get('job') or host.split('.')[0]} "
+        f"services={','.join(s['service'] for s in plan['services'])} -->",
     ]
     existing = [i for i in gl.get(f"projects/{PROJECT}/issues", state="opened", labels=LABEL_ROLLBACK,
                                   search=f"!{iid}", per_page=20) if f"(!{iid})" in i["title"]]
@@ -790,7 +836,7 @@ def cmd_daily_report(args: argparse.Namespace) -> int:
               f"{'  [fast track]' if LABEL_FAST_TRACK in (m.get('labels') or []) else ''}" for m in merged]
     lines.append(f"Rollbacks (new): {len(rb_new)}")
     lines += [f"  #{i['iid']} {i['title']}  {i['web_url']}" for i in rb_new]
-    lines.append(f"Rollback issues still open (auto-merge paused while any are open): {len(rb_open)}")
+    lines.append(f"Rollback issues still open (auto-merge paused for their services): {len(rb_open)}")
     lines += [f"  #{i['iid']} {i['title']}  {i['web_url']}" for i in rb_open]
     lines.append(f"Open MRs currently labelled {LABEL_ELIGIBLE}: {len(eligible_open)}")
     lines += [f"  !{m['iid']} {m['title']}" for m in eligible_open]

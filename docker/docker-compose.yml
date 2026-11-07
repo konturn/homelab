@@ -304,7 +304,8 @@ services:
       plex:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8181/status"]
+      # The image dropped curl (18993091-ls1, 2026-11); Python is what Tautulli runs on.
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8181/status', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
