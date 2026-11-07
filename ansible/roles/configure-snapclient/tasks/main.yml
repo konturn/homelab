@@ -31,13 +31,24 @@
   apt:
     update_cache: yes
 
-- name: Install snapclient
+# Bookworm and later ship snapclient 0.26 themselves (0.26.0+dfsg1, which
+# sorts above the GitHub build below and replaces it on upgrade). That GitHub
+# .deb was built for bullseye and depends on libflac8, which bookworm no longer
+# has, so it cannot be installed there. Both keep the armhf architecture.
+- name: Install snapclient (bullseye, GitHub release)
   apt:
     deb: https://github.com/badaix/snapcast/releases/download/v0.26.0/snapclient_0.26.0-1_armhf.deb
   retries: 3
   delay: 5
   register: snapclient_install
   until: snapclient_install is success
+  when: ansible_distribution_release == 'bullseye'
+
+- name: Install snapclient (bookworm and later, Debian package)
+  apt:
+    name: "snapclient:armhf"
+    state: present
+  when: ansible_distribution_release != 'bullseye'
 
 - name: Stop snapclient
   ansible.builtin.systemd:
