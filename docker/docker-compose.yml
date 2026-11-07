@@ -2086,10 +2086,14 @@ services:
     networks:
       iot:
         ipv4_address: {{ mopidy_address }}
+    # Anon (active+inactive) peaked at 117 MiB in 10d (2026-11-05), 92% of
+    # the old 128M; the 10d high before that was 106 MiB. No OOM kill yet in
+    # 30d. 192M is ~1.6x the peak. Measure anon, not usage: usage adds page
+    # cache from the media library and reads ~95%.
     deploy:
       resources:
         limits:
-          memory: 128M
+          memory: 192M
     environment:
       - TZ=America/New_York
     volumes:
