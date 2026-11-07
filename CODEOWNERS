@@ -55,7 +55,10 @@
 
 # === CI PIPELINE ===
 # Could run arbitrary commands during CI, exfiltrate secrets
-/.gitlab-ci.yml                          @root
+# The second owner is the auto-merge bot: the sweep approves Renovate MRs that
+# change only job image lines (the CI image class in ci/automerge/policy.py;
+# docs/AUTOMERGE.md, "CI images"), and scripts/approve-root-mr.sh root MRs.
+/.gitlab-ci.yml                          @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
 
 # GitLab runner config: templated to /etc/gitlab-runner/config.toml on the
 # router (configure-base). Sets the executor options, volumes and environment

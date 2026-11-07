@@ -218,10 +218,11 @@ variables:
     - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "full-deploy" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
 
 # Commits merged by the auto-merge policy get <host>:deploy-service instead of
-# the full host deploys; those stay available as manual jobs.
+# the full host deploys; those stay available as manual jobs. CI image merges
+# (Automerge-Policy: ci-image) change only job image lines and deploy nothing.
 .automerged_commit_manual:
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /Automerge-Policy: image-update/'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /Automerge-Policy: (image-update|ci-image)/'
       when: manual
       allow_failure: true
 
@@ -1985,6 +1986,7 @@ automerge:eligibility:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - docker/docker-compose*.yml
+        - .gitlab-ci.yml
 
 # Scheduled (e.g. every 15 min) with AUTOMERGE_TASK=sweep: labels eligible MRs
 # and merges at most one MR whose pipeline has passed.
