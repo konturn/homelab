@@ -17,7 +17,7 @@ from __future__ import annotations
 import fnmatch
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Collection, Dict, List, Optional, Set, Tuple
 
 # The router's compose file. Other deployed compose files are listed under
 # `compose_files` in the policy file (see `compose_files`).
@@ -122,13 +122,15 @@ def parse_version(tag: str) -> Optional[Version]:
     return Version(nums=nums, flavor=flavor, suffix_nums=suffix_nums)  # type: ignore[arg-type]
 
 
-def classify_tag_change(old_tag: str, new_tag: str) -> str:
+def classify_tag_change(old_tag: str, new_tag: str, zero_minor_is_minor: bool = False) -> str:
     """Return 'patch' or 'minor', or raise PolicyError.
 
     Anything that cannot be shown to stay within one major version raises
     MajorVersionChange: a different major, a 0.x minor, a tag that is not a
     major.minor[.patch] version (`latest`, `18993091-ls1`, a date), or a
-    changed flavor. Where the scheme is ambiguous, the change counts as major."""
+    changed flavor. Where the scheme is ambiguous, the change counts as major.
+    `zero_minor_is_minor` counts a 0.x minor as a minor (a service whose 0.x
+    minors are routine releases, see `zero_minor_services`)."""
     old_v, new_v = parse_version(old_tag), parse_version(new_tag)
     if old_v is None or new_v is None:
         raise MajorVersionChange(
@@ -143,7 +145,7 @@ def classify_tag_change(old_tag: str, new_tag: str) -> str:
     n_major, n_minor = new_v.nums[0], new_v.nums[1]
     if n_major != o_major:
         raise MajorVersionChange(f"major version change ({old_tag} -> {new_tag})")
-    if o_major == 0 and n_minor != o_minor:
+    if o_major == 0 and n_minor != o_minor and not zero_minor_is_minor:
         # semver: in 0.x the minor component is the breaking one
         raise MajorVersionChange(f"0.x minor version change counts as major ({old_tag} -> {new_tag})")
     return "minor" if n_minor != o_minor else "patch"
@@ -280,9 +282,11 @@ def _image_value(line: str) -> Tuple[str, str]:
     return m.group(1), m.group(2)
 
 
-def diff_compose(base: str, head: str, path: str = COMPOSE_PATH) -> List[ImageChange]:
+def diff_compose(base: str, head: str, path: str = COMPOSE_PATH,
+                 zero_minor: Collection[str] = ()) -> List[ImageChange]:
     """Compare two versions of a compose file. Raise PolicyError unless every
-    difference is an in-place, same-image tag/digest edit of a service image line."""
+    difference is an in-place, same-image tag/digest edit of a service image line.
+    Services in `zero_minor` take 0.x minors as minors (`zero_minor_services`)."""
     b_lines, h_lines = base.split("\n"), head.split("\n")
     if len(b_lines) != len(h_lines):
         raise PolicyError(
@@ -322,7 +326,7 @@ def diff_compose(base: str, head: str, path: str = COMPOSE_PATH) -> List[ImageCh
             if old.tag is None or new.tag is None:
                 raise PolicyError(f"{where} ({service}): tag added or removed")
             try:
-                kind = classify_tag_change(old.tag, new.tag)
+                kind = classify_tag_change(old.tag, new.tag, service in zero_minor)
             except MajorVersionChange as e:
                 raise MajorVersionChange(f"{where} ({service}): {e}", service=service, image=new.name)
             except PolicyError as e:
@@ -489,6 +493,19 @@ def deny_reason(service: str, image: Optional[str], allowlist: dict) -> Optional
     if image and image in d["images"]:
         return d["images"][image]
     return None
+
+
+def zero_minor_services(allowlist: dict) -> Set[str]:
+    """Services whose 0.x minor updates count as minors (`zero_minor_is_minor:
+    true` under `services`). Anything but a boolean raises PolicyError."""
+    out = set()
+    for name, svc in (allowlist.get("services") or {}).items():
+        value = (svc or {}).get("zero_minor_is_minor", False)
+        if not isinstance(value, bool):
+            raise PolicyError(f"service {name}: `zero_minor_is_minor` must be true or false")
+        if value:
+            out.add(name)
+    return out
 
 
 def allowed_kinds(service: str, image: str, allowlist: dict) -> Tuple[str, ...]:
@@ -681,7 +698,7 @@ def evaluate_mr(*, author: str, target_branch: str, labels: List[str],
             v.reject(f"could not read both versions of {path}")
             continue
         try:
-            file_changes = diff_compose(base, head, path)
+            file_changes = diff_compose(base, head, path, zero_minor_services(allowlist))
         except MajorVersionChange as e:
             v.major = True
             v.reject(f"compose: {e}")

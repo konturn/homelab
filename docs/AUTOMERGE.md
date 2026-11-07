@@ -127,7 +127,9 @@ plus an unchanged flavor suffix (`-alpine`, `-ubuntu`, `-ls<build>`, a trailing
 build hash). Everything else counts as major and is never merged:
 
 - a different major number; for `0.x` versions a different minor (in semver a
-  `0.x` minor bump may break);
+  `0.x` minor bump may break), unless the service sets `zero_minor_is_minor:
+  true` in the policy (the OpenTelemetry collector does: its routine releases
+  are 0.x minors);
 - a tag that is not such a version (`latest`, `nightly`, `18993091-ls1`, a date
   like `20261101`): these qualify for digest-only updates of the same tag only;
 - a changed flavor (`-alpine` to `-bookworm`);
