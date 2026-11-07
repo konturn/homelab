@@ -191,6 +191,8 @@ COMMIT
 # NUT (upsd) from mgmt VLAN only: NUT secondaries on other hosts read the UPS
 # status from the router (base/nut/upsd.conf, docs/POWER.md)
 -A INPUT -i {{ local_interface_name }}.4 -s 10.4.0.0/16 -d 10.4.0.1/32 -p tcp -m tcp --dport 3493 -j ACCEPT
+# Home Assistant (docker_internal) reads UPS status; it has no NUT user, so read-only
+-A INPUT -s 10.3.0.0/16 -d 10.4.0.1/32 -p tcp -m tcp --dport 3493 -j ACCEPT
 
 # NTP for the S2500 management port (direct link, no route beyond it)
 -A INPUT -s 10.100.0.1/32 -d 10.100.0.2/32 -p udp -m udp --dport 123 -j ACCEPT
