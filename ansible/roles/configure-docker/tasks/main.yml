@@ -201,3 +201,51 @@
     name: "Scrub credentials from moltbot transcripts"
     state: absent
   when: is_satellite | default(false)
+
+# Weekly `docker image prune --all` for hosts that set
+# docker_image_prune_on_calendar (defaults/main.yml, #118). Only images that
+# no container (running or stopped) uses are removed.
+- name: Docker image prune units
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/docker-image-prune.{{ item.ext }}"
+    owner: root
+    group: root
+    mode: "0644"
+    content: "{{ item.content }}"
+  loop:
+    - ext: service
+      content: |
+        # {{ ansible_managed }}
+        [Unit]
+        Description=Remove Docker images that no container uses (configure-docker)
+        Requires=docker.service
+        After=docker.service
+
+        [Service]
+        Type=oneshot
+        ExecStart=/usr/bin/docker image prune --all --force --filter until={{ docker_image_prune_until }}
+    - ext: timer
+      content: |
+        # {{ ansible_managed }}
+        [Unit]
+        Description=Weekly removal of unused Docker images (configure-docker)
+
+        [Timer]
+        OnCalendar={{ docker_image_prune_on_calendar }}
+        RandomizedDelaySec=30min
+        Persistent=true
+
+        [Install]
+        WantedBy=timers.target
+  loop_control:
+    label: "{{ item.ext }}"
+  register: _docker_prune_units
+  when: docker_image_prune_on_calendar | length > 0
+
+- name: Enable the Docker image prune timer
+  ansible.builtin.systemd:
+    name: docker-image-prune.timer
+    enabled: true
+    state: started
+    daemon_reload: "{{ _docker_prune_units is changed }}"
+  when: docker_image_prune_on_calendar | length > 0
