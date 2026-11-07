@@ -55,4 +55,9 @@
     state: link
     force: yes
 
-# borgmatic cron removed — backups use restic now
+# borgmatic was retired for restic, but its old cron file was left behind and
+# fails nightly (the venv predates the Python 3.12 upgrade). Make sure it is gone.
+- name: Remove stale borgmatic cron
+  ansible.builtin.file:
+    path: /etc/cron.d/borgmatic
+    state: absent
