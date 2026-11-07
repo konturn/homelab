@@ -95,11 +95,14 @@ gitlab_pages['enable'] = false
 ###
 gitlab_rails['env'] = {
   'MALLOC_CONF' => 'dirty_decay_ms:1000,muzzy_decay_ms:1000',
-  # Tracing (Puma and Sidekiq) via LabKit, which reads only GITLAB_TRACING;
-  # the generic OTEL_* variables are ignored. otlp:// means OTLP/HTTP, and
-  # the path must be given: LabKit posts to the URL as written, so without
-  # /v1/traces every export fails. 1% of requests are sampled.
-  'GITLAB_TRACING' => 'otlp://otel-collector:4318/v1/traces?service_name=gitlab&sampler=probabilistic&sampler_param=0.01'
+  # OpenTelemetry tracing — export GitLab traces via OTLP to otel-collector
+  # GITLAB_ENABLE_OTEL_EXPORTERS enables the Rails initializer that wires up exporters
+  'GITLAB_ENABLE_OTEL_EXPORTERS' => 'true',
+  'OTEL_EXPORTER' => 'otlphttp',
+  'OTEL_EXPORTER_OTLP_ENDPOINT' => 'http://otel-collector:4318',
+  'OTEL_SERVICE_NAME' => 'gitlab',
+  'OTEL_TRACES_EXPORTER' => 'otlp',
+  'OTEL_LOG_LEVEL' => 'warn'
 }
 
 # Preserve caches on restart to avoid cold-start performance issues
