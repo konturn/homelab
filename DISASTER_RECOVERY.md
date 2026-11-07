@@ -530,6 +530,12 @@ restic restore latest --target / --include /persistent_data/docker/volumes
 ls -la /persistent_data/docker/volumes/
 ```
 
+If a database will not start from its restored files (InnoDB or PostgreSQL
+crash recovery fails, InfluxDB panics on a shard, SQLite reports corruption),
+restore it from its logical dump in `/persistent_data/application/db-dumps/`
+(restored with Priority 1). Per-database steps: `docs/backups.md`, *Database
+Recovery*. GitLab's dump needs the restored `gitlab-secrets.json`.
+
 #### Priority 3: User Files
 ```bash
 # Nextcloud data (largest, takes longest)

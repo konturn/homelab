@@ -1772,7 +1772,7 @@ groups:
                   |> range(start: -15m)
                   |> filter(fn: (r) => r._measurement == "systemd_units")
                   |> filter(fn: (r) => r._field == "active_code")
-                  |> filter(fn: (r) => r.name =~ /^restic-(backup|check|prune)\.service$/)
+                  |> filter(fn: (r) => r.name =~ /^restic-(backup|check|prune|db-dumps|db-dumps-weekly)\.service$/)
                   |> group(columns: ["name"])
                   |> last()
                   |> keep(columns: ["_time", "_value", "name"])
@@ -1832,6 +1832,65 @@ groups:
         annotations:
           summary: "Offsite backups are not verified deletion-resistant"
           description: "No 'restic-b2-policy: OK' in 48h. The reason is on the FAIL line: journalctl -u restic-backup.service --since '48 hours ago' | grep restic-b2-policy. Run by hand: /usr/local/sbin/restic-b2-policy-check"
+        labels:
+          severity: warning
+
+      # Logical database dumps (docs/backups.md, "Logical database dumps").
+      # restic-db-dumps prints one SUMMARY line per run; these rules require a
+      # clean one rather than matching FAIL, so a dump that stopped running
+      # (timer gone, unit no longer pulled in by restic-backup) also goes red.
+      # A failed run is additionally caught by Restic Unit Failed above.
+      - uid: restic-db-dumps-stale
+        title: Nightly Database Dumps Missing or Failing
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 172800, to: 0}
+            datasourceUid: loki
+            model:
+              expr: 'count_over_time({unit="restic-db-dumps.service"} |= "restic-db-dumps: SUMMARY group=nightly" |= "failed=0" [48h])'
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: replaceNN, replaceWithValue: 0}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [1]}}]}
+        noDataState: Alerting
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "No clean nightly database dump in 48 hours"
+          description: "restic is backing up only raw database files. Failing dumps: journalctl -u restic-db-dumps.service --since '48 hours ago' | grep 'restic-db-dumps: FAIL'. Re-run one by hand: /usr/local/sbin/restic-db-dumps nightly <name>"
+        labels:
+          severity: critical
+
+      - uid: restic-db-dumps-weekly-stale
+        title: Weekly Database Dumps Missing or Failing
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 691200, to: 0}
+            datasourceUid: loki
+            model:
+              expr: 'count_over_time({unit="restic-db-dumps-weekly.service"} |= "restic-db-dumps: SUMMARY group=weekly" |= "failed=0" [8d])'
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: replaceNN, replaceWithValue: 0}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [1]}}]}
+        noDataState: Alerting
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "No clean weekly database dump (InfluxDB) in 8 days"
+          description: "Check: journalctl -u restic-db-dumps-weekly.service --since '8 days ago' | grep restic-db-dumps. Re-run outside 02:15-04:00: systemctl start restic-db-dumps-weekly.service"
         labels:
           severity: warning
 

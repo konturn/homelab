@@ -270,6 +270,92 @@ hidden version (see *Deletion resistance* below).
 > `--keep-monthly`/`--keep-yearly` tier is a Backblaze storage-cost decision, so it is left to the
 > repo owner rather than changed here — only the documentation is corrected.
 
+### Logical database dumps
+
+restic copies every database's raw data files, but a file copy of a running
+InnoDB, PostgreSQL or InfluxDB (TSM) engine is not crash-consistent and may not
+start. So each database is also dumped online, through its own engine, by
+`/usr/local/sbin/restic-db-dumps` (template
+`ansible/roles/restic/templates/restic-db-dumps.j2`, inventory
+`restic_db_dumps` in `ansible/router.yml`). Both copies are kept: the raw files
+are the fast path, the dumps are the path that is known to restore.
+
+**Where:** `/persistent_data/application/db-dumps/` (0700, files 0600), inside
+the `/persistent_data/application` restic folder. Only the latest dump is kept
+on disk; restic keeps the history (90 days).
+
+**When:**
+
+- `restic-db-dumps.service` (group `nightly`): `restic-backup.service` has
+  `Wants=` + `After=` on it, so every backup, scheduled or by hand, first takes
+  a fresh set of dumps. `Wants=` and not `Requires=`: a failed dump never stops
+  the file backup.
+- `restic-db-dumps-weekly.service` (group `weekly`), from
+  `restic-db-dumps-weekly.timer`, Saturdays 21:00: databases too large to dump
+  every night. Sunday's 03:00 backup uploads the result.
+
+| Dump | Engine / how | File | Group |
+|---|---|---|---|
+| `gitlab` | GitLab omnibus PostgreSQL, `pg_dump -Fc` of `gitlabhq_production` | `gitlab.pgdump.zst` | nightly |
+| `gitlab-registry` | same, container registry metadata DB `registry` | `gitlab-registry.pgdump.zst` | nightly |
+| `nextcloud` | MariaDB, `mariadb-dump --single-transaction` of `nextcloud` | `nextcloud.sql.zst` | nightly |
+| `wordpress` | MySQL, `mysqldump --single-transaction`; skipped while the `wordpress` compose profile is stopped | `wordpress.sql.zst` | nightly |
+| `vaultwarden`, `paperless`, `grafana`, `navidrome`, `ombi`, `ombi-external` | SQLite, `sqlite3 .dump` (one read transaction, as the file owner) | `<name>.sql.zst` | nightly |
+| `influxdb` | InfluxDB 2, `influx backup` (full: metadata, tokens, every bucket) | `influxdb/` (manifest + shard `.tar.gz`) | weekly |
+
+Measured on the first live run (2026-11-07): `gitlab` 527 MB in 59 s,
+`nextcloud` 42 MB in 6 s, `gitlab-registry` and every SQLite dump under 2 MB
+and 1 s each, so the nightly set adds about a minute before the backup.
+`influxdb` (35 GB of TSM data) took 24 minutes and wrote 15 GB (143 shard
+tarballs), mostly gzip inside `influxd`, which is why it is weekly. Every dump
+was then restored into a throwaway, network-less container and compared with
+the live database (row and point counts matched).
+
+Every dump goes to a `.tmp` name, is verified (`pg_restore -l` lists table
+data; the SQL dump ends in its `-- Dump completed` / `COMMIT;` trailer; the
+InfluxDB manifest parses and every file it names is present with the recorded
+size), and only then replaces the previous
+one. A failed dump leaves the last good one in place. Output is `zstd
+--rsyncable` so restic still deduplicates unchanged parts between nights.
+
+Credentials never leave the containers that already hold them: the MariaDB and
+MySQL dumps read the root password from the container's own environment through
+`MYSQL_PWD`, PostgreSQL uses the local socket as `gitlab-psql`, and the InfluxDB
+operator token is read from the `influxdb` container into a 0600 env-file that
+is deleted when the backup ends.
+
+**Alerting:** each run logs `restic-db-dumps: OK|SKIP|FAIL <name> ...` and one
+`restic-db-dumps: SUMMARY group=<group> ok= skipped= failed=` line. Grafana
+alerts *Nightly Database Dumps Missing or Failing* (no clean nightly summary in
+48 h) and *Weekly Database Dumps Missing or Failing* (8 days) require a clean
+summary, and *Restic Unit Failed* covers both units. `OnFailure=` also sends the
+usual `restic-notify-failure@` mail.
+
+**Run by hand** (outside 02:15-04:00):
+
+```bash
+systemctl start restic-db-dumps.service          # whole nightly set
+/usr/local/sbin/restic-db-dumps nightly gitlab   # one dump
+journalctl -u restic-db-dumps.service -n 20 | grep restic-db-dumps
+```
+
+**Deliberately not dumped:**
+
+- *Home Assistant recorder* (`home-assistant_v2.db`, ~14 GB SQLite): history
+  only. A dump would cost a 14 GB rewrite every night; the file copy (WAL
+  sidecars excluded) restores to the last checkpoint, and HA
+  configuration lives in YAML and `.storage/` JSON, not in this database.
+- *Sonarr, Radarr, Lidarr, Prowlarr*: each writes its own weekly backup zip
+  (`<config>/Backups/scheduled/`) through SQLite's backup API, and restic
+  copies those. *Plex* does the same every three days
+  (`.../Plug-in Support/Databases/*.db-YYYY-MM-DD`).
+- *Vault*: the `file` storage backend has no online dump (`vault operator
+  raft snapshot` exists only for Raft storage). restic copies its per-key
+  files; moving Vault to Raft would make a snapshot possible and is a
+  separate change.
+- *Caches and rebuildable data*: Trivy DBs, Pelias/Valhalla map data,
+  Paperless' Redis.
+
 ### Deletion resistance (offsite copy)
 
 **Threat:** someone with root on the router can read `/root/.restic_env`, and through the
@@ -422,36 +508,87 @@ zfs rollback mpool@backup-20240204-1200
 
 ### Database Recovery
 
-**For SQL databases (MariaDB/PostgreSQL):**
+Prefer the raw files restored by restic when the database starts cleanly from
+them and the data looks right. When it does not (InnoDB or PostgreSQL crash
+recovery fails, InfluxDB panics on a shard, SQLite reports corruption), restore
+from the logical dump instead (see *Logical database dumps* above).
+
+**Get a dump out of restic** (any snapshot of `/persistent_data/application`):
+
 ```bash
-# Stop application using the database
-docker stop nextcloud
-
-# Restore database files or dump
-# Start database container
-docker start nextcloud_database
-
-# For dumps, restore via SQL
-docker exec -i nextcloud_database mysql -u root -p nextcloud < backup.sql
-
-# Start application
-docker start nextcloud
+restic snapshots --path /persistent_data/application
+restic restore <snapshot-id> --target /tmp/r --include /persistent_data/application/db-dumps
+ls -la /tmp/r/persistent_data/application/db-dumps/
 ```
 
-**For SQLite databases:**
+**GitLab (PostgreSQL, `gitlab.pgdump.zst`, `gitlab-registry.pgdump.zst`).**
+The dump only makes sense with the matching `/etc/gitlab/gitlab-secrets.json`
+(from `/persistent_data/application/gitlab/config/`, restored with the rest of
+`/persistent_data/application`): it holds the keys for the encrypted columns.
+Run the same GitLab version that took the dump.
+
 ```bash
-# Stop application
+docker exec gitlab gitlab-ctl stop puma
+docker exec gitlab gitlab-ctl stop sidekiq
+zstd -dc gitlab.pgdump.zst | docker exec -i -u gitlab-psql gitlab \
+  /opt/gitlab/embedded/bin/pg_restore -h /var/opt/gitlab/postgresql \
+  -d gitlabhq_production --clean --if-exists   # check the error count it prints at the end
+# Registry metadata, the same way, into -d registry
+docker exec gitlab gitlab-ctl restart
+docker exec gitlab gitlab-rake gitlab:check SANITIZE=true
+docker exec gitlab gitlab-rake gitlab:doctor:secrets
+```
+
+**Nextcloud (MariaDB, `nextcloud.sql.zst`).** The dump carries
+`CREATE DATABASE IF NOT EXISTS` and drops each table before recreating it.
+
+```bash
+docker exec -u www-data nextcloud php occ maintenance:mode --on
+zstd -dc nextcloud.sql.zst | docker exec -i nextcloud_database \
+  sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mariadb -uroot'
+docker exec -u www-data nextcloud php occ maintenance:mode --off
+docker exec -u www-data nextcloud php occ status
+```
+
+WordPress (`wordpress.sql.zst`) is the same against `wordpress_db`, with
+`mysql` as the client.
+
+**SQLite (`vaultwarden`, `paperless`, `grafana`, `navidrome`, `ombi`,
+`ombi-external`).** Rebuild the file from the SQL text, as its owner, with the
+app stopped:
+
+```bash
 docker stop bitwarden
-
-# Restore .sqlite file
-cp backup/db.sqlite3 /persistent_data/application/bitwarden/data/
-
-# Fix permissions
-chown 1000:1000 /persistent_data/application/bitwarden/data/db.sqlite3
-
-# Start application  
+cd /persistent_data/application/bitwarden/data
+mv db.sqlite3 db.sqlite3.broken; rm -f db.sqlite3-wal db.sqlite3-shm
+zstd -dc vaultwarden.sql.zst | sqlite3 db.sqlite3
+sqlite3 db.sqlite3 'PRAGMA integrity_check;'   # expect: ok
+chown --reference=db.sqlite3.broken db.sqlite3
 docker start bitwarden
 ```
+
+The database paths are the `target` values in `restic_db_dumps`
+(`ansible/router.yml`).
+
+**InfluxDB (`influxdb/`, weekly).** A full restore replaces every bucket,
+dashboard, task, user and token with the backup's, so tokens issued after the
+backup stop working. Up to a week of metrics since the dump is lost unless the
+raw shards restored by restic are usable.
+
+```bash
+# The CLI runs in a throwaway container in influxdb's network namespace. The
+# token is the operator token of the instance being restored *into*.
+docker exec influxdb printenv DOCKER_INFLUXDB_INIT_ADMIN_TOKEN | sed 's/^/INFLUX_TOKEN=/' > /root/influx.env
+chmod 600 /root/influx.env
+docker run --rm --network container:influxdb --env-file /root/influx.env \
+  -v /tmp/r/persistent_data/application/db-dumps/influxdb:/backup:ro \
+  --entrypoint influx influxdb:2.8.0 restore --full /backup --host http://127.0.0.1:8086
+rm /root/influx.env
+```
+
+To recover one bucket without touching the rest, use
+`restore --bucket <name> --new-bucket <name>-restored /backup` instead of
+`--full`.
 
 ## Backup Verification & Testing
 
@@ -628,6 +765,6 @@ what surfaces it. Details and remediation: `ansible/roles/restic/README.md`.
 
 ---
 
-**Last updated:** 2026-10-27  
+**Last updated:** 2026-11-07  
 **Review schedule:** Quarterly  
 **Owner:** Infrastructure Team

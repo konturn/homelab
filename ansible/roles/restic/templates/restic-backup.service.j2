@@ -1,6 +1,13 @@
 [Unit]
 Description=Restic backup
 OnFailure=restic-notify-failure@%n.service
+{% if restic_db_dumps | length > 0 %}
+# Fresh logical database dumps before every backup (restic-db-dumps.service).
+# Wants=, not Requires=: a failed dump is alerted on by its own unit and must
+# never stop the file backup. After= waits for the oneshot to finish.
+Wants=restic-db-dumps.service
+After=restic-db-dumps.service
+{% endif %}
 
 [Service]
 Type=oneshot

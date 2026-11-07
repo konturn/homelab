@@ -1,0 +1,176 @@
+#!/bin/bash
+# {{ ansible_managed }}
+#
+# Logical database dumps for restic (docs/backups.md, "Logical database dumps").
+#
+#   restic-db-dumps <group>        dump every entry of restic_db_dumps in <group>
+#   restic-db-dumps <group> <name> dump one entry only
+#
+# restic backs up the raw data files of every database too, but a file copy of
+# a running InnoDB, PostgreSQL or TSM engine is not crash-consistent. These
+# dumps are taken online through each engine's own tool and written to
+# {{ restic_db_dumps_dir }}, which the next restic run picks up:
+#
+#   postgres-omnibus  pg_dump -Fc from GitLab's bundled PostgreSQL  -> <name>.pgdump.zst
+#   mysql             mysqldump/mariadb-dump --single-transaction  -> <name>.sql.zst
+#   sqlite            sqlite3 .dump inside one read transaction    -> <name>.sql.zst
+#   influxdb          influx backup (full, with manifest)          -> <name>/
+#
+# Each dump goes to a temporary name, is verified, and only then replaces the
+# previous one, so a failed run leaves the last good dump in place. Only the
+# latest dump is kept here; restic keeps the history.
+#
+# One line per dump, "restic-db-dumps: OK|SKIP|FAIL <name> ...", then one
+# "restic-db-dumps: SUMMARY group=<group> ok=N skipped=N failed=N" line that
+# the Grafana alerts key on. Exits 1 if any dump failed. Credentials never
+# leave the containers that already hold them, and are never printed.
+set -uo pipefail
+
+DIR="{{ restic_db_dumps_dir }}"
+TIMEOUT="{{ restic_db_dumps_timeout_sec }}"
+# group|type|name|container|target|required
+ENTRIES=(
+{% for d in restic_db_dumps %}
+  "{{ d.group | default('nightly') }}|{{ d.type }}|{{ d.name }}|{{ d.container | default('') }}|{{ d.target }}|{{ d.required | default(true) | bool | lower }}"
+{% endfor %}
+)
+{% raw %}
+GROUP="${1:?usage: restic-db-dumps <group> [name]}"
+ONLY="${2:-}"
+ZSTD=(zstd -q -T0 -3 --rsyncable)
+umask 077
+install -d -m 0700 -o root -g root "$DIR" || { echo "restic-db-dumps: FAIL cannot create $DIR"; exit 1; }
+
+ok=0 skipped=0 failed=0
+
+log() { echo "restic-db-dumps: $*"; }
+running() { [ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]; }
+human() { numfmt --to=iec --suffix=B "$1"; }
+# All exit codes of the last pipeline must be 0.
+pipe_ok() { local s; for s in "$@"; do [ "$s" -eq 0 ] || return 1; done; }
+
+dump_postgres_omnibus() { # container db tmp
+  timeout "$TIMEOUT" docker exec -u gitlab-psql "$1" /opt/gitlab/embedded/bin/pg_dump \
+      -h /var/opt/gitlab/postgresql -d "$2" -Fc -Z0 | "${ZSTD[@]}" -o "$3"
+  local ps=("${PIPESTATUS[@]}")
+  pipe_ok "${ps[@]}" || { REASON="pg_dump | zstd exited ${ps[*]}"; return 1; }
+  # Verify: the custom format's table of contents is at the start, so
+  # pg_restore -l reads it and stops (zstd's SIGPIPE is expected).
+  local n
+  n=$( { zstd -dcq "$3" 2>/dev/null | docker exec -i "$1" /opt/gitlab/embedded/bin/pg_restore -l; } \
+       | grep -c ' TABLE DATA ')
+  [ "${n:-0}" -gt 0 ] || { REASON="pg_restore -l lists no TABLE DATA entries"; return 1; }
+  DETAIL="tables=$n"
+}
+
+dump_mysql() { # container db tmp
+  # The root password stays inside the container: it already holds it as
+  # MYSQL_ROOT_PASSWORD, and MYSQL_PWD keeps it out of the process list.
+  # shellcheck disable=SC2016 # expanded by the container's shell
+  timeout "$TIMEOUT" docker exec "$1" sh -c '
+      bin=$(command -v mariadb-dump || command -v mysqldump) || exit 127
+      MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec "$bin" -uroot --single-transaction --quick \
+        --routines --events --triggers --hex-blob --databases "$1"' sh "$2" \
+    | "${ZSTD[@]}" -o "$3"
+  local ps=("${PIPESTATUS[@]}")
+  pipe_ok "${ps[@]}" || { REASON="dump | zstd exited ${ps[*]}"; return 1; }
+  zstd -dcq "$3" | tail -n 1 | grep -q '^-- Dump completed' \
+    || { REASON="dump is truncated (no 'Dump completed' trailer)"; return 1; }
+}
+
+dump_sqlite() { # db-path tmp
+  [ -f "$1" ] || { REASON="$1 does not exist"; return 1; }
+  # Run as the file's owner so a -shm/-wal sidecar sqlite3 has to create is
+  # never left owned by root under the app. CAP_DAC_READ_SEARCH only lets it
+  # through root-only parents such as /persistent_data/docker/volumes/<vol>.
+  # .dump reads the whole database in one transaction.
+  local u g
+  u=$(stat -c %u "$1") g=$(stat -c %g "$1")
+  timeout "$TIMEOUT" setpriv --reuid="$u" --regid="$g" --clear-groups \
+      --inh-caps=+dac_read_search --ambient-caps=+dac_read_search -- \
+      sqlite3 -readonly "$1" '.timeout 60000' '.dump' | "${ZSTD[@]}" -o "$2"
+  local ps=("${PIPESTATUS[@]}")
+  pipe_ok "${ps[@]}" || { REASON="sqlite3 | zstd exited ${ps[*]}"; return 1; }
+  [ "$(zstd -dcq "$2" | tail -n 1)" = "COMMIT;" ] \
+    || { REASON="dump did not end in COMMIT (corrupt source or read error)"; return 1; }
+}
+
+dump_influxdb() { # container tmpdir
+  # A throwaway CLI container joins influxdb's network namespace and writes to
+  # the host; the operator token is read from the server container's own
+  # environment into a 0600 env-file that is removed straight away.
+  local img envf rc
+  img=$(docker inspect -f '{{.Config.Image}}' "$1") || return 1
+  envf=$(mktemp) || return 1
+  docker exec "$1" printenv DOCKER_INFLUXDB_INIT_ADMIN_TOKEN | sed 's/^/INFLUX_TOKEN=/' > "$envf"
+  mkdir -m 0700 "$2" || { rm -f "$envf"; return 1; }
+  timeout "$TIMEOUT" docker run --rm --network "container:$1" --env-file "$envf" \
+      --cap-drop ALL --security-opt no-new-privileges --read-only \
+      -v "$2:/backup" --entrypoint influx "$img" \
+      backup /backup --host http://127.0.0.1:8086 >/dev/null
+  rc=$?
+  rm -f "$envf"
+  [ "$rc" -eq 0 ] || { REASON="influx backup exited $rc"; return 1; }
+  # Verify: the manifest parses, and every file it names (KV store, SQL
+  # metadata, one tarball per shard) is present with the recorded size.
+  local m list f size n=0
+  m=$(find "$2" -maxdepth 1 -name '*.manifest' | head -n 1)
+  [ -n "$m" ] || { REASON="no manifest"; return 1; }
+  list=$(jq -r '.kv, .sql, (.buckets[].retentionPolicies[].shardGroups[].shards[])
+                | "\(.fileName) \(.size)"' "$m") || { REASON="manifest does not parse"; return 1; }
+  while read -r f size; do
+    [ "$(stat -c %s "$2/$f" 2>/dev/null)" = "$size" ] || { REASON="$f missing or wrong size"; return 1; }
+    n=$((n + 1))
+  done <<<"$list"
+  gzip -t "$2"/*.bolt.gz "$2"/*.sqlite.gz || { REASON="metadata archive is corrupt"; return 1; }
+  DETAIL="files=$n"
+}
+
+for e in "${ENTRIES[@]}"; do
+  IFS='|' read -r g type name container target required <<<"$e"
+  [ "$g" = "$GROUP" ] || continue
+  [ -z "$ONLY" ] || [ "$ONLY" = "$name" ] || continue
+
+  if [ -n "$container" ] && ! running "$container"; then
+    if [ "$required" = true ]; then
+      log "FAIL $name container $container is not running"; failed=$((failed + 1))
+    else
+      log "SKIP $name container $container is not running (data volume is at rest)"; skipped=$((skipped + 1))
+    fi
+    continue
+  fi
+
+  case "$type" in
+    postgres-omnibus) out="$DIR/$name.pgdump.zst" ;;
+    mysql|sqlite)     out="$DIR/$name.sql.zst" ;;
+    influxdb)         out="$DIR/$name" ;;
+    *) log "FAIL $name unknown type $type"; failed=$((failed + 1)); continue ;;
+  esac
+  tmp="$out.tmp"
+  rm -rf "$tmp"
+  DETAIL="" REASON=""
+  start=$(date +%s)
+  case "$type" in
+    postgres-omnibus) dump_postgres_omnibus "$container" "$target" "$tmp" ;;
+    mysql)            dump_mysql "$container" "$target" "$tmp" ;;
+    sqlite)           dump_sqlite "$target" "$tmp" ;;
+    influxdb)         dump_influxdb "$container" "$tmp" ;;
+  esac
+  rc=$?
+  secs=$(( $(date +%s) - start ))
+  if [ "$rc" -eq 0 ]; then
+    size=$(du -sb "$tmp" | cut -f1)
+    rm -rf "$out.old"
+    { [ ! -e "$out" ] || mv "$out" "$out.old"; } && mv "$tmp" "$out" && rm -rf "$out.old"
+    log "OK $name size=$(human "$size") secs=$secs${DETAIL:+ $DETAIL}"
+    ok=$((ok + 1))
+  else
+    rm -rf "$tmp"
+    log "FAIL $name ${REASON:-exit $rc} secs=$secs (previous dump, if any, kept)"
+    failed=$((failed + 1))
+  fi
+done
+
+log "SUMMARY group=$GROUP ok=$ok skipped=$skipped failed=$failed"
+[ "$failed" -eq 0 ]
+{% endraw %}

@@ -64,6 +64,37 @@
     mode: "0644"
   notify: Reload systemd
 
+# Logical database dumps (docs/backups.md, "Logical database dumps"). The
+# nightly set runs just before every backup (restic-backup.service Wants= it);
+# the weekly set has its own timer, outside the backup window.
+- name: Install logical database dump script
+  ansible.builtin.template:
+    src: restic-db-dumps.j2
+    dest: /usr/local/sbin/restic-db-dumps
+    owner: root
+    group: root
+    mode: "0750"
+  when: restic_db_dumps | length > 0
+
+- name: Add systemd services for logical database dumps
+  ansible.builtin.template:
+    src: restic-db-dumps.service.j2
+    dest: "/etc/systemd/system/{{ item.unit }}.service"
+    mode: "0644"
+  loop: "{{ restic_db_dumps_units }}"
+  loop_control:
+    label: "{{ item.unit }}"
+  when: restic_db_dumps | length > 0
+  notify: Reload systemd
+
+- name: Add systemd timer for weekly logical database dumps
+  ansible.builtin.template:
+    src: restic-db-dumps-weekly.timer.j2
+    dest: /etc/systemd/system/restic-db-dumps-weekly.timer
+    mode: "0644"
+  when: restic_db_dumps | length > 0
+  notify: Reload systemd
+
 - name: Add systemd service for restic check
   ansible.builtin.template:
     src: restic-check.service.j2
@@ -119,3 +150,10 @@
     enabled: true
     state: started
   when: restic_prune and restic_prune_timer_on_calendar | length > 0
+
+- name: Enable and start weekly database dump timer
+  ansible.builtin.systemd:
+    name: restic-db-dumps-weekly.timer
+    enabled: true
+    state: started
+  when: restic_db_dumps | length > 0

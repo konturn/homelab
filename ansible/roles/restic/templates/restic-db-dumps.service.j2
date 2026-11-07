@@ -1,0 +1,21 @@
+# {{ ansible_managed }}
+# Logical database dumps, group "{{ item.group }}": /usr/local/sbin/restic-db-dumps
+# and docs/backups.md, "Logical database dumps".
+{% if item.group == "nightly" %}
+# Started by restic-backup.service (Wants= + After=), so fresh dumps are on
+# disk before every backup. A failure here never stops the file backup.
+{% else %}
+# Started by {{ item.unit }}.timer outside the backup window; the next
+# nightly restic run uploads the result.
+{% endif %}
+[Unit]
+Description=Logical database dumps for restic ({{ item.group }})
+OnFailure=restic-notify-failure@%n.service
+
+[Service]
+Type=oneshot
+User=root
+Nice={{ item.nice }}
+IOSchedulingClass={{ item.io_class }}
+TimeoutStartSec={{ item.timeout }}
+ExecStart=/usr/local/sbin/restic-db-dumps {{ item.group }}

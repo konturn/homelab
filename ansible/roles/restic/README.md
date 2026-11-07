@@ -63,6 +63,9 @@ noise floor.
 
 Each database has a `name` property which will be the name of the restic snapshot (`{{ database.name }}.sql`). They also have a `dump_command` property which is the command to dump the database to stdout (like `mysqldump dbname`).
 
+- `restic_db_dumps`: logical database dumps written to `restic_db_dumps_dir` (which must sit inside a backed-up folder) by `/usr/local/sbin/restic-db-dumps`. Entries have `name`, `type` (`postgres-omnibus`, `mysql`, `sqlite`, `influxdb`), `container`, `target`, optional `group` (`nightly`, the default, runs from `restic-db-dumps.service` before every backup; `weekly` from `restic-db-dumps-weekly.timer` on `restic_db_dumps_weekly_on_calendar`) and optional `required` (`false` skips a stopped container instead of failing). Unlike `restic_databases`, the dumps are verified before they replace the previous one, a failure never stops the file backup, and they land in the normal folder snapshots. Details and restore steps: `docs/backups.md`, *Logical database dumps*.
+- `restic_db_dumps_timeout_sec`: per-dump timeout (`3600`)
+
 - `restic_forget`: run `restic forget` as `ExecStartPost` with `--keep-within {{ restic_forget_keep_within }}` (`true`)
 - `restic_forget_keep_within`: period of time to use with `--keep-within` (`30d`)
 - `restic_prune`: run `restic prune` (`true`)

@@ -44,6 +44,26 @@ restic_global_excludes:
 restic_folders: []
 restic_databases: []
 restic_dump_compression_enabled: false
+# Logical database dumps, written to restic_db_dumps_dir by
+# /usr/local/sbin/restic-db-dumps (docs/backups.md, "Logical database dumps").
+# restic_db_dumps_dir must sit inside one of the restic_folders. Each entry:
+#   name       file name of the dump (<name>.pgdump.zst, <name>.sql.zst, <name>/)
+#   type       postgres-omnibus | mysql | sqlite | influxdb
+#   container  running container the dump goes through (not used by sqlite)
+#   target     database name; for sqlite the database file on the host
+#   group      nightly (default): before every backup; weekly: on
+#              restic_db_dumps_weekly_on_calendar, for databases too large to
+#              dump every night
+#   required   false: a stopped container is skipped, not a failure (default true)
+# restic_databases above streams a dump straight into its own snapshot instead;
+# it is kept for compatibility and unused on the router.
+restic_db_dumps: []
+restic_db_dumps_dir: /var/backups/db-dumps
+restic_db_dumps_timeout_sec: 3600
+restic_db_dumps_weekly_on_calendar: "Sat *-*-* 21:00:00"
+restic_db_dumps_units:
+  - {unit: restic-db-dumps, group: nightly, nice: 10, io_class: best-effort, timeout: 2h}
+  - {unit: restic-db-dumps-weekly, group: weekly, nice: 19, io_class: idle, timeout: 4h}
 restic_forget: true
 restic_forget_keep_within: 30d
 restic_prune: true
