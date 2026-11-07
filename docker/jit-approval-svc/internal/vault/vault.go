@@ -272,6 +272,9 @@ var resourceTier = map[string]int{
 	"tautulli":  1,
 	"mqtt":        1,
 	"ssh-macmini": 1,
+	// The agent's own GitLab identity, short-lived (gitlab_agent.go).
+	// "gitlab" (a Maintainer project token) stays tier 2.
+	"gitlab-moltbot": 1,
 
 	// Tier 2: Infrastructure (requires approval, 30 min TTL)
 	"ssh-router":    2,

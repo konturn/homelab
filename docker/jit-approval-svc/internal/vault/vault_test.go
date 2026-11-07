@@ -75,6 +75,12 @@ func TestMinTierForResource(t *testing.T) {
 	if got := MinTierForResource("grafana"); got != 1 {
 		t.Errorf("grafana min tier: expected 1, got %d", got)
 	}
+	if got := MinTierForResource("gitlab-moltbot"); got != 1 {
+		t.Errorf("gitlab-moltbot tier = %d, want 1", got)
+	}
+	if got := MinTierForResource("gitlab"); got != 2 {
+		t.Errorf("gitlab tier = %d, want 2", got)
+	}
 	if got := MinTierForResource("unknown"); got != 0 {
 		t.Errorf("unknown min tier: expected 0, got %d", got)
 	}

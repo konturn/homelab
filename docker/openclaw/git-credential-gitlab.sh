@@ -11,7 +11,9 @@
 #     1. Vault homelab/openclaw/tokens, field clawd_memory_token
 #     2. /home/node/.openclaw/credentials/gitlab-clawd-memory.token (0600)
 #   everything else, or clawd-memory when neither is set:
-#     $GITLAB_TOKEN, else Vault homelab/openclaw/tokens, field gitlab_token
+#     a short-lived moltbot token from the JIT broker (jit-gitlab-token,
+#     resource gitlab-moltbot: auto-approved, audited, revoked after 1h),
+#     else $GITLAB_TOKEN while the static token is being retired
 #
 # Vault is read with the gateway's AppRole (VAULT_ADDR, VAULT_APPROLE_ROLE_ID,
 # VAULT_APPROLE_SECRET_ID), same as the openclaw-ops policy allows.
@@ -60,8 +62,11 @@ case $path in
     fi
     ;;
 esac
+# Everything else: a short-lived moltbot token from the JIT broker
+# (jit-gitlab-token, resource gitlab-moltbot, auto-approved, cached ~50 min).
+[ -n "$tok" ] || tok=$(/usr/local/bin/jit-gitlab-token 2>/dev/null) || tok=
+# Transition fallback, removed together with the static token.
 [ -n "$tok" ] || tok=${GITLAB_TOKEN:-}
-[ -n "$tok" ] || tok=$(vault_field gitlab_token 2>/dev/null)
 [ -n "$tok" ] || exit 0
 
 printf 'username=oauth2\npassword=%s\n' "$tok"

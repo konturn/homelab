@@ -1,6 +1,8 @@
 package backend
 
 import (
+	"fmt"
+
 	"github.com/nkontur/jit-approval-svc/internal/logger"
 )
 
@@ -112,6 +114,15 @@ func NewRegistry(vaultMinter VaultTokenMinter, vaultReader VaultSecretReader, ha
 	}
 
 	return r
+}
+
+// Register adds (or replaces) the dynamic backend for a resource.
+func (r *Registry) Register(resource string, b Backend) {
+	r.backends[resource] = b
+	logger.Info("backend_registered", logger.Fields{
+		"resource": resource,
+		"backend":  fmt.Sprintf("dynamic/%T", b),
+	})
 }
 
 // For returns the backend for a given resource.
