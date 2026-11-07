@@ -68,10 +68,11 @@ rm -f /data/chrome-profile/SingletonLock /data/chrome-profile/SingletonSocket /d
 # Clients that send no Origin header (playwright, agent-browser) are unaffected.
 CDP_ALLOWED_ORIGINS="${CDP_ALLOWED_ORIGINS:-*}"
 
-# Start Chromium
+# Start Chromium with its sandbox on. The namespace sandbox needs user/pid/net
+# namespaces, which the container allows through docker/chromium-browser/seccomp.json
+# (no CAP_SYS_ADMIN). Without that profile Chromium exits with "No usable sandbox".
 echo "Starting Chromium..."
 exec gosu chrome chromium \
-    --no-sandbox \
     --disable-blink-features=AutomationControlled \
     --disable-features=AutomationControlled,TranslateUI \
     --enable-features=NetworkService,NetworkServiceInProcess \
