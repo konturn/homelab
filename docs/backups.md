@@ -575,6 +575,12 @@ dashboard, task, user and token with the backup's, so tokens issued after the
 backup stop working. Up to a week of metrics since the dump is lost unless the
 raw shards restored by restic are usable.
 
+Since InfluxDB 2.9 tokens are stored hashed, so a backup no longer holds the
+operator token in plain text. `restore --full` then needs `--operator-token`:
+the operator token the restored instance should use (the one in the
+container's `DOCKER_INFLUXDB_INIT_ADMIN_TOKEN`). Other tokens in the backup
+keep working for clients that already hold them.
+
 ```bash
 # The CLI runs in a throwaway container in influxdb's network namespace. The
 # token is the operator token of the instance being restored *into*.
@@ -582,7 +588,8 @@ docker exec influxdb printenv DOCKER_INFLUXDB_INIT_ADMIN_TOKEN | sed 's/^/INFLUX
 chmod 600 /root/influx.env
 docker run --rm --network container:influxdb --env-file /root/influx.env \
   -v /tmp/r/persistent_data/application/db-dumps/influxdb:/backup:ro \
-  --entrypoint influx influxdb:2.8.0 restore --full /backup --host http://127.0.0.1:8086
+  --entrypoint sh "$(docker inspect -f '{{.Config.Image}}' influxdb)" \
+  -c 'influx restore --full /backup --host http://127.0.0.1:8086 --operator-token "$INFLUX_TOKEN"'
 rm /root/influx.env
 ```
 
