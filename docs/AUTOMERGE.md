@@ -20,14 +20,16 @@ What stays with a human:
   whatever its profiles.
 - **Restricted kinds**: a service whose version change runs a one-way
   migration lists only the kinds that roll back cleanly (`updates:`).
-- **Anything that is not an image line in a deployed compose file**:
-  Dockerfiles, CI job images in `.gitlab-ci.yml`, Python/npm dependencies,
-  Terraform providers. These have no per-service deploy and health gate.
+- **Anything that is not an image line in a deployed compose file** or a job
+  image line in `.gitlab-ci.yml` ([CI images](#ci-images)): Dockerfiles,
+  Python/npm dependencies, Terraform providers, the runners' default image
+  (`base/gitlab-runner/config.toml`, deployed by `configure-base`). These have
+  no per-service deploy and health gate.
 
 The sweep labels such MRs `automerge-manual` and notes the reason on the MR
 (see [Visibility](#visibility-of-manual-updates)).
 
-Two classes share the policy:
+Three classes share the policy:
 
 - **General**: any eligible update. While the sweep schedule carries
   `AUTOMERGE_DRY_RUN=1` this class only logs what it would do.
@@ -35,6 +37,10 @@ Two classes share the policy:
   services reachable from outside the LAN, opened by Renovate. They are
   proposed at any hour and merge as soon as their pipeline passes, also while
   the general class is in dry run. See [Fast track](#fast-track).
+- **CI image**: non-major updates of job images in `.gitlab-ci.yml`, opened
+  by Renovate. Nothing is deployed; the sweep watches the main pipeline of
+  the merge and reverts on a failure in a job that runs the image. Counts
+  against the general budget and follows its dry run. See [CI images](#ci-images).
 
 The pieces:
 
@@ -42,7 +48,7 @@ The pieces:
 |---|---|---|
 | Policy | `ci/automerge/policy.py`, `ci/automerge-policy.yml` | — |
 | Hosts per compose file | `docker_compose_file_names` in `ansible/inventory.yml` | — |
-| `automerge:eligibility` | MR pipeline | MRs touching `docker/docker-compose*.yml` (informational only) |
+| `automerge:eligibility` | MR pipeline | MRs touching `docker/docker-compose*.yml` or `.gitlab-ci.yml` (informational only) |
 | `automerge:sweep` | scheduled pipeline on `main`, `AUTOMERGE_TASK=sweep` | every 15 min |
 | `<host>:deploy-service` (`router`, `zwave`, `satellite-2`) | `main` pipeline | only for commits merged by the sweep |
 | `automerge:report` | scheduled pipeline on `main`, `AUTOMERGE_TASK=report` | daily |
@@ -484,6 +490,69 @@ While any `automerge-rollback` issue is open, auto-merge is paused for every MR.
 deploy in the meantime would apply it again. Merge (or close) the revert
 MR, then close the issue.
 
+## CI images
+
+Renovate also updates the images CI jobs run in (`gitlabci` manager), for
+example the `nginx:validate` job's `nginx:<ver>-alpine3.23-perl`. The CI image
+class (`ci_images` in the policy) merges those without review. An MR
+qualifies only if, on top of the general checks that apply (author list,
+target, freeze and `major` labels, MR pipeline passed on the head commit,
+not a draft, no conflicts, the general daily budget):
+
+1. the author is listed under `ci_images.authors` (Renovate only);
+2. the only changed file is a listed CI file (`.gitlab-ci.yml`; the
+   repository has no CI `include:` files). Mixing it with a compose file or
+   anything else disqualifies;
+3. every changed line is an image line, edited in place: a job's or
+   template's `image: <ref>`, or `name: <ref>` directly under an `image:`
+   mapping or under an anchored template that a job uses as `image: *anchor`
+   (the Renovate job's `.renovate_image`). A top-level `image:`, `variables:`
+   values and anything else disqualify. No CI variable holds an image
+   reference today;
+4. per line: the same image name, the new reference pinned by `@sha256:`
+   digest (digest-only and digest pins included), and not a major
+   ([Major versions](#major-versions));
+5. the image is on neither the global denylist (`denylist.images`: GitLab,
+   the runner helper `gitlab/gitlab-runner`, Vault, ...) nor
+   `ci_images.denylist`. That holds `willhallonline/ansible`: the `.ansible`
+   image runs the sweep, `plan-deploy` and every deploy, so a broken update
+   would take down the jobs that detect and revert it;
+6. no open rollback issue holds the image (see below), and no earlier CI image
+   merge is still waiting for its main pipeline.
+
+`.gitlab-ci.yml` is CODEOWNERS-protected; the automerge bot is its second
+code owner, and the eligibility check allows the path only for diffs that
+pass rule 3, as for the compose files.
+
+The merge commit carries `Automerge-Class: ci-image` and `Automerge-Policy:
+ci-image`. The trailer makes the full host deploys manual for that commit
+(`.automerged_commit_manual`); a `.gitlab-ci.yml` change would otherwise
+trigger a full deploy of every host (`ci/deploy-scope`). The MR gets the
+labels `automerged`, `automerge-ci-image` and `automerge-ci-watch`.
+
+After the merge, every sweep run checks the main pipeline of each merged MR
+still labelled `automerge-ci-watch`:
+
+- still running: nothing yet (and no other CI image MR merges);
+- passed: a note, and the watch label is removed;
+- a job failed (not `allow_failure`) that runs a changed image (its own
+  `image`, through `extends`, or `default.image`): the sweep opens a revert MR
+  (`automerge-revert/<iid>`, the previous image lines put back on main), an
+  `automerge-rollback` issue with the scope `job=ci services=<image>`, labels
+  the MR `automerge-rollback`, notes it and mails root. While the issue is
+  open, the next update of that image in CI files waits for a human; other
+  images and compose updates carry on. Merge (or close) the revert MR, then
+  close the issue;
+- only jobs that do not run the image failed, or the pipeline was canceled:
+  a note saying so, no revert.
+
+Most image jobs run in MR pipelines only (`nginx:validate`, the linters), so
+the MR pipeline that must pass before the merge is what exercises them. The
+watch covers jobs that run on `main`. An image used only by jobs that run in
+neither (the kaniko image of the build jobs, which run when their image
+directory changes) is first exercised by a later pipeline; a failure there is
+not attributed to the update automatically.
+
 ## Freezing
 
 Any one of these stops auto-merge:
@@ -495,8 +564,9 @@ Any one of these stops auto-merge:
 - An open `automerge-rollback` issue (automatic).
 - A per-service deploy still running (automatic, until it ends).
 
-These apply to both classes. `AUTOMERGE_DRY_RUN=all` on the schedule also
-stops both, but logs every decision. `fast_track.enabled: false` stops only
+These apply to every class. `AUTOMERGE_DRY_RUN=all` on the schedule also
+stops them all, but logs every decision; `AUTOMERGE_DRY_RUN=1` dry-runs the
+general and CI image classes. `fast_track.enabled: false` stops only
 the fast track.
 
 Removing the freeze needs no other action. The next sweep re-evaluates.
@@ -586,7 +656,7 @@ above. The script refuses any MR not authored by root.
 - **Dry run**: while the sweep schedule has `AUTOMERGE_DRY_RUN=1`, the general
   class logs every decision (`ELIGIBLE` / `not eligible` with reasons, "would
   merge ...") and writes nothing. **The fast-track class stays live.**
-  `AUTOMERGE_DRY_RUN=all` dry-runs both classes, and so does `sweep --dry-run`.
+  `AUTOMERGE_DRY_RUN=all` dry-runs every class, and so does `sweep --dry-run`.
   To take the general class live, delete the variable from the schedule (Build >
   Pipeline schedules > `automerge sweep` > edit), or via the API:
   `glab api -X DELETE projects/4/pipeline_schedules/<id>/variables/AUTOMERGE_DRY_RUN`.

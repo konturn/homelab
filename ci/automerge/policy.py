@@ -342,6 +342,164 @@ def diff_compose(base: str, head: str, path: str = COMPOSE_PATH,
 
 
 # ---------------------------------------------------------------------------
+# CI job images (the "CI image" class)
+# ---------------------------------------------------------------------------
+# A CI file (`ci_images.files`, .gitlab-ci.yml) may change only in place on
+# an image line: a job's or template's `image: <ref>`, or `name: <ref>`
+# directly under an `image:` mapping or under an anchored template that some
+# job uses as `image: *anchor`. Nothing is deployed; the sweep watches the
+# main pipeline of the merge instead (automerge.py, `ci_watch`).
+
+CI_PATH = ".gitlab-ci.yml"
+_CI_IMAGE_RE = re.compile(r"^(\s*)(image|name):\s*(\S.*?)\s*$")
+_CI_KEY_RE = re.compile(r"^(\s*)(?:-\s+)?([A-Za-z0-9_.:/-]+):(?:\s+(.*?))?\s*$")
+
+
+def _ci_structure(text: str):
+    """Per line: (indent, key, value) for `key: value` lines, None otherwise;
+    and the parent line index of each line (by indentation)."""
+    lines = text.split("\n")
+    info: List[Optional[Tuple[int, str, str]]] = []
+    parent: List[Optional[int]] = []
+    stack: List[Tuple[int, int]] = []           # (indent, line index)
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            info.append(None)
+            parent.append(None)
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        while stack and stack[-1][0] >= indent:
+            stack.pop()
+        parent.append(stack[-1][1] if stack else None)
+        m = _CI_KEY_RE.match(line)
+        info.append((indent, m.group(2), m.group(3) or "") if m else None)
+        stack.append((indent, i))
+    return lines, info, parent
+
+
+def ci_image_lines(text: str) -> Dict[int, str]:
+    """0-based line index -> owning top-level key, for every image line of a
+    CI file (see the section comment)."""
+    lines, info, parent = _ci_structure(text)
+    aliases = set(re.findall(r"^\s*image:\s*\*([A-Za-z0-9_-]+)\s*$", text, re.M))
+    out: Dict[int, str] = {}
+    for i, line in enumerate(lines):
+        m = _CI_IMAGE_RE.match(line)
+        if not m or info[i] is None or info[i][1] != m.group(2):
+            continue
+        value = m.group(3)
+        if value[:1] in ("*", "&", "{", "[", "|", ">", "!") or value.startswith("#"):
+            continue
+        if m.group(2) == "name":
+            p = parent[i]
+            if p is None or info[p] is None:
+                continue
+            pkey, pval = info[p][1], info[p][2]
+            anchor = re.match(r"^&([A-Za-z0-9_-]+)\s*(#.*)?$", pval)
+            if not (pkey == "image" or (anchor and anchor.group(1) in aliases)):
+                continue
+        top = i
+        while parent[top] is not None:
+            top = parent[top]
+        if info[top] is None or top == i:
+            continue                            # a top-level `image:` is global (default) config
+        out[i] = info[top][1]
+    return out
+
+
+def diff_ci_images(base: str, head: str, path: str = CI_PATH) -> List[ImageChange]:
+    """Like diff_compose, for a CI file: every difference must be an in-place,
+    same-image tag/digest edit of an image line (`ci_image_lines`). Each
+    change's `service` is the job or template that owns the line."""
+    b_lines, h_lines = base.split("\n"), head.split("\n")
+    if len(b_lines) != len(h_lines):
+        raise PolicyError(f"{path}: line count changed ({len(b_lines)} -> {len(h_lines)}); "
+                          "only in-place image line edits qualify")
+    b_img, h_img = ci_image_lines(base), ci_image_lines(head)
+    changes: List[ImageChange] = []
+    for i, (bl, hl) in enumerate(zip(b_lines, h_lines)):
+        if bl == hl:
+            continue
+        where = f"{path} line {i + 1}"
+        if i not in b_img or i not in h_img:
+            raise PolicyError(f"{where} is not a job image line")
+        if b_img[i] != h_img[i]:
+            raise PolicyError(f"{where}: job structure changed")
+        job = h_img[i]
+        bm, hm = _CI_IMAGE_RE.match(bl), _CI_IMAGE_RE.match(hl)
+        if (bm.group(1), bm.group(2)) != (hm.group(1), hm.group(2)):
+            raise PolicyError(f"{where} ({job}): key or indentation changed")
+        try:
+            old, new = parse_image_ref(bm.group(3)), parse_image_ref(hm.group(3))
+        except PolicyError as e:
+            raise PolicyError(f"{where} ({job}): {e}")
+        if old.name != new.name:
+            raise PolicyError(f"{where} ({job}): image name changed ({old.name} -> {new.name})")
+        if not new.digest:
+            raise PolicyError(f"{where} ({job}): new image is not pinned by digest")
+        if old.tag == new.tag:
+            if old.digest == new.digest:
+                raise PolicyError(f"{where} ({job}): non-functional edit to image line")
+            kind = "digest"
+        else:
+            if old.tag is None or new.tag is None:
+                raise PolicyError(f"{where} ({job}): tag added or removed")
+            try:
+                kind = classify_tag_change(old.tag, new.tag)
+            except MajorVersionChange as e:
+                raise MajorVersionChange(f"{where} ({job}): {e}", service=job, image=new.name)
+            except PolicyError as e:
+                raise PolicyError(f"{where} ({job}): {e}")
+        changes.append(ImageChange(job, i + 1, old, new, kind, bl, hl, path))
+    return changes
+
+
+def ci_images_config(allowlist: dict) -> dict:
+    """Validated `ci_images` section: {enabled, authors, files, denylist}.
+    Raises PolicyError on anything malformed (fails closed)."""
+    sec = allowlist.get("ci_images")
+    if sec is None:
+        return {"enabled": False, "authors": [], "files": [], "denylist": {}}
+    if not isinstance(sec, dict):
+        raise PolicyError("`ci_images` must be a mapping")
+    files = sec.get("files") or [CI_PATH]
+    if not isinstance(files, list) or any(not isinstance(f, str) or f.startswith("/") for f in files):
+        raise PolicyError("ci_images.files must be a list of repository paths")
+    deny = {}
+    for name, reason in (sec.get("denylist") or {}).items():
+        if not isinstance(reason, str) or not reason.strip():
+            raise PolicyError(f"ci_images.denylist {name}: a reason is required")
+        deny[name] = " ".join(reason.split())
+    authors = sec.get("authors") or []
+    if not isinstance(authors, list):
+        raise PolicyError("ci_images.authors must be a list")
+    return {"enabled": sec.get("enabled") is True, "authors": list(authors),
+            "files": list(files), "denylist": deny}
+
+
+def ci_files(allowlist: dict) -> List[str]:
+    try:
+        cfg = ci_images_config(allowlist)
+    except PolicyError:
+        return []
+    return cfg["files"] if cfg["enabled"] else []
+
+
+def ci_change_reasons(changes: List[ImageChange], allowlist: dict) -> List[str]:
+    """Per-change checks of the CI image class: the global image denylist and
+    `ci_images.denylist`. Used by evaluate_mr and again by the post-merge watch."""
+    reasons = []
+    d = denylist(allowlist)["images"]
+    cd = ci_images_config(allowlist)["denylist"]
+    for c in changes:
+        why = d.get(c.new.name) or cd.get(c.new.name)
+        if why:
+            reasons.append(f"{c.service}: {DENIED_MARK} ({c.new.name}: {why})")
+    return reasons
+
+
+# ---------------------------------------------------------------------------
 # CODEOWNERS
 # ---------------------------------------------------------------------------
 
@@ -657,6 +815,8 @@ class Verdict:
     frozen: bool = False                               # carries the freeze label
     deploy_jobs: List[str] = field(default_factory=list)   # per-service deploy job prefixes
     deploy_hosts: List[Deployment] = field(default_factory=list)
+    ci_image: bool = False                             # CI image class (job images in a CI file)
+    ci_images: List[str] = field(default_factory=list)     # image names it changes
 
     def reject(self, reason: str) -> None:
         self.eligible = False
@@ -670,7 +830,8 @@ class Verdict:
         return not self.eligible and len(self.reasons) > (1 if self.frozen else 0)
 
     def as_dict(self) -> dict:
-        return {"eligible": self.eligible, "fast_track": self.fast_track, "heavy": self.heavy,
+        return {"eligible": self.eligible, "fast_track": self.fast_track, "ci_image": self.ci_image,
+                "heavy": self.heavy,
                 "major": self.major, "denied": self.denied, "manual": self.manual,
                 "deploy_jobs": self.deploy_jobs, "reasons": self.reasons,
                 "notes": self.notes, "changes": [c.as_dict() for c in self.changes]}
@@ -708,7 +869,7 @@ def evaluate_mr(*, author: str, target_branch: str, labels: List[str],
         deployments = default_deployments(allowlist)
 
     # A malformed policy section fails closed for every MR.
-    for check in (fast_track_config, denylist, pre_upgrade_config):
+    for check in (fast_track_config, denylist, pre_upgrade_config, ci_images_config):
         try:
             check(allowlist)
         except PolicyError as e:
@@ -730,6 +891,7 @@ def evaluate_mr(*, author: str, target_branch: str, labels: List[str],
         v.reject(f"labelled {LABEL_MAJOR!r} by Renovate: major updates are never auto-merged")
 
     allowed = set(compose_files(allowlist))
+    ci_allowed = set(ci_files(allowlist))
     paths = sorted({f.path for f in files} | {f.old_path for f in files if f.old_path})
     if not files:
         v.reject("MR has no file changes")
@@ -737,7 +899,7 @@ def evaluate_mr(*, author: str, target_branch: str, labels: List[str],
         if f.new_file or f.deleted_file or f.renamed_file or f.mode_changed:
             v.reject(f"{f.path}: file added, deleted, renamed or mode-changed")
     for p in paths:
-        if p in allowed:
+        if p in allowed or p in ci_allowed:
             continue
         if COMPOSE_GLOB.match(p):
             if not deployments.get(p):
@@ -748,11 +910,17 @@ def evaluate_mr(*, author: str, target_branch: str, labels: List[str],
         else:
             v.reject(f"touches files outside the auto-merge scope: {p}")
 
-    # CODEOWNERS: the listed compose files are special-cased (allowed only for
-    # image-only diffs, verified below); any other code-owned path disqualifies.
-    owned = [p for p in protected_paths(paths, codeowners_text) if p not in allowed]
+    # CODEOWNERS: the listed compose files and CI files are special-cased
+    # (allowed only for image-only diffs, verified below); any other
+    # code-owned path disqualifies.
+    owned = [p for p in protected_paths(paths, codeowners_text) if p not in allowed | ci_allowed]
     if owned:
         v.reject("touches CODEOWNERS-protected paths: " + ", ".join(owned))
+
+    changed_ci = [p for p in paths if p in ci_allowed]
+    if changed_ci:
+        _evaluate_ci(v, author, changed_ci, [p for p in paths if p not in ci_allowed], composes, allowlist)
+        return v
 
     changed_composes = [p for p in paths if p in allowed]
     for path in changed_composes:
@@ -812,6 +980,44 @@ def evaluate_mr(*, author: str, target_branch: str, labels: List[str],
     return v
 
 
+def _evaluate_ci(v: Verdict, author: str, changed_ci: List[str], others: List[str],
+                 files: Dict[str, ComposePair], allowlist: dict) -> None:
+    """The CI image class: job image lines in CI files only, by a CI-class
+    author. Nothing is deployed (deploy_jobs stays empty)."""
+    cfg = ci_images_config(allowlist)
+    v.ci_image = True
+    if others:
+        v.reject("a CI image update must not change other files: " + ", ".join(others))
+    if author not in cfg["authors"]:
+        v.reject(f"author {author!r} may not auto-merge CI image updates (ci_images.authors)")
+    for path in changed_ci:
+        base, head = files.get(path, (None, None))
+        if base is None or head is None:
+            v.reject(f"could not read both versions of {path}")
+            continue
+        try:
+            changes = diff_ci_images(base, head, path)
+        except MajorVersionChange as e:
+            v.major = True
+            v.reject(f"ci: {e}")
+            continue
+        except PolicyError as e:
+            v.reject(f"ci: {e}")
+            continue
+        v.changes += changes
+        for r in ci_change_reasons(changes, allowlist):
+            v.reject(r)
+            v.denied = True
+    v.ci_images = sorted({c.new.name for c in v.changes})
+    for c in v.changes:
+        v.notes.append(f"{c.service}: {c.kind} update {c.old.tag or ''} -> {c.new.tag or ''}"
+                       f" ({(c.new.digest or '')[:19]}) [{c.file}]")
+    if v.eligible and not v.changes:
+        v.reject("CI file changed but no image updates were found")
+    if v.eligible:
+        v.notes.append("class: CI image (nothing to deploy; the sweep watches the main pipeline)")
+
+
 def change_reasons(changes: List[ImageChange], allowlist: dict,
                    head_info: Optional[Dict[str, Dict[str, ServiceInfo]]] = None,
                    base_info: Optional[Dict[str, Dict[str, ServiceInfo]]] = None) -> List[str]:
@@ -846,3 +1052,57 @@ def change_reasons(changes: List[ImageChange], allowlist: dict,
             reasons.append(f"{c.service}: {c.kind} update of {c.new.name} is not allowed "
                            f"(allowed: {', '.join(kinds) or 'none'})")
     return reasons
+
+
+# ---------------------------------------------------------------------------
+# Jobs that run a CI image (for the post-merge watch)
+# ---------------------------------------------------------------------------
+
+_CI_RESERVED = {"stages", "variables", "default", "include", "workflow", "image", "services",
+                "before_script", "after_script", "cache"}
+
+
+def ci_image_jobs(text: str, names: Collection[str]) -> List[str]:
+    """Jobs of a CI file whose effective image (own `image`, else through
+    `extends`, else `default.image`) is one of `names`. Needs PyYAML."""
+    import yaml
+
+    class _Loader(yaml.SafeLoader):
+        pass
+
+    # GitLab's !reference [a, b]: only its shape matters here.
+    _Loader.add_constructor("!reference", lambda loader, node: loader.construct_sequence(node))
+    doc = yaml.load(text, Loader=_Loader) or {}
+
+    def own_image(key: str, seen: frozenset):
+        job = doc.get(key)
+        if not isinstance(job, dict) or key in seen:
+            return None
+        if "image" in job:
+            return job["image"]
+        ext = job.get("extends") or []
+        for parent in reversed([ext] if isinstance(ext, str) else list(ext)):
+            img = own_image(parent, seen | {key})
+            if img is not None:
+                return img
+        return None
+
+    default = (doc.get("default") or {}).get("image") if isinstance(doc.get("default"), dict) else None
+    out = []
+    for key, job in doc.items():
+        if not isinstance(key, str) or key.startswith(".") or key in _CI_RESERVED or not isinstance(job, dict):
+            continue
+        img = own_image(key, frozenset())
+        if img is None:
+            img = default
+        if isinstance(img, dict):
+            img = img.get("name")
+        if not isinstance(img, str):
+            continue
+        try:
+            name = parse_image_ref(img).name
+        except PolicyError:
+            continue
+        if name in names:
+            out.append(key)
+    return out

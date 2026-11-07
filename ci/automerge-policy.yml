@@ -44,6 +44,27 @@ deploy_hosts:
 # while a per-service deploy is still running.
 max_per_24h: 24
 
+# CI image class (docs/AUTOMERGE.md, "CI images"): Renovate MRs whose only
+# change is job image lines in these CI files, edited in place (same image,
+# new reference pinned by digest, not a major). Nothing is deployed: the merge
+# commit carries `Automerge-Policy: ci-image` (full host deploys become
+# manual), and the sweep watches the main pipeline of the merge. If a job that
+# runs the changed image fails there, it opens a revert MR and a rollback
+# issue (job=ci), which holds further updates of that image. Merges count
+# against max_per_24h. The images under `denylist.images` below stay manual
+# here too; `ci_images.denylist` adds CI-only exceptions.
+ci_images:
+  enabled: true
+  authors:
+    # Renovate only.
+    - project_4_bot_af78a2ea227eba9e10006515fbde375e
+  files:
+    - .gitlab-ci.yml
+  denylist:
+    willhallonline/ansible: >-
+      The .ansible image runs the sweep, plan-deploy and every deploy. A
+      broken one takes down the jobs that would detect and revert it.
+
 # Never auto-merged, whatever the update kind. Each entry needs a reason; the
 # sweep prints it on the MR and labels the MR `automerge-manual`. Renovate
 # labels updates of the denylisted images `automerge-manual` too (renovate.json,
