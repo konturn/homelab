@@ -662,7 +662,7 @@ def cmd_plan_deploy(args: argparse.Namespace) -> int:
     for path in changed:
         base, head = git_show(first_parent, path) or "", git_show(sha, path) or ""
         try:
-            changes += policy.diff_compose(base, head, path)
+            changes += policy.diff_compose(base, head, path, policy.zero_minor_services(allow))
         except policy.PolicyError as e:
             return abort(f"merged change to {path} is outside the policy: {e}")
         head_info[path], base_info[path] = policy.compose_service_info(head), policy.compose_service_info(base)

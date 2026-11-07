@@ -114,6 +114,9 @@ default_health_timeout: 600
 #   updates: subset of [digest, patch, minor] (default: all three). Use it for
 #            services whose version change runs a one-way migration that
 #            restoring the previous image cannot undo.
+#   zero_minor_is_minor: true counts a 0.x minor (0.163 -> 0.165) as a minor
+#            update instead of a major one, for projects that ship routine
+#            releases as 0.x minors. Majors stay manual.
 # Without a probe the gate is the container's own healthcheck. Every
 # long-running service in the deployed compose files has one; services
 # without one are on the denylist (checked by test_fast_track.py).
@@ -147,6 +150,11 @@ services:
     probe: https://grafana.lab.nkontur.com/api/health
   tempo:
     probe: https://tempo.lab.nkontur.com/ready
+  # The collector has been 0.x for years and ships a 0.x minor every two
+  # weeks. It rejects unknown config keys at start, so a renamed key fails
+  # the health gate and the sweep rolls it back.
+  otel-collector:
+    zero_minor_is_minor: true
   # InfluxDB 2.x minor releases migrate its metadata store one way (going
   # back needs `influxd downgrade`), so they stay reviewed.
   influxdb:

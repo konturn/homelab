@@ -96,6 +96,16 @@ class VersionTests(unittest.TestCase):
         self.assertEqual(policy.classify_tag_change("1.43.3.10896-cb3ebc72d", "1.43.4.10920-0a1b2c3d4"), "patch")
         self.assertEqual(policy.classify_tag_change("0.24.2486", "0.24.2492"), "patch")
 
+    def test_zero_minor_is_minor(self):
+        self.assertEqual(policy.classify_tag_change("0.163.0", "0.165.0", True), "minor")
+        with self.assertRaises(PolicyError):
+            policy.classify_tag_change("0.163.0", "1.0.0", True)
+        self.assertEqual(policy.zero_minor_services(
+            {"services": {"otel-collector": {"zero_minor_is_minor": True}, "tempo": {}}}),
+            {"otel-collector"})
+        with self.assertRaises(PolicyError):
+            policy.zero_minor_services({"services": {"x": {"zero_minor_is_minor": "yes"}}})
+
     def test_rejections(self):
         for old, new in [("2.0.4", "3.0.0"),            # major
                          ("0.63.2", "0.64.2"),          # 0.x minor is breaking
