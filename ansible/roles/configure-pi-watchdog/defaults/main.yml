@@ -6,5 +6,7 @@
 # maximum timeout is 15s.
 pi_watchdog_runtime_sec: 15s
 # RebootWatchdogSec: a reboot that stalls in the final stage after this long
-# is forced by the watchdog.
-pi_watchdog_reboot_sec: 2min
+# is forced by the watchdog. Same 15s hardware cap applies: with 2min,
+# systemd logs "Failed to set timeout to 120s: Invalid argument" at shutdown
+# and the reboot watchdog is never armed.
+pi_watchdog_reboot_sec: 15s
