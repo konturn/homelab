@@ -2191,15 +2191,20 @@ services:
     # a short observation window never sees it. Under the previous 3G limit the
     # container ran from 2026-06-24 to 2026-08-30 with zero OOM kills and zero
     # fail_count, so 3G is the value with actual evidence behind it.
+    # 2026-11-07 (#145): 3G OOMed on 2026-10-08 under a burst of iOS DAV
+    # requests because apache's pool was unbounded (stock MaxRequestWorkers
+    # 150). The pool is now capped at 12 in nextcloud/mpm_prefork.conf and the
+    # limit is sized to that bound (~12 x 280M heavy workers + ~0.5G base).
     deploy:
       resources:
         limits:
-          memory: 3G
+          memory: 4G
         reservations:
           memory: 256M
     volumes:
       - nextcloud:/data
       - {{ docker_persistent_data_path }}/nextcloud/custom.config.php:/var/www/html/config/custom.config.php
+      - {{ docker_persistent_data_path }}/nextcloud/mpm_prefork.conf:/etc/apache2/mods-available/mpm_prefork.conf:ro
       - /etc/localtime:/etc/localtime:ro
     restart: unless-stopped
     healthcheck:
