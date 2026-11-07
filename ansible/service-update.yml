@@ -17,6 +17,12 @@
 # is backed up by ci/automerge/pre-upgrade-backup.sh before the new image
 # starts, and the backup is restored before the rollback starts the previous
 # image (docs/AUTOMERGE.md, "Pre-upgrade backups").
+#
+# Bot-config merges (docs/AUTOMERGE.md, "Bot-config class") also use this
+# playbook: changed services (resource limits, log levels) are recreated like
+# image updates, and changed Grafana provisioning files (plan `grafana_files`,
+# router only) are copied and reloaded through Grafana's API instead of
+# restarting it; the rollback copies the previous files back and reloads.
 - hosts: "{{ automerge_host }}"
   vars:
     automerge_plan: "{{ lookup('file', lookup('env', 'AUTOMERGE_PLAN')) | from_json }}"
@@ -29,12 +35,20 @@
       {{ automerge_plan.services | selectattr('pre_upgrade_backup', 'defined')
          | selectattr('pre_upgrade_backup') | list }}
     automerge_pre_upgrade: "{{ automerge_plan.pre_upgrade | default({}) }}"
+    automerge_grafana_files: "{{ automerge_plan.grafana_files | default([]) }}"
+    automerge_grafana_script: "{{ lookup('env', 'CI_PROJECT_DIR') }}/ci/automerge/grafana-reload.py"
+    automerge_grafana_args: >-
+      --host grafana.lab.nkontur.com --ip {{ lab_nginx_ip | quote }}
+      {% for kind, flag in [('alerts', '--alerts'), ('dashboard', '--dashboard')] %}
+      {%- set fs = automerge_grafana_files | selectattr('kind', 'equalto', kind) | map(attribute='dest') | list %}
+      {%- if fs %} {{ flag }}{% for f in fs %} {{ (docker_persistent_data_path ~ '/' ~ f) | quote }}{% endfor %}{% endif %}
+      {%- endfor %}
 
   pre_tasks:
     - name: Validate deploy plan
       ansible.builtin.assert:
         that:
-          - automerge_services | length > 0
+          - automerge_services | length > 0 or automerge_grafana_files | length > 0
           - automerge_result_file | length > 0
           - automerge_plan.host | default('router.lab.nkontur.com') == inventory_hostname
           - automerge_plan.host_files | default(['docker/docker-compose.yml'])
@@ -148,6 +162,8 @@
             pull: missing
             state: present
           timeout: 900
+          # an empty service list would mean every service
+          when: automerge_services | length > 0
 
         - name: Wait for target services to become healthy
           ansible.builtin.script:
@@ -182,6 +198,40 @@
             and not (automerge_nc_status.stdout | from_json).maintenance
             and not (automerge_nc_status.stdout | from_json).needsDbUpgrade
           when: "'nextcloud' in automerge_services"
+
+        # Bot-config: Grafana provisioning files. Reloaded through the API
+        # (no restart), then every rule and dashboard in the changed files must
+        # read back as the file says.
+        - name: Grafana - mark provisioning as changed
+          ansible.builtin.set_fact:
+            automerge_grafana_started: true
+          when: automerge_grafana_files | length > 0
+
+        - name: Grafana - copy merged provisioning files
+          ansible.builtin.copy:
+            src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/{{ item.src }}"
+            dest: "{{ docker_persistent_data_path }}/{{ item.dest }}"
+            owner: root
+            group: root
+            mode: "0644"
+          loop: "{{ automerge_grafana_files }}"
+          loop_control:
+            label: "{{ item.src }}"
+
+        - name: Grafana - reload provisioning and check it took effect
+          ansible.builtin.script:
+            cmd: "{{ automerge_grafana_script }} {{ automerge_grafana_args }}"
+            executable: python3
+          environment:
+            GRAFANA_ADMIN_PASSWORD: "{{ vault_grafana_admin_password | trim }}"
+          register: automerge_grafana_reload
+          timeout: 300
+          when: automerge_grafana_files | length > 0
+
+        - name: Grafana - reload output
+          ansible.builtin.debug:
+            msg: "{{ automerge_grafana_reload.stdout_lines | default([]) }}"
+          when: automerge_grafana_files | length > 0
 
       rescue:
         - name: Record failure
@@ -254,6 +304,7 @@
           timeout: 900
           register: automerge_rollback_up
           ignore_errors: true
+          when: automerge_services | length > 0
 
         - name: ROLLBACK - wait for previous image to become healthy
           ansible.builtin.script:
@@ -277,12 +328,44 @@
           ansible.builtin.debug:
             msg: "{{ automerge_rollback_health.results | default([]) | map(attribute='stdout_lines', default=[]) | list }}"
 
+        - name: ROLLBACK - Grafana - copy previous provisioning files
+          ansible.builtin.copy:
+            src: "{{ item.prev }}"
+            dest: "{{ docker_persistent_data_path }}/{{ item.dest }}"
+            owner: root
+            group: root
+            mode: "0644"
+          loop: "{{ automerge_grafana_files }}"
+          loop_control:
+            label: "{{ item.src }}"
+          register: automerge_grafana_rb_copy
+          ignore_errors: true
+          when: automerge_grafana_started | default(false)
+
+        - name: ROLLBACK - Grafana - reload previous provisioning
+          ansible.builtin.script:
+            cmd: "{{ automerge_grafana_script }} {{ automerge_grafana_args }}"
+            executable: python3
+          environment:
+            GRAFANA_ADMIN_PASSWORD: "{{ vault_grafana_admin_password | trim }}"
+          register: automerge_grafana_rb
+          timeout: 300
+          ignore_errors: true
+          when: automerge_grafana_started | default(false) and automerge_grafana_rb_copy is succeeded
+
+        - name: ROLLBACK - Grafana - reload output
+          ansible.builtin.debug:
+            msg: "{{ automerge_grafana_rb.stdout_lines | default([]) }}"
+          when: automerge_grafana_started | default(false)
+
         - name: ROLLBACK - outcome
           ansible.builtin.set_fact:
             automerge_restores_ok: "{{ automerge_restored | default([]) | rejectattr('ok') | list | length == 0 }}"
             automerge_rollback_ok: >-
               {{ automerge_rollback_up is succeeded and automerge_rollback_health is succeeded
-                 and automerge_restored | default([]) | rejectattr('ok') | list | length == 0 }}
+                 and automerge_restored | default([]) | rejectattr('ok') | list | length == 0
+                 and (not (automerge_grafana_started | default(false))
+                      or (automerge_grafana_rb_copy is succeeded and automerge_grafana_rb is succeeded)) }}
 
         - name: Write failure result
           ansible.builtin.copy:

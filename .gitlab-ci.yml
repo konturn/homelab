@@ -219,10 +219,12 @@ variables:
 
 # Commits merged by the auto-merge policy get <host>:deploy-service instead of
 # the full host deploys; those stay available as manual jobs. CI image merges
-# (Automerge-Policy: ci-image) change only job image lines and deploy nothing.
+# (Automerge-Policy: ci-image) change only job image lines and deploy nothing;
+# bot-config merges (Automerge-Policy: bot-config) deploy through
+# <host>:deploy-service too, or not at all (docs only).
 .automerged_commit_manual:
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /Automerge-Policy: (image-update|ci-image)/'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /Automerge-Policy: (image-update|ci-image|bot-config)/'
       when: manual
       allow_failure: true
 

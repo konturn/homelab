@@ -65,6 +65,65 @@ ci_images:
       The .ansible image runs the sweep, plan-deploy and every deploy. A
       broken one takes down the jobs that would detect and revert it.
 
+# Bot-config class (docs/AUTOMERGE.md, "Bot-config class"): moltbot's own
+# low-risk configuration MRs. moltbot reads outside input and can be
+# prompt-injected, so nothing here trusts it: ci/automerge/botconfig.py
+# checks that every changed file is on the allowlist below AND that every
+# change in it has the allowed shape (resource/log-level values in compose
+# files; for/summary/description/severity/threshold values of existing
+# Grafana alert rules; dashboard JSON without new datasources; Markdown docs).
+# A hard never-list in botconfig.py (networking, ansible, CI, OpenClaw, Vault,
+# secrets, scripts, ...) wins over every allowlist, as does `never` below.
+# New, deleted, renamed or mode-changed files never qualify. Merges count
+# against max_per_24h and against the class cap below.
+bot_config:
+  enabled: true
+  authors:
+    - moltbot
+  max_per_24h: 6
+  # A resource limit/reservation may move to between 0.5x and 2x its old value.
+  resource_ratio: [0.5, 2.0]
+  paths:
+    compose:
+      - docker/docker-compose.yml
+      - docker/docker-compose-observability.yml
+      - docker/docker-compose-zwave.yml
+    alerts:
+      - docker/grafana/provisioning/alerting/infrastructure.yml
+      - docker/grafana/provisioning/alerting/anomaly.yml
+    dashboard:
+      - docker/grafana/provisioning/dashboards/json/*.json
+    docs:
+      - docs/*.md
+      - docs/**/*.md
+      - README.md
+      - docs/**/README*.md
+  # Docs that describe security policy, deploy procedures or this policy
+  # itself, or that agents follow as runbooks: reviewed.
+  docs_exclude:
+    - docs/AUTOMERGE.md
+    - docs/DISASTER_RECOVERY.md
+    - docs/RENOVATE.md
+    - docs/DEPLOY.md
+    - docs/FIREWALL.md
+    - docs/SECRET_ROTATION.md
+    - docs/GITLAB_SETTINGS.md
+    - docs/docker-proxy-architecture.md
+    - docs/jit-*
+    - docs/*security*
+    - docs/*SECURITY*
+  # On top of the global denylist services and any service named
+  # openclaw*/moltbot* (always denied).
+  denied_services:
+    - nginx
+    - lab_nginx
+    - iot_nginx
+    - jit-approval-svc
+    - anomaly-detector
+    - chromium-browser
+  never:
+    - docker/grafana/provisioning/dashboards/homelab.yml
+
 # Never auto-merged, whatever the update kind. Each entry needs a reason; the
 # sweep prints it on the MR and labels the MR `automerge-manual`. Renovate
 # labels updates of the denylisted images `automerge-manual` too (renovate.json,

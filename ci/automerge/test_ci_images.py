@@ -439,9 +439,10 @@ class RealRepoTests(unittest.TestCase):
             self.assertIn("@project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6", own)
 
     def test_ci_image_merges_make_host_deploys_manual(self):
-        self.assertIn("Automerge-Policy: (image-update|ci-image)", self.ci)
+        m = re.search(r"\.automerged_commit_manual:\n  rules:\n    - if: '.*?=~ /(Automerge-Policy: [^/]*)/'", self.ci)
+        self.assertTrue(m)
         trailer = automerge.CI_TRAILER
-        self.assertTrue(re.search(r"Automerge-Policy: (image-update|ci-image)", trailer))
+        self.assertTrue(re.search(m.group(1), trailer))
         # and never selects a per-service deploy
         self.assertNotIn("Automerge-Deploy", trailer + automerge.CI_CLASS_TRAILER)
 

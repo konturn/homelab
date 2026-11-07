@@ -29,7 +29,7 @@ What stays with a human:
 The sweep labels such MRs `automerge-manual` and notes the reason on the MR
 (see [Visibility](#visibility-of-manual-updates)).
 
-Three classes share the policy:
+Four classes share the policy:
 
 - **General**: any eligible update. While the sweep schedule carries
   `AUTOMERGE_DRY_RUN=1` this class only logs what it would do.
@@ -41,6 +41,10 @@ Three classes share the policy:
   by Renovate. Nothing is deployed; the sweep watches the main pipeline of
   the merge and reverts on a failure in a job that runs the image. Counts
   against the general budget and follows its dry run. See [CI images](#ci-images).
+- **Bot-config**: moltbot's own low-risk configuration MRs (resource limits,
+  log levels, Grafana alert thresholds and dashboards, docs), checked by
+  path and by the shape of every change. Counts against the general budget
+  plus its own cap. See [Bot-config class](#bot-config-class).
 
 The pieces:
 
@@ -385,6 +389,14 @@ whose upgrade migrates its data on start may not run cleanly on the old image:
 restrict its `updates:` (see [Restricted kinds](#restricted-kinds)), or give it
 a pre-upgrade backup type.
 
+While an `automerge-rollback` issue is open, auto-merge is held back only for
+the services it names on its host (the `<!-- automerge-rollback job=...
+services=... -->` scope; see [Policy](#policy)); other services keep
+auto-merging. An issue without a readable scope holds every MR. `main` still
+references the new image until the revert MR is merged, so a full deploy in
+the meantime would apply it again. Merge (or close) the revert MR, then close
+the issue.
+
 ## Pre-upgrade backups
 
 Home Assistant's monthly releases can migrate `.storage` and its recorder
@@ -485,11 +497,6 @@ ci/automerge/pre-upgrade-backup.sh restore --type homeassistant \
 image: merge the revert MR and run `router:deploy`, or recreate the service
 with the previous image line by hand.
 
-While any `automerge-rollback` issue is open, auto-merge is paused for every MR.
-`main` still references the new image until the revert MR is merged, so a full
-deploy in the meantime would apply it again. Merge (or close) the revert
-MR, then close the issue.
-
 ## CI images
 
 Renovate also updates the images CI jobs run in (`gitlabci` manager), for
@@ -553,6 +560,80 @@ neither (the kaniko image of the build jobs, which run when their image
 directory changes) is first exercised by a later pipeline; a failure there is
 not attributed to the update automatically.
 
+## Bot-config class
+
+moltbot (OpenClaw) may get some of its own MRs merged without review. It is
+an LLM agent that reads outside input (Telegram, web pages, logs), so it can be
+prompt-injected; the rules are enforced by the sweep on the diff
+(`ci/automerge/botconfig.py`), never by trusting the bot or the MR text. The
+merger is still the automerge bot (author and merger always differ).
+
+An MR qualifies only if **all** of these hold:
+
+1. the author is listed under `bot_config.authors` (`moltbot`), the target is
+   `main`, it is not a draft, the MR pipeline passed on the head commit, and it
+   carries none of the labels `freeze`, `security`, `major`;
+2. no file is added, deleted, renamed or mode-changed, no file starts with
+   `#!`, and no path is a script (`.sh`, `.py`, `.js`, ...);
+3. no path is on the never-list: the hard list in `botconfig.py` (`networking/**`,
+   iptables/nftables, `ansible/**`, `.gitlab-ci.yml`, `ci/**`, `renovate.json`,
+   `CODEOWNERS`, `CLAUDE.md`, `terraform/**`, `base/**`, `scripts/**`,
+   `docker/vault/**`, anything with `openclaw` or `moltbot` in its path,
+   `docker/jit-approval-svc/**`, `docker/nginx/**`, `docker/promtail/**`,
+   `docker/telegraf/**`, `*.env`, `*.j2`, anything with `secret` or `vault`
+   in its path, Grafana contact points, notification policies and datasources)
+   plus `bot_config.never`. The never-list wins over every allowlist;
+4. every path is on one allowlist under `bot_config.paths`, and every change in
+   it has that list's shape:
+
+| Kind | Paths | Allowed change |
+|---|---|---|
+| `compose` | the deployed compose files | the value of `deploy.resources.limits/reservations.memory/cpus` of an existing service, to between 0.5x and 2x the old value (`resource_ratio`); the value of an existing `*LOG_LEVEL`/`*LOGLEVEL` entry under `environment:` to a known level (`debug`, `info`, `warn`, ...); comment lines outside block scalars (no `{` or `}`, the file is a Jinja template). No other line may change, and no line may be added or removed except comments. Not for the global denylist services, `bot_config.denied_services` (the reverse proxies, jit-approval-svc, anomaly-detector, chromium-browser) or any `openclaw*`/`moltbot*` service. |
+| `alerts` | `docker/grafana/provisioning/alerting/infrastructure.yml`, `anomaly.yml` | per existing rule (same uid, same position): `for`, `annotations.summary`/`description`, `labels.severity` (`critical`, `warning`, `info`) and the numbers in a threshold expression's `evaluator.params`. No rule added, removed or reordered; no query, datasource, condition, label or group change. |
+| `dashboard` | `docker/grafana/provisioning/dashboards/json/*.json` | any edit that keeps the dashboard `uid` and uses no datasource the dashboard did not already use. |
+| `docs` | `docs/*.md`, `README.md`, `docs/**/README*.md` | any text, except in `bot_config.docs_exclude`: this file, `DISASTER_RECOVERY.md`, `RENOVATE.md`, `DEPLOY.md`, `FIREWALL.md`, `SECRET_ROTATION.md`, `GITLAB_SETTINGS.md`, `docker-proxy-architecture.md`, `jit-*`, `*security*`. |
+
+5. fewer than `bot_config.max_per_24h` (6) bot-config merges in the last 24
+   hours, and fewer than `max_per_24h` general-class merges (bot-config merges
+   count there too); no open rollback issue holds a changed service (or
+   `grafana-provisioning` for Grafana files).
+
+Left out on purpose: **promtail pipeline stages** (dropping or filtering log
+lines). A filter that hides the bot's own traces, or security events, is
+exactly what a prompt-injected agent would want, and a "drop only noise" shape
+cannot be checked mechanically. Log noise is handled through log levels only.
+
+`docker-compose*.yml` and the Grafana alert-rule files and dashboard JSON
+list the automerge bot as a second code owner, so the sweep's approval
+satisfies the code-owner rule there. `docs/` is not code-owned.
+
+### Deploying a bot-config merge
+
+The merge commit carries `Automerge-Class: bot-config`, `Automerge-Policy:
+bot-config` (the full host deploys become manual, as for image updates) and,
+unless it changes docs only, `Automerge-Deploy: [<host>] ...`:
+
+- **Compose changes** go through the same per-service deploy as image
+  updates: `plan-deploy` re-checks the merged diff against `main`'s policy,
+  `service-update.yml` recreates only the changed services (recreating is what
+  applies a new limit or environment value), runs the health gate, and on
+  failure renders the previous compose files, recreates the services, and opens
+  the rollback issue and revert MR.
+- **Grafana files** are copied on the router and reloaded through Grafana's
+  API (`POST /api/admin/provisioning/{alerting,dashboards}/reload`, as the
+  admin user), not by restarting Grafana: a restart makes every Loki-backed
+  alert query fail while Grafana is down. `ci/automerge/grafana-reload.py`
+  then reads every rule of a changed alert file back through the provisioning
+  API (`for`, summary, description, severity, threshold params must match the
+  file) and every changed dashboard (uid, title, panel count). A mismatch or
+  a failed reload takes the rollback path: the previous files are copied back
+  and reloaded, and the rollback issue holds `grafana-provisioning` on the
+  router. The next full deploy finds the files already in place, so it does
+  not restart Grafana for them either.
+- **Docs** deploy nothing.
+
+The daily `automerge:report` lists each one as "merged for moltbot: <title>".
+
 ## Freezing
 
 Any one of these stops auto-merge:
@@ -561,7 +642,8 @@ Any one of these stops auto-merge:
 - **Everything, temporarily:** set the CI/CD variable `AUTOMERGE_FREEZE=true`
   (project settings, or on the pipeline schedule).
 - **Everything, in git:** commit an `ci/automerge-freeze` file (any content) to `main`.
-- An open `automerge-rollback` issue (automatic).
+- An open `automerge-rollback` issue (automatic), for the services (or CI
+  images) it names only.
 - A per-service deploy still running (automatic, until it ends).
 
 These apply to every class. `AUTOMERGE_DRY_RUN=all` on the schedule also
