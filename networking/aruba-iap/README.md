@@ -217,8 +217,9 @@ exercised against the live cluster yet (it runs the newest 8.13 LSR known).
   cluster, export the configuration if the difference is new defaults, and close
   the issue. A timeout or crash that the script could not report is mailed by
   the job's `after_script`.
-- The job runs on the protected runner (host network), as root, so its TFTP
-  server can bind 10.4.0.1:69 (`IAP_TFTP_SERVER`).
+- The job runs on the `router-firmware` runner (tag `firmware-hostnet`, the
+  only runner with host networking; see `base/gitlab-runner/config.toml`), as
+  root, so its TFTP server can bind 10.4.0.1:69 (`IAP_TFTP_SERVER`).
 
 ### Starting it by hand, or from OpenClaw
 

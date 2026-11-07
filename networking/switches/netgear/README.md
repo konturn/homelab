@@ -199,8 +199,10 @@ python3 ngswitch.py firmware upgrade --tftp-server 10.4.0.1 netgear-movie.yml
   difference is new firmware defaults, and close the issue. The next window
   carries on with the remaining switch. A timeout or crash that the script
   could not report is mailed by the job's `after_script`.
-- The job runs on the protected runner (host network), as root, so its TFTP
-  server can bind 10.4.0.1:69. `NETGEAR_TFTP_SERVER` sets the address.
+- The job runs on the `router-firmware` runner (tag `firmware-hostnet`, the
+  only runner with host networking; see `base/gitlab-runner/config.toml`), as
+  root, so its TFTP server can bind 10.4.0.1:69. `NETGEAR_TFTP_SERVER` sets
+  the address.
 - **One firmware rollout per night.** The NETGEAR, Aruba Instant and S2500
   firmware jobs share a lock in the runner's cache
   (`networking/firmware_night.py`, `/cache/firmware-night`). A rollout never

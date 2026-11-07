@@ -246,7 +246,22 @@ network `gitlab-ci` (bridge `br-ci`, 172.28.0.0/24, created by `configure-docker
 | filter `FORWARD` | same allowlist + `-o` WAN, then drop |
 | nat `POSTROUTING` | MASQUERADE 172.28.0.0/24 leaving `br-ci` |
 
-The allowlist sits in the raw table because the filter hooks that fw-apply keeps at the top
+The protected runner's jobs get their own network `gitlab-ci-protected` (bridge `br-ci-prot`,
+172.28.1.0/24, also created by `configure-docker`), with a wider but still explicit allowlist:
+
+| Table / chain | Rule |
+|---|---|
+| raw `PREROUTING` → `CI-PROT-EGRESS` | allow Pi-hole :53, lab_nginx :443 and :2376 (docker-socket-proxy), Vault :8200; SSH :22 to the router (10.4.0.1), the Pis, the Mac mini, the Aruba Instant VC and APs, the S2500 (10.100.0.1) and the UPS card; NETGEAR switches :80; Denon :23/:8080; then the same drops as `CI-EGRESS` |
+| filter `INPUT` | accept tcp :22 to 10.4.0.1 from `br-ci-prot`, drop the rest |
+| filter `FORWARD` | same allowlist + `-o` WAN, then drop |
+| nat `POSTROUTING` | MASQUERADE 172.28.1.0/24 leaving `br-ci-prot` |
+
+Devices therefore see the router's own address on the egress interface, as they did when these
+jobs used host networking. The firmware rollout jobs are the exception: their TFTP server must
+bind the router's addresses, so they run on the `router-firmware` runner (tag
+`firmware-hostnet`), the only runner left on host networking.
+
+The allowlists sit in the raw table because the filter hooks that fw-apply keeps at the top
 of FORWARD/INPUT (`DOCKER-*`, `ts-forward`, `ts-input`, `LIBVIRT_*`) run before the managed
 filter rules; `ts-forward`, for example, accepts anything routed out `tailscale0`.
 
