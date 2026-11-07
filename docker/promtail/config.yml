@@ -81,10 +81,11 @@ scrape_configs:
           replace: 'REDACTED'
 
   # Docker container logs (json-file driver)
-  # Discovers containers via Docker socket, reads JSON log files
+  # Discovers containers through the read-only Docker API proxy
+  # (docker-socket-proxy-ro) and tails their logs from it
   - job_name: docker
     docker_sd_configs:
-      - host: unix:///var/run/docker.sock
+      - host: tcp://docker-socket-proxy-ro:2375
         refresh_interval: 30s
     relabel_configs:
       - source_labels: ['__meta_docker_container_name']

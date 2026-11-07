@@ -112,6 +112,10 @@ networks:
   loki-backend:
     driver: bridge
     internal: true
+  # promtail <-> docker-socket-proxy-ro (read-only Docker API for log discovery)
+  docker-ro:
+    driver: bridge
+    internal: true
   # ollama <-> its clients (paperless-ai). Ollama has no authentication, so it
   # is on no LAN VLAN and has no egress; only containers attached here reach
   # it. Model pulls: see docs/ollama.md.
@@ -162,6 +166,43 @@ services:
       - NETWORKS=0
       - VOLUMES=0
       - POST=1  # Needed for build/push
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:2375/_ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Read-only Docker API for promtail's container discovery and log tailing:
+  # GET on containers (list, inspect, logs) and events only. No POST, so
+  # nothing can be started, changed or exec'd through it. Separate from
+  # docker-socket-proxy, which CI builds use with POST enabled.
+  docker-socket-proxy-ro:
+    container_name: docker-socket-proxy-ro
+    security_opt:
+      - no-new-privileges=true
+    cap_drop:
+      - ALL
+    image: tecnativa/docker-socket-proxy:v0.5.0@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459
+    restart: unless-stopped
+    networks:
+      docker-ro:
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - CONTAINERS=1
+      - EVENTS=1
+      - POST=0
+      - BUILD=0
+      - COMMIT=0
+      - IMAGES=0
+      - EXEC=0
+      - NETWORKS=0
+      - VOLUMES=0
+      - AUTH=0
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:2375/_ping"]
       interval: 30s
@@ -921,9 +962,10 @@ services:
       - {{ docker_persistent_data_path }}/promtail:/tmp/positions
       - {{ docker_persistent_data_path }}/promtail/config.yml:/etc/promtail/config.yml:ro
       - {{ docker_persistent_data_path }}/vault/logs:/vault/logs:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - {{ docker_persistent_data_path }}/docker/containers:/var/lib/docker/containers:ro
     command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - docker-socket-proxy-ro
     ports:
       - "1514:1514/udp"   # Syslog from network devices (Aruba switches)
     extra_hosts:
@@ -931,6 +973,7 @@ services:
     networks:
       internal:
         ipv4_address: {{ promtail_ip }}
+      docker-ro:
     # Promtail is a lightweight log shipper; ~85MB typical, spikes to ~245MB during
     # log bursts (observed 2026-06-01). 384M leaves ~36% headroom on the spike peak.
     deploy:
