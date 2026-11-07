@@ -1,0 +1,6 @@
+# Never reboots the host. Boot config changes apply at the next boot.
+- name: Report that the boot config needs a reboot
+  ansible.builtin.debug:
+    msg: >-
+      The firmware config or kernel command line on {{ inventory_hostname }}
+      changed. It takes effect at the next reboot; nothing was rebooted.

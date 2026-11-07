@@ -18,10 +18,23 @@
   community.general.timezone:
     name: America/New_York
 
+# Bookworm layout: the FAT boot partition is mounted at /boot/firmware and
+# /boot/config.txt is only a stub the firmware never reads (configure-pi-boot,
+# docs/raspberry-pi.md). Legacy layout: /boot is the boot partition.
+- name: Check whether the boot partition is at /boot/firmware
+  ansible.builtin.command:
+    argv: [mountpoint, -q, /boot/firmware]
+  register: _snapclient_fw_mount
+  changed_when: false
+  failed_when: _snapclient_fw_mount.rc not in [0, 1]
+  check_mode: false
+
+# Replaces the whole firmware config, so the template also carries what other
+# roles would otherwise add to it (auto_initramfs, the watchdog dtparam).
 - name: Template out base configuration file
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/snapclient/config.txt"
-    dest: "/boot/config.txt"
+    dest: "{{ '/boot/firmware/config.txt' if _snapclient_fw_mount.rc == 0 else '/boot/config.txt' }}"
 
 - name: Add armhf architecture for snapclient
   command: dpkg --add-architecture armhf

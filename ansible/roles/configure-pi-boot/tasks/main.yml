@@ -1,0 +1,87 @@
+# Raspberry Pi boot layout on bookworm and later (docs/raspberry-pi.md):
+#   - the FAT boot partition is mounted at /boot/firmware. The firmware reads
+#     config.txt, cmdline.txt, kernel8.img and initramfs8 from its root;
+#   - the kernel comes from linux-image-rpi-v8, and raspi-firmware's hooks
+#     copy it there;
+#   - auto_initramfs=1 makes the firmware load initramfs8 with kernel8.img.
+# A host on the legacy layout (/boot is the FAT partition, frozen
+# raspberrypi-kernel package) fails the check below: moving it needs a reboot
+# and is done by hand, see the doc. This role never reboots.
+- name: Raspberry Pi boot layout (bookworm and later)
+  when: ansible_distribution_release != 'bullseye'
+  block:
+    - name: Check that /boot/firmware is a mount point
+      ansible.builtin.command:
+        argv: [mountpoint, -q, /boot/firmware]
+      register: _pi_boot_fw_mount
+      changed_when: false
+      failed_when: _pi_boot_fw_mount.rc not in [0, 1]
+      check_mode: false
+
+    - name: Refuse the legacy /boot layout
+      ansible.builtin.assert:
+        that: _pi_boot_fw_mount.rc == 0
+        fail_msg: >-
+          /boot/firmware is not a mount point on {{ inventory_hostname }}: it
+          still uses the legacy /boot layout. Migrate it by hand
+          (docs/raspberry-pi.md); installing raspi-firmware without the
+          mount fails.
+        quiet: true
+
+    - name: Install the kernel and boot firmware packages
+      ansible.builtin.apt:
+        name: "{{ pi_boot_kernel_packages }}"
+        state: present
+      # skipped when all are installed (installed_packages: playbook pre_tasks)
+      when: pi_boot_kernel_packages | difference(installed_packages | default([])) | length > 0
+
+    # bookworm's raspberrypi-net-mods (1.4.x) only exists to pull in
+    # NetworkManager for the desktop Wi-Fi UI. These hosts are wired and keep
+    # dhcpcd, so the package is removed instead of being held back (a hold
+    # blocks every later upgrade).
+    - name: Remove raspberrypi-net-mods
+      ansible.builtin.apt:
+        name: raspberrypi-net-mods
+        state: absent
+        purge: true
+      when: "'raspberrypi-net-mods' in (installed_packages | default(['raspberrypi-net-mods']))"
+
+    - name: Load initramfs8 with the kernel
+      ansible.builtin.lineinfile:
+        path: /boot/firmware/config.txt
+        regexp: '^\s*#?\s*auto_initramfs='
+        line: auto_initramfs=1
+        # Above the first [filter] section, so it applies to every board.
+        insertbefore: '^\['
+        firstmatch: true
+        # No backup: true. FAT rejects the ":" in lineinfile's backup name.
+      notify: Report that the boot config needs a reboot
+
+    # cmdline.txt is a single line, and a broken one leaves the Pi unbootable,
+    # so it is rebuilt from its words rather than edited with a regex.
+    - name: Read the kernel command line
+      ansible.builtin.slurp:
+        src: /boot/firmware/cmdline.txt
+      register: _pi_boot_cmdline_raw
+
+    - name: Work out the kernel command line
+      ansible.builtin.set_fact:
+        _pi_boot_cmdline_old: "{{ (_pi_boot_cmdline_raw.content | b64decode).split() }}"
+        _pi_boot_cmdline_new: >-
+          {{ ((_pi_boot_cmdline_raw.content | b64decode).split()
+              | reject('match', '^(' ~ (pi_boot_cmdline_params | map('regex_replace', '=.*$', '')
+                                         | map('regex_escape') | join('|')) ~ ')(=|$)')
+              | list) + pi_boot_cmdline_params }}
+
+    - name: Check the new kernel command line still has its root device
+      ansible.builtin.assert:
+        that: _pi_boot_cmdline_new | select('match', '^root=') | list | length == 1
+        fail_msg: "Refusing to write a kernel command line without root=: {{ _pi_boot_cmdline_new | join(' ') }}"
+        quiet: true
+
+    - name: Write the kernel command line
+      ansible.builtin.copy:
+        content: "{{ _pi_boot_cmdline_new | join(' ') }}\n"
+        dest: /boot/firmware/cmdline.txt
+      when: _pi_boot_cmdline_new != _pi_boot_cmdline_old
+      notify: Report that the boot config needs a reboot

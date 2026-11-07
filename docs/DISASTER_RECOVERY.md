@@ -273,8 +273,9 @@ zwave-js-ui's store. The store is backed up nightly to the router
 `s2_access_control_lr` when Long Range keys exist). Without the keys, secure
 devices (locks, garage) have to be excluded and re-included.
 
-1. Flash Raspberry Pi OS Lite onto the new card or SSD and boot the Pi with
-   the Z-Wave stick plugged in. It gets 10.6.128.6 from the router's DHCP
+1. Flash Raspberry Pi OS Lite (bookworm or later, 64-bit; the deploy needs
+   its `/boot/firmware` layout, `docs/raspberry-pi.md`) onto the new card or
+   SSD and boot the Pi with the Z-Wave stick plugged in. It gets 10.6.128.6 from the router's DHCP
    (`zwave_mac` in the inventory).
 2. Enable root SSH with the router's key, then update the pinned host keys:
    the new install has new ones, so both `ansible/known_hosts` (CI,
