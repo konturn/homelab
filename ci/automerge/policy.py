@@ -508,6 +508,69 @@ def zero_minor_services(allowlist: dict) -> Set[str]:
     return out
 
 
+# ---------------------------------------------------------------------------
+# Pre-upgrade backups
+# ---------------------------------------------------------------------------
+# A service whose version change migrates its data one way (Home Assistant's
+# recorder and .storage, InfluxDB's metadata) sets `pre_upgrade_backup: <type>`.
+# Before a version (minor) update of it is deployed, the per-service deploy
+# takes a backup with ci/automerge/pre-upgrade-backup.sh, and restores it if
+# the rollback fires. Digest and patch updates take none.
+
+PRE_UPGRADE_TYPES = ("homeassistant", "influxdb")
+PRE_UPGRADE_KINDS = ("minor",)
+
+
+def pre_upgrade_config(allowlist: dict) -> dict:
+    """Validated `pre_upgrade_backups` section plus the per-service types:
+    {dir, keep, rate_mb, timeout, services: {service: type}}. Raises
+    PolicyError on anything malformed, so a typo fails closed."""
+    services = {}
+    for name, svc in (allowlist.get("services") or {}).items():
+        t = (svc or {}).get("pre_upgrade_backup")
+        if t is None:
+            continue
+        if t not in PRE_UPGRADE_TYPES:
+            raise PolicyError(f"service {name}: `pre_upgrade_backup` must be one of {list(PRE_UPGRADE_TYPES)}")
+        services[name] = t
+    sec = allowlist.get("pre_upgrade_backups")
+    if sec is None and not services:
+        return {"dir": "", "keep": 2, "rate_mb": 40, "timeout": 1800, "services": {}}
+    if not isinstance(sec, dict):
+        raise PolicyError("`pre_upgrade_backups` must be a mapping (dir, keep, rate_mb, timeout)")
+    root = sec.get("dir")
+    if not isinstance(root, str) or not root.startswith("/") or root.rstrip("/") in ("", "/") \
+            or root.startswith("/persistent_data"):
+        raise PolicyError("pre_upgrade_backups.dir must be an absolute path on the ZFS pool")
+    out = {"dir": root.rstrip("/"), "services": services}
+    for key, default, low in (("keep", 2, 1), ("rate_mb", 40, 1), ("timeout", 1800, 60)):
+        value = sec.get(key, default)
+        if not isinstance(value, int) or isinstance(value, bool) or value < low:
+            raise PolicyError(f"pre_upgrade_backups.{key} must be an integer >= {low}")
+        out[key] = value
+    return out
+
+
+def _path_part(tag: Optional[str]) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]", "_", tag or "untagged")
+
+
+def pre_upgrade_backups(changes: List["ImageChange"], allowlist: dict, stamp: str) -> Dict[str, dict]:
+    """service -> {type, dir} for the changes that need a pre-upgrade backup:
+    version (minor) updates of services with `pre_upgrade_backup`. `stamp` is
+    the UTC time (YYYYmmddTHHMMSSZ) that starts each backup directory name."""
+    cfg = pre_upgrade_config(allowlist)
+    out = {}
+    for c in changes:
+        t = cfg["services"].get(c.service)
+        if t and c.kind in PRE_UPGRADE_KINDS:
+            out[c.service] = {
+                "type": t,
+                "dir": f"{cfg['dir']}/{c.service}/{stamp}-{_path_part(c.old.tag)}-to-{_path_part(c.new.tag)}",
+            }
+    return out
+
+
 def allowed_kinds(service: str, image: str, allowlist: dict) -> Tuple[str, ...]:
     """Update kinds a service may take for this image (empty: none)."""
     if deny_reason(service, image, allowlist):
@@ -645,7 +708,7 @@ def evaluate_mr(*, author: str, target_branch: str, labels: List[str],
         deployments = default_deployments(allowlist)
 
     # A malformed policy section fails closed for every MR.
-    for check in (fast_track_config, denylist):
+    for check in (fast_track_config, denylist, pre_upgrade_config):
         try:
             check(allowlist)
         except PolicyError as e:
@@ -728,6 +791,11 @@ def evaluate_mr(*, author: str, target_branch: str, labels: List[str],
         v.notes.append(f"{c.service}: {c.kind} update {c.old.tag or ''} -> {c.new.tag or ''}"
                        f" ({(c.new.digest or '')[:19]})"
                        + (f" [{c.file}]" if c.file != COMPOSE_PATH else ""))
+    try:
+        for svc, b in pre_upgrade_backups(v.changes, allowlist, "now").items():
+            v.notes.append(f"{svc}: {b['type']} pre-upgrade backup before the deploy, restored on rollback")
+    except PolicyError:
+        pass    # already rejected above
     if v.deploy_jobs:
         v.notes.append("deploys via " + ", ".join(f"{j}:deploy-service" for j in v.deploy_jobs))
     if not changed_composes and v.eligible:

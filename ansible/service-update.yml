@@ -11,6 +11,12 @@
 #   -e automerge_host=<inventory host>  the plan's `host` (selects the play's host)
 #   AUTOMERGE_PLAN    JSON plan written by `ci/automerge/automerge.py plan-deploy --host`
 #   AUTOMERGE_RESULT  path where the outcome JSON is written (on the controller)
+#
+# Pre-upgrade backups: a version update of a service with
+# `pre_upgrade_backup` in ci/automerge-policy.yml (Home Assistant, InfluxDB)
+# is backed up by ci/automerge/pre-upgrade-backup.sh before the new image
+# starts, and the backup is restored before the rollback starts the previous
+# image (docs/AUTOMERGE.md, "Pre-upgrade backups").
 - hosts: "{{ automerge_host }}"
   vars:
     automerge_plan: "{{ lookup('file', lookup('env', 'AUTOMERGE_PLAN')) | from_json }}"
@@ -18,6 +24,11 @@
     automerge_services: "{{ automerge_plan.services | map(attribute='service') | list }}"
     automerge_project: "{{ docker_compose_project_name | default('docker') }}"
     automerge_health_script: "{{ lookup('env', 'CI_PROJECT_DIR') }}/ci/automerge/wait-healthy.sh"
+    automerge_pre_upgrade_script: "{{ lookup('env', 'CI_PROJECT_DIR') }}/ci/automerge/pre-upgrade-backup.sh"
+    automerge_backups: >-
+      {{ automerge_plan.services | selectattr('pre_upgrade_backup', 'defined')
+         | selectattr('pre_upgrade_backup') | list }}
+    automerge_pre_upgrade: "{{ automerge_plan.pre_upgrade | default({}) }}"
 
   pre_tasks:
     - name: Validate deploy plan
@@ -31,6 +42,17 @@
         fail_msg: >-
           AUTOMERGE_PLAN has no services, AUTOMERGE_RESULT is unset, or the plan is for
           another host or for compose files this host does not render
+
+    - name: Validate pre-upgrade backup targets
+      ansible.builtin.assert:
+        that:
+          - automerge_pre_upgrade.dir | default('') | length > 1
+          - item.backup_dir.startswith(automerge_pre_upgrade.dir ~ '/' ~ item.service ~ '/')
+          - "'..' not in item.backup_dir"
+        fail_msg: "{{ item.service }}: backup_dir is not under pre_upgrade.dir/{{ item.service }}"
+      loop: "{{ automerge_backups }}"
+      loop_control:
+        label: "{{ item.service }}"
 
     - name: Show deploy plan
       ansible.builtin.debug:
@@ -68,6 +90,52 @@
             executable: /bin/bash
           changed_when: false
           when: "'nextcloud' in automerge_services"
+
+        # A version update of a service whose new version migrates its data one
+        # way: back up that data first. The script pulls the new image, takes
+        # any online copy, then stops the container and copies the rest, so
+        # the service is down about as long as the recreate below takes.
+        - name: Pre-upgrade backup
+          ansible.builtin.script:
+            cmd: >-
+              {{ automerge_pre_upgrade_script }} backup
+              --type {{ item.pre_upgrade_backup | quote }}
+              --project {{ automerge_project | quote }}
+              --service {{ item.service | quote }}
+              --dir {{ item.backup_dir | quote }}
+              --new-image {{ item.new | quote }}
+              --rate {{ automerge_pre_upgrade.rate_mb | default(40) | int }}
+            executable: /bin/bash
+          loop: "{{ automerge_backups }}"
+          loop_control:
+            label: "{{ item.service }}"
+          register: automerge_backup_out
+          timeout: "{{ automerge_pre_upgrade.timeout | default(1800) | int }}"
+
+        - name: Pre-upgrade backup output
+          ansible.builtin.debug:
+            msg: "{{ automerge_backup_out.results | map(attribute='stdout_lines') | list }}"
+          when: automerge_backups | length > 0
+
+        # Keep the newest `keep` backups per service (this one included). A
+        # failure here does not fail the deploy.
+        - name: Prune old pre-upgrade backups
+          ansible.builtin.script:
+            cmd: >-
+              {{ automerge_pre_upgrade_script }} prune
+              --dir {{ item.backup_dir | dirname | quote }}
+              --keep {{ automerge_pre_upgrade.keep | default(2) | int }}
+            executable: /bin/bash
+          loop: "{{ automerge_backups }}"
+          loop_control:
+            label: "{{ item.service }}"
+          ignore_errors: true
+
+        # From here on the new image may have run (and migrated its data), so
+        # the rollback restores the pre-upgrade backups.
+        - name: Mark the upgrade as started
+          ansible.builtin.set_fact:
+            automerge_upgrade_started: true
 
         - name: Pull and recreate only the target services
           community.docker.docker_compose_v2:
@@ -137,6 +205,42 @@
           vars:
             compose_src_dir: "{{ automerge_plan.prev_compose_dir }}"
 
+        # Only once the new image may have started: a failed backup leaves
+        # the data as it was. The script stops the container first; the next
+        # task starts the previous image on the restored data. A failed
+        # restore still starts the previous image, but the rollback counts as
+        # unhealthy, so the issue says to restore by hand.
+        - name: ROLLBACK - restore pre-upgrade backups
+          ansible.builtin.script:
+            cmd: >-
+              {{ automerge_pre_upgrade_script }} restore
+              --type {{ item.pre_upgrade_backup | quote }}
+              --project {{ automerge_project | quote }}
+              --service {{ item.service | quote }}
+              --dir {{ item.backup_dir | quote }}
+              --rate {{ automerge_pre_upgrade.rate_mb | default(40) | int }}
+            executable: /bin/bash
+          loop: "{{ automerge_backups }}"
+          loop_control:
+            label: "{{ item.service }}"
+          register: automerge_restore
+          timeout: "{{ automerge_pre_upgrade.timeout | default(1800) | int }}"
+          ignore_errors: true
+          when: automerge_upgrade_started | default(false)
+
+        - name: ROLLBACK - restore output
+          ansible.builtin.debug:
+            msg: "{{ automerge_restore.results | default([]) | map(attribute='stdout_lines', default=[]) | list }}"
+          when: automerge_upgrade_started | default(false) and automerge_backups | length > 0
+
+        - name: ROLLBACK - record restores
+          ansible.builtin.set_fact:
+            automerge_restored: "{{ automerge_restored | default([]) + [{'service': item.item.service, 'ok': item is succeeded}] }}"
+          loop: "{{ automerge_restore.results | default([]) }}"
+          loop_control:
+            label: "{{ item.item.service | default('?') }}"
+          when: item is not skipped
+
         - name: ROLLBACK - recreate target services on their previous image
           community.docker.docker_compose_v2:
             project_name: "{{ automerge_project }}"
@@ -173,11 +277,19 @@
           ansible.builtin.debug:
             msg: "{{ automerge_rollback_health.results | default([]) | map(attribute='stdout_lines', default=[]) | list }}"
 
+        - name: ROLLBACK - outcome
+          ansible.builtin.set_fact:
+            automerge_restores_ok: "{{ automerge_restored | default([]) | rejectattr('ok') | list | length == 0 }}"
+            automerge_rollback_ok: >-
+              {{ automerge_rollback_up is succeeded and automerge_rollback_health is succeeded
+                 and automerge_restored | default([]) | rejectattr('ok') | list | length == 0 }}
+
         - name: Write failure result
           ansible.builtin.copy:
             content: "{{ {'status': 'failed', 'failure': automerge_failure,
-                          'rollback_healthy': (automerge_rollback_up is succeeded
-                                               and automerge_rollback_health is succeeded)} | to_nice_json }}"
+                          'rollback_healthy': automerge_rollback_ok | bool,
+                          'upgrade_started': automerge_upgrade_started | default(false),
+                          'restored': automerge_restored | default([])} | to_nice_json }}"
             dest: "{{ automerge_result_file }}"
             mode: '0644'
           delegate_to: localhost
@@ -187,8 +299,8 @@
             msg: >-
               Per-service deploy of {{ automerge_services | join(', ') }} failed ({{ automerge_failure }}).
               Rolled back to the previous image:
-              {{ 'healthy' if (automerge_rollback_up is succeeded and automerge_rollback_health is succeeded)
-                 else 'STILL UNHEALTHY' }}.
+              {{ 'healthy' if automerge_rollback_ok | bool else 'STILL UNHEALTHY' }}{{
+                 '' if automerge_restores_ok | bool else ' (a pre-upgrade restore FAILED)' }}.
 
     - name: Write success result
       ansible.builtin.copy:
