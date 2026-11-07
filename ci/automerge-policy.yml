@@ -6,6 +6,8 @@
 #   - services and images on the `denylist` below,
 #   - services that run only under a compose profile (e.g. `wordpress`),
 #   - update kinds a service's entry under `services` restricts.
+# Version updates of services whose data migrates one way (Home Assistant,
+# InfluxDB) are backed up before they deploy (`pre_upgrade_backup` below).
 # Those wait for a human; the sweep labels them `automerge-manual`.
 # This file is CODEOWNERS-protected.
 
@@ -103,6 +105,21 @@ freeze_label: freeze
 # Default seconds to wait for a service to become healthy after deploy.
 default_health_timeout: 600
 
+# Pre-upgrade backups (docs/AUTOMERGE.md, "Pre-upgrade backups"). A version
+# (minor) update of a service with `pre_upgrade_backup` is backed up by
+# ci/automerge/pre-upgrade-backup.sh before the new image starts, into
+# <dir>/<service>/<UTC time>-<old tag>-to-<new tag>, and restored if the
+# rollback fires. The newest `keep` backups per service are kept. `dir` must
+# be on the ZFS pool (the script refuses anything else): copies onto or off
+# /persistent_data are limited to `rate_mb` MB/s, because a full-speed 14 GB
+# copy there on 2026-10-20 starved Vault. `timeout` (seconds) bounds each
+# backup and each restore.
+pre_upgrade_backups:
+  dir: /mpool/backups/automerge-pre-upgrade
+  keep: 2
+  rate_mb: 40
+  timeout: 1800
+
 # Per-service options (compose service name). A service needs no entry to be
 # auto-merged; list it only to set one of:
 #   probe:   URL that must return 2xx/3xx after deploy. Requests are sent to
@@ -117,6 +134,9 @@ default_health_timeout: 600
 #   zero_minor_is_minor: true counts a 0.x minor (0.163 -> 0.165) as a minor
 #            update instead of a major one, for projects that ship routine
 #            releases as 0.x minors. Majors stay manual.
+#   pre_upgrade_backup: homeassistant | influxdb. Before a version (minor)
+#            update deploys, back up the data its new version migrates one
+#            way, and restore it on rollback (see pre_upgrade_backups above).
 # Without a probe the gate is the container's own healthcheck. Every
 # long-running service in the deployed compose files has one; services
 # without one are on the denylist (checked by test_fast_track.py).
@@ -140,11 +160,13 @@ services:
     probe_via: external
   deluge:
     probe: https://deluge.lab.nkontur.com/
-  # home automation. Home Assistant's monthly (minor) releases migrate its
-  # recorder database, so they stay reviewed.
+  # home automation. Home Assistant's monthly (minor) releases can migrate
+  # .storage and the recorder database (SQLite) one way, so a minor update is
+  # backed up first: /config without the database, and the database itself
+  # only when the new image's recorder schema differs from the database's.
   homeassistant:
     probe: https://homeassistant.lab.nkontur.com/manifest.json
-    updates: [digest, patch]
+    pre_upgrade_backup: homeassistant
   # observability
   grafana:
     probe: https://grafana.lab.nkontur.com/api/health
@@ -155,10 +177,13 @@ services:
   # the health gate and the sweep rolls it back.
   otel-collector:
     zero_minor_is_minor: true
-  # InfluxDB 2.x minor releases migrate its metadata store one way (going
-  # back needs `influxd downgrade`), so they stay reviewed.
+  # InfluxDB 2.x minor releases migrate its metadata (influxd.bolt,
+  # influxd.sqlite) one way, and `influxd downgrade` cannot go back to a 2.8 or
+  # later release (2.9.1 knows only 2.0-2.4 as targets, which would also drop
+  # hashed tokens). So a minor update copies both files with influxd stopped,
+  # and the rollback puts them back. The TSM data is not migrated by a minor.
   influxdb:
-    updates: [digest, patch]
+    pre_upgrade_backup: influxdb
   # reverse proxies
   nginx:
     probe: https://nkontur.com/

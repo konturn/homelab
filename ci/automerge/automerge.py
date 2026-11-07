@@ -704,6 +704,11 @@ def cmd_plan_deploy(args: argparse.Namespace) -> int:
             (prev_dir / Path(path).name).write_text(git_show(first_parent, path) or "")
     timeout_default = int(allow.get("default_health_timeout", 600))
     services = allow["services"]
+    try:
+        pre_cfg = policy.pre_upgrade_config(allow)
+        backups = policy.pre_upgrade_backups(host_changes, allow, now().strftime("%Y%m%dT%H%M%SZ"))
+    except policy.PolicyError as e:
+        return abort(f"pre_upgrade_backups: {e}")
     plan = {
         "mr_iid": mr["iid"], "mr_url": mr["web_url"], "mr_title": mr["title"],
         "merge_sha": sha, "first_parent": first_parent, "prev_compose_dir": str(prev_dir),
@@ -715,12 +720,18 @@ def cmd_plan_deploy(args: argparse.Namespace) -> int:
             "probe": (services.get(c.service) or {}).get("probe") or "",
             "probe_via": (services.get(c.service) or {}).get("probe_via") or "",
             "timeout": int((services.get(c.service) or {}).get("timeout") or timeout_default),
+            # pre-upgrade backup (version updates of migrating services only)
+            "pre_upgrade_backup": (backups.get(c.service) or {}).get("type", ""),
+            "backup_dir": (backups.get(c.service) or {}).get("dir", ""),
         } for c in host_changes],
+        "pre_upgrade": {k: pre_cfg[k] for k in ("dir", "keep", "rate_mb", "timeout")},
     }
     out.write_text(json.dumps(plan, indent=2))
     log(f"Deploy plan for !{mr['iid']} ({sha[:12]}) on {dep.host}:")
     for s in plan["services"]:
         log(f"  {s['service']}: {s['old']} -> {s['new']} (probe: {s['probe'] or 'none'}, timeout {s['timeout']}s)")
+        if s["pre_upgrade_backup"]:
+            log(f"    pre-upgrade backup ({s['pre_upgrade_backup']}) to {s['backup_dir']}")
     return 0
 
 
@@ -736,9 +747,13 @@ def cmd_deploy_report(args: argparse.Namespace) -> int:
     job = os.environ.get("CI_JOB_URL", "n/a")
     host = plan.get("host") or "router.lab.nkontur.com"
     svc_list = ", ".join(s["service"] for s in plan["services"])
+    backups = [s for s in plan["services"] if s.get("pre_upgrade_backup")]
     if args.status == "success":
-        gl.write("POST", f"projects/{PROJECT}/merge_requests/{iid}/notes",
-                 {"body": f"Deployed and healthy on {host}: {svc_list} ({job})."})
+        body = f"Deployed and healthy on {host}: {svc_list} ({job})."
+        if backups:
+            body += " Pre-upgrade backup kept on the host: " + ", ".join(
+                f"`{s['backup_dir']}`" for s in backups) + "."
+        gl.write("POST", f"projects/{PROJECT}/merge_requests/{iid}/notes", {"body": body})
         return 0
 
     gl.ensure_labels()
@@ -754,6 +769,7 @@ def cmd_deploy_report(args: argparse.Namespace) -> int:
         f"- Deploy job: {job}",
         f"- Merge commit: {plan['merge_sha']}",
         f"- Failure: {result.get('failure') or 'see job log'}",
+    ] + restore_lines(backups, result) + [
         "",
         "| service | from | to |", "|---|---|---|",
     ] + [f"| {s['service']} | `{s['old']}` | `{s['new']}` |" for s in plan["services"]] + [
@@ -785,6 +801,28 @@ def cmd_deploy_report(args: argparse.Namespace) -> int:
     mail_root(f"Homelab auto-merge ROLLBACK: {svc_list} on {host.split('.')[0]} (!{iid})",
               "\n".join(body + ["", f"Issue: {issue_ref}", f"MR: {plan['mr_url']}"]) + "\n")
     return 0
+
+
+def restore_lines(backups: List[dict], result: dict) -> List[str]:
+    """Issue lines on the pre-upgrade backups of a failed deploy. `result`
+    (service-update.yml) says whether the new image was started
+    (`upgrade_started`) and lists the restores it ran (`restored`)."""
+    if not backups:
+        return []
+    restored = {r.get("service"): r.get("ok") for r in result.get("restored") or []}
+    lines = []
+    for s in backups:
+        svc, where = s["service"], s["backup_dir"]
+        if not result.get("upgrade_started"):
+            state = "new image never started; nothing to restore"
+        elif svc not in restored:
+            state = "restore did not run - check the host"
+        elif restored[svc]:
+            state = "restored before the previous image was started"
+        else:
+            state = "RESTORE FAILED - restore by hand (docs/AUTOMERGE.md, \"Pre-upgrade backups\")"
+        lines.append(f"- Pre-upgrade backup of {svc} (`{where}`): {state}")
+    return lines
 
 
 def open_revert_mr(gl: GitLab, plan: dict) -> Optional[int]:

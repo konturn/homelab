@@ -4,7 +4,10 @@ Container image updates in the deployed compose files merge and deploy
 without a manual review: digest refreshes, digest pins, and patch and minor
 releases, for every service, unless one of the exceptions below applies. Each
 merge deploys only the changed services, waits for them to become healthy,
-and rolls back automatically if they do not.
+and rolls back automatically if they do not. Version updates of Home
+Assistant and InfluxDB, whose data migrates one way, are backed up first and
+the backup is restored by the rollback (see
+[Pre-upgrade backups](#pre-upgrade-backups)).
 
 What stays with a human:
 
@@ -189,8 +192,10 @@ someone merges or closes them. A checklist for merging one by hand:
 | Service | `updates` | Why |
 |---|---|---|
 | `nextcloud`, `bitwarden` | digest | A new version runs a one-way migration on start (`occ upgrade`, Vaultwarden's schema). |
-| `homeassistant` | digest, patch | Monthly (minor) releases migrate its recorder database. |
-| `influxdb` | digest, patch | 2.x minor releases migrate its metadata store one way (`influxd downgrade` to go back). |
+
+Home Assistant and InfluxDB also migrate their data on a minor release, but
+they take every non-major kind: the deploy backs their data up first and the
+rollback restores it ([Pre-upgrade backups](#pre-upgrade-backups)).
 
 Their other non-major updates wait for a human, who merges them through the
 normal review and full deploy.
@@ -248,7 +253,7 @@ The services published through the external reverse proxy
 |---|---|---|---|
 | `plexinc/pms-docker` | plex | digest, patch | |
 | `linuxserver/ombi` | ombi | digest, patch | |
-| `homeassistant/home-assistant` | homeassistant | digest, patch | minors stay reviewed (restricted kind) |
+| `homeassistant/home-assistant` | homeassistant | digest, patch | minors go through the general class, with a pre-upgrade backup |
 | `lscr.io/linuxserver/deluge` | deluge | digest, patch | peer port forwarded through the VPN |
 | `izderadicka/audioserve` | booksonic | digest | floating `latest` tag |
 | `nextcloud` | nextcloud | digest | a new version runs `occ upgrade` on start |
@@ -325,9 +330,11 @@ in its host's resource group (`deploy-router`, `deploy-zwave`,
    run the manual `<host>:deploy` if a full deploy is wanted.
 2. `ansible/service-update.yml` (play host from the plan) fetches secrets,
    renders the host's compose files with the same task as the full deploy
-   (`configure-homelab-services` `render_compose.yml`), then pulls and
-   recreates **only** the changed services in that host's compose project
-   (`dependencies: false`, no orphan removal).
+   (`configure-homelab-services` `render_compose.yml`), takes the
+   [pre-upgrade backup](#pre-upgrade-backups) of a version update of Home
+   Assistant or InfluxDB, then pulls and recreates **only** the changed
+   services in that host's compose project (`dependencies: false`, no orphan
+   removal).
 3. Health gate (`ci/automerge/wait-healthy.sh`, per service, up to `timeout`,
    default 600s). The container (found by its compose project and service
    labels) must run the new digest, its Docker healthcheck must report
@@ -340,8 +347,9 @@ in its host's resource group (`deploy-router`, `deploy-zwave`,
    and is not denylisted.
    For Nextcloud, see [Digest-only services and rollback](#digest-only-services-and-rollback).
 4. On failure the playbook renders the **pre-merge** compose files (the merge
-   commit's first parent), recreates the same services on their previous image,
-   runs the health gate again, and fails the job. Then `automerge.py deploy-report`:
+   commit's first parent), restores the pre-upgrade backups (only if the new
+   image may have started), recreates the same services on their previous
+   image, runs the health gate again, and fails the job. Then `automerge.py deploy-report`:
    - opens (or updates) an issue labelled `automerge-rollback` with the host,
      the failure and whether the rollback is healthy;
    - opens a revert MR (`automerge-revert/<iid>`) that restores the previous image
@@ -365,9 +373,111 @@ Alerts:
   `Container Health Check Failed` alert (email) after 10 minutes.
 
 Rendering and recreating the previous image is idempotent, so you can retry the
-job safely. Rollback restores the **image**, not data. A service whose upgrade
-migrates its data on start may not run cleanly on the old image: restrict its
-`updates:` (see [Restricted kinds](#restricted-kinds)).
+job safely. Rollback restores the **image**, not data, except for the
+services with a [pre-upgrade backup](#pre-upgrade-backups). Any other service
+whose upgrade migrates its data on start may not run cleanly on the old image:
+restrict its `updates:` (see [Restricted kinds](#restricted-kinds)), or give it
+a pre-upgrade backup type.
+
+## Pre-upgrade backups
+
+Home Assistant's monthly releases can migrate `.storage` and its recorder
+database, and InfluxDB 2.x minor releases migrate its metadata store. Starting
+the previous image on migrated data fails or misbehaves, so these services
+set `pre_upgrade_backup:` in the policy, and for a **minor** update of them
+(not a digest refresh or a patch) the per-service deploy runs
+`ci/automerge/pre-upgrade-backup.sh`:
+
+- `backup` before the new image starts: it pulls the new image, takes any
+  online copy, then stops the container and copies the rest, so the service is
+  down about as long as a normal recreate. A failed backup fails the deploy
+  before the new image runs (the normal failure path: the previous image is
+  started again, the rollback issue and revert MR are opened).
+- `restore` in the rollback, after the new image may have started and before
+  the previous image starts: it stops the container and puts the copied files
+  back. A failed restore still starts the previous image, but the rollback
+  counts as unhealthy and the issue says `RESTORE FAILED`.
+- `prune` after each backup keeps the newest `keep` (2) backups per service.
+
+Backups go to `/mpool/backups/automerge-pre-upgrade/<service>/<UTC time>-<old
+tag>-to-<new tag>/` (`pre_upgrade_backups` in the policy), on the ZFS pool.
+The script refuses any other filesystem: on 2026-10-20 a full-speed 14 GB copy
+onto `/persistent_data` (one SATA SSD) starved Vault, which broke deploys and
+DHCP. Copies off or onto `/persistent_data` are therefore limited to
+`rate_mb` (40 MB/s). `ionice` would not help: the disks use `mq-deadline`,
+which ignores I/O priorities. `timeout` (1800 s) bounds each backup and each
+restore. A directory is usable only once it holds `COMPLETE`; `INFO` records
+the images and what was copied. The deploy note on the MR names the directory.
+
+### Home Assistant
+
+The recorder is SQLite (`home-assistant_v2.db` in `/config`, about 14 GB with
+`purge_keep_days: 1000`); the script refuses an external recorder (`db_url`).
+
+- **Database**: copied only if the recorder schema changes. The script reads
+  `SCHEMA_VERSION` from the new image (`homeassistant.components.recorder.db_schema`,
+  in a throwaway container without network) and compares it with the
+  database's (`schema_changes`). The schema has been 53 since 2025-12, so most
+  monthly releases copy nothing. When it changes (or the new image's version
+  cannot be read), the database is copied online with SQLite's backup API
+  inside one read transaction: a consistent snapshot while Home Assistant keeps
+  running and writing (WAL mode), at 40 MB/s, about 6 minutes for 14 GB.
+  Measured on 2026-11-07 (real database, 14 GB in 337 s): the SSD ran at
+  about 45% utilization (short peaks near 80%) and Vault's health endpoint
+  stayed at 40-55 ms.
+- **Configuration**: with Home Assistant stopped (so `.storage` is flushed),
+  `/config` without the recorder database, logs, `.cache`, `deps` and `tts`
+  (about 230 MB, most of it `www`), also at 40 MB/s.
+- **Restore**: `rsync --delete` of the configuration back (the excluded paths
+  are neither copied nor deleted), then, if the database was copied, the
+  database at 40 MB/s (Home Assistant stays down for those ~6 minutes), with
+  the new version's `-wal`/`-shm` removed.
+
+Why not the alternatives: the nightly restic backup copies the database file
+raw (it is not among the logical dumps), restoring it from B2 is slow, and it
+would lose up to a day of history; the old recorder refuses a database whose
+schema is newer than its own, so a schema change does need a copy. Stopping
+Home Assistant for the copy would add those 6 minutes of downtime to every such
+upgrade. On rollback, history recorded between the copy and the rollback (a few
+minutes) is lost.
+
+### InfluxDB
+
+A 2.x minor migrates `influxd.bolt` and `influxd.sqlite`; the TSM data is not
+migrated. `influxd downgrade` is not usable: 2.9.1 accepts only 2.0, 2.1, 2.3
+and 2.4 as targets, so it cannot return to 2.8 or 2.9, and going below 2.8
+would drop the hashed tokens. A full `influx backup` (as in the weekly dump)
+reads about 35 GB off the SSD for 23 minutes at whatever hour the sweep
+merges, and restoring it would write as much back.
+
+So the script stops influxd (the new image is already pulled), copies the two
+metadata files (under 1 MB) with a `SHA256SUMS` file, and the restore checks
+the sums, stops influxd, removes any SQLite `-wal`/`-shm` and puts the files
+back. TSM data written in between is kept. Buckets, tokens or tasks created
+between the deploy and the rollback are lost, as is a shard group created in
+that window (its data stays on disk, unreferenced). The weekly full dump
+(`restic-db-dumps weekly`) stays the disaster backup.
+
+### Timing and the sweep
+
+A Home Assistant job with a schema change takes at worst about 6 minutes of
+backup, the deploy and health gate (up to 10), 6 minutes of restore and the
+rollback's health gate (up to 10): within the job's 60-minute timeout. While
+the job runs the sweep merges nothing (a per-service deploy is still running).
+
+### Restoring by hand
+
+If the rollback reports `RESTORE FAILED`, or a problem shows up after the
+health gate passed, on the router, from a checkout of `main`:
+
+```bash
+ci/automerge/pre-upgrade-backup.sh restore --type homeassistant \
+  --service homeassistant --dir /mpool/backups/automerge-pre-upgrade/homeassistant/<dir>
+```
+
+(`--type influxdb --service influxdb` for InfluxDB), then start the previous
+image: merge the revert MR and run `router:deploy`, or recreate the service
+with the previous image line by hand.
 
 While any `automerge-rollback` issue is open, auto-merge is paused for every MR.
 `main` still references the new image until the revert MR is merged, so a full
@@ -401,7 +511,11 @@ All in `ci/automerge-policy.yml` (reviewed, since `ci/` is code-owned):
 - **Restrict its kinds:** set `updates:` under `services`, and exclude the image
   from the "Auto-merge class" rule in `renovate.json` (an "Auto-merge class,
   restricted kinds" rule gives it the allowed kinds). Use this for services
-  whose version change runs a one-way migration.
+  whose version change runs a one-way migration that no pre-upgrade backup
+  type covers.
+- **Back up before a version update:** set `pre_upgrade_backup:
+  homeassistant|influxdb` under `services` (router services only; a new type
+  needs code in `ci/automerge/pre-upgrade-backup.sh`).
 - **Add a probe or timeout:** add the service under `services` with the compose
   **service name**, not the container name:
 
