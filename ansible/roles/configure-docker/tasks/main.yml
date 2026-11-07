@@ -257,4 +257,7 @@
     enabled: true
     state: started
     daemon_reload: "{{ _docker_prune_units is changed }}"
-  when: docker_image_prune_on_calendar | length > 0
+  when:
+    - docker_image_prune_on_calendar | length > 0
+    # In check mode a new timer does not exist yet, so there is nothing to enable.
+    - not (ansible_check_mode and _docker_prune_units is changed)
