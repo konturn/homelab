@@ -106,6 +106,17 @@
       ],
       "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else}}semver-coerced{{/if}}",
       "extractVersionTemplate": "{{#if extractVersion}}{{{extractVersion}}}{{else}}^v?(?<version>.+)${{/if}}"
+    },
+    {
+      "customType": "regex",
+      "description": "Default images of the GitLab runners (base/gitlab-runner/config.toml, TOML: image = \"name:tag@digest\")",
+      "managerFilePatterns": [
+        "/^base/gitlab-runner/config\\.toml$/"
+      ],
+      "matchStrings": [
+        "image = \"(?<depName>[a-z0-9][^\\s\"@]*?):(?<currentValue>\\w[\\w.-]*)@(?<currentDigest>sha256:[a-f0-9]{64})\""
+      ],
+      "datasourceTemplate": "docker"
     }
   ],
   "packageRules": [

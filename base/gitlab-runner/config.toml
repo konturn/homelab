@@ -1,8 +1,10 @@
 # Three runners (see workflow:rules in .gitlab-ci.yml):
 #   router-protected   tag "protected", access_level=ref_protected: jobs
 #                      from protected refs (main) only. Deploys and image
-#                      pushes; host network and the docker-socket-proxy
-#                      client certs.
+#                      pushes. Docker network "gitlab-ci-protected" (bridge
+#                      br-ci-prot, egress allowlist in
+#                      networking/iptables/rules.v4) and the
+#                      docker-socket-proxy client certs.
 #   router-firmware    tag "firmware-hostnet", access_level=ref_protected:
 #                      only the firmware rollout jobs (netgear:firmware,
 #                      aruba-iap:firmware, aruba-s2500:firmware). Host
@@ -17,6 +19,10 @@
 # The protected and firmware runners' tokens are read by Ansible from
 # /etc/gitlab-runner/{protected,firmware}-runner.token on the host
 # (configure-base).
+#
+# Default image: only used by a job that sets no image of its own (every job
+# in this repo sets one). Pinned by digest; Renovate updates it
+# (customManagers in renovate.json).
 concurrent = 7
 check_interval = 0
 
@@ -31,8 +37,11 @@ check_interval = 0
   executor = "docker"
   limit = 4
   [runners.docker]
-    image = "ubuntu:20.04"
-    network_mode = "host"
+    image = "ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852"
+    # Job, helper and service containers all join this network. Not host
+    # networking: jobs reach only the allowlisted destinations (CI-PROT-EGRESS
+    # in networking/iptables/rules.v4, docs/FIREWALL.md).
+    network_mode = "gitlab-ci-protected"
     privileged = false
     # Resource caps: CI build containers are the only containers on the router
     # without limits (every service in docker-compose.yml has one). The router
@@ -63,7 +72,7 @@ check_interval = 0
   executor = "docker"
   limit = 1
   [runners.docker]
-    image = "ubuntu:20.04"
+    image = "ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852"
     # Host network on purpose, for this runner only: the firmware jobs bind
     # a TFTP server to 10.4.0.1 / 10.100.0.2 and the switches and APs fetch
     # the image from it. Every other protected job runs on router-protected.
@@ -84,7 +93,7 @@ check_interval = 0
   executor = "docker"
   limit = 2
   [runners.docker]
-    image = "ubuntu:20.04"
+    image = "ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852"
     # Job, helper and service containers all join this network
     network_mode = "gitlab-ci"
     privileged = false
