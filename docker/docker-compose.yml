@@ -764,7 +764,7 @@ services:
         ipv4_address: {{ influxdb_ip }}
       iot:
         ipv4_address: {{ influxdb_iot_ip }}
-    image: influxdb:2.8.0@sha256:fef4cf8f3c2f494df222d24c36204ff8f5bf2deae9224fc7bd2055098ad27d2b
+    image: influxdb:2.8.0@sha256:e6d293bedc5800bc5f7f61af6335d90a355c78be88fa41e591431ff44df553a5
     restart: unless-stopped
     # Memory (2026-09-01, 30d max): 2719M of 4096M = 66.4%; OOM-killed 2026-07-13
     # at 4.15G anon-rss during a compaction spike. 6G covers the spike.
