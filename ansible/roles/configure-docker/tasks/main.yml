@@ -50,6 +50,15 @@
     mode: '0644'
   check_mode: no
 
+# A host upgraded in place from bullseye keeps the bullseye line next to the
+# new one (apt_repository only adds), so apt would still read the bullseye
+# suite (#134: satellite-2).
+- name: Remove the bullseye Docker repository after an upgrade
+  apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bullseye stable"
+    state: absent
+  when: ansible_distribution == Debian and ansible_distribution_release != bullseye
+
 - name: Add docker repository to apt
   apt_repository:
     repo: "deb [signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
