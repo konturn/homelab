@@ -244,6 +244,15 @@ class WatchTests(unittest.TestCase):
     def test_canceled(self):
         self.assertEqual(automerge.ci_watch_verdict({"status": "canceled"}, [], self.users)[0], "unverified")
 
+    def test_canceled_after_the_image_jobs_passed(self):
+        # !989: deploy-scope:test was canceled by a newer main pipeline after
+        # nginx:validate had passed
+        jobs = [{"name": "nginx:validate", "status": "success"}, {"name": "deploy-scope:test", "status": "canceled"}]
+        self.assertEqual(automerge.ci_watch_verdict({"status": "canceled"}, jobs, self.users),
+                         ("passed", ["nginx:validate"]))
+        jobs[0]["status"] = "canceled"
+        self.assertEqual(automerge.ci_watch_verdict({"status": "canceled"}, jobs, self.users)[0], "unverified")
+
     def test_revert_text(self):
         head = edit(BASE, *NGINX_989)
         changes = policy.diff_ci_images(BASE, head)

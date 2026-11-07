@@ -727,6 +727,11 @@ def ci_watch_verdict(pipeline: Optional[dict], jobs: List[dict], users: List[str
     if failed:
         return "unrelated", failed
     if pipeline.get("status") in ("canceled", "skipped"):
+        # superseded main pipelines are canceled (interruptible jobs); the
+        # jobs that run the image may still have finished
+        ran = {j["name"]: j.get("status") for j in jobs if j["name"] in set(users)}
+        if ran and all(st == "success" for st in ran.values()):
+            return "passed", sorted(ran)
         return "unverified", []
     return "passed", []
 
@@ -777,7 +782,9 @@ def ci_watch(gl: GitLab, allow: dict) -> List[int]:
         if outcome == "revert":
             ci_rollback(gl, mr, changes, which, url)
         else:
-            text = {"passed": f"Main pipeline of the merge passed ({url}).",
+            text = {"passed": f"Main pipeline of the merge passed ({url})." if not which else
+                    f"Jobs that run the image passed in the main pipeline of the merge: "
+                    f"{', '.join(which)} ({url}).",
                     "unrelated": f"Main pipeline of the merge failed only in jobs that do not run "
                                  f"{', '.join(names)}: {', '.join(which)} ({url}). Not reverted.",
                     "unverified": f"Main pipeline of the merge was {pipe.get('status')} ({url}); "

@@ -50,15 +50,6 @@
     mode: '0644'
   check_mode: no
 
-# A host upgraded in place from bullseye keeps the bullseye line next to the
-# new one (apt_repository only adds), so apt would still read the bullseye
-# suite (#134: satellite-2).
-- name: Remove the bullseye Docker repository after an upgrade
-  apt_repository:
-    repo: "deb [signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bullseye stable"
-    state: absent
-  when: ansible_distribution == 'Debian' and ansible_distribution_release != 'bullseye'
-
 - name: Add docker repository to apt
   apt_repository:
     repo: "deb [signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
@@ -210,54 +201,3 @@
     name: "Scrub credentials from moltbot transcripts"
     state: absent
   when: is_satellite | default(false)
-
-# Weekly `docker image prune --all` for hosts that set
-# docker_image_prune_on_calendar (defaults/main.yml, #118). Only images that
-# no container (running or stopped) uses are removed.
-- name: Docker image prune units
-  ansible.builtin.copy:
-    dest: "/etc/systemd/system/docker-image-prune.{{ item.ext }}"
-    owner: root
-    group: root
-    mode: "0644"
-    content: "{{ item.content }}"
-  loop:
-    - ext: service
-      content: |
-        # Managed by Ansible (configure-docker); local changes are overwritten.
-        [Unit]
-        Description=Remove Docker images that no container uses (configure-docker)
-        Requires=docker.service
-        After=docker.service
-
-        [Service]
-        Type=oneshot
-        ExecStart=/usr/bin/docker image prune --all --force --filter until={{ docker_image_prune_until }}
-    - ext: timer
-      content: |
-        # Managed by Ansible (configure-docker); local changes are overwritten.
-        [Unit]
-        Description=Weekly removal of unused Docker images (configure-docker)
-
-        [Timer]
-        OnCalendar={{ docker_image_prune_on_calendar }}
-        RandomizedDelaySec=30min
-        Persistent=true
-
-        [Install]
-        WantedBy=timers.target
-  loop_control:
-    label: "{{ item.ext }}"
-  register: _docker_prune_units
-  when: docker_image_prune_on_calendar | length > 0
-
-- name: Enable the Docker image prune timer
-  ansible.builtin.systemd:
-    name: docker-image-prune.timer
-    enabled: true
-    state: started
-    daemon_reload: "{{ _docker_prune_units is changed }}"
-  when:
-    - docker_image_prune_on_calendar | length > 0
-    # In check mode a new timer does not exist yet, so there is nothing to enable.
-    - not (ansible_check_mode and _docker_prune_units is changed)

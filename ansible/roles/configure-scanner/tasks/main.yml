@@ -133,7 +133,7 @@
     dest: '/etc/systemd/system/shell2http.service'
     owner: root
     group: root
-    mode: 0644
+    mode: 0600
   register: _shell2http_unit
 
 - name: Make sure shell2http enabled

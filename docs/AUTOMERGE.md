@@ -550,12 +550,16 @@ still labelled `automerge-ci-watch`:
   open, the next update of that image in CI files waits for a human; other
   images and compose updates carry on. Merge (or close) the revert MR, then
   close the issue;
-- only jobs that do not run the image failed, or the pipeline was canceled:
-  a note saying so, no revert.
+- only jobs that do not run the image failed: a note saying so, no revert;
+- the pipeline was canceled (a newer `main` pipeline cancels the
+  interruptible jobs of an older one): passed if every job that runs the
+  image had already succeeded, otherwise a note that the change was not
+  verified, no revert.
 
-Most image jobs run in MR pipelines only (`nginx:validate`, the linters), so
-the MR pipeline that must pass before the merge is what exercises them. The
-watch covers jobs that run on `main`. An image used only by jobs that run in
+The MR pipeline, which must pass before the merge, runs the image jobs that
+are triggered by a `.gitlab-ci.yml` change in MR pipelines (the linters,
+`nginx:validate`); the watch covers the jobs that run on `main` (on !989,
+`nginx:validate` ran in both). An image used only by jobs that run in
 neither (the kaniko image of the build jobs, which run when their image
 directory changes) is first exercised by a later pipeline; a failure there is
 not attributed to the update automatically.

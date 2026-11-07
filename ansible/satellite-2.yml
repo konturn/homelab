@@ -34,9 +34,6 @@
       tags: [configure-pi-watchdog]
     - role: configure-docker
       tags: [configure-docker]
-      vars:
-        # Weekly, after the 03:40 nightly deploy (#118).
-        docker_image_prune_on_calendar: "Sun *-*-* 04:30:00"
     - role: deploy-compose
       tags: [deploy-compose]
   become: yes
