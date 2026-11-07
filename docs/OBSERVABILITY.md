@@ -122,7 +122,7 @@ Config: `docker/otel-collector/config.yaml`
 | Service   | Method                           | Signals          |
 |-----------|----------------------------------|------------------|
 | OpenClaw  | Native `diagnostics-otel` plugin | Traces + Metrics |
-| GitLab    | LabKit `GITLAB_TRACING` (gitlab.rb), 1% sampled | Traces |
+| GitLab    | Ruby OTel SDK (env vars)         | Traces           |
 | Grafana   | Built-in OTel support            | Traces           |
 
 ### Alerting: Grafana
