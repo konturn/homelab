@@ -2149,7 +2149,11 @@ services:
     volumes:
       - nextcloud_db_lts:/var/lib/mysql
     environment:
-      - MYSQL_ROOT_PASSWORD={{ vault_nextcloud_db_password | trim | replace("$", "$$") }}
+      # Root has its own password (Vault docker/nextcloud db_root_password).
+      # MYSQL_ROOT_PASSWORD only seeds a new datadir; on an existing one it is
+      # what restic-db-dumps logs in with, so change it together with the
+      # password in MariaDB (ALTER USER root@localhost and root@%).
+      - MYSQL_ROOT_PASSWORD={{ vault_nextcloud_db_root_password | trim | replace("$", "$$") }}
       - MYSQL_PASSWORD={{ vault_nextcloud_db_password | trim | replace("$", "$$") }}
       - MYSQL_DATABASE=nextcloud
       - MYSQL_USER=nextcloud

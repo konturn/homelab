@@ -103,6 +103,7 @@ vault_secret_paths:
   - path: "docker/nextcloud"
     fields:
       vault_nextcloud_db_password: "db_password"
+      vault_nextcloud_db_root_password: "db_root_password"
       vault_nextcloud_secret: "secret"
     optional_fields: [vault_nextcloud_secret]  # not referenced by any template
   - path: "docker/nzbget"
