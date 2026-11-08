@@ -119,22 +119,24 @@ covered by the normal `.storage` backups. Expected values:
 
 If the nginx IPs change in the inventory, update them in the UI too.
 
-## Custom integrations (HACS)
+## Custom integrations (Marketplace)
 
-Custom integrations are installed and upgraded through HACS on the live volume,
-not from this repo:
+Custom integrations are installed and upgraded through the Marketplace (the
+core `marketplace` integration, which replaced HACS in 2026.11) on the live
+volume, not from this repo:
 
 | Integration | Source | Notes |
 |---|---|---|
 | keymaster | `FutureTense/keymaster` | Manages keypad user codes on the front door lock (Z-Wave JS) |
 | osrm_travel_time | `edekeijzer/osrm_travel_time` | |
 | mopidy | `bushvin/hass-integrations` | Replaces the `mopidy` integration removed from HA core. Still configured by the `media_player: platform: mopidy` block in `configuration.yaml`; the night-mode automation plays white noise on `media_player.mopidy_3` |
-| hacs | `hacs/integration` | |
 | samsungtv_smart | `TheFab21/ha-samsungtv-smart` | Samsung Frame TV (local only). See below |
+| adaptive_lighting | `basnijholt/adaptive-lighting` | Entry *Hue Lights* |
+| frigate | `blakeblackshear/frigate-hass-integration` | See docs/frigate.md |
 
 After a Home Assistant upgrade, check *Settings -> System -> Repairs* and the
-log for custom integrations that fail to import. Upgrade them in HACS
-(respecting each release's minimum HA version in `hacs.json`) and restart.
+log for custom integrations that fail to import. Upgrade them in the
+Marketplace (respecting each release's minimum HA version in `hacs.json`) and restart.
 
 ### keymaster
 
@@ -155,7 +157,7 @@ log for custom integrations that fail to import. Upgrade them in HACS
 
 ### samsungtv_smart (Frame TV)
 
-- Installed from HACS (`TheFab21/ha-samsungtv-smart`, which adds
+- Installed from the Marketplace (`TheFab21/ha-samsungtv-smart`, which adds
   Frame Art Mode services). Configured
   local only: no SmartThings OAuth and no keys for the optional art
   identification (Google Vision / LLM) features.
@@ -185,7 +187,7 @@ log for custom integrations that fail to import. Upgrade them in HACS
   (`www/frame/halloween/`, with a `manifest.csv` of sources and licences),
   not in git.
 
-## Frontend cards (HACS)
+## Frontend cards (Marketplace)
 
 | Card | Source | Used by |
 |---|---|---|
@@ -203,6 +205,13 @@ clients have to be added to the exclude list in
 *Settings -> Devices & services -> HomeKit Bridge -> Configure*.
 The speakers, TV, lock and cameras are separate accessory-mode entries.
 
+Siri reaches these entries over HomeKit, so they are advertised on the
+container's internal and IoT legs (*Settings -> System -> Network*, network
+adapters). The setting stores interface names (`eth0`, `eth2`), and Docker
+does not keep the order of HA's three networks across container recreates
+(see the comment in `docker/docker-compose.yml`), so check the selected
+adapters' addresses after a recreate.
+
 ## Denon receiver
 
 `media_player.denon` comes from the `denonavr` integration (telnet enabled).
@@ -211,4 +220,5 @@ The *denon* HomeKit entry (accessory mode, port 21077) includes only
 no longer exists, and was repointed in the options flow on 2026-10-28. If the
 integration is stuck in `setup_retry` with a 403 on `description.xml`, the
 receiver needs a mains power-cycle; see docs/denon.md, which also covers the
-settings export and drift check.
+settings export and drift check. The movie-room Apple TV is paired through the
+`apple_tv` integration (`media_player.apple_tv`, `remote.apple_tv`).

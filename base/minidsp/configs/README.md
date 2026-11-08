@@ -28,6 +28,7 @@ base/minidsp/configs/
   919619/
     preset-0.xml       # plugin XML for preset slot 0 (normal)
     preset-1.xml       # plugin XML for preset slot 1 (bass boost)
+    preset-2.xml       # plugin XML for preset slot 2 (unused)
     NOTES.md           # where the file came from, date, speakers, measurements
   921284/
     preset-0.xml

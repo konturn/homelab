@@ -33,15 +33,15 @@ Read-only operations are fine; see [Read-only commands](#read-only-commands).
 
 ## Device map
 
-| Serial | USB path | ALSA id (stable, after next boot) | ALSA id today (by enumeration) | minidspd index today | Role (unconfirmed) |
-|---|---|---|---|---|---|
-| 919619 | `1-1.3` | `minidsp_919619` | `m2x4HD_1` (card 2) | 0 | Outputs 3-4 sit 13-19 dB below the noise floor of outputs 1-2; possibly muted or unused there |
-| 921284 | `1-1.2` | `minidsp_921284` | `m2x4HD` (card 1) | 1 | Live signal on analog input 1 and on all 4 outputs |
+| Serial | USB path | ALSA id (stable) | minidspd index today | Role |
+|---|---|---|---|---|
+| 919619 | `1-1.3` | `minidsp_919619` (card 2) | 0 | Subwoofer / low-frequency unit, fed from input 1; outputs 3-4 read lower at idle because of their low-pass filters, not a mute |
+| 921284 | `1-1.2` | `minidsp_921284` (card 1) | 1 | Two ButtKickers on outputs 1-2 |
 
-Checked on 2026-10-28. The two "today" columns follow USB enumeration order and
-can swap after a reboot or replug; note that index 0 is currently the unit on
-the *higher* USB port. The roles come from read-only level meters only.
-Which unit drives which speakers has not been confirmed (needs Noah).
+Checked on 2026-11-08. The minidspd index (and the ALSA card number) follow
+USB enumeration order and can swap after a reboot or replug; note that index 0
+is currently the unit on the *higher* USB port. The roles come from the
+decoded presets in `base/minidsp/configs/<serial>/NOTES.md`.
 
 How the map was derived (all read-only):
 
@@ -96,7 +96,7 @@ client.
   (identical for both: playback and capture switches on, volumes 127 = 0 dB).
   At boot the units therefore get the same mixer writes as before the rename.
 
-After the next reboot, check:
+In effect since the Pi's reboot on 2026-11-07. Check:
 
 ```bash
 ssh zwave.lab.nkontur.com 'cat /proc/asound/cards'
@@ -243,8 +243,4 @@ unit is covered by the safety rule above, so do that with Noah present.
 
 ## Open items for Noah
 
-- Which unit drives which speakers (the roles above are unconfirmed), and
-  whether 919619's outputs 3-4 are muted on purpose.
-- The original plugin XML files for both units
-  (`base/minidsp/configs/README.md`).
 - The snapclient target, above.
