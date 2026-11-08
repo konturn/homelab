@@ -311,27 +311,30 @@ groups:
                 // field's max first double-counts: the kernel moves pages
                 // between the active and inactive lists, so both maxima can
                 // include the same pages.
+                // Group by host as well. The same container_name runs on several
+                // hosts (telegraf and promtail on both Pis, promtail on the
+                // router), and when their samples share a timestamp the sum
+                // would add two hosts' anon together against one host's limit.
                 anon = base
                   |> filter(fn: (r) => r._field == "active_anon" or r._field == "inactive_anon")
-                  |> group(columns: ["container_name", "_time"])
+                  |> group(columns: ["container_name", "host", "_time"])
                   |> sum()
-                  |> group(columns: ["container_name"])
+                  |> group(columns: ["container_name", "host"])
                   |> max()
 
                 lim = base
                   |> filter(fn: (r) => r._field == "limit")
-                  |> group(columns: ["container_name"])
+                  |> group(columns: ["container_name", "host"])
                   |> max()
-                  |> group(columns: ["container_name"])
-                  |> sum()
 
-                join(tables: {a: anon, l: lim}, on: ["container_name"])
+                join(tables: {a: anon, l: lim}, on: ["container_name", "host"])
                   |> filter(fn: (r) => r._value_l > 0)
                   |> map(fn: (r) => ({
                       _time: now(),
                       container_name: r.container_name,
+                      host: r.host,
                       _value: float(v: r._value_a) * 100.0 / float(v: r._value_l)}))
-                  |> keep(columns: ["_time", "_value", "container_name"])
+                  |> keep(columns: ["_time", "_value", "container_name", "host"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -345,7 +348,7 @@ groups:
         execErrState: Error
         for: 5m
         annotations:
-          summary: "Container {{ $labels.container_name }} anon memory above 85% of its limit"
+          summary: "Container {{ $labels.container_name }} on {{ $labels.host }} anon memory above 85% of its limit"
           description: "Unreclaimable (anon) memory is within 15% of the container's hard limit; the next allocation spike may trigger an OOM kill. Check the configured limit in docker/docker-compose.yml against actual use: sudo docker stats --no-stream {{ $labels.container_name }}. Either raise deploy.resources.limits.memory or find what is driving the allocation."
         labels:
           severity: warning
