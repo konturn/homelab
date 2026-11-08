@@ -622,7 +622,7 @@ that touches `docker/event-router/playbooks/` qualifies only if, besides rules
 - each file is at most 8 KB, is not a script, and parses as one YAML mapping
   with `id: <id>` (the file name), an explicit `mode: shadow`, and an
   `action.type` from `PLAYBOOK_ACTIONS` in `ci/automerge/botconfig.py` (a
-  mirror of the router's allowlist, `restart_container` and `cancel_ci_job`;
+  mirror of the router's allowlist, `restart_container`, `cancel_ci_job` and `retry_ci_job`;
   a test keeps it a subset of `ALLOWED_ACTIONS` in
   `docker/event-router/router/config.py`).
 

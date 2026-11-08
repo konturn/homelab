@@ -73,7 +73,7 @@ PLAYBOOK_PATH = re.compile(r"^docker/event-router/playbooks/([a-z0-9][a-z0-9_.-]
 # tests check it stays a subset of the router's, so a type the router drops
 # stops qualifying here too. A type the router adds qualifies only after it
 # is added here (by a reviewed MR).
-PLAYBOOK_ACTIONS = ("restart_container", "cancel_ci_job")
+PLAYBOOK_ACTIONS = ("restart_container", "cancel_ci_job", "retry_ci_job")
 # A new playbook ships in the event-router image: deploying it recreates
 # that service on the router (after event-router:build).
 PLAYBOOK_SERVICE = ("docker/docker-compose.yml", "event-router")
