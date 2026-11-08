@@ -121,7 +121,17 @@
   register: _dpkg_arch
   changed_when: false
 
+# Only download the .deb when 1.14.2 is not installed (see configure-zwave's
+# minidsp install for the same guard).
+- name: Check installed shell2http version
+  ansible.builtin.command: "dpkg-query -W -f=${Version} shell2http"
+  register: _shell2http_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
 - name: Install shell2http
+  when: _shell2http_installed.stdout is not match('^1\\.14\\.2(-|$)')
   vars:
     _shell2http_arch: "{{ {'amd64': 'amd64', 'arm64': 'arm64'}.get(_dpkg_arch.stdout, 'armv6') }}"
   ansible.builtin.apt:
