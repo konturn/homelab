@@ -1,0 +1,28 @@
+# go2rtc for the PETLIBRO feeder camera (docs/petlibro-camera.md).
+#
+# Locked down on purpose:
+# - app.modules loads only the RTSP server and the petlibro:// source. The
+#   HTTP API (config writes, restart), WebRTC, exec/ffmpeg/echo/expr sources
+#   and every other module are never initialised.
+# - One fixed stream. The RTSP server only serves streams defined here and
+#   requires a login (Frigate's, from Vault).
+# ${...} values come from the container environment (compose, from Vault);
+# go2rtc redacts them in its log.
+app:
+  modules:
+    - rtsp
+    - petlibro
+
+log:
+  level: info
+  petlibro: info
+
+rtsp:
+  listen: "${RTSP_LISTEN}"
+  username: frigate
+  password: "${RTSP_PASSWORD}"
+
+streams:
+  # No host: go2rtc finds the camera on the IoT subnet by its UID (LAN
+  # search), so a new DHCP address does not break the stream.
+  cat_feeder: "petlibro://?uid=${PETLIBRO_CAMERA_UID}&subnet=${PETLIBRO_SUBNET}&quality=hd"

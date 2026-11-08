@@ -1,6 +1,7 @@
 # Frigate NVR
 
-Frigate records and runs object detection for the two door cameras. Home
+Frigate records and runs object detection for the two door cameras and the
+cat feeder camera. Home
 Assistant uses its person-occupancy sensors to turn on the porch and rear
 floodlights.
 
@@ -12,7 +13,7 @@ floodlights.
 | Recordings | ZFS dataset `mpool/frigate` at `/mpool/frigate` (`quota=1T`, `com.sun:auto-snapshot=false`) |
 | Network | `internal`, fixed address `frigate_ip` (10.3.32.12) |
 | UI | https://frigate.lab.nkontur.com (lab_nginx; LAN and tailnet only, Frigate login) |
-| Secrets (Vault) | `cameras/rear`, `cameras/doorbell`, `docker/frigate` (`mqtt_password`, `admin_password`, `ha_password`) |
+| Secrets (Vault) | `cameras/rear`, `cameras/doorbell`, `docker/frigate` (`mqtt_password`, `admin_password`, `ha_password`), `docker/petlibro-camera` (`rtsp_password`) |
 
 ## Cameras
 
@@ -20,6 +21,7 @@ floodlights.
 |---|---|---|---|---|
 | `back_door` | Amcrest (inventory `back_camera_address`) | 10.6.128.14 | main, 2592x1944 H.264 20 fps | sub, 704x480 at 5 fps |
 | `front_door` | Amcrest AD410 doorbell (`doorbell_address`) | 10.6.128.9 | main | sub, scaled to 640x480 at 5 fps |
+| `cat_feeder` | PETLIBRO PLAF203 feeder, via the `petlibro-camera` relay (docs/petlibro-camera.md) | `petlibro_camera_ip`:8554 (RTSP, Frigate login) | events only (alerts 14 d, detections 7 d) | 640x360 at 2 fps, `cat` and `person` |
 
 While the doorbell is offline, Frigate restarts its ffmpeg processes every few
 seconds (~230 log lines a minute). `logger.logs` in config.yml lowers those
@@ -90,6 +92,9 @@ The math is in the comments of `docker/frigate/config.yml`. In short:
   days (both `mode: motion`), snapshots 30 days.
 - Worst case for both cameras (40% motion, 8% tracked objects): about 790 GB.
   With one camera, about 400 GB.
+- cat_feeder: 0.24 Mbit/s (2.6 GB/day, measured 2026-11-08), events only
+  (no continuous or motion recording). Worst case, an alert all day for 14
+  days, is 36 GB; in practice a few GB.
 
 Frigate also deletes the oldest recordings on its own when the filesystem has
 less than an hour of recording space left, and the 1T quota is the filesystem
@@ -186,6 +191,7 @@ versions) and restarting Home Assistant. To have the repo manage it instead,
 use the pinned-fork pattern (docs/HOMEASSISTANT.md, "Pinned integrations from
 private forks"). It is configured
 against `http://frigate:8971` with the `homeassistant` user. It creates
+`camera.<camera>` (cat_feeder too) and
 `binary_sensor.<camera>_person_occupancy`, used by the floodlight and porch
 light automations in the homeassistant repo.
 

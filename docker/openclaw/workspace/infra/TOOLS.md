@@ -35,7 +35,7 @@ with this file, they win: say so.
 
 ## Services *(from the compose files each host renders)*
 
-- **router**: airplay_guest_bathroom, airplay_guest_bedroom, airplay_house, airplay_kitchen, airplay_main_bathroom, airplay_main_bedroom, airplay_movie_room, airplay_office, ambientweather, amcrest2mqtt, anomaly-detector, bitwarden, bluebubbles-relay, booksonic, chromium-browser, deluge, diagram, docker-socket-proxy, docker-socket-proxy-ro, event-router, frigate, gitlab, grafana, hcpy, homeassistant, influxdb, iot_nginx, iperf3, jackett, jit-approval-svc, lab_nginx, lidarr, loki, mopidy, mosquitto, navidrome, nextcloud, nextcloud_db, nginx, novnc-dev1, novnc-dev2, novnc-dev3, nzbget, ollama, ombi, openclaw-gateway, otel-collector, paperless-ai, paperless-ngx, paperless-redis, pihole, plex, promtail, prowlarr, radarr, snapclient_global, snapserver, sonarr, tautulli, tempo, vault, zigbee2mqtt.
+- **router**: airplay_guest_bathroom, airplay_guest_bedroom, airplay_house, airplay_kitchen, airplay_main_bathroom, airplay_main_bedroom, airplay_movie_room, airplay_office, ambientweather, amcrest2mqtt, anomaly-detector, bitwarden, bluebubbles-relay, booksonic, chromium-browser, deluge, diagram, docker-socket-proxy, docker-socket-proxy-ro, event-router, frigate, gitlab, grafana, hcpy, homeassistant, influxdb, iot_nginx, iperf3, jackett, jit-approval-svc, lab_nginx, lidarr, loki, mopidy, mosquitto, navidrome, nextcloud, nextcloud_db, nginx, novnc-dev1, novnc-dev2, novnc-dev3, nzbget, ollama, ombi, openclaw-gateway, otel-collector, paperless-ai, paperless-ngx, paperless-redis, petlibro-camera, pihole, plex, promtail, prowlarr, radarr, snapclient_global, snapserver, sonarr, tautulli, tempo, vault, zigbee2mqtt.
   Defined, not running: snapclient_{guest_bathroom,guest_bedroom,kitchen,main_bathroom,main_bedroom,office} (no sound card, snapclient_disabled_zones); blog, wordpress_db (compose profile).
 - **zwave**: promtail, telegraf, zwavejs2mqtt.
 - **satellite-2**: promtail, telegraf.
@@ -107,6 +107,7 @@ with this file, they win: say so.
 - **Rule (zigbee2mqtt):** After an SLZB coordinator firmware update (or coordinator reboot), restart zigbee2mqtt. It keeps its TCP session but receives no frames; on 2026-11-07 that went unnoticed for about an hour. The Zigbee silence alert watches for it.
 - **Rule (frigate):** The config is repo-managed (docker/frigate/config.yml): edits in the Frigate UI are overwritten on the next deploy.
 - **Rule (frigate):** Recordings live on /mpool/frigate, never on /persistent_data.
+- **Rule (petlibro_camera):** Camera only: never redirect the feeder's MQTT/DNS or run its installer. Feeding is cloud-run; never make it depend on this.
 
 ## Home Assistant facts
 
@@ -183,7 +184,7 @@ with this file, they win: say so.
 
 ## Where things are written down
 
-- `docs/`: AUDIO, AUTOMERGE, backups, CANARY, CONTAINER-REGISTRY, DEADMAN, denon, DEPLOY, DISASTER_RECOVERY, docker-proxy-architecture, FIREWALL, frigate, GITLAB_SETTINGS, HOMEASSISTANT, IPMI, jit-access-design, jit-webhook-design, minidsp, NETWORK, OBSERVABILITY, ollama, paperless-ai, plex-gpu, POWER, raspberry-pi, RENOVATE, SECRET_ROTATION.
+- `docs/`: AUDIO, AUTOMERGE, backups, CANARY, CONTAINER-REGISTRY, DEADMAN, denon, DEPLOY, DISASTER_RECOVERY, docker-proxy-architecture, FIREWALL, frigate, GITLAB_SETTINGS, HOMEASSISTANT, IPMI, jit-access-design, jit-webhook-design, minidsp, NETWORK, OBSERVABILITY, ollama, paperless-ai, petlibro-camera, plex-gpu, POWER, raspberry-pi, RENOVATE, SECRET_ROTATION.
 - The GitLab project wiki (private, not mirrored) holds the security and
   network reviews.
 - Your checkout `workspace/homelab` is hard-reset to `origin/main` every

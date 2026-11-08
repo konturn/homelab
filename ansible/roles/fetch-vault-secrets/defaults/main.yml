@@ -99,6 +99,12 @@ vault_secret_paths:
   - path: "docker/deluge"
     fields:
       vault_deluge_password: "password"
+  # PETLIBRO feeder camera relay (docs/petlibro-camera.md): the camera's TUTK
+  # UID and the RTSP password Frigate uses (also passed to Frigate)
+  - path: "docker/petlibro-camera"
+    fields:
+      vault_petlibro_camera_uid: "camera_uid"
+      vault_petlibro_camera_rtsp_password: "rtsp_password"
   # Frigate (docs/frigate.md): its MQTT user, and the passwords of its admin
   # UI user and of the user Home Assistant logs in with
   - path: "docker/frigate"

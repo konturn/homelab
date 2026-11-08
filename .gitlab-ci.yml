@@ -21,7 +21,7 @@
 #   BUILD (parallel, path-triggered)
 #   ┌──────────────┬──────────────┬──────────────┬──────────────────────┐
 #   openclaw:build  amcrest2mqtt:build  snapcast:build  snapclient:build  jit-approval-svc:build
-#   anomaly-detector:build  nginx:build  event-router:build
+#   anomaly-detector:build  nginx:build  event-router:build  petlibro-camera:build
 #   main: <image>:build builds and pushes :latest and :<sha> (protected runner)
 #   MRs:  <image>:build-check builds with kaniko, no push (unprotected runner)
 #
@@ -731,6 +731,29 @@ amcrest2mqtt:build-check:
       when: manual
       allow_failure: true
 
+petlibro-camera:build:
+  extends: .docker_build
+  variables:
+    IMAGE_NAME: petlibro-camera
+    BUILD_CONTEXT: docker/images/petlibro-camera
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - docker/images/petlibro-camera/**/*
+
+petlibro-camera:build-check:
+  extends: .kaniko_check
+  variables:
+    BUILD_CONTEXT: docker/images/petlibro-camera
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - docker/images/petlibro-camera/**/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
+
 snapcast:build:
   extends: .docker_build
   variables:
@@ -985,6 +1008,8 @@ router:deploy:
     - job: novnc:build
       optional: true
     - job: openclaw:build
+      optional: true
+    - job: petlibro-camera:build
       optional: true
     - job: snapcast:build
       optional: true
@@ -2395,6 +2420,8 @@ router:deploy-service:
     - job: novnc:build
       optional: true
     - job: openclaw:build
+      optional: true
+    - job: petlibro-camera:build
       optional: true
     - job: snapcast:build
       optional: true
