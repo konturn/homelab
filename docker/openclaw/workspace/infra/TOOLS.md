@@ -210,11 +210,12 @@ What may change:
   or reordered rules.
 - **Dashboards** (`dashboards/json/*.json`): edits that keep the uid and add
   no new datasource.
-- **Docs**: `docs/*.md`, `README.md`, `docs/**/README*.md`, except AUTOMERGE,
+- **Docs**: `docs/*.md`, `docs/**/*.md`, `README.md`, except AUTOMERGE,
   DISASTER_RECOVERY, RENOVATE, DEPLOY, FIREWALL, SECRET_ROTATION,
   GITLAB_SETTINGS, docker-proxy-architecture, `jit-*` and anything with
   "security" in the name.
 
 Keep one concern per MR so it can qualify. If a change falls outside these
 rules, open the MR and leave it for Noah; never split or reshape a change to
-get past the rules.
+get past the rules. If this section and `ci/automerge-policy.yml` disagree,
+the policy file wins.
