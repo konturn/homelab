@@ -19,6 +19,10 @@ all:
     # rules for its vehicle-service hosts in networking/iptables/rules.v4
     # match this address (docs/FIREWALL.md).
     homeassistant_ip: 10.3.32.13
+    # hcpy, the Home Connect to MQTT bridge for the Thermador appliances
+    # (docs/HOMEASSISTANT.md, "Thermador"). Static: its FORWARD rules in
+    # networking/iptables/rules.v4 match this address.
+    hcpy_ip: 10.3.32.16
     chromium_browser_ip: 10.3.32.9
     chromium_cdp_ip: 172.30.1.10  # openclaw-browser bridge (CDP)
     bluebubbles_relay_ip: 172.30.2.10  # openclaw-relay bridge
@@ -89,6 +93,12 @@ all:
     zigbee_radio_address: 10.6.128.20
     frame_tv_mac: e8:aa:cb:04:64:da
     frame_tv_address: 10.6.128.21
+    # Thermador hood and range (Home Connect), read locally by hcpy. Static:
+    # hcpy's devices file and FORWARD rules use these addresses.
+    thermador_hood_mac: 68:a4:0e:a8:04:e7
+    thermador_hood_address: 10.6.128.22
+    thermador_range_mac: 68:a4:0e:ab:35:f6
+    thermador_range_address: 10.6.128.23
     snapserver_address: 10.6.32.2
     mosquitto_address: 10.6.32.3
     iot_nginx_ip: 10.6.32.5
@@ -194,6 +204,8 @@ all:
         - "{{ denon_address }} denon.lab.nkontur.com"
         - "{{ projector_address }} projector.lab.nkontur.com"
         - "{{ frame_tv_address }} frame-tv.lab.nkontur.com"
+        - "{{ thermador_hood_address }} thermador-hood.lab.nkontur.com"
+        - "{{ thermador_range_address }} thermador-range.lab.nkontur.com"
         - "{{ kitchen_qual_address }} AWAIR-ELEM-14B541.lab.nkontur.com"
         - "{{ bedroom_qual_address }} AWAIR-ELEM-147AA0.lab.nkontur.com"
         - "{{ satellite_2_address }} satellite-2.lab.nkontur.com"

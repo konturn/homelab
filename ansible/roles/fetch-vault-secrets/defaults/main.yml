@@ -277,3 +277,22 @@ vault_secret_paths:
     fields:
       vault_ha_toyota_deploy_user: "deploy_token_username"
       vault_ha_toyota_deploy_token: "deploy_token"
+
+  # Read-only (read_repository) deploy token of root/ha-miele-at-lan, the
+  # pinned Miele@LAN integration (homeassistant_custom_components.yml)
+  - path: "gitlab/ha-miele-at-lan"
+    fields:
+      vault_ha_miele_lan_deploy_user: "deploy_token_username"
+      vault_ha_miele_lan_deploy_token: "deploy_token"
+
+  # Read-only deploy token of root/hcpy, the pinned Home Connect bridge that
+  # the deploy builds into a local image (hcpy.yml)
+  - path: "gitlab/hcpy"
+    fields:
+      vault_hcpy_deploy_user: "deploy_token_username"
+      vault_hcpy_deploy_token: "deploy_token"
+
+  # hcpy's own mosquitto user (hcpy_post.yml)
+  - path: "docker/hcpy"
+    fields:
+      vault_hcpy_mqtt_password: "mqtt_password"

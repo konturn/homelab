@@ -137,6 +137,8 @@ iptables -t mangle -vnL PREROUTING           # RETURN counter for wan_bypass_ha
 | Any | snapserver | Service ports only (1704, 1705, 1780, 80-87, 50000-50007) |
 | frigate (`frigate_ip`, internal) | back camera, doorbell (iot) | TCP 80, 554 |
 | frigate (`frigate_ip`, internal) | mosquitto (iot) | TCP 8883 |
+| hcpy (`hcpy_ip`, internal) | Thermador hood and range (iot) | TCP 80 |
+| hcpy (`hcpy_ip`, internal) | mosquitto (iot) | TCP 8883; anything else from hcpy is refused |
 | Apple TV | internet, lab_nginx | Internet + TCP 32400 (Plex) |
 
 ---
