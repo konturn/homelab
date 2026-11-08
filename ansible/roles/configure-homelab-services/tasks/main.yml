@@ -247,10 +247,28 @@
                         'name': item.name }] }}"
   loop: "{{ nginx_config | default([]) }}"
 
+# AirPlay receivers (docs/AUDIO.md): docker/airplay/ is rendered once per
+# airplay_receivers entry into that container's own directory, so a change
+# restarts every receiver. The templates read item.receiver and item.slug.
+- name: create AirPlay receiver conf file dicts
+  ansible.builtin.set_fact:
+    docker_config_airplay: >-
+      {%- set out = [] -%}
+      {%- for name, r in (airplay_receivers | default({})).items() -%}
+      {%-   set slug = name | regex_replace('^airplay_', '') -%}
+      {%-   set dir = docker_persistent_data_path ~ '/airplay/' ~ slug -%}
+      {%-   set _ = out.append({'src': 'docker/airplay/shairport-sync.conf', 'dest': dir ~ '/shairport-sync.conf',
+                                'name': name, 'mode': '0600', 'receiver': r, 'slug': slug}) -%}
+      {%-   set _ = out.append({'src': 'docker/airplay/feed.sh', 'dest': dir ~ '/feed.sh',
+                                'name': name, 'mode': '0755', 'receiver': r, 'slug': slug}) -%}
+      {%- endfor -%}
+      {{ out }}
+  when: "'router' in inventory_hostname"
+
 # All config files, used by the directory, cleanup and copy tasks below.
 - name: Collect docker config files
   ansible.builtin.set_fact:
-    _docker_config_all: "{{ docker_config + (docker_config_nginx | default([])) }}"
+    _docker_config_all: "{{ docker_config + (docker_config_nginx | default([])) + (docker_config_airplay | default([])) }}"
 
 # One remote call for every config directory (a file-module loop over ~40
 # items took ~15s). mkdir -p fails on a path that exists as a file, as
@@ -1114,6 +1132,29 @@
     PW: "{{ vault_anomaly_mqtt_password }}"
   register: _anomaly_mqtt_user
   changed_when: "'added' in _anomaly_mqtt_user.stdout"
+  no_log: true
+  when: "'router' in inventory_hostname and not ansible_check_mode"
+
+### MQTT user for the AirPlay receivers (docs/AUDIO.md), same pattern as the
+# anomaly-detector user above.
+- name: Ensure the airplay MQTT user exists
+  ansible.builtin.shell: |
+    set -euo pipefail
+    f={{ docker_persistent_data_path }}/mqtt/conf/mosquitto.passwd
+    if grep -q '^airplay:' "$f"; then echo present; exit 0; fi
+    [ -n "${PW:-}" ]
+    docker exec -e PW mosquitto sh -c 'mosquitto_passwd -b /mosquitto/config/mosquitto.passwd airplay "$PW"'
+    chown 1883:1883 "$f"
+    chmod 0700 "$f"
+    grep -q '^airplay:' "$f"
+    docker kill -s HUP mosquitto >/dev/null
+    echo added
+  args:
+    executable: /bin/bash
+  environment:
+    PW: "{{ vault_airplay_mqtt_password }}"
+  register: _airplay_mqtt_user
+  changed_when: "'added' in _airplay_mqtt_user.stdout"
   no_log: true
   when: "'router' in inventory_hostname and not ansible_check_mode"
 

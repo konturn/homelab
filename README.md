@@ -76,7 +76,7 @@ ansible-playbook -i ansible/inventory.yml ansible/macmini.yml
 - **Home Assistant** - Home automation
 - **Zigbee2MQTT** - Zigbee device bridge
 - **Mosquitto** - MQTT broker
-- **Snapcast** - Multi-room audio
+- **Snapcast** - Multi-room audio, with an AirPlay receiver per zone (docs/AUDIO.md)
 
 ## Directory Structure
 

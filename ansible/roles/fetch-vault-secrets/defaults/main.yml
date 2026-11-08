@@ -89,6 +89,10 @@ vault_secret_paths:
       vault_event_router_gitlab_webhook_token: "gitlab_webhook_token"
 
   # Docker service secrets
+  # AirPlay receivers (docs/AUDIO.md): their shared MQTT user
+  - path: "docker/airplay"
+    fields:
+      vault_airplay_mqtt_password: "mqtt_password"
   - path: "docker/audioserve"
     fields:
       vault_audioserve_secret: "secret"

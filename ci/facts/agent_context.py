@@ -140,6 +140,12 @@ def sec_hardware(root: Path) -> list[str]:
     zones = hw.get("audio_zones") or []
     lines.append("- Audio: speaker zone -> Monoprice amp input -> Snapcast stream -> USB card (udev rule "
                  "generated, by port). Streams: " + ", ".join(z["id"] for z in zones) + ".")
+    inv = facts.load_yaml(facts.INVENTORY, root)
+    receivers = ((inv.get("all") or {}).get("vars") or {}).get("airplay_receivers") or {}
+    if receivers:
+        lines.append("- AirPlay 2 receivers (docs/AUDIO.md), name -> snapserver source: "
+                     + ", ".join(f"{r['name']} ({c}, {r['address']}) -> {r['stream']}"
+                                 for c, r in receivers.items()) + ".")
     for name, amp in (hw.get("amps") or {}).items():
         if amp.get("connected", True) is False:
             lines.append(f"- Amp {name}: {one_line(amp.get('note') or 'not connected.')}")

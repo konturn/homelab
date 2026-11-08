@@ -371,3 +371,16 @@ integration is stuck in `setup_retry` with a 403 on `description.xml`, the
 receiver needs a mains power-cycle; see docs/denon.md, which also covers the
 settings export and drift check. The movie-room Apple TV is paired through the
 `apple_tv` integration (`media_player.apple_tv`, `remote.apple_tv`).
+
+## AirPlay receivers
+
+The AirPlay receivers (one per audio zone, docs/AUDIO.md) publish what they
+play over MQTT and announce themselves through MQTT discovery: one device per
+receiver, `shairport-sync_<device ID>`, with sensors for artist, album,
+title, format, client name and IP. Raw state is under `shairport/<zone>/`
+(`playing` and `active` are `1`/`0`). They connect as MQTT user `airplay`
+(Vault `homelab/docker/airplay`, created by the deploy like the other MQTT
+users).
+
+They can also be added to the Home app as speakers, which makes them Siri
+targets by room; the steps are in docs/AUDIO.md ("Home app and Siri").

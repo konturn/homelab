@@ -153,6 +153,7 @@ for Home Assistant"). HA's other traffic stays on Mullvad.
 | 10.6.32.5 | iot_nginx (IoT reverse proxy) |
 | 10.6.32.6 | Ambient Weather bridge |
 | 10.6.32.7 | Mopidy (music player) |
+| 10.6.32.24 - 10.6.32.31 | AirPlay receivers, one per audio zone (`airplay_*`, docs/AUDIO.md) |
 
 **Physical Devices:**
 | IP | Device |

@@ -127,6 +127,54 @@ networks:
     ipam:
       config:
         - subnet: 172.30.4.0/24
+# AirPlay 2 receivers (shairport-sync), one per Snapcast zone: docs/AUDIO.md.
+# The services below differ only in name, address, MAC and config directory.
+x-airplay: &airplay
+  image: mikebrady/shairport-sync:5.5.2@sha256:bed60f067bd328034ee772a597f2d2ff9f1d4d2fe95c84b8e10ff86208fa9046
+  restart: unless-stopped
+  # Reaps the per-session nc that the play hooks start (docker/airplay/feed.sh).
+  init: true
+  read_only: true
+  tmpfs:
+    - /run
+    - /tmp
+  security_opt:
+    - no-new-privileges=true
+  cap_drop:
+    - ALL
+  # dbus-daemon and avahi-daemon drop to their own users; avahi chowns its
+  # runtime directory. UDP 319/320 (NQPTP) need no NET_BIND_SERVICE: Docker sets
+  # net.ipv4.ip_unprivileged_port_start=0 in the container.
+  cap_add:
+    - SETUID
+    - SETGID
+    - CHOWN
+  sysctls:
+    # AirPlay 2 binds its event and audio sockets to ephemeral ports; keep them
+    # in the range the firewall opens from VLAN 3 (networking/iptables/rules.v4).
+    net.ipv4.ip_local_port_range: "7100 7199"
+    # IPv4 only: avahi would otherwise also publish a link-local IPv6 address
+    # that senders on other VLANs cannot reach.
+    net.ipv6.conf.all.disable_ipv6: 1
+  deploy:
+    resources:
+      limits:
+        memory: 96M
+  # The audio pipe always has a reader (fd 3, inherited by shairport-sync), so
+  # shairport-sync can open and write it whether or not the feeder is running.
+  entrypoint:
+    - /bin/sh
+    - -c
+    - mkdir -p /run/dbus /run/lock && mkfifo -m 600 /tmp/shairport-sync-audio && exec 3<>/tmp/shairport-sync-audio && exec /run.sh "$$@"
+    - airplay
+  command: ["-c", "/airplay/shairport-sync.conf"]
+  healthcheck:
+    test: ["CMD-SHELL", "pidof shairport-sync >/dev/null && pidof nqptp >/dev/null && [ -d /proc/$$(cat /run/avahi-daemon/pid) ] && netstat -ltn | grep -q ':7000 '"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
+    start_period: 20s
+
 services:
   # Docker socket proxy - filtered access for CI builds
   # Only allows build/image operations, blocks exec/start/stop
@@ -2035,6 +2083,86 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
+  airplay_house:
+    <<: *airplay
+    container_name: airplay_house
+    hostname: airplay-house
+    networks:
+      iot:
+        ipv4_address: {{ airplay_receivers.airplay_house.address }}
+        mac_address: "{{ airplay_receivers.airplay_house.mac }}"
+    volumes:
+      - "{{ docker_persistent_data_path }}/airplay/house:/airplay:ro"
+  airplay_movie_room:
+    <<: *airplay
+    container_name: airplay_movie_room
+    hostname: airplay-movie-room
+    networks:
+      iot:
+        ipv4_address: {{ airplay_receivers.airplay_movie_room.address }}
+        mac_address: "{{ airplay_receivers.airplay_movie_room.mac }}"
+    volumes:
+      - "{{ docker_persistent_data_path }}/airplay/movie_room:/airplay:ro"
+  airplay_office:
+    <<: *airplay
+    container_name: airplay_office
+    hostname: airplay-office
+    networks:
+      iot:
+        ipv4_address: {{ airplay_receivers.airplay_office.address }}
+        mac_address: "{{ airplay_receivers.airplay_office.mac }}"
+    volumes:
+      - "{{ docker_persistent_data_path }}/airplay/office:/airplay:ro"
+  airplay_kitchen:
+    <<: *airplay
+    container_name: airplay_kitchen
+    hostname: airplay-kitchen
+    networks:
+      iot:
+        ipv4_address: {{ airplay_receivers.airplay_kitchen.address }}
+        mac_address: "{{ airplay_receivers.airplay_kitchen.mac }}"
+    volumes:
+      - "{{ docker_persistent_data_path }}/airplay/kitchen:/airplay:ro"
+  airplay_main_bedroom:
+    <<: *airplay
+    container_name: airplay_main_bedroom
+    hostname: airplay-main-bedroom
+    networks:
+      iot:
+        ipv4_address: {{ airplay_receivers.airplay_main_bedroom.address }}
+        mac_address: "{{ airplay_receivers.airplay_main_bedroom.mac }}"
+    volumes:
+      - "{{ docker_persistent_data_path }}/airplay/main_bedroom:/airplay:ro"
+  airplay_main_bathroom:
+    <<: *airplay
+    container_name: airplay_main_bathroom
+    hostname: airplay-main-bathroom
+    networks:
+      iot:
+        ipv4_address: {{ airplay_receivers.airplay_main_bathroom.address }}
+        mac_address: "{{ airplay_receivers.airplay_main_bathroom.mac }}"
+    volumes:
+      - "{{ docker_persistent_data_path }}/airplay/main_bathroom:/airplay:ro"
+  airplay_guest_bathroom:
+    <<: *airplay
+    container_name: airplay_guest_bathroom
+    hostname: airplay-guest-bathroom
+    networks:
+      iot:
+        ipv4_address: {{ airplay_receivers.airplay_guest_bathroom.address }}
+        mac_address: "{{ airplay_receivers.airplay_guest_bathroom.mac }}"
+    volumes:
+      - "{{ docker_persistent_data_path }}/airplay/guest_bathroom:/airplay:ro"
+  airplay_guest_bedroom:
+    <<: *airplay
+    container_name: airplay_guest_bedroom
+    hostname: airplay-guest-bedroom
+    networks:
+      iot:
+        ipv4_address: {{ airplay_receivers.airplay_guest_bedroom.address }}
+        mac_address: "{{ airplay_receivers.airplay_guest_bedroom.mac }}"
+    volumes:
+      - "{{ docker_persistent_data_path }}/airplay/guest_bedroom:/airplay:ro"
   # Private registry container removed - using GitLab's built-in registry instead
   # Images now pulled from: gitlab-registry.lab.nkontur.com:443/root/homelab/<image>
   mosquitto:
