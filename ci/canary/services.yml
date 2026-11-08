@@ -201,7 +201,13 @@ services:
       # dnsmasq.d/custom.conf would not be loaded and not be tested.
       FTLCONF_misc_etc_dnsmasq_d: "true"
     mounts:
-      - {path: /etc/pihole}
+      - path: /etc/pihole
+        # Without gravity.db a fresh Pi-hole runs gravity first, which needs
+        # the internet and never finishes on the canary network. A copy of
+        # production's (blocklists, no secrets); not pihole.toml.
+        seed_production:
+          from: /persistent_data/application/pihole/conf
+          include: [gravity.db]
       - {path: /etc/dnsmasq.d}
     files:
       - {src: docker/pihole/custom.conf, dest: /etc/dnsmasq.d/custom.conf}

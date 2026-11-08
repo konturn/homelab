@@ -129,9 +129,17 @@ For each service, `canary.py run`:
 A fresh omnibus boots from an empty data directory: reconfigure, schema load,
 seed, then Puma and Sidekiq. The readiness probe also requires both to have
 been up for 180s, and `stable_for` adds another 180s. Measured on the router
-(2026-11-08, load ~20): see the numbers in the !MR description and issue #106;
-roughly 10-15 min and a peak of ~5-6 GiB. The limit is 10 GiB. The other
-canaries take 1-3 min and well under 1 GiB.
+on 2026-11-08 (load ~20, 19.5.3, production gitlab.rb):
+
+| Run | Result | Time | Peak memory |
+|---|---|---|---|
+| production gitlab.rb | PASS | 565s (ready after 376s) | 5.43 GiB (+0.05 GiB collector) |
+| + two `gitlab-rails runner` processes | (held open by hand) | | 6.75 GiB |
+| + `GITLAB_TRACING` (#106) | FAIL, container exited | 127s | 1.08 GiB |
+
+The memory limit is 10 GiB. The others, same day: vault 79s / 0.15 GiB,
+pihole 82s / 0.05 GiB, homeassistant 370s / 0.72 GiB (check_config retries
+requirement installs that cannot reach PyPI), each nginx instance ~70s / 30 MB.
 
 ## Running one by hand
 
