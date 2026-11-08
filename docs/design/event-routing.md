@@ -524,7 +524,7 @@ work and Noah reviewing MRs rather than responding to alerts.
 | Approved lessons (`docker/openclaw/workspace/lessons/AGENTS.md`) | Repo-managed, deployed read-only into every agent session. After a nontrivial task the agent asks whether it learned something durable and proposes a one-line rule by MR (label `lessons`, under 150 lines). Noah reviews it, never auto-merged | No. A lesson changes the agent's behaviour, not the alerting or a playbook |
 | `skill-review` cron (Wed 02:00) | Reads `skills/*/feedback.jsonl`, updates `SKILL.md`, flags "hardening" candidates (5+ consecutive successes → extract to a script) and reverts (>20% failure over 5+ runs, from `hardened.json`) | No, but it is the same idea as this section applied to skills: a repeated agent procedure becomes deterministic code |
 | `fact-extraction` (06:00), `weekly-knowledge-synthesis` (Sun 10:00) | Agent memory: durable facts about people, projects and preferences pulled from daily notes into entity files, then summaries rewritten weekly | No. Personal/agent knowledge, not operations |
-| `docker/anomaly-detector/suppressions.yml` | Known/expected anomalies by MR, with a mandatory `reason` and `until` (at most a year); the agent proposes one when Noah says "that's expected" (`anomaly-triage` skill); expired entries stop applying and appear under `/status` | Partly: the only existing loop from a human verdict to a config change, and only for the detector |
+| `docker/anomaly-detector/suppressions.yml` | Known/expected anomalies by MR, with a mandatory `reason` and `until` (at most a year); the agent proposes one (`anomaly-triage` skill); expired entries stop applying and appear under `/status` | Partly: the only existing loop from a human verdict to a config change, and only for the detector |
 | `dependencies.yml` `rules:` | Operational rules learned the hard way, shown to agents (e.g. restart zigbee2mqtt after a coordinator firmware update, added after I1) | Written by hand after the fact; nothing executes them |
 | Bot-config auto-merge class (`ci/automerge/botconfig.py`, [AUTOMERGE.md](../AUTOMERGE.md#bot-config-class)) | moltbot's MRs that change only `for`, summary/description, severity or threshold numbers of an *existing* rule in `infrastructure.yml`/`anomaly.yml` (and some resource limits, log levels, dashboards) merge without review, enforced on the diff | It is the ready-made channel for tuning, but nothing feeds it outcome data today |
 
@@ -579,7 +579,7 @@ plus raw decisions from Loki) and acts on four lists:
 | Finding | Signal in the log | Output |
 |---|---|---|
 | Playbooks that do not work | Verify success < 80% over 30 days, breaker trips, outcome records showing a playbook ran but the real fix was something else | MR to fix the precondition/verify, or to disable it (`enabled: false`), or an issue proposing retirement |
-| Alerts that fire and are not acted on | Fired and auto-resolved within the `for` window, repeat fires with `noise: true` outcomes, pages Noah marked "useless" | Bot-config MR tuning `for` or the threshold of the existing rule; a dedupe/`needs` edge MR when it was a symptom; a suppression MR (with reason and expiry) when it is expected for a while |
+| Alerts that fire and are not acted on | Fired and auto-resolved within the `for` window, repeat fires with `noise: true` outcomes, pages that drew no human or agent action | Bot-config MR tuning `for` or the threshold of the existing rule; a dedupe/`needs` edge MR when it was a symptom; a suppression MR (with reason and expiry) when it is expected for a while |
 | Event classes that keep reaching OpenClaw or Noah | Same `alertname`/node reaching residue ≥ 3 times in 30 days, or outcome records with `playbook_able: true` and no MR yet | Playbook MR (shadow) or an issue explaining why no playbook is safe |
 | Missed incidents | Failures found by a safety-net cron (`main-pipeline-fix`, `schedule-failures`, drift) with no matching event; Noah's "should have paged me"; agent incidents that started from Noah rather than an alert (I1 pattern) | MR adding an alert rule (new rules are not bot-config eligible, so Noah reviews) or a reconciler check |
 
@@ -612,28 +612,41 @@ counterpart and the only cron that reads the decision log.
 - **Shadow first.** A learned playbook proves itself in the log before it acts.
 - **One-way ratchet on pages.** The loop may *add* page classes on "should have paged me", but removing a page class needs Noah's MR approval, even when the change is otherwise bot-config shaped.
 
-### 8.4 Capturing Noah's verdicts
+### 8.4 Judging outcomes without Noah
 
-Pages and digest lines carry a short incident id (`inc-7f3a`). Feedback uses a
-fixed vocabulary and is written to the decision log as
-`{"decision":"feedback","incident":"inc-7f3a","verdict":"useless_page"}`:
+Noah does not give per-event feedback (decision 2026-11-08). The loop must
+judge its own results from signals it can observe, and its only output to
+Noah is MRs.
 
-| Verdict | Meaning | Used by |
+**Signals per incident**, recorded in the decision log by the router or by
+OpenClaw's outcome record:
+
+| Signal | How it is observed | Interpreted as |
 |---|---|---|
-| `useful` | Right to page | Pages-useful metric |
-| `useless_page` | Should not have paged | Tuning list (8.2, second row) |
-| `should_have_paged` | A digest line or a silence that should have been a page | Missed list; page-class additions |
-| `wrong_action` | The playbook did the wrong thing | Breaker opens for that playbook; fix list |
-| `expected` | Known, expected condition | Suppression MR (asks for an expiry, as the anomaly skill does today) |
+| Verification passed and the alert stayed clear 24h | Router verify step plus Grafana state | Playbook worked |
+| Same alert re-fired within 24h after a "verified" fix | Router correlation | Fix was cosmetic: playbook needs work, or root cause not addressed |
+| Alert cleared on its own before any action | Grafana resolved before the playbook ran | Noise candidate: tune `for` or threshold |
+| Alert fires repeatedly, never acted on, nothing depends on it | Decision log | Noise: tune or suppress (with expiry) |
+| Human changed the same target after a page | Docker events, systemd journal, git commits or MRs touching it within 2h of the page | The page mattered. If the human's fix differs from the playbook, it is a candidate for a new or changed playbook |
+| Page with no human or agent action and the condition persisted | Decision log | Either noise (tune) or a missed escalation path: the weekly review decides |
+| Incident found by polling (audit, drift, digest) with no prior alert | OpenClaw cron outcome records | Missed detection: propose an alert rule |
+| OpenClaw investigation resolved it | Outcome record (root cause, fix, playbook-able?) | Playbook candidate |
 
-How it arrives:
+**Who reviews:** OpenClaw. The weekly `routing-review` cron reads the log
+and decides what to change. Outputs, in order of preference:
+1. **Bot-config MRs** for threshold, `for`, wording and dashboard tuning on
+   existing rules. These auto-merge under the existing policy (health gate,
+   rollback, daily cap).
+2. **MRs for anything else:** new playbooks, new alert rules, suppressions,
+   `needs` edges. Each carries the evidence (incident ids, counts, before and
+   after) so it can be merged without discussion. New playbooks and new
+   action types never auto-merge (8.3).
+3. A one-line weekly summary in the digest: changes proposed, merged and
+   outcomes since the last review.
 
-- **Telegram reply** to a page or digest message (pages are delivered by OpenClaw, so the agent sees the reply with the original message). "useless", "should have paged me", "that's expected" are mapped to a verdict; the agent echoes the verdict back in one line so a misread is visible, then posts it to the router's `POST /feedback`. The agent forwards only the incident id and the verdict, never Noah's text as an instruction to the router.
-- **Reaction** on the page (for example 👍 / 👎) if the OpenClaw Telegram channel surfaces reactions to the agent; otherwise replies only.
-- **"You missed X"** in any chat with the agent becomes a `should_have_paged` record without an incident id, which the weekly review treats as a missed incident.
-- Pages sent by email fallback (OpenClaw down) carry the same id; Noah can reply to it on Telegram later.
-
----
+Noah's involvement is merging (or ignoring) MRs. Nothing in the loop waits on
+a reply from him. An MR left unmerged for 30 days is closed by OpenClaw with
+a note, and the proposal stays in the decision log.
 
 ## 9. Rollout plan
 
@@ -692,7 +705,7 @@ notification history):
 14. **Success targets.** Are fewer than 10 pages/month and < 30 min MTTR the right bars?
 15. **I5-style regressions.** Out of scope here; do you want a separate CI guard (e.g. fail an MR whose diff reverts lines changed by commits after its merge base) tracked as its own issue?
 16. **Learning-loop tuning by bot-config.** Threshold/`for`/wording tuning of existing rules would auto-merge through the bot-config class (8.3). Comfortable with that being driven by the routing review, or should tuning MRs that come from it wait for you for the first few months?
-17. **Feedback capture.** Is a Telegram reply ("useless", "should have paged me", "expected") enough, or do you want reactions or inline buttons on pages too?
+17. ~~Feedback capture~~ — resolved: no per-event feedback from Noah; outcomes are judged from observed signals (8.4).
 18. **Routing-review cadence and output.** Weekly, results in the Monday Morning Digest: right cadence and place? Should findings that need a decision go to the monthly decision queue instead of separate issues?
 
 ## 12. Formal model: properties to check (for review)
