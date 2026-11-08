@@ -110,9 +110,16 @@ with this file, they win: say so.
 
 ## Monitoring
 
-- Grafana alerts go to email and to you via webhook (skill `anomaly-triage`
-  for the anomaly detector). Query Loki only through the Grafana datasource
-  proxy (direct access returns 401); its label is `container`.
+- The event router (`docker/event-router/`) is the first responder for
+  Grafana alerts and GitLab pipeline events: it runs fixed playbooks and
+  hands you only what it could not handle, through `/hooks/event-router`
+  (skill `event-router`: diagnose, page by its rules, always file an outcome
+  record). A Grafana alert that comes to you directly, marked FALLBACK, is
+  one the router did not take (it may be down). Grafana emails Noah only
+  page classes. The anomaly detector's alerts still follow skill
+  `anomaly-triage`. Noah's `/maint` command: skill `maint`. Query Loki only
+  through the Grafana datasource proxy (direct access returns 401); its
+  label is `container`.
 - The dead-man check (`deadman-check.timer`, docs/DEADMAN.md) tests
   `/persistent_data`, dockerd, key containers, Grafana, Vault unsealed and
   `mpool`, then pings healthchecks.io. If it fails, the alert comes from

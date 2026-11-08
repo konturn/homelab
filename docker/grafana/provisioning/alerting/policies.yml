@@ -1,5 +1,19 @@
 apiVersion: 1
 
+# Quiet hours (decision 6): non-urgent page classes are not mailed 23:00-08:00.
+# Alertmanager sends a muted alert at the first notification after the
+# interval ends if it still fires (08:00 plus up to group_interval).
+muteTimes:
+  - orgId: 1
+    name: quiet-hours
+    time_intervals:
+      - times:
+          - start_time: "23:00"
+            end_time: "24:00"
+          - start_time: "00:00"
+            end_time: "08:00"
+        location: America/New_York
+
 policies:
   - orgId: 1
     receiver: openclaw-webhook
@@ -8,12 +22,12 @@ policies:
     group_interval: 5m
     repeat_interval: 24h
     routes:
-      # Event router (docs/design/event-routing.md, phases 1-2): a copy of
-      # every alert. First, so the zigbee2mqtt exception below (continue:
-      # false) cannot hide anything from it; continue: true, so every route
-      # below delivers exactly as before. group_by '...' sends one alert per
-      # notification (the router dedupes by fingerprint); resolves within ~1m
-      # are its verification signal.
+      # Event router (docs/design/event-routing.md, phase 3, section 15): the
+      # catch-all. Every alert, one per notification (it dedupes by
+      # fingerprint); resolves within ~1m are its verification signal. It
+      # runs playbooks and hands OpenClaw what it could not handle through
+      # OpenClaw's /hooks/event-router. First, with continue: true, so the
+      # routes below still see every alert.
       - receiver: event-router
         matchers:
           - severity =~ ".*"
@@ -22,33 +36,16 @@ policies:
         group_interval: 1m
         repeat_interval: 4h
         continue: true
-      # zigbee2mqtt log floods: agent only, no email. Its log volume swings with
-      # normal Zigbee activity (OTA firmware updates, interviews, re-pairing),
-      # so the 10x-baseline rule fires on routine work. This route delivers it
-      # to the agent; continue: false keeps it out of the email routes. It sits
-      # ahead of the agent catch-all so openclaw-webhook gets it exactly once.
-      - receiver: openclaw-webhook
-        matchers:
-          - alertname = "Container Log Flood (rate 10x its own 24h baseline)"
-          - container = "zigbee2mqtt"
-        group_wait: 30s
-        group_interval: 10m
-        repeat_interval: 24h
-        continue: false
-      # Agent notification. MUST be the first catch-all and MUST stay a child route.
-      #
-      # The root `receiver:` above is Alertmanager's *fallback* -- it notifies only
-      # alerts that match no child route. `continue: true` continues to sibling
-      # routes, never to the parent. Every one of the 27 rules carries
-      # severity=critical|warning, so all 27 matched the email route below and the
-      # root receiver was never used: openclaw-webhook's lastNotifyAttempt was
-      # 0001-01-01T00:00:00Z (never) while the email receiver was attempting
-      # normally. The agent path had never delivered a real alert since it was
-      # wired in 2026-02 (cf3194a).
-      #
-      # severity =~ ".*" matches every alert, including any rule that forgets the
-      # label (an absent label matches the empty string), so this route cannot be
-      # bypassed the way the root receiver was.
+      # Fallback to OpenClaw (property L4). Every alert also goes to the
+      # agent's /hooks/grafana, whose transform (grafana.js) asks the router
+      # (GET /ack) and drops each alert the router acknowledged. So while the
+      # router works this route wakes nobody; when the router is down or never
+      # got an alert, the agent gets it here. It MUST stay a catch-all child
+      # route: the root `receiver:` is only Alertmanager's fallback for
+      # alerts no child matches (the agent path silently never delivered from
+      # 2026-02 to 2026-09 because of that, cf3194a). severity =~ ".*" also
+      # matches a rule without the label. group_wait 30s > the router's 10s,
+      # so the router's copy is in its inbox before this route asks.
       - receiver: openclaw-webhook
         matchers:
           - severity =~ ".*"
@@ -56,24 +53,35 @@ policies:
         group_interval: 10m
         repeat_interval: 24h
         continue: true
+      # Email: page classes only (decisions 4 and 5), by rule uid. Must match
+      # page_classes in docker/event-router/config.yml (tests/test_repo.py).
+      # Urgent classes, never muted (decision 6): security, data at risk, UPS.
       - receiver: homelab-email-alerts
         matchers:
-          - severity =~ "critical|warning"
+          - __alert_rule_uid__ =~ "failed-ssh-logins|efeju4cob1ipsb|zpool-unhealthy|smart-disk-vanished|smart-disk-error|restic-backup-stale|restic-db-dumps-stale|restic-db-dumps-weekly-stale|ups-on-battery|ups-battery-low|ups-battery-critical-30"
         group_wait: 10s
         group_interval: 2m
         repeat_interval: 24h
         continue: true
+      # Non-urgent page classes, held through quiet hours (23:00-08:00): an
+      # alert still firing at 08:00 is mailed then. Host not reporting,
+      # certificate <= 3 days, platform down (the event router itself;
+      # Pi-hole not answering).
       - receiver: homelab-email-alerts
         matchers:
-          - alertname =~ ".*HighMemory.*"
+          - __alert_rule_uid__ =~ "host-metrics-stale|ssl-cert-expiry-3d|event-router-down|pihole-dns-latency-high"
+        mute_time_intervals: [quiet-hours]
         group_wait: 10s
-        group_interval: 5m
+        group_interval: 2m
         repeat_interval: 24h
         continue: true
+      # Platform down: GitLab, Vault, Home Assistant, Pi-hole containers.
       - receiver: homelab-email-alerts
         matchers:
-          - alertname =~ ".*DiskSpace.*"
-        group_wait: 30s
-        group_interval: 10m
+          - __alert_rule_uid__ =~ "container-health-failure|container-restart-loop|critical-service-down"
+          - container_name =~ "gitlab|vault|homeassistant|pihole"
+        mute_time_intervals: [quiet-hours]
+        group_wait: 10s
+        group_interval: 2m
         repeat_interval: 24h
         continue: true

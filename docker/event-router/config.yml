@@ -28,7 +28,7 @@ quiet_hours: {start: "23:00", end: "08:00", tz: America/New_York}   # decision 6
 # router for every alert the router acknowledges (/ack), and an alert the
 # router never saw still reaches OpenClaw that way (L4).
 openclaw:
-  forward: false
+  forward: true
   url: http://openclaw-gateway:18789/hooks/event-router
   max_age: 6h          # queued residue older than this goes to the digest instead
   jit_after: 2m        # a page OpenClaw has not taken by then goes out through the JIT bot
@@ -75,9 +75,12 @@ restart_denylist:
   - jit-approval-svc
   - openclaw-gateway
 
-# Always-page classes (section 6.3, decision 5), by Grafana rule uid. In
-# phases 1-2 Grafana's email and OpenClaw routes still deliver these; the
-# router records them and never runs a playbook for them (S9, S11).
+# Always-page classes (section 6.3, decision 5), by Grafana rule uid. The
+# router never runs a playbook for them (S9, S11) and hands each to OpenClaw
+# as a page (Telegram; the JIT bot when OpenClaw is down). Grafana mails the
+# same list, and only it (policies.yml; tests/test_repo.py keeps the two
+# equal). `urgent` classes ignore quiet hours (decision 6). Failed
+# remediations page too, as class failed_remediation, from the router alone.
 page_classes:
   security:
     urgent: true
@@ -109,9 +112,18 @@ page_classes:
       - {rule_uid: container-restart-loop, labels: {container_name: "vault"}}
       - {rule_uid: container-restart-loop, labels: {container_name: "homeassistant"}}
       - {rule_uid: container-restart-loop, labels: {container_name: "pihole"}}
+      - {rule_uid: critical-service-down, labels: {container_name: "gitlab"}}
+      - {rule_uid: critical-service-down, labels: {container_name: "vault"}}
+      - {rule_uid: critical-service-down, labels: {container_name: "homeassistant"}}
+      - {rule_uid: critical-service-down, labels: {container_name: "pihole"}}
+      - {rule_uid: pihole-dns-latency-high}          # Pi-hole not answering (5s per failed query)
+      - {rule_uid: event-router-down}                # mostly reaches OpenClaw via the fallback route
   host_not_reporting:
     rules:
       - {rule_uid: host-metrics-stale}
+  certificate:
+    rules:
+      - {rule_uid: ssl-cert-expiry-3d}
 
 # Router deploys (resource_group deploy-router in .gitlab-ci.yml): while one
 # runs, nothing but ci-orphan-cancel acts (S7).

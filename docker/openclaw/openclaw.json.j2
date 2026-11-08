@@ -167,6 +167,17 @@
     "mappings": [
       {
         "action": "agent",
+        "name": "event-router",
+        "match": { "path": "event-router" },
+        "deliver": true,
+        "channel": "telegram",
+        "to": "8531859108",
+        "transform": {
+          "module": "event-router.js"
+        }
+      },
+      {
+        "action": "agent",
         "name": "grafana",
         "deliver": true,
         "channel": "telegram",

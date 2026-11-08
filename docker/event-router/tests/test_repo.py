@@ -67,6 +67,40 @@ class TestRepo(unittest.TestCase):
         self.assertEqual(held, set(self.cfg["ci_orphan"]["jobs"]))
         self.assertEqual(set(self.cfg["deploy_jobs"]), held)
 
+    def test_email_routes_are_the_page_classes(self):
+        """Decision 4: Grafana mails page classes only. The email routes in
+        policies.yml and page_classes here must name the same (rule uid,
+        container, urgent) triples; urgent ones are never muted (decision 6)."""
+        import re
+        with open(os.path.join(ROOT, "docker", "grafana", "provisioning", "alerting", "policies.yml")) as f:
+            pol = yaml.safe_load(f)
+        mutes = {m["name"] for m in pol.get("muteTimes") or []}
+        routed = set()
+        for r in pol["policies"][0]["routes"]:
+            if r["receiver"] != "homelab-email-alerts":
+                continue
+            m = {}
+            for matcher in r["matchers"]:
+                k, op, v = re.match(r"^(\S+)\s*(=~|=)\s*\"(.*)\"$", matcher).groups()
+                m[k] = v.split("|") if op == "=~" else [v]
+            self.assertLessEqual(set(m), {"__alert_rule_uid__", "container_name"}, r["matchers"])
+            muted = bool(r.get("mute_time_intervals"))
+            self.assertLessEqual(set(r.get("mute_time_intervals") or []), mutes)
+            for uid in m["__alert_rule_uid__"]:
+                for c in m.get("container_name", [None]):
+                    routed.add((uid, c, not muted))
+        want = set()
+        for cls in self.cfg["page_classes"].values():
+            for rule in cls["rules"]:
+                want.add((rule["rule_uid"], (rule.get("labels") or {}).get("container_name"), bool(cls.get("urgent"))))
+        # A route with a container matcher covers every listed container for
+        # every listed rule; the config may list fewer pairs than that.
+        self.assertLessEqual(want, routed)
+        extra = {t for t in routed - want if t[1] is None}
+        self.assertEqual(extra, set(), "mailed but not a page class")
+        for uid, c, urgent in routed - want:
+            self.assertTrue(any(w[1] for w in want if w[0] == uid), (uid, c))
+
     def test_durations_parse(self):
         self.assertEqual(parse_duration("45m"), self.cfg["ci_orphan"]["jobs"]["router:deploy"])
 
