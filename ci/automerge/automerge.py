@@ -38,6 +38,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import policy  # noqa: E402
+import botconfig  # noqa: E402
 
 try:
     import yaml  # PyYAML ships with ansible
@@ -68,6 +69,10 @@ CI_TRAILER = "Automerge-Policy: ci-image"
 CI_CLASS_TRAILER = "Automerge-Class: ci-image"
 # Rollback issues and holds of the CI image class use this deploy "job".
 CI_HOLD_JOB = "ci"
+# Bot-config class (moltbot's own low-risk config MRs, ci/automerge/botconfig.py).
+LABEL_BOT_CONFIG = "automerge-bot-config"
+BOT_TRAILER = "Automerge-Policy: bot-config"
+BOT_CLASS_TRAILER = "Automerge-Class: bot-config"
 # Selects the per-service deploy jobs: "Automerge-Deploy: [router] [zwave]".
 # plan-deploy re-derives the hosts from main's policy and refuses a mismatch.
 DEPLOY_TRAILER = "Automerge-Deploy:"
@@ -210,6 +215,7 @@ class GitLab:
             LABEL_FAST_TRACK: ("#6699cc", "Merged under the fast-track class (docs/AUTOMERGE.md)"),
             LABEL_CI_IMAGE: ("#8fbc8f", "Merged under the CI image class (docs/AUTOMERGE.md)"),
             LABEL_CI_WATCH: ("#c0c0c0", "CI image merge whose main pipeline the sweep has not checked yet"),
+            LABEL_BOT_CONFIG: ("#b07cd8", "moltbot config change merged under the bot-config class (docs/AUTOMERGE.md)"),
             LABEL_MANUAL: ("#e9be74", "Update the auto-merge policy leaves to a human: major, denylist "
                                       "(e.g. GitLab) or restricted kind. Reason in the MR notes"),
             "freeze": ("#808080", "Block auto-merge for this MR"),
@@ -284,6 +290,7 @@ def rollback_gate(holds: List[Tuple[dict, Optional[Set[Tuple[str, str]]]]],
     per-service deploys recreate only their own containers."""
     mine = {(j, c.service) for j in v.deploy_jobs for c in v.changes}
     mine |= {(CI_HOLD_JOB, name) for name in getattr(v, "ci_images", None) or []}
+    mine |= set(getattr(v, "hold_keys", None) or [])
     hits = [f"#{i['iid']}" for i, scope in holds if scope is None or scope & mine]
     if hits:
         return "open rollback issue(s) for this service: " + ", ".join(hits)
@@ -307,6 +314,19 @@ def host_unreachable(address: str, port: int = 22, timeout: float = 5.0) -> Opti
             return None
     except OSError as e:
         return f"{address}:{port} unreachable ({e.__class__.__name__})"
+
+
+def bot_config_rate_gate(recent: List[dict], allow: dict) -> Optional[str]:
+    """The bot-config class also has its own cap (`bot_config.max_per_24h`),
+    on top of the general budget it counts against."""
+    n = len([m for m in recent if LABEL_BOT_CONFIG in (m.get("labels") or [])])
+    try:
+        limit = botconfig.config(allow)["max_per_24h"]
+    except policy.PolicyError as e:
+        return f"policy: {e}"
+    if n >= limit:
+        return f"rate limit: {n} bot-config auto-merges in the last 24h (max {limit})"
+    return None
 
 
 def rate_gate(recent: List[dict], allow: dict, fast_track: bool) -> Optional[str]:
@@ -353,14 +373,26 @@ def evaluate_api(gl: GitLab, mr: dict, allow: dict, merger: Optional[str] = None
     base_sha, head_sha = refs.get("base_sha"), refs.get("head_sha")
     files = mr_file_changes(gl, mr["iid"])
     composes: Dict[str, policy.ComposePair] = {}
+    wanted = {f.path for f in files} & (set(policy.compose_files(allow)) | set(policy.ci_files(allow)))
+    if is_bot_config_author(mr["author"]["username"], allow) and len(files) <= 30:
+        # the bot-config class reads every changed file (as data)
+        wanted |= {f.path for f in files if not (f.new_file or f.deleted_file or f.renamed_file)}
     if base_sha and head_sha:
-        for path in sorted({f.path for f in files} & (set(policy.compose_files(allow)) | set(policy.ci_files(allow)))):
+        for path in sorted(wanted):
             composes[path] = (gl.file_at(path, base_sha), gl.file_at(path, head_sha))
     return policy.evaluate_mr(
         author=mr["author"]["username"], target_branch=mr["target_branch"],
         labels=mr.get("labels") or [], files=files, composes=composes,
         deployments=deployments if deployments is not None else load_deployments(allow),
         allowlist=allow, codeowners_text=read_codeowners(), merger=merger)
+
+
+def is_bot_config_author(author: str, allow: dict) -> bool:
+    try:
+        cfg = botconfig.config(allow)
+    except policy.PolicyError:
+        return False
+    return cfg["enabled"] and author in cfg["authors"]
 
 
 def token_user(gl: GitLab) -> str:
@@ -445,6 +477,8 @@ def cmd_mr_check(args: argparse.Namespace) -> int:
         files.append(policy.FileChange(path=path, new_file=status == "A", deleted_file=status == "D",
                                        mode_changed=status == "T"))
     listed = set(policy.compose_files(allow)) | set(policy.ci_files(allow))
+    if is_bot_config_author(args.author or "", allow):
+        listed |= {f.path for f in files if not (f.new_file or f.deleted_file)}
     composes = {f.path: (git_show(base, f.path), git_show(head, f.path)) for f in files if f.path in listed}
     v = policy.evaluate_mr(
         author=args.author or "", target_branch=args.target or "",
@@ -528,6 +562,7 @@ def cmd_sweep(args: argparse.Namespace) -> int:
             log(f"  - rollback #{i['iid']} holds: {held}")
         recent = recent_automerges(gl)
         rate = {ft: rate_gate(recent, allow, ft) for ft in (False, True)}
+        bot_rate = bot_config_rate_gate(recent, allow)
         for ft, r in rate.items():
             if r:
                 log(f"  - {'fast track' if ft else 'general class'}: {r}")
@@ -541,11 +576,12 @@ def cmd_sweep(args: argparse.Namespace) -> int:
         rb = rollback_gate(holds, v) if v.eligible else None
         ci_gate = (f"CI image merge(s) still awaiting their main pipeline: "
                    + ", ".join(f"!{i}" for i in ci_pending)) if v.eligible and v.ci_image and ci_pending else None
-        mr_gates = gates + [g for g in (rate[v.fast_track], rb, ci_gate) if g]
+        bot_gate = bot_rate if v.eligible and v.bot_config else None
+        mr_gates = gates + [g for g in (rate[v.fast_track], rb, ci_gate, bot_gate) if g]
         eligible = v.eligible and not mr_gates
         print_verdict(mr, v, mr_gates if v.eligible else [])
         if v.eligible:
-            log(f"  class: {'fast track' if v.fast_track else 'CI image' if v.ci_image else 'general'}"
+            log(f"  class: {'fast track' if v.fast_track else 'CI image' if v.ci_image else 'bot-config' if v.bot_config else 'general'}"
                 f"{' (dry run)' if (ft_dry if v.fast_track else dry) else ''}")
         writer = gl_ft if v.fast_track else gl
         has_label = LABEL_ELIGIBLE in (mr.get("labels") or [])
@@ -605,10 +641,15 @@ def deploy_trailer(v: policy.Verdict) -> str:
 def do_merge(gl: GitLab, mr: dict, v: policy.Verdict) -> bool:
     iid, sha = mr["iid"], mr["sha"]
     services = ", ".join(c.service for c in v.changes)
-    if not v.deploy_jobs and not v.ci_image:
+    if not v.deploy_jobs and not v.ci_image and not v.bot_config:
         log(f"  not merging !{iid}: no per-service deploy target")
         return False
-    if v.ci_image:
+    if v.bot_config:
+        trailers = BOT_CLASS_TRAILER + "\n" + (deploy_trailer(v) + "\n" if v.deploy_jobs else "") + BOT_TRAILER
+        services = ", ".join(sorted({c.file for c in v.bot_changes}))
+        what = f"moltbot config change: {mr.get('title', '')}"
+        labels = LABEL_MERGED + "," + LABEL_BOT_CONFIG
+    elif v.ci_image:
         trailers = CI_CLASS_TRAILER + "\n" + CI_TRAILER
         what = "CI image update: " + ", ".join(v.ci_images) + f" ({services})"
         labels = ",".join((LABEL_MERGED, LABEL_CI_IMAGE, LABEL_CI_WATCH))
@@ -641,10 +682,19 @@ def do_merge(gl: GitLab, mr: dict, v: policy.Verdict) -> bool:
         except RuntimeError as e2:
             log(f"  could not remove {LABEL_MERGED} label: {e2}")
         return False
-    cls = " under the fast-track class" if v.fast_track else " under the CI image class" if v.ci_image else ""
+    cls = (" under the fast-track class" if v.fast_track else " under the CI image class" if v.ci_image
+           else " under the bot-config class" if v.bot_config else "")
     lines = [f"Merged by the auto-merge policy{cls} (pipeline {os.environ.get('CI_PIPELINE_URL', 'n/a')}).", ""]
     lines += [f"- `{c.service}`: {c.kind} `{c.old}` -> `{c.new}`" for c in v.changes]
-    if v.ci_image:
+    lines += [f"- `{c.file}`{' ' + c.service if c.service else ''}: {c.what}" for c in v.bot_changes]
+    if v.bot_config and not v.deploy_jobs:
+        lines += ["", "Nothing to deploy (documentation only)."]
+    elif v.bot_config:
+        lines += ["", "The main pipeline deploys these changes (" +
+                  ", ".join(f"`{j}:deploy-service`" for j in v.deploy_jobs) +
+                  "): changed services are recreated behind the health gate, Grafana provisioning is "
+                  "reloaded through its API, and either rolls back automatically on failure."]
+    elif v.ci_image:
         lines += ["", "Nothing is deployed. The sweep checks the main pipeline of this merge; if a job "
                       "that runs the changed image fails there, it opens a revert MR and a rollback "
                       "issue, and holds the next update of the image for a human."]
@@ -677,6 +727,11 @@ def ci_watch_verdict(pipeline: Optional[dict], jobs: List[dict], users: List[str
     if failed:
         return "unrelated", failed
     if pipeline.get("status") in ("canceled", "skipped"):
+        # superseded main pipelines are canceled (interruptible jobs); the
+        # jobs that run the image may still have finished
+        ran = {j["name"]: j.get("status") for j in jobs if j["name"] in set(users)}
+        if ran and all(st == "success" for st in ran.values()):
+            return "passed", sorted(ran)
         return "unverified", []
     return "passed", []
 
@@ -727,7 +782,9 @@ def ci_watch(gl: GitLab, allow: dict) -> List[int]:
         if outcome == "revert":
             ci_rollback(gl, mr, changes, which, url)
         else:
-            text = {"passed": f"Main pipeline of the merge passed ({url}).",
+            text = {"passed": f"Main pipeline of the merge passed ({url})." if not which else
+                    f"Jobs that run the image passed in the main pipeline of the merge: "
+                    f"{', '.join(which)} ({url}).",
                     "unrelated": f"Main pipeline of the merge failed only in jobs that do not run "
                                  f"{', '.join(names)}: {', '.join(which)} ({url}). Not reverted.",
                     "unverified": f"Main pipeline of the merge was {pipe.get('status')} ({url}); "
@@ -821,6 +878,105 @@ def ci_rollback(gl: GitLab, mr: dict, changes: List[policy.ImageChange], failed:
               "\n".join(body + ["", f"MR: {mr.get('web_url', '')}"]) + "\n")
 
 
+def bot_config_merge_files(first_parent: str, sha: str) -> Tuple[List[policy.FileChange], Dict[str, policy.ComposePair]]:
+    """The first-parent diff of a merge, as FileChanges and file contents."""
+    files = []
+    for line in git("diff", "--name-status", "--no-renames", first_parent, sha).splitlines():
+        status, _, path = line.partition("\t")
+        files.append(policy.FileChange(path=path, new_file=status == "A", deleted_file=status == "D",
+                                       mode_changed=status == "T"))
+    contents = {f.path: (git_show(first_parent, f.path), git_show(sha, f.path))
+                for f in files if not (f.new_file or f.deleted_file)}
+    return files, contents
+
+
+def plan_bot_config(args: argparse.Namespace, allow: dict, deployments: Dict[str, List[policy.Deployment]],
+                    mr: dict, sha: str, first_parent: str, abort) -> int:
+    """plan-deploy for a bot-config merge: re-check the merged diff with
+    main's policy, then plan the changed services and Grafana files of this host."""
+    if not is_bot_config_author(mr["author"]["username"], allow):
+        return abort(f"!{mr['iid']} is labelled {LABEL_BOT_CONFIG} but its author is not a bot-config author")
+    files, contents = bot_config_merge_files(first_parent, sha)
+    result = botconfig.evaluate_files(files, contents, allow)
+    if result.reasons:
+        return abort("merged change is outside the bot-config policy: " + "; ".join(result.reasons))
+    targets, problems = policy.bot_config_targets(result, deployments)
+    if problems:
+        return abort("; ".join(problems))
+    dep = next((d for d in targets if d.job == args.host), None)
+    if dep is None:
+        return abort(f"this commit does not deploy to {args.host} (targets: "
+                     f"{', '.join(sorted(d.job for d in targets)) or 'none'})")
+
+    out = Path(args.out)
+    prev_dir = out.parent / "prev"
+    (prev_dir / "files").mkdir(parents=True, exist_ok=True)
+    for path in git("ls-tree", "--name-only", first_parent, "docker/").splitlines():
+        if policy.COMPOSE_GLOB.match(path):
+            (prev_dir / Path(path).name).write_text(git_show(first_parent, path) or "")
+    prev_files = {}
+    for path in sorted(result.kinds):
+        if result.kinds[path] in ("compose", "alerts", "dashboard"):
+            dest = prev_dir / "files" / path.replace("/", "__")
+            dest.write_text(contents[path][0] or "")
+            prev_files[path] = str(dest)
+
+    timeout_default = int(allow.get("default_health_timeout", 600))
+    opts = allow["services"]
+    host_files = [f for f in sorted({f for f, _ in result.compose_services}) if dep in (deployments.get(f) or [])]
+    services = []
+    for path in host_files:
+        head = contents[path][1] or ""
+        _, images = policy.compose_line_services(head)
+        lines = head.split("\n")
+        for f, svc in result.compose_services:
+            if f != path:
+                continue
+            idx = next((i for i, s in images.items() if s == svc), None)
+            if idx is None:
+                return abort(f"{svc} in {path} has no image line")
+            raw = lines[idx].split("image:", 1)[1].strip().strip("'\"")
+            try:
+                digest = policy.parse_image_ref(raw).digest or ""
+            except policy.PolicyError:
+                digest = ""        # templated (locally built) image: no digest check
+            o = opts.get(svc) or {}
+            services.append({
+                "service": svc, "file": path, "kind": "config", "old": raw, "new": raw,
+                "old_digest": digest, "new_digest": digest, "probe": o.get("probe") or "",
+                "probe_via": o.get("probe_via") or "",
+                "timeout": int(o.get("timeout") or timeout_default),
+                "pre_upgrade_backup": "", "backup_dir": "",
+            })
+    grafana = []
+    if dep.job == "router":
+        for path in result.grafana_files:
+            kind = result.kinds[path]
+            grafana.append({
+                "src": path, "dest": path[len("docker/"):], "kind": kind, "prev": prev_files[path],
+                "uids": botconfig.alert_rule_uids(contents[path][1]) if kind == "alerts"
+                else [json.loads(contents[path][1])["uid"]],
+            })
+    pre_cfg = policy.pre_upgrade_config(allow)
+    plan = {
+        "mr_iid": mr["iid"], "mr_url": mr["web_url"], "mr_title": mr["title"], "class": "bot-config",
+        "merge_sha": sha, "first_parent": first_parent, "prev_compose_dir": str(prev_dir),
+        "host": dep.host, "job": args.host, "project": dep.project,
+        "changed_files": sorted(prev_files), "prev_files": prev_files, "host_files": host_files,
+        "services": services, "grafana_files": grafana,
+        "pre_upgrade": {k: pre_cfg[k] for k in ("dir", "keep", "rate_mb", "timeout")},
+    }
+    out.write_text(json.dumps(plan, indent=2))
+    log(f"Bot-config deploy plan for !{mr['iid']} ({sha[:12]}) on {dep.host}:")
+    for c in result.changes:
+        log(f"  {c.file}: {c.service + ': ' if c.service else ''}{c.what}")
+    for s in services:
+        log(f"  recreate {s['service']} (probe: {s['probe'] or 'none'}, timeout {s['timeout']}s)")
+    for g in grafana:
+        log(f"  Grafana {g['kind']}: {g['src']} (reload through the API)")
+    return 0
+
+
 def cmd_plan_deploy(args: argparse.Namespace) -> int:
     gl = gitlab_from_env(dry_run=False)
     allow = load_allowlist()
@@ -849,6 +1005,9 @@ def cmd_plan_deploy(args: argparse.Namespace) -> int:
     merged_by = (mr.get("merge_user") or mr.get("merged_by") or {}).get("username")
     if merged_by != token_user(gl) or merged_by == mr["author"]["username"]:
         return abort(f"!{mr['iid']} was not merged by the auto-merge identity")
+
+    if LABEL_BOT_CONFIG in (mr.get("labels") or []):
+        return plan_bot_config(args, allow, deployments, mr, sha, first_parent, abort)
 
     listed = set(policy.compose_files(allow))
     changed = [p for p in git("diff", "--name-only", first_parent, sha).splitlines() if p]
@@ -945,7 +1104,8 @@ def cmd_deploy_report(args: argparse.Namespace) -> int:
     iid = plan["mr_iid"]
     job = os.environ.get("CI_JOB_URL", "n/a")
     host = plan.get("host") or "router.lab.nkontur.com"
-    svc_list = ", ".join(s["service"] for s in plan["services"])
+    held = plan_hold_services(plan)
+    svc_list = ", ".join(held)
     backups = [s for s in plan["services"] if s.get("pre_upgrade_backup")]
     if args.status == "success":
         body = f"Deployed and healthy on {host}: {svc_list} ({job})."
@@ -972,13 +1132,15 @@ def cmd_deploy_report(args: argparse.Namespace) -> int:
         "",
         "| service | from | to |", "|---|---|---|",
     ] + [f"| {s['service']} | `{s['old']}` | `{s['new']}` |" for s in plan["services"]] + [
+        f"| {policy.GRAFANA_HOLD} | `{g['src']}` (previous) | `{g['src']}` (merged) |"
+        for g in plan.get("grafana_files") or []] + [
         "",
         f"While this issue is open, auto-merge is paused for {svc_list} on {host.split('.')[0]}; other",
         "services keep auto-merging. `main` still references the new image, so the next full deploy of",
         "this host would re-apply it; merge the revert MR or fix forward, then close this issue.",
         "",
         f"<!-- automerge-rollback job={plan.get('job') or host.split('.')[0]} "
-        f"services={','.join(s['service'] for s in plan['services'])} -->",
+        f"services={','.join(held)} -->",
     ]
     existing = [i for i in gl.get(f"projects/{PROJECT}/issues", state="opened", labels=LABEL_ROLLBACK,
                                   search=f"!{iid}", per_page=20) if f"(!{iid})" in i["title"]]
@@ -1000,6 +1162,13 @@ def cmd_deploy_report(args: argparse.Namespace) -> int:
     mail_root(f"Homelab auto-merge ROLLBACK: {svc_list} on {host.split('.')[0]} (!{iid})",
               "\n".join(body + ["", f"Issue: {issue_ref}", f"MR: {plan['mr_url']}"]) + "\n")
     return 0
+
+
+def plan_hold_services(plan: dict) -> List[str]:
+    """What a failed deploy of this plan holds back: its services, and the
+    Grafana provisioning when it deployed Grafana files."""
+    return [s["service"] for s in plan["services"]] + \
+        ([policy.GRAFANA_HOLD] if plan.get("grafana_files") else [])
 
 
 def restore_lines(backups: List[dict], result: dict) -> List[str]:
@@ -1033,15 +1202,17 @@ def open_revert_mr(gl: GitLab, plan: dict) -> Optional[int]:
         if found:
             return found[0]["iid"]
         changed = plan.get("changed_files") or [policy.COMPOSE_PATH]
+        prev = plan.get("prev_files") or {}
         actions = [{"action": "update", "file_path": path,
-                    "content": Path(plan["prev_compose_dir"], Path(path).name).read_text()}
+                    "content": Path(prev[path] if path in prev
+                                    else Path(plan["prev_compose_dir"], Path(path).name)).read_text()}
                    for path in changed]
         try:
             gl.get(f"projects/{PROJECT}/repository/branches/{urllib.parse.quote(branch, safe='')}")
         except RuntimeError:
             gl.write("POST", f"projects/{PROJECT}/repository/commits", {
                 "branch": branch, "start_sha": plan["merge_sha"],
-                "commit_message": "Revert image update for " + ", ".join(s["service"] for s in plan["services"]),
+                "commit_message": "Revert auto-merged update for " + ", ".join(plan_hold_services(plan)),
                 "actions": actions,
             })
         mr = gl.write("POST", f"projects/{PROJECT}/merge_requests", {
@@ -1071,6 +1242,7 @@ def cmd_daily_report(args: argparse.Namespace) -> int:
     lines.append(f"Auto-merged: {len(merged)}")
     lines += [f"  !{m['iid']} {m['title']}  {m['web_url']}"
               f"{'  [fast track]' if LABEL_FAST_TRACK in (m.get('labels') or []) else ''}" for m in merged]
+    lines += report_bot_config(merged)
     lines.append(f"Rollbacks (new): {len(rb_new)}")
     lines += [f"  #{i['iid']} {i['title']}  {i['web_url']}" for i in rb_new]
     lines.append(f"Rollback issues still open (auto-merge paused for their services): {len(rb_open)}")
@@ -1097,6 +1269,15 @@ def cmd_daily_report(args: argparse.Namespace) -> int:
         return 1
     log("Summary mailed.")
     return 0
+
+
+def report_bot_config(merged: List[dict]) -> List[str]:
+    """Daily report lines for the bot-config class (moltbot's own MRs)."""
+    bot = [m for m in merged if LABEL_BOT_CONFIG in (m.get("labels") or [])]
+    if not bot:
+        return []
+    return [f"Merged for moltbot (bot-config class): {len(bot)}"] + \
+        [f"  merged for moltbot: {m['title']}  {m['web_url']}" for m in bot]
 
 
 def mail_root(subject: str, body: str) -> bool:

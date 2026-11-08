@@ -244,6 +244,15 @@ class WatchTests(unittest.TestCase):
     def test_canceled(self):
         self.assertEqual(automerge.ci_watch_verdict({"status": "canceled"}, [], self.users)[0], "unverified")
 
+    def test_canceled_after_the_image_jobs_passed(self):
+        # !989: deploy-scope:test was canceled by a newer main pipeline after
+        # nginx:validate had passed
+        jobs = [{"name": "nginx:validate", "status": "success"}, {"name": "deploy-scope:test", "status": "canceled"}]
+        self.assertEqual(automerge.ci_watch_verdict({"status": "canceled"}, jobs, self.users),
+                         ("passed", ["nginx:validate"]))
+        jobs[0]["status"] = "canceled"
+        self.assertEqual(automerge.ci_watch_verdict({"status": "canceled"}, jobs, self.users)[0], "unverified")
+
     def test_revert_text(self):
         head = edit(BASE, *NGINX_989)
         changes = policy.diff_ci_images(BASE, head)
@@ -439,9 +448,10 @@ class RealRepoTests(unittest.TestCase):
             self.assertIn("@project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6", own)
 
     def test_ci_image_merges_make_host_deploys_manual(self):
-        self.assertIn("Automerge-Policy: (image-update|ci-image)", self.ci)
+        m = re.search(r"\.automerged_commit_manual:\n  rules:\n    - if: '.*?=~ /(Automerge-Policy: [^/]*)/'", self.ci)
+        self.assertTrue(m)
         trailer = automerge.CI_TRAILER
-        self.assertTrue(re.search(r"Automerge-Policy: (image-update|ci-image)", trailer))
+        self.assertTrue(re.search(m.group(1), trailer))
         # and never selects a per-service deploy
         self.assertNotIn("Automerge-Deploy", trailer + automerge.CI_CLASS_TRAILER)
 

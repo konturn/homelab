@@ -1243,31 +1243,6 @@
     mode: "0644"
   when: "'router' in inventory_hostname"
 
-### OpenClaw infrastructure context
-# Reviewed summary of the current homelab (hosts, services, how updates and
-# deploys work, what the agent may do). Injected into every session by the
-# bootstrap-extra-files hook as infra/TOOLS.md (see openclaw.json.j2; the hook
-# only loads bootstrap basenames, and cron and sub-agent sessions keep
-# TOOLS.md). Root-owned like the lessons file, so it changes only through an
-# MR. Read per session; no restart needed.
-- name: Ensure OpenClaw infra context directory exists
-  ansible.builtin.file:
-    path: "{{ docker_persistent_data_path }}/openclaw/workspace/infra"
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  when: "'router' in inventory_hostname"
-
-- name: Deploy OpenClaw infra context
-  ansible.builtin.copy:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/openclaw/workspace/infra/TOOLS.md"
-    dest: "{{ docker_persistent_data_path }}/openclaw/workspace/infra/TOOLS.md"
-    owner: root
-    group: root
-    mode: "0644"
-  when: "'router' in inventory_hostname"
-
 ### OpenClaw repo-managed skills
 # Skills whose source of truth is the repo (docker/openclaw/workspace/skills/),
 # deployed root-owned like the lessons file so they change only through an

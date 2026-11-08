@@ -86,6 +86,15 @@
 /docker/docker-compose-zwave.yml         @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
 /docker/daemon.json                      @root
 
+# === GRAFANA (bot-config class) ===
+# The automerge bot is a second owner of the alert-rule files and dashboard
+# JSON the bot-config class may change (shape-checked by
+# ci/automerge/botconfig.py; docs/AUTOMERGE.md, "Bot-config class"). Contact
+# points, notification policies and datasources stay root-only.
+/docker/grafana/provisioning/alerting/infrastructure.yml @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+/docker/grafana/provisioning/alerting/anomaly.yml        @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+/docker/grafana/provisioning/dashboards/json/            @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+
 # === MOLTBOT SELF-MODIFICATION ===
 # Prevent moltbot from expanding its own access
 /docker/openclaw/                         @root

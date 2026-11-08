@@ -11,10 +11,5 @@ pi_boot_kernel_packages:
 #   panic=10: a kernel panic reboots after 10s instead of hanging. These Pis
 #   are remote-only, and after a `reboot "0 tryboot"` the reboot also lands
 #   back on the known-good config.txt.
-#   cgroup_enable=memory: the firmware adds cgroup_disable=memory to the
-#   command line; a later cgroup_enable wins. Without the memory controller
-#   Docker ignores container memory limits and reports 0 for every memory
-#   metric (#140).
 pi_boot_cmdline_params:
   - panic=10
-  - cgroup_enable=memory

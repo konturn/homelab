@@ -817,6 +817,11 @@ class Verdict:
     deploy_hosts: List[Deployment] = field(default_factory=list)
     ci_image: bool = False                             # CI image class (job images in a CI file)
     ci_images: List[str] = field(default_factory=list)     # image names it changes
+    bot_config: bool = False                           # bot-config class (moltbot config MRs)
+    bot_changes: list = field(default_factory=list)    # botconfig.ConfigChange
+    config_services: List[Tuple[str, str]] = field(default_factory=list)   # (compose file, service)
+    grafana_files: List[str] = field(default_factory=list)
+    hold_keys: List[Tuple[str, str]] = field(default_factory=list)          # (deploy job, service)
 
     def reject(self, reason: str) -> None:
         self.eligible = False
@@ -831,6 +836,8 @@ class Verdict:
 
     def as_dict(self) -> dict:
         return {"eligible": self.eligible, "fast_track": self.fast_track, "ci_image": self.ci_image,
+                "bot_config": self.bot_config,
+                "bot_changes": [c.as_dict() for c in self.bot_changes],
                 "heavy": self.heavy,
                 "major": self.major, "denied": self.denied, "manual": self.manual,
                 "deploy_jobs": self.deploy_jobs, "reasons": self.reasons,
@@ -851,6 +858,117 @@ ComposePair = Tuple[Optional[str], Optional[str]]
 
 
 def evaluate_mr(*, author: str, target_branch: str, labels: List[str],
+                files: List[FileChange], allowlist: dict, codeowners_text: str,
+                base_compose: Optional[str] = None, head_compose: Optional[str] = None,
+                composes: Optional[Dict[str, ComposePair]] = None,
+                deployments: Optional[Dict[str, List[Deployment]]] = None,
+                merger: Optional[str] = None) -> Verdict:
+    """Image-update policy (general, fast track, CI image), and for MRs by a
+    bot-config author that are not image updates, the bot-config class.
+    `composes` maps changed files to their (base, head) text (every changed
+    file for a bot-config author)."""
+    v = _evaluate_images(author=author, target_branch=target_branch, labels=labels, files=files,
+                         allowlist=allowlist, codeowners_text=codeowners_text, base_compose=base_compose,
+                         head_compose=head_compose, composes=composes, deployments=deployments,
+                         merger=merger)
+    if v.eligible or v.changes or v.major:
+        return v
+    import botconfig
+    try:
+        cfg = botconfig.config(allowlist)
+    except PolicyError as e:
+        v.reject(f"policy: {e}")
+        return v
+    if not cfg["enabled"] or author not in cfg["authors"]:
+        return v
+    return evaluate_bot_config(author=author, target_branch=target_branch, labels=labels, files=files,
+                               contents=composes or {}, allowlist=allowlist, merger=merger,
+                               deployments=deployments if deployments is not None
+                               else default_deployments(allowlist))
+
+
+LABEL_SECURITY = "security"
+
+
+def bot_config_targets(result, deployments: Dict[str, List[Deployment]]) -> Tuple[List[Deployment], List[str]]:
+    """(deploy targets, problems) of a bot-config change: the hosts of each
+    changed compose file, and the router for Grafana provisioning files."""
+    targets: List[Deployment] = []
+    problems: List[str] = []
+    for path in sorted({f for f, _ in result.compose_services}):
+        hosts = deployments.get(path) or []
+        if not hosts:
+            problems.append(f"{path} is not deployed by any host")
+        for d in hosts:
+            if not d.job:
+                problems.append(f"{path} runs on {d.host}, which has no per-service deploy")
+            elif d not in targets:
+                targets.append(d)
+    if result.grafana_files:
+        router = [d for d in deployments.get(COMPOSE_PATH) or [] if d.job == "router"]
+        if not router:
+            problems.append("Grafana files deploy on the router, which has no per-service deploy")
+        elif router[0] not in targets:
+            targets.append(router[0])
+    return targets, problems
+
+
+GRAFANA_HOLD = "grafana-provisioning"
+
+
+def evaluate_bot_config(*, author: str, target_branch: str, labels: List[str], files: List[FileChange],
+                        contents: Dict[str, ComposePair], allowlist: dict, merger: Optional[str],
+                        deployments: Dict[str, List[Deployment]]) -> Verdict:
+    """The bot-config class (ci/automerge/botconfig.py; docs/AUTOMERGE.md)."""
+    import botconfig
+    v = Verdict(bot_config=True)
+    cfg = botconfig.config(allowlist)
+    if author not in cfg["authors"]:
+        v.reject(f"author {author!r} is not a bot-config author")
+    if merger is not None and author == merger:
+        v.reject(f"author {author!r} is the merging identity; the merger must not be the author")
+    if target_branch != allowlist.get("target_branch", "main"):
+        v.reject(f"target branch {target_branch!r} is not {allowlist.get('target_branch', 'main')!r}")
+    freeze_label = allowlist.get("freeze_label", "freeze")
+    if freeze_label in labels:
+        v.frozen = True
+        v.reject(f"MR has the {freeze_label!r} label")
+    for label in (LABEL_SECURITY, LABEL_MAJOR):
+        if label in labels:
+            v.reject(f"MR has the {label!r} label")
+    if len(files) > 30:
+        v.reject(f"MR changes {len(files)} files (more than 30)")
+    r = botconfig.evaluate_files(files, contents, allowlist)
+    for reason in r.reasons:
+        v.reject(reason)
+    v.bot_changes = r.changes
+    v.config_services = r.compose_services
+    v.grafana_files = r.grafana_files
+    targets, problems = bot_config_targets(r, deployments)
+    for p in problems:
+        v.reject(p)
+    for d in targets:
+        v.deploy_jobs.append(d.job)
+        v.deploy_hosts.append(d)
+    by_file = {}
+    for f, svc in r.compose_services:
+        by_file.setdefault(f, []).append(svc)
+    for d in targets:
+        for f, svcs in by_file.items():
+            if d in (deployments.get(f) or []):
+                v.hold_keys += [(d.job, s) for s in svcs]
+    if r.grafana_files:
+        v.hold_keys.append(("router", GRAFANA_HOLD))
+    for c in r.changes:
+        v.notes.append(f"{c.file}: {c.service + ': ' if c.service else ''}{c.what}")
+    if v.deploy_jobs:
+        v.notes.append("deploys via " + ", ".join(f"{j}:deploy-service" for j in v.deploy_jobs))
+    if v.eligible:
+        v.notes.append("class: bot-config")
+    return v
+
+
+def _evaluate_images(*, author: str, target_branch: str, labels: List[str],
                 files: List[FileChange], allowlist: dict, codeowners_text: str,
                 base_compose: Optional[str] = None, head_compose: Optional[str] = None,
                 composes: Optional[Dict[str, ComposePair]] = None,
