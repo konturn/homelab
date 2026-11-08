@@ -10,6 +10,10 @@ path stays a plain copy):
     base/disk/crypttab                from inventory/hardware.yml disks[].luks
                                       (boot, persistent_data, then data and
                                       spare disks by mapper number)
+    docker/openclaw/workspace/infra/TOOLS.md
+                                      OpenClaw's standing context: TOOLS.md.in
+                                      plus sections from the repo data
+                                      (ci/facts/agent_context.py)
 """
 
 from __future__ import annotations
@@ -20,6 +24,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import agent_context  # noqa: E402
 import facts  # noqa: E402
 
 KEYFILE = "/etc/password_file.txt"
@@ -73,6 +78,7 @@ def targets(root: Path = facts.ROOT) -> dict[str, str]:
     return {
         "base/udev/85-my-usb-audio.rules": render_udev_audio(hw),
         "base/disk/crypttab": render_crypttab(hw),
+        agent_context.OUTPUT: agent_context.render(root),
     }
 
 

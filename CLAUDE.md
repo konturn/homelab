@@ -14,7 +14,7 @@ This repository contains the infrastructure-as-code for a homelab environment us
 - `ansible/inventory.yml` - Host variables and config file mappings
 - `ansible/roles/configure-docker/` - Docker deployment role
 - `docker/<service>/` - Service-specific config files
-- `inventory/hardware.yml`, `inventory/dependencies.yml` - Disk slots, USB audio ports, service dependency chain. `base/udev/85-my-usb-audio.rules` and `base/disk/crypttab` are generated from them (`python3 ci/facts/render.py`); `facts:drift` checks the live router against them. See `inventory/README.md`
+- `inventory/hardware.yml`, `inventory/dependencies.yml` - Disk slots, USB audio ports, service dependency chain. `base/udev/85-my-usb-audio.rules`, `base/disk/crypttab` and OpenClaw's `docker/openclaw/workspace/infra/TOOLS.md` (from `TOOLS.md.in` + repo data) are generated (`python3 ci/facts/render.py`); `facts:drift` checks the live router against them. See `inventory/README.md`
 
 ## Config Deployment Pattern
 

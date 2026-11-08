@@ -9,6 +9,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+import agent_context  # noqa: E402
 import collect  # noqa: E402
 import drift  # noqa: E402
 import facts  # noqa: E402
@@ -103,6 +104,53 @@ class RenderTest(unittest.TestCase):
         self.assertNotIn("dev22", names)
         nums = [int(n[3:]) for n in names[2:]]
         self.assertEqual(nums, sorted(nums))
+
+
+class AgentContextTest(unittest.TestCase):
+    """docker/openclaw/workspace/infra/TOOLS.md (staleness: DataTest above)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = agent_context.render()
+
+    def test_every_marker_replaced(self):
+        self.assertNotIn("<!-- generated:", self.text)
+        template = (facts.ROOT / agent_context.TEMPLATE).read_text()
+        for name in agent_context.SECTIONS:
+            self.assertIn(f"<!-- generated: {name} -->", template, f"section {name} unused")
+
+    def test_size_fits_openclaw(self):
+        # OpenClaw truncates a bootstrap file above 20,000 chars; its config
+        # guard distrusts a file that shrinks by more than half.
+        self.assertLess(len(self.text), 18000)
+        self.assertGreater(len(self.text), 6000)
+
+    def test_bot_config_matches_sweep(self):
+        sys.path.insert(0, str(facts.ROOT / "ci" / "automerge"))
+        import botconfig
+        cfg = botconfig.config(facts.load_yaml(agent_context.POLICY))
+        section = self.text.split("## Merging your own MRs", 1)[1]
+        for pattern in cfg["never"] + [p for k in botconfig.KINDS for p in cfg["paths"][k]]:
+            self.assertIn(f"`{pattern}`", section)
+        self.assertIn(f"at most {cfg['max_per_24h']} bot-config merges", section)
+        for svc in cfg["denied_services"]:
+            self.assertIn(svc, section)
+
+    def test_facts_present(self):
+        for needle in ("dev12", "870 EVO", "Office (zone_16_2)", "restart zigbee2mqtt",
+                       "homeassistant needs mqtt, zwave_js, influxdb, dns", "snapclient_global",
+                       "6 `iot` 10.6.0.0/16"):
+            self.assertIn(needle, self.text)
+
+    def test_unknown_marker_rejected(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for rel in (agent_context.TEMPLATE,):
+                (root / rel).parent.mkdir(parents=True)
+                (root / rel).write_text("<!-- generated: nope -->\n")
+            with self.assertRaises(facts.FactsError):
+                agent_context.render(root)
 
 
 class ParseTest(unittest.TestCase):
