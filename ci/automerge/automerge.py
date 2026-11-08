@@ -847,8 +847,11 @@ def watch_one(gl: GitLab, allow: dict, mr: dict, label: str) -> bool:
     if not sha:
         log(f"{what} !{iid}: no merge commit")
         return False
-    pipes = gl.get(f"projects/{PROJECT}/pipelines", sha=sha, ref="main", per_page=20) or []
-    pipes = sorted(pipes, key=lambda p: p["id"])
+    # The push pipeline of the merge commit. Scheduled pipelines (the sweep
+    # itself, every 15 min) run on main's head too, often on this very sha:
+    # taking the newest pipeline would watch the sweep instead of the merge.
+    pipes = gl.get(f"projects/{PROJECT}/pipelines", sha=sha, ref="main", source="push", per_page=20) or []
+    pipes = sorted((p for p in pipes if p.get("source", "push") == "push"), key=lambda p: p["id"])
     pipe = pipes[-1] if pipes else None
     jobs = gl.get_all(f"projects/{PROJECT}/pipelines/{pipe['id']}/jobs") if pipe and \
         pipe.get("status") in PIPELINE_DONE else []

@@ -482,7 +482,9 @@ class WatchGitLab(FakeGitLab):
 
     def get(self, path, **params):
         if path.endswith("/pipelines"):
-            return [{"id": 9, "status": self.status, "web_url": "p"}]
+            pipes = [{"id": 9, "status": self.status, "web_url": "p", "source": "push"},
+                     {"id": 10, "status": "running", "web_url": "s", "source": "schedule"}]
+            return [p for p in pipes if p["source"] == params.get("source", p["source"])]
         if "/repository/commits/" in path:
             return {"parent_ids": ["base"]}
         if path.endswith("/repository/compare"):
@@ -507,6 +509,11 @@ class WatchFlowTests(unittest.TestCase):
         gl, pending = self.run_watch("running", [])
         self.assertEqual(pending, [1159])
         self.assertEqual(gl.writes, [])
+
+    def test_watches_the_push_pipeline_not_the_sweep(self):
+        # the sweep's own scheduled pipeline runs on the merge sha too
+        gl, pending = self.run_watch("success", [{"name": "novnc:build", "status": "success"}])
+        self.assertEqual(pending, [])
 
     def test_passed(self):
         gl, pending = self.run_watch("success", [{"name": "novnc:build", "status": "success"}])
