@@ -28,7 +28,7 @@ RUN go mod download && go mod verify
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -trimpath -ldflags="-s -w" -o /out/go2rtc .
 
-FROM alpine:3.23.8@sha256:5c216c9767869f6ec7c4718977601d52f087c5c7bf2fdfb198e403f6b48ec40d
+FROM alpine:3.24.4@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
 
 COPY --from=build /out/go2rtc /usr/local/bin/go2rtc
 COPY go2rtc.yaml /etc/go2rtc/go2rtc.yaml
