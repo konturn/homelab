@@ -514,6 +514,8 @@
       dest: "{{ docker_persistent_data_path }}/grafana/provisioning/dashboards/json/anomaly-detector.json"
     - src: "docker/grafana/provisioning/dashboards/json/ups.json"
       dest: "{{ docker_persistent_data_path }}/grafana/provisioning/dashboards/json/ups.json"
+    - src: "docker/grafana/provisioning/dashboards/json/event-router.json"
+      dest: "{{ docker_persistent_data_path }}/grafana/provisioning/dashboards/json/event-router.json"
   when: "'router' in inventory_hostname"
 
 # Vaultwarden's admin-panel settings (/data/config.json) take precedence over

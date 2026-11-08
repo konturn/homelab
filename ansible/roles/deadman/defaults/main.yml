@@ -21,6 +21,8 @@ deadman_containers:
   - homeassistant
   - vault
   - gitlab
+  # Event router (docs/design/event-routing.md 7.4): the first responder for alerts.
+  - event-router
 
 deadman_persistent_path: /persistent_data
 deadman_zpool: mpool
