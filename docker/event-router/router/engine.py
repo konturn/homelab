@@ -772,8 +772,12 @@ class Engine:
             expired = now - f["created"] > oc["max_age"]
             if f["due_at"] > now and not expired:
                 continue
-            if f["kind"] == "page" and f["due_at"] > f["created"] and inc["alert_state"] == "resolved":
-                # Held for quiet hours and cleared before morning: digest only.
+            if (f["kind"] == "page" and f["due_at"] > f["created"] and inc["alert_state"] == "resolved"
+                    and (f["payload"].get("page") or {}).get("class") != "failed_remediation"):
+                # A page-class alert held for quiet hours that cleared before
+                # morning: digest only. Never a failed remediation (a breaker,
+                # a failed verification): that is a fact about the router, not
+                # the alert, and still pages (L3; doc 12.6 g).
                 self.store.update_forward(f["id"], state="skipped")
                 self._log({"decision": "forward_skipped", "forward": f["id"],
                            "reason": "resolved during quiet hours"}, inc)
@@ -824,16 +828,23 @@ class Engine:
                 self._log({"decision": "forward_failed", "forward": f["id"], "result": result,
                            "detail": detail}, inc)
 
-    def ack(self, fp, status):
-        """Does the router own this alert (doc 7.4, L4)? OpenClaw's Grafana
-        transform asks before it stays out of the way. No while the router
-        does not forward, or while OpenClaw rejects its deliveries (a token
-        or mapping problem): then Grafana's direct route is the path."""
+    def ack(self, fp, status, starts_at):
+        """Does the router own this alert episode (doc 7.4, L4)? OpenClaw's
+        Grafana transform asks before it stays out of the way, with the
+        alert's fingerprint, status and startsAt (12.6 f: per delivery, not
+        per fingerprint). No while the router does not forward, or while
+        OpenClaw rejects its deliveries (a token or mapping problem): then
+        Grafana's direct route is the path."""
         if not self.forwarding or self.store.setting("forward_rejected_since"):
             return False
         if status not in ("firing", "resolved"):
             return False
-        return self.store.seen_since(fp, status, self.clock.now() - self.cfg["openclaw"]["ack_window"])
+        # starts_at None: a transform that does not send it yet (per
+        # fingerprint, the phase-3 first version); "" is never acked.
+        if starts_at is not None and not starts_at:
+            return False
+        return self.store.seen_since(fp, status, starts_at,
+                                     self.clock.now() - self.cfg["openclaw"]["ack_window"])
 
     # ---- outcome records, /maint from Telegram, incident view ------------------------
     def record_outcome(self, body):

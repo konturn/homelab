@@ -11,7 +11,7 @@
   GET  /summary?days=7 weekly summary
   GET  /decisions?days=7  raw decision log (routing review)
   GET  /incident/<id>  incident, its decisions, forward and outcome
-  GET  /ack?fp=<grafana fingerprint>&status=firing|resolved
+  GET  /ack?fp=<grafana fingerprint>&status=firing|resolved&starts_at=<startsAt>
                        does the router own this alert? (OpenClaw's Grafana route)
   POST /outcome        OpenClaw's outcome record for an escalation (router/outcomes.py)
   POST /maint/text     {"text": "/maint zwave_js 2h kernel update"} from Telegram,
@@ -103,9 +103,10 @@ def make_handler(state):
                 if u.path == "/ack":
                     fp = (q.get("fp") or [""])[0]
                     st = (q.get("status") or ["firing"])[0]
+                    starts = q["starts_at"][0][:40] if "starts_at" in q else None
                     if not re.match(r"^[0-9a-f]{1,32}$", fp):
                         return self._send(400, {"error": "fp must be a Grafana fingerprint"})
-                    return self._send(200, {"accepted": eng.ack(f"grafana:{fp}", st)})
+                    return self._send(200, {"accepted": eng.ack(f"grafana:{fp}", st, starts)})
                 if u.path.startswith("/incident/"):
                     view = eng.incident_view(u.path[len("/incident/"):])
                     return self._send(200 if view else 404, view or {"error": "no such incident"})

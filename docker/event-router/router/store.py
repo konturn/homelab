@@ -60,6 +60,9 @@ CREATE TABLE IF NOT EXISTS outcomes (
   id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL, incident TEXT, record TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS seen (
   fp TEXT NOT NULL, status TEXT NOT NULL, ts REAL NOT NULL, PRIMARY KEY (fp, status));
+CREATE TABLE IF NOT EXISTS acks (
+  fp TEXT NOT NULL, status TEXT NOT NULL, starts_at TEXT NOT NULL, ts REAL NOT NULL,
+  PRIMARY KEY (fp, status, starts_at));
 """
 
 _INC_JSON = ("labels",)
@@ -108,22 +111,33 @@ class Store:
     # ---- inbox ---------------------------------------------------------
     def inbox_put(self, now, event_dicts):
         """Accept events (written before the HTTP reply), and remember the
-        fingerprints for /ack: OpenClaw's Grafana route asks whether the
-        router has an alert before it stays out of the way (doc 7.4, L4)."""
+        deliveries for /ack: OpenClaw's Grafana route asks whether the
+        router has this alert before it stays out of the way (doc 7.4, L4).
+        Keyed by fingerprint, status and startsAt, i.e. by episode: TLC
+        found (doc 12.6 f) that a per-fingerprint answer drops an alert's
+        next episode when the router was down for it."""
         with self.tx() as c:
             for e in event_dicts:
                 c.execute("INSERT INTO inbox (received_at, event) VALUES (?, ?)",
                           (now, json.dumps(e, sort_keys=True)))
+                c.execute("INSERT INTO acks (fp, status, starts_at, ts) VALUES (?, ?, ?, ?) "
+                          "ON CONFLICT (fp, status, starts_at) DO UPDATE SET ts = excluded.ts",
+                          (e["fp"], e["status"], e.get("starts_at") or "", now))
                 c.execute("INSERT INTO seen (fp, status, ts) VALUES (?, ?, ?) "
                           "ON CONFLICT (fp, status) DO UPDATE SET ts = excluded.ts",
                           (e["fp"], e["status"], now))
 
-    def seen_since(self, fp, status, since):
-        r = self.conn.execute("SELECT ts FROM seen WHERE fp = ? AND status = ? AND ts >= ?",
-                              (fp, status, since)).fetchone()
+    def seen_since(self, fp, status, starts_at, since):
+        if starts_at is None:      # a caller that does not send startsAt (legacy)
+            r = self.conn.execute("SELECT ts FROM seen WHERE fp = ? AND status = ? AND ts >= ?",
+                                  (fp, status, since)).fetchone()
+        else:
+            r = self.conn.execute("SELECT ts FROM acks WHERE fp = ? AND status = ? AND starts_at = ? AND ts >= ?",
+                                  (fp, status, starts_at, since)).fetchone()
         return r is not None
 
     def prune_seen(self, before):
+        self.conn.execute("DELETE FROM acks WHERE ts < ?", (before,))
         self.conn.execute("DELETE FROM seen WHERE ts < ?", (before,))
 
     def inbox_take(self, limit=100):
