@@ -911,3 +911,106 @@ Forgotten or overrun maintenance surfaces this way, and a window can never becom
 | L7 | Every window closes by its expiry. |
 | L8 | After a window closes, every in-scope node is either verified healthy or re-enters normal handling within one cycle. |
 | Mutation | Skip the post-window recovery check → L8 must fail. Let a window have no expiry → L7 must fail. |
+
+## 14. Implementation notes (phases 1–2)
+
+Choices made while building phases 1 and 2 where the sections above are
+silent. In each case the simplest option was taken. Code:
+`docker/event-router/` (router, playbooks, tests), `docker/event-router/executor/`
+(host executor and control service), `ansible/roles/event-router`.
+
+**Language and packaging.** Python 3.13, standard library plus PyYAML, the
+same as the anomaly detector. The executor and control service are single
+Python files using the host's python3 and python3-yaml. Code, `config.yml`
+and playbooks ship in one image, so a playbook change is an image build and
+deploy. `inventory/dependencies.yml` is copied to the router at deploy time
+(read-only mount); the router reloads it when it changes.
+
+**Intake.** Grafana's `event-router` contact point is the *first* child
+route in `policies.yml`, with `continue: true`. It goes before the
+zigbee2mqtt exception (`continue: false`) so that nothing is hidden from the
+router, and every other route delivers exactly as before.
+`group_by: ['...']` gives one alert per notification; `group_interval: 1m`
+makes resolves arrive within about a minute; `repeat_interval: 4h`. Playbooks
+match on the Grafana rule uid (`__alert_rule_uid__`, or the rule uid in
+`generatorURL`), not on the title, so wording changes through bot-config cannot
+break a match. `DatasourceError`/`DatasourceNoData` notifications are their own kind
+and never match a playbook or a page class. Accepted events are written to a
+SQLite inbox before the HTTP reply, so a restart cannot lose one. The GitLab
+webhook is not part of phases 1–2: the only CI playbook (orphaned jobs) is
+level-triggered by the reconciler, and pipeline failures move to the webhook
+path in phase 3.
+
+**Episodes and dedupe.** An alert's fingerprint maps to one incident while it
+is firing, including Grafana's repeats after the incident was escalated. A
+new incident starts only after a resolve, or 24h after the last one if a
+resolve was lost.
+
+**Verification.** `alert_resolved: <within>`: the Grafana alert resolving is
+the evidence. For Zigbee silence that means device messages are flowing
+again (the rule clears on the first health report with messages); for
+`restart-once` it means the container is healthy. `ci_job_finished` asks
+GitLab for the job's status.
+
+**What "escalate" and "page" mean in phases 1–2.** OpenClaw and email still
+receive every alert directly from Grafana, so for a Grafana alert the router
+records `escalated` or `paged` (`delivery: grafana-direct`) and sends
+nothing. Facts only the router knows are queued for Noah: a breaker
+tripped, a remediation failed or was refused, an automation storm. They go
+through the JIT bot (decision 3). Non-urgent messages are held until 08:00
+(decision 6); kill-switch changes and automation storms are urgent.
+
+**Kill switch on Telegram (decision 13).** The "existing path" is the JIT
+service's action-prompt socket. A small root service on the host,
+`event-router-control`, keeps one Telegram message, "Event router: mode
+X", with two buttons. "Stop automation" writes `notify-only` to the host
+override file; "Resume" removes it (and any automation-storm override). The
+same service notifies Noah of every change of the effective mode, whatever
+the source (button, SSH, deploy, automation storm), and again every 24h while
+an override is set. It works while the router container is down, because the
+host file is what both the router and the executor read. Telegram buttons
+cannot carry free text, so `/maint zwave 2h ...` is not a Telegram command
+in phases 1–2. Windows are opened with `scripts/event-router maint open` on
+the router, or `POST /maint` with the control token (OpenClaw, CI).
+
+**Shared state.** The router's SQLite database stays private to the
+container. What the host services need is published as small files in
+`data/shared/`: open windows (`windows.json`), the router's own override
+(`runtime_mode`) and the message outbox. Root processes opening the database
+could leave WAL files the router cannot open.
+
+**Deploy lock (S7).** The router asks GitLab whether a `deploy-router` job
+is running (`router:deploy`, `router:deploy-service`, `facts:drift`). The
+executor asks GitLab too. If GitLab cannot be asked, any CI job container for
+`main` on the host counts as a deploy (fail safe). `restart-once`'s
+"no deploy touching the service in 2h" is simplified to "no router deploy
+finished in the last 2h", and fails closed when GitLab cannot be asked.
+
+**Orphaned CI jobs (row 11).** Only the router's own deploy group
+(`deploy-router`) is in scope. Device groups (switch and AP firmware) and
+Pi deploys are never cancelled automatically: killing a firmware job mid-way
+is worse than waiting. Orphaned means still `running` past the job's
+`.gitlab-ci.yml` timeout plus 5 minutes, or started before GitLab last came
+back. The router sees that from its own polling; the executor checks it
+against the GitLab container's start time. The playbook cancels only.
+Queued deploys then start on their own (`newest_ready_first`), so "retry the
+newest deploy" waits for `retry_ci_job` in phase 3.
+
+**Rate limits.** `max_runs` per window applies per playbook *and target*
+(restart-once may restart two different containers; never one twice). The
+breaker is per playbook. The global limit counts actions started in the last
+hour. The executor keeps its own limits: 2 actions per target per 6h, 6 per
+hour in total, and never two requests for one incident.
+
+**Executor.** Socket-activated with `Accept=yes`: one short-lived root
+process per request, so no long-running privileged daemon. The socket is
+`/run/event-router/executor.sock` (0660, group `event-router`), and the
+container runs as uid 2470, the only uid the executor accepts
+(`SO_PEERCRED`). Before acting, it probes everything the target needs, using
+the probes in `dependencies.yml` (container health, systemd, mount, TCP,
+DNS); any failure refuses with `dependency`. It cannot know which playbook
+sent a request, so it treats `assist` windows like `quiet` ones (it refuses).
+
+**Not in phases 1–2:** the GitLab webhook, the Grafana dashboard, `POST
+/outcome` and the routing review (phase 3), router suppressions
+(`suppressions.yml`, phase 3), and a Grafana mute timing for site windows.

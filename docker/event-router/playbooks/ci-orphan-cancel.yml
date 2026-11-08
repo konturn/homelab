@@ -1,0 +1,18 @@
+# Routing table row 11 (I3): a router deploy job still "running" past its
+# timeout, or started before GitLab last came back, holds deploy-router and
+# blocks every deploy. The reconciler raises the event every 5 minutes; this
+# cancels the job. Queued deploys then start on their own (the group is
+# newest_ready_first). Exempt from the deploy lock (S7): it exists to free it.
+id: ci-orphan-cancel
+description: Cancel an orphaned job holding the router deploy lock
+mode: shadow
+match:
+  source: reconciler
+  kind: ci_orphan
+node: gitlab
+action: {type: cancel_ci_job, target_from_event: job_id}
+verify:
+  ci_job_finished: 2m
+limits: {max_runs: 2, per: 24h, cooldown: 5m}
+on_success: {notify: digest}
+on_failure: {notify: page}

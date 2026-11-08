@@ -76,6 +76,14 @@ vault_secret_paths:
       vault_anomaly_influx_write_token: "influx_write_token"
       vault_anomaly_mqtt_password: "mqtt_password"
 
+  # Event router (docker/event-router): Grafana webhook bearer token, API
+  # control token, read-only GitLab token (reconciler)
+  - path: "docker/event-router"
+    fields:
+      vault_event_router_grafana_token: "grafana_token"
+      vault_event_router_control_token: "control_token"
+      vault_event_router_gitlab_read_token: "gitlab_read_token"
+
   # Docker service secrets
   - path: "docker/audioserve"
     fields:

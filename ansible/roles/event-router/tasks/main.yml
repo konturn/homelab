@@ -1,0 +1,51 @@
+# Event router, host side: the container's user and directories, the
+# dependency graph it correlates with, and the kill-switch override
+# directory. See docker/event-router/README.md.
+
+- name: Event router group
+  ansible.builtin.group:
+    name: event-router
+    gid: "{{ event_router_gid }}"
+    system: true
+
+- name: Event router user (no login; the container runs as this uid)
+  ansible.builtin.user:
+    name: event-router
+    uid: "{{ event_router_uid }}"
+    group: event-router
+    system: true
+    create_home: false
+    home: /nonexistent
+    shell: /usr/sbin/nologin
+
+- name: Event router data directories (SQLite, shared state for the host services)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ event_router_uid }}"
+    group: "{{ event_router_gid }}"
+    mode: "0750"
+  loop:
+    - "{{ event_router_data_dir }}/data"
+
+- name: Event router read-only config directory and host override directory
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ event_router_data_dir }}/config"
+    - "{{ event_router_etc }}"
+    - "{{ event_router_etc }}/override"
+
+# Copied, not templated: the router reads names and `needs` only, and the
+# file's own comments contain "{{ var }}".
+- name: Dependency graph for correlation
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/inventory/dependencies.yml"
+    dest: "{{ event_router_data_dir }}/config/dependencies.yml"
+    owner: root
+    group: root
+    mode: "0644"

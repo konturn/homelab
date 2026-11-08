@@ -39,3 +39,17 @@ contactPoints:
 {% endraw %}
           authorization_credentials: "{{ vault_openclaw_hooks_token }}"
         disableResolveMessage: false
+  # Event router (docs/design/event-routing.md): every alert, one per
+  # notification (policies.yml), firing and resolved. Phases 1-2: in addition
+  # to openclaw-webhook and email, which are unchanged.
+  - orgId: 1
+    name: event-router
+    receivers:
+      - uid: event-router
+        type: webhook
+        settings:
+          url: "http://event-router:8080/grafana"
+          httpMethod: POST
+          authorization_scheme: Bearer
+          authorization_credentials: "{{ vault_event_router_grafana_token }}"
+        disableResolveMessage: false

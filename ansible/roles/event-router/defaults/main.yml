@@ -1,0 +1,11 @@
+# Event router host side (docker/event-router/README.md,
+# docs/design/event-routing.md 4.6).
+
+# The container's uid/gid. The executor accepts requests only from this uid
+# (SO_PEERCRED), and only this group can open its socket. Must match the
+# Dockerfile's USER and `user:` in docker-compose.yml.
+event_router_uid: 2470
+event_router_gid: 2470
+
+event_router_data_dir: "{{ docker_persistent_data_path }}/event-router"
+event_router_etc: /etc/event-router
