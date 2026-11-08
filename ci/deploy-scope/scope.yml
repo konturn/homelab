@@ -71,7 +71,6 @@ shared:
     - ansible/roles/*/README.md
     - scripts/approve-root-mr.sh
     - scripts/bootstrap.sh
-    - scripts/check-updates.sh
     - scripts/gitlab-settings.sh
     - scripts/validate-nginx-config.sh
     - scripts/set-deadman-ping-url.sh
