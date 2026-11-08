@@ -358,15 +358,6 @@ all:
           dest: "/etc/telegraf/scripts/zpool-health.sh"
           name: "telegraf"
           mode: "0755"
-        - src: "docker/tileserver/config.json"
-          dest: "{{ docker_persistent_data_path }}/tileserver/config.json"
-          name: "tileserver"
-          owner: "1000"
-          group: "1000"
-          mode: "0644"
-        - src: "docker/headway/nginx.conf.template"
-          dest: "{{ docker_persistent_data_path }}/headway/nginx.conf.template"
-          name: "headway-frontend"
 
       docker_data_dirs:
         # jit-approval-svc action-prompt socket (container user svc, uid 1000)
@@ -390,9 +381,6 @@ all:
           owner: "root"
           group: "root"
           mode: "0700"
-        - path: "{{ docker_persistent_data_path }}/tileserver"
-          owner: "1000"
-          group: "1000"
   children:
     macmini:
       vars:

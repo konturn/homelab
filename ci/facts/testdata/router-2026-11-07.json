@@ -115,21 +115,6 @@
    "health": "healthy",
    "state": "running"
   },
-  "headway-frontend": {
-   "exit_code": null,
-   "health": "healthy",
-   "state": "running"
-  },
-  "headway-frontend-init": {
-   "exit_code": 0,
-   "health": null,
-   "state": "exited"
-  },
-  "headway-travelmux-init": {
-   "exit_code": 0,
-   "health": null,
-   "state": "exited"
-  },
   "homeassistant": {
    "exit_code": null,
    "health": "healthy",
@@ -285,41 +270,6 @@
    "health": "healthy",
    "state": "running"
   },
-  "pelias-api": {
-   "exit_code": null,
-   "health": "healthy",
-   "state": "running"
-  },
-  "pelias-config-init": {
-   "exit_code": 0,
-   "health": null,
-   "state": "exited"
-  },
-  "pelias-elasticsearch": {
-   "exit_code": null,
-   "health": "healthy",
-   "state": "running"
-  },
-  "pelias-elasticsearch-init": {
-   "exit_code": 0,
-   "health": null,
-   "state": "exited"
-  },
-  "pelias-libpostal": {
-   "exit_code": null,
-   "health": "healthy",
-   "state": "running"
-  },
-  "pelias-placeholder": {
-   "exit_code": null,
-   "health": "healthy",
-   "state": "running"
-  },
-  "pelias-placeholder-init": {
-   "exit_code": 0,
-   "health": null,
-   "state": "exited"
-  },
   "pihole": {
    "exit_code": null,
    "health": "healthy",
@@ -400,25 +350,10 @@
    "health": null,
    "state": "exited"
   },
-  "tileserver": {
-   "exit_code": null,
-   "health": "healthy",
-   "state": "running"
-  },
-  "travelmux": {
-   "exit_code": null,
-   "health": null,
-   "state": "running"
-  },
   "unruffled_ellis": {
    "exit_code": 100,
    "health": null,
    "state": "exited"
-  },
-  "valhalla": {
-   "exit_code": null,
-   "health": "healthy",
-   "state": "running"
   },
   "vault": {
    "exit_code": null,

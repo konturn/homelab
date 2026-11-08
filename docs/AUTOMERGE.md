@@ -171,7 +171,6 @@ never auto-merged, each with its reason:
 | `gitlab/gitlab-runner` | Runs every CI job. Today the runner is a host package (`configure-base`), not a compose service; the entry covers a future compose runner. |
 | `vault` (`hashicorp/vault`) | Every deploy job reads its secrets from Vault before it changes anything. A Vault that breaks after the health gate blocks every later deploy, the revert included. |
 | `docker-socket-proxy` (`tecnativa/docker-socket-proxy`) | CI image builds reach the Docker daemon through it. |
-| `headway-frontend-init`, `headway-travelmux-init`, `pelias-*-init` | One-shot init containers: they exit by design, which the health gate cannot tell from a failure. (Renovate also ignores their images.) |
 
 Renovate labels updates of the denylisted images `automerge-manual` and adds a
 note to the MR body (`renovate.json`, rule "Auto-merge denylist").

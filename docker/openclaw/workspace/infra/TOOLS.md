@@ -35,7 +35,7 @@ with this file, they win: say so.
 
 ## Services *(from the compose files each host renders)*
 
-- **router**: ambientweather, amcrest2mqtt, anomaly-detector, bitwarden, bluebubbles-relay, booksonic, chromium-browser, deluge, diagram, docker-socket-proxy, docker-socket-proxy-ro, event-router, frigate, gitlab, grafana, headway-frontend, homeassistant, influxdb, iot_nginx, iperf3, jackett, jit-approval-svc, lab_nginx, lidarr, loki, mopidy, mosquitto, navidrome, nextcloud, nextcloud_db, nginx, novnc-dev1, novnc-dev2, novnc-dev3, nzbget, ollama, ombi, openclaw-gateway, otel-collector, paperless-ai, paperless-ngx, paperless-redis, pelias-api, pelias-elasticsearch, pelias-libpostal, pelias-placeholder, pihole, plex, promtail, prowlarr, radarr, snapclient_global, snapserver, sonarr, tautulli, tempo, tileserver, travelmux, valhalla, vault, zigbee2mqtt; one-shot: headway-frontend-init, headway-travelmux-init, pelias-config-init, pelias-elasticsearch-init, pelias-placeholder-init.
+- **router**: ambientweather, amcrest2mqtt, anomaly-detector, bitwarden, bluebubbles-relay, booksonic, chromium-browser, deluge, diagram, docker-socket-proxy, docker-socket-proxy-ro, event-router, frigate, gitlab, grafana, homeassistant, influxdb, iot_nginx, iperf3, jackett, jit-approval-svc, lab_nginx, lidarr, loki, mopidy, mosquitto, navidrome, nextcloud, nextcloud_db, nginx, novnc-dev1, novnc-dev2, novnc-dev3, nzbget, ollama, ombi, openclaw-gateway, otel-collector, paperless-ai, paperless-ngx, paperless-redis, pihole, plex, promtail, prowlarr, radarr, snapclient_global, snapserver, sonarr, tautulli, tempo, vault, zigbee2mqtt.
   Defined, not running: snapclient_{guest_bathroom,guest_bedroom,kitchen,main_bathroom,main_bedroom,office} (no sound card, snapclient_disabled_zones); blog, wordpress_db (compose profile).
 - **zwave**: promtail, telegraf, zwavejs2mqtt.
 - **satellite-2**: promtail, telegraf.
@@ -124,7 +124,7 @@ with this file, they win: say so.
   (`<host>:deploy-service`) behind a health gate. A failure rolls back and
   opens an `automerge-rollback` issue and a revert MR (holds that service).
 - Limits: 24 general merges per rolling 24h, plus 4 fast-track merges (internet-facing images); one merge per sweep run.
-- Never auto-merged (denylist): docker-socket-proxy, gitlab, headway-frontend-init, headway-travelmux-init, pelias-config-init, pelias-elasticsearch-init, pelias-placeholder-init, vault; majors; anything but a compose image line.
+- Never auto-merged (denylist): docker-socket-proxy, gitlab, vault; majors; anything but a compose image line.
 - digest updates only: bitwarden, nextcloud.
 - Version updates of homeassistant, influxdb are backed up first and restored on rollback.
 - 0.x minors count as minors: otel-collector.
@@ -156,7 +156,7 @@ with this file, they win: say so.
 
 ## Where things are written down
 
-- `docs/`: AUTOMERGE, backups, CONTAINER-REGISTRY, DEADMAN, denon, DEPLOY, DISASTER_RECOVERY, docker-proxy-architecture, FIREWALL, frigate, GITLAB_SETTINGS, HEADWAY_SETUP, HOMEASSISTANT, IPMI, jit-access-design, jit-webhook-design, minidsp, NETWORK, OBSERVABILITY, ollama, paperless-ai, plex-gpu, POWER, raspberry-pi, RENOVATE, SECRET_ROTATION.
+- `docs/`: AUTOMERGE, backups, CONTAINER-REGISTRY, DEADMAN, denon, DEPLOY, DISASTER_RECOVERY, docker-proxy-architecture, FIREWALL, frigate, GITLAB_SETTINGS, HOMEASSISTANT, IPMI, jit-access-design, jit-webhook-design, minidsp, NETWORK, OBSERVABILITY, ollama, paperless-ai, plex-gpu, POWER, raspberry-pi, RENOVATE, SECRET_ROTATION.
 - The GitLab project wiki (private, not mirrored) holds the security and
   network reviews.
 - Your checkout `workspace/homelab` is hard-reset to `origin/main` every

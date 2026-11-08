@@ -32,8 +32,7 @@ Dependency updates are detected and proposed by a self-hosted
 
 Held back on purpose (see `packageRules`): the images used only by services
 under the retired `wordpress` compose profile (`mysql`, `wordpress`), promtail `>= 3.6`, influxdb 3,
-Headway/Pelias images (they must move together with the separately built map
-data), locally built images in the GitLab registry, and `mariadb` (Nextcloud's
+locally built images in the GitLab registry, and `mariadb` (Nextcloud's
 database), which only gets patch and digest updates within the 12.3 LTS series.
 `ollama/ollama` updates wait for dashboard approval: each one must be checked
 for the CUDA 12 runner the Pascal GPU needs ([ollama.md](ollama.md#testing-an-update)).

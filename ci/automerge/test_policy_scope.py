@@ -484,7 +484,7 @@ class RealRepoTests(unittest.TestCase):
                 if svc in d["services"] and ref.name in d["images"]:
                     continue
                 if svc in d["services"]:
-                    self.assertTrue(svc.endswith("-init") or ref.name.startswith(("ghcr.io/headwaymaps/", "pelias/")),
+                    self.assertTrue(svc.endswith("-init"),
                                     f"{svc}: deny its image {ref.name} too")
 
 
