@@ -1227,6 +1227,9 @@ services:
       - LISTEN_ADDR=:8080
       - REQUEST_TIMEOUT=300
       - ALLOWED_REQUESTERS=prometheus
+      # Requests per resource per requester per 15 min. Twice the busiest
+      # resource's observed peak (Grafana/InfluxDB checks in agent bursts).
+      - JIT_RATE_LIMIT_MAX=72
       - JIT_API_KEY={{ vault_jit_api_key | replace("$", "$$") }}
       - GITLAB_URL=https://gitlab.lab.nkontur.com
       - GITLAB_ADMIN_TOKEN={{ vault_jit_gitlab_admin_token | replace("$", "$$") }}

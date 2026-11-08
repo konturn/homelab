@@ -31,8 +31,14 @@ func FuzzPoliciesForResource(f *testing.F) {
 			}
 			return
 		}
-		if len(p) != 1 || p[0] != tierPolicy[tier] {
-			t.Fatalf("policiesForResource(%q, %d) = %v, want [%s]", resource, tier, p, tierPolicy[tier])
+		if _, static := staticResourcePaths[resource]; !static {
+			if p != nil {
+				t.Fatalf("policiesForResource(%q, %d) = %v, want none (not a static resource)", resource, tier, p)
+			}
+			return
+		}
+		if len(p) != 1 || p[0] != StaticPolicyPrefix+resource {
+			t.Fatalf("policiesForResource(%q, %d) = %v, want [%s]", resource, tier, p, StaticPolicyPrefix+resource)
 		}
 		if MinTierForResource(resource) != tier {
 			t.Fatalf("MinTierForResource(%q) = %d, want %d", resource, MinTierForResource(resource), tier)

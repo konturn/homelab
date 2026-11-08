@@ -1,36 +1,120 @@
 package vault
 
 import (
+	"os"
+	"path/filepath"
+	"reflect"
+	"regexp"
+	"strings"
 	"testing"
 )
 
-func TestPoliciesForResource_Tier1(t *testing.T) {
-	tier1Resources := []string{"grafana", "influxdb", "plex", "radarr", "sonarr", "ombi", "nzbget", "deluge", "prowlarr", "mqtt"}
+// staticTier1 and staticTier2 are the static-backend resources by tier.
+var staticTier1 = []string{"plex", "radarr", "sonarr", "ombi", "nzbget", "deluge", "prowlarr", "tautulli", "mqtt"}
+var staticTier2 = []string{"pihole", "ipmi"}
 
-	for _, res := range tier1Resources {
-		policies := policiesForResource(res, 1)
-		if len(policies) != 1 {
-			t.Errorf("%s tier 1: expected 1 policy, got %d", res, len(policies))
-			continue
-		}
-		if policies[0] != "jit-tier1-services" {
-			t.Errorf("%s tier 1: expected jit-tier1-services, got %s", res, policies[0])
+func TestPoliciesForResource_StaticGetsOwnPolicy(t *testing.T) {
+	for tier, list := range map[int][]string{1: staticTier1, 2: staticTier2} {
+		for _, res := range list {
+			got := policiesForResource(res, tier)
+			want := []string{"jit-static-" + res}
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("%s tier %d: got %v, want %v", res, tier, got, want)
+			}
 		}
 	}
 }
 
-func TestPoliciesForResource_Tier2(t *testing.T) {
-	tier2Resources := []string{"gitlab", "homeassistant", "ssh-router", "tailscale", "pihole", "paperless"}
+// A token for one static resource must not carry any policy that grants
+// another resource's path: its only policy is its own, and that policy's
+// paths belong to no other resource.
+func TestPoliciesForResource_IsolatedPerResource(t *testing.T) {
+	owner := map[string]string{}
+	for res, paths := range staticResourcePaths {
+		if len(paths) == 0 {
+			t.Errorf("%s: no paths", res)
+		}
+		for _, p := range paths {
+			if other, dup := owner[p]; dup {
+				t.Errorf("path %s granted to both %s and %s", p, other, res)
+			}
+			owner[p] = res
+			if strings.ContainsAny(p, "*+") {
+				t.Errorf("%s: path %s is a glob; static grants must be exact", res, p)
+			}
+		}
+	}
+	for res := range staticResourcePaths {
+		pols := policiesForResource(res, resourceTier[res])
+		if len(pols) != 1 || pols[0] != StaticPolicyPrefix+res {
+			t.Fatalf("%s: unexpected policies %v", res, pols)
+		}
+		for other := range staticResourcePaths {
+			if other != res && pols[0] == StaticPolicyPrefix+other {
+				t.Errorf("%s token gets %s's policy", res, other)
+			}
+		}
+		for _, p := range pols {
+			if p == "jit-tier1-services" || p == "jit-tier2-infra" {
+				t.Errorf("%s: tier-wide policy %s attached", res, p)
+			}
+		}
+	}
+}
 
-	for _, res := range tier2Resources {
-		policies := policiesForResource(res, 2)
-		if len(policies) != 1 {
-			t.Errorf("%s tier 2: expected 1 policy, got %d", res, len(policies))
-			continue
+// Resources with a dynamic backend never get a static Vault token, even if
+// their backend is unconfigured and the registry falls back to static.
+func TestPoliciesForResource_DynamicResourcesRefused(t *testing.T) {
+	dynamic := []string{"grafana", "influxdb", "homeassistant", "gitlab", "gitlab-moltbot", "paperless",
+		"tailscale", "gmail-read", "gmail-send", "vault", "ssh-router", "ssh-macmini"}
+	for _, res := range dynamic {
+		if _, static := staticResourcePaths[res]; static {
+			t.Errorf("%s has a dynamic backend but is in staticResourcePaths", res)
 		}
-		if policies[0] != "jit-tier2-infra" {
-			t.Errorf("%s tier 2: expected jit-tier2-infra, got %s", res, policies[0])
+		if got := policiesForResource(res, resourceTier[res]); got != nil {
+			t.Errorf("%s: expected no static policy, got %v", res, got)
 		}
+	}
+}
+
+// Every static resource is a known resource with a tier.
+func TestStaticResourcesHaveTier(t *testing.T) {
+	for res := range staticResourcePaths {
+		if _, ok := resourceTier[res]; !ok {
+			t.Errorf("%s in staticResourcePaths but not in resourceTier", res)
+		}
+	}
+}
+
+// staticResourcesFromTerraform parses local.jit_static_resources from
+// terraform/vault/policies.tf.
+func staticResourcesFromTerraform(t *testing.T) map[string][]string {
+	t.Helper()
+	src, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "terraform", "vault", "policies.tf"))
+	if err != nil {
+		t.Skipf("policies.tf not available: %v", err)
+	}
+	block := regexp.MustCompile(`(?s)jit_static_resources\s*=\s*\{(.*?)\n  \}`).FindSubmatch(src)
+	if block == nil {
+		t.Fatal("local.jit_static_resources not found in policies.tf")
+	}
+	out := map[string][]string{}
+	entry := regexp.MustCompile(`(?m)^\s*([a-z0-9-]+)\s*=\s*\[([^\]]*)\]`)
+	quoted := regexp.MustCompile(`"([^"]+)"`)
+	for _, m := range entry.FindAllSubmatch(block[1], -1) {
+		var paths []string
+		for _, q := range quoted.FindAllSubmatch(m[2], -1) {
+			paths = append(paths, string(q[1]))
+		}
+		out[string(m[1])] = paths
+	}
+	return out
+}
+
+func TestStaticResourcesMatchTerraform(t *testing.T) {
+	tf := staticResourcesFromTerraform(t)
+	if !reflect.DeepEqual(tf, staticResourcePaths) {
+		t.Errorf("staticResourcePaths and local.jit_static_resources differ:\n go: %v\n tf: %v", staticResourcePaths, tf)
 	}
 }
 
@@ -88,8 +172,8 @@ func TestMinTierForResource(t *testing.T) {
 
 func TestResourceTierConsistency(t *testing.T) {
 	for resource, tier := range resourceTier {
-		if _, ok := tierPolicy[tier]; !ok {
-			t.Errorf("resource %q maps to tier %d which has no policy", resource, tier)
+		if tier < 1 || tier > 3 {
+			t.Errorf("resource %q maps to invalid tier %d", resource, tier)
 		}
 	}
 }

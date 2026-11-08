@@ -19,7 +19,9 @@ The service supports two types of credential backends:
 - Have service-managed lifecycle (auto-expiry, auto-cleanup)
 - Don't require Vault token management on the consumer side
 
-**Static backend** mints a scoped Vault token (policy `jit-tier1-services` or `jit-tier2-infra`) that the consumer uses to read the static secret from Vault. It is used for every resource without a dynamic backend.
+**Static backend** mints a Vault token with the resource's own policy, `jit-static-<resource>`, which can read only that resource's secret (`staticResourcePaths` in `internal/vault/vault.go`, `local.jit_static_resources` in `terraform/vault/policies.tf`). The tier decides approval and TTL, not what the token can read. Only resources in `staticResourcePaths` use it; a resource whose dynamic backend is not configured is refused rather than given a Vault token.
+
+The secrets the dynamic backends mint from (upstream admin tokens, OAuth clients) and the service's own secret are listed in `BrokerOnlyPaths` (`internal/backend/vault_dynamic.go`). Only the service's AppRole policy can read them: requests for them through the `vault` resource are refused, and every per-request policy denies them.
 
 **Failure behavior:** If a dynamic backend fails (service unreachable, auth error, etc.), the request fails and `dynamic_backend_failed` is logged. There is no fallback to a static Vault token.
 
@@ -177,7 +179,7 @@ longer active" and the client re-sends what it still needs.
 | 2 | 30 min | Manual (Telegram) | gitlab, homeassistant, paperless, gmail-send, tailscale, pihole, vault, ipmi, ssh-router, ssh-satellite, ssh-zwave, ssh-nkontur/konoahko/konturn (8 h), `ssh-*-elevated` |
 | 3 | 60 min | Manual (Telegram) | Critical (reserved) |
 
-The resource-to-tier map is `resourceTier` in `internal/vault/vault.go`; a request below a resource's minimum tier is rejected. Per-resource TTL overrides are in `internal/config/config.go`. Requests are rate limited to 5 per resource per requester per 15 minutes.
+The resource-to-tier map is `resourceTier` in `internal/vault/vault.go`; a request below a resource's minimum tier is rejected. Per-resource TTL overrides are in `internal/config/config.go`. Requests are rate limited per resource per requester: `JIT_RATE_LIMIT_MAX` per `JIT_RATE_LIMIT_WINDOW_MIN` minutes (code defaults 50 per 15; the deployment sets 72).
 
 Tiers represent **approval trust level**, not backend type. Dynamic vs static credential backends are orthogonal to the tier system.
 
@@ -198,6 +200,8 @@ All configuration via environment variables:
 | `LISTEN_ADDR` | No | `:8080` | HTTP listen address |
 | `REQUEST_TIMEOUT` | No | `1800` | Seconds before pending requests auto-timeout (deployed with `300`) |
 | `ALLOWED_REQUESTERS` | No | `prometheus` | Comma-separated requester allowlist |
+| `JIT_RATE_LIMIT_MAX` | No | `50` | Requests per resource per requester per window (deployment: 72) |
+| `JIT_RATE_LIMIT_WINDOW_MIN` | No | `15` | Rate-limit window in minutes |
 | `ACTIONS_SOCKET` | No | — | Unix socket path for the action-prompt API |
 | `HA_URL` | No | `https://homeassistant.lab.nkontur.com` | Home Assistant URL for dynamic backend |
 | `GRAFANA_URL` | No | `https://grafana.lab.nkontur.com` | Grafana URL for dynamic backend |
@@ -299,7 +303,7 @@ Events logged include: `request_received`, `approval_sent`, `auto_approve`, `app
 - Credentials returned exactly once (claim-on-first-poll)
 - No credential data in logs (request_id and resource only, never tokens)
 - Request auto-timeout (`REQUEST_TIMEOUT`, 5 min as deployed)
-- Rate limit: 5 requests per resource per requester per 15 minutes
+- Rate limit: `JIT_RATE_LIMIT_MAX` requests per resource per requester per 15 minutes (72 in the deployment)
 - All HTTP clients have 10-second timeouts
 - InfluxDB tokens are auto-cleaned via goroutine after TTL expiry
 

@@ -39,7 +39,7 @@ func (m *mockPolicyManager) DeletePolicy(name string) error {
 func TestValidateVaultPaths_Valid(t *testing.T) {
 	paths := []VaultPathRequest{
 		{Path: "homelab/data/docker/nginx", Capabilities: []string{"read"}},
-		{Path: "homelab/data/infrastructure/tailscale", Capabilities: []string{"read", "update"}},
+		{Path: "homelab/data/infrastructure/unifi", Capabilities: []string{"read", "update"}},
 	}
 	if err := ValidateVaultPaths(paths); err != nil {
 		t.Fatalf("expected valid, got: %v", err)
@@ -325,5 +325,74 @@ func TestValidateVaultPaths_ValidDeepPath(t *testing.T) {
 	}
 	if err := ValidateVaultPaths(paths); err != nil {
 		t.Fatalf("expected valid deep path to pass: %v", err)
+	}
+}
+
+// --- Broker-only secrets ---
+
+func TestValidateVaultPaths_BrokerOnlyRejected(t *testing.T) {
+	for _, p := range BrokerOnlyPaths {
+		for _, caps := range [][]string{{"read"}, {"update"}, {"list"}} {
+			err := ValidateVaultPaths([]VaultPathRequest{{Path: p, Capabilities: caps}})
+			if err == nil || !strings.Contains(err.Error(), "reserved for the broker") {
+				t.Errorf("%s %v: expected reserved-path error, got %v", p, caps, err)
+			}
+		}
+	}
+}
+
+// A wildcard request covering a broker-only path still cannot read it: the
+// generated policy carries an exact-path deny for each one.
+func TestBuildPolicyHCL_DeniesBrokerOnlyPaths(t *testing.T) {
+	paths := []VaultPathRequest{{Path: "homelab/data/docker/*", Capabilities: []string{"read", "list"}}}
+	if err := ValidateVaultPaths(paths); err != nil {
+		t.Fatalf("wildcard request should validate: %v", err)
+	}
+	hcl := BuildPolicyHCL(paths)
+	for _, p := range BrokerOnlyPaths {
+		want := fmt.Sprintf("path %q {\n  capabilities = [\"deny\"]\n}", p)
+		if !strings.Contains(hcl, want) {
+			t.Errorf("missing deny for %s in:\n%s", p, hcl)
+		}
+	}
+}
+
+// Every Vault path a dynamic backend reads its admin credentials from is in
+// BrokerOnlyPaths.
+func TestBrokerOnlyPaths_CoverDynamicBackendSecrets(t *testing.T) {
+	backendPaths := map[string]string{
+		"grafana":       NewGrafanaBackend("http://x", nil).vaultPath,
+		"influxdb":      NewInfluxDBBackend("http://x", nil).vaultPath,
+		"homeassistant": NewHomeAssistantBackend("http://x", nil).vaultPath,
+		"paperless":     NewPaperlessBackend("http://x", nil).vaultPath,
+		"tailscale":     NewTailscaleBackend("http://x", nil).vaultPath,
+		"gmail":         NewGmailBackend("http://x", nil, GmailScopeRead).vaultPath,
+	}
+	for name, p := range backendPaths {
+		if !isBrokerOnly(p) {
+			t.Errorf("%s backend reads %s, which is not in BrokerOnlyPaths", name, p)
+		}
+	}
+}
+
+// The broker-only block only ever denies, and only the listed paths.
+func TestBrokerOnlyDenyHCL_OnlyDenies(t *testing.T) {
+	var paths int
+	for _, line := range strings.Split(brokerOnlyDenyHCL(), "\n") {
+		switch {
+		case line == "", line == "}", strings.HasPrefix(line, "#"):
+		case strings.HasPrefix(line, "path "):
+			p := strings.TrimSuffix(strings.TrimPrefix(line, "path "), " {")
+			if !isBrokerOnly(strings.Trim(p, `"`)) {
+				t.Errorf("unexpected path line %q", line)
+			}
+			paths++
+		case line == `  capabilities = ["deny"]`:
+		default:
+			t.Errorf("unexpected line %q", line)
+		}
+	}
+	if paths != len(BrokerOnlyPaths) {
+		t.Errorf("%d deny stanzas, want %d", paths, len(BrokerOnlyPaths))
 	}
 }
