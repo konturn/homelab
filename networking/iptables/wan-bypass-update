@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+"""wan-bypass-update - refresh the wan_bypass_ha ipset from a hostname list.
+
+Resolves each hostname in the list through the router's resolver (Pi-hole,
+the same one Home Assistant uses via Docker's embedded DNS) and adds every
+public unicast IPv4 address it returns to the ipset with a timeout, so an
+address the service stops handing out ages out on its own. Re-adding an
+address resets its timeout.
+
+The mangle/filter rules in rules.v4 send traffic from Home Assistant to the
+addresses in this set out the WAN instead of Mullvad (docs/FIREWALL.md).
+
+Usage:
+  wan-bypass-update [HOSTS_FILE]   default /etc/iptables/wan-bypass-ha.hosts
+  wan-bypass-update --dry-run      resolve and print, do not touch the set
+"""
+import ipaddress
+import re
+import socket
+import subprocess
+import sys
+
+SET = "wan_bypass_ha"
+# Keep in sync with networking/iptables/rules.ipset.
+CREATE = f"create {SET} hash:ip family inet hashsize 64 maxelem 1024 timeout 3600"
+TIMEOUT = 3600
+DEFAULT_HOSTS = "/etc/iptables/wan-bypass-ha.hosts"
+HOSTNAME = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
+
+
+def read_hosts(path):
+    hosts = []
+    with open(path) as f:
+        for n, line in enumerate(f, 1):
+            name = line.split("#", 1)[0].strip().lower()
+            if not name:
+                continue
+            if not HOSTNAME.match(name):
+                sys.exit(f"wan-bypass-update: {path}:{n}: not a hostname: {name!r}")
+            hosts.append(name)
+    return hosts
+
+
+def resolve(host):
+    try:
+        infos = socket.getaddrinfo(host, 443, socket.AF_INET, socket.SOCK_STREAM)
+    except socket.gaierror as e:
+        print(f"wan-bypass-update: {host}: lookup failed: {e}", file=sys.stderr)
+        return []
+    good = []
+    for info in infos:
+        ip = ipaddress.IPv4Address(info[4][0])
+        # public unicast only: never let a DNS answer pull a LAN, loopback,
+        # CGNAT/tailnet, link-local, multicast or reserved address into the set
+        if ip.is_global and not ip.is_multicast and not ip.is_reserved:
+            good.append(str(ip))
+        else:
+            print(f"wan-bypass-update: {host}: ignoring non-public {ip}", file=sys.stderr)
+    return sorted(set(good))
+
+
+def main(argv):
+    dry = "--dry-run" in argv
+    files = [a for a in argv[1:] if not a.startswith("--")]
+    hosts = read_hosts(files[0] if files else DEFAULT_HOSTS)
+    addrs = {}
+    for host in hosts:
+        for ip in resolve(host):
+            addrs.setdefault(ip, []).append(host)
+    for ip, names in sorted(addrs.items()):
+        print(f"{ip} {','.join(names)}")
+    if dry:
+        return 0
+    batch = [CREATE] + [f"add {SET} {ip} timeout {TIMEOUT}" for ip in sorted(addrs)]
+    p = subprocess.run(["ipset", "-exist", "restore"], input="\n".join(batch) + "\n",
+                       capture_output=True, text=True)
+    if p.returncode != 0:
+        sys.exit(f"wan-bypass-update: ipset restore failed: {p.stderr.strip()}")
+    print(f"wan-bypass-update: {len(addrs)} addresses for {len(hosts)} hosts refreshed in {SET}")
+    # Non-zero when nothing resolved, so a broken resolver shows up as a
+    # failed unit; addresses already in the set keep working until they expire.
+    return 0 if addrs else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

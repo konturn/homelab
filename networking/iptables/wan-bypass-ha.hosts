@@ -1,0 +1,21 @@
+# Hostnames Home Assistant reaches via the WAN instead of Mullvad
+# (docs/FIREWALL.md, "WAN bypass for Home Assistant").
+#
+# These services reject VPN egress (HTTP 403 from Mullvad exits). Only the
+# hosts the toyota_connected integration contacts for North American
+# accounts are listed; nothing broader (no wildcards, no CDN-wide ranges).
+# wan-bypass-update resolves them every minute and puts their current IPv4
+# addresses into the ipset wan_bypass_ha (1 h timeout per address).
+#
+# One hostname per line; '#' starts a comment.
+
+# ForgeRock sign-in (authenticate / authorize / access_token), per brand
+login.subarudriverslogin.com
+login.toyotadriverslogin.com
+login.lexusdriverslogin.com
+
+# REST API gateway (vehicle list, status, commands)
+onecdn.telematicsct.com
+
+# GraphQL API (HTTPS queries and the realtime websocket)
+oa-api.telematicsct.com

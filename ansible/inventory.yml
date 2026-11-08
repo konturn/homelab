@@ -15,6 +15,10 @@ all:
     # Frigate NVR (docs/frigate.md). Static: the FORWARD rules to the cameras
     # and mosquitto in networking/iptables/rules.v4 match this address.
     frigate_ip: 10.3.32.12
+    # Home Assistant on the internal network (int0). Static: the WAN bypass
+    # rules for its vehicle-service hosts in networking/iptables/rules.v4
+    # match this address (docs/FIREWALL.md).
+    homeassistant_ip: 10.3.32.13
     chromium_browser_ip: 10.3.32.9
     chromium_cdp_ip: 172.30.1.10  # openclaw-browser bridge (CDP)
     bluebubbles_relay_ip: 172.30.2.10  # openclaw-relay bridge

@@ -74,6 +74,7 @@ All VLANs use macvlan Docker networks, allowing containers to have their own IP 
 | 10.3.32.1 | lab_nginx (internal reverse proxy) |
 | 10.3.32.2 | PiHole (DNS ad-blocking) |
 | 10.3.32.3 | Deluge (torrent client) |
+| 10.3.32.13 | Home Assistant (`homeassistant_ip`, interface `int0`) |
 | 10.3.64.0 - 10.3.127.255 | DHCP range |
 
 **Services:**
@@ -88,6 +89,10 @@ All VLANs use macvlan Docker networks, allowing containers to have their own IP 
 - **Home Assistant** (multi-homed, also on IoT + External)
 
 **Egress:** Routes through Mullvad VPN (marked traffic → route table 252).
+Exceptions via WAN: excel-vm (all traffic), and Home Assistant to the
+connected-vehicle service hosts in `networking/iptables/wan-bypass-ha.hosts`,
+which reject VPN egress (ipset `wan_bypass_ha`, docs/FIREWALL.md "WAN bypass
+for Home Assistant"). HA's other traffic stays on Mullvad.
 
 ---
 
@@ -436,6 +441,12 @@ bond0:
 | VLAN 5 (guest) | Internet | Direct WAN |
 | VLAN 6 (iot) | Internet | Mullvad VPN |
 | VLAN 7 | Internet | Mullvad VPN |
+
+VLAN 3 exceptions: excel-vm goes direct to the WAN, and Home Assistant goes
+direct to the WAN for the hosts in ipset `wan_bypass_ha` only (list:
+`networking/iptables/wan-bypass-ha.hosts`, refreshed every minute by
+`wan-bypass-update.timer`). To add a host, add its exact name to that file
+(see docs/FIREWALL.md, "WAN bypass for Home Assistant").
 
 ### Port Forwarding via Mullvad
 

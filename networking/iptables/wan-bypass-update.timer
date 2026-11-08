@@ -1,0 +1,12 @@
+[Unit]
+Description=Refresh the wan_bypass_ha ipset every minute
+
+[Timer]
+# The service hosts answer with 0-60 s DNS TTLs (AWS load balancers,
+# CloudFront), so refresh often; each address stays in the set for 1 h.
+OnBootSec=30s
+OnUnitActiveSec=1min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

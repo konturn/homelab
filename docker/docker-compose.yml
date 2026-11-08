@@ -1559,6 +1559,7 @@ services:
     networks:
       internal:
         interface_name: int0
+        ipv4_address: "{{ homeassistant_ip }}"
       iot:
         interface_name: iot0
       external:
