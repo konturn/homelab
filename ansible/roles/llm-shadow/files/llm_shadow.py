@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Shadow comparison of a local model against the imessage-check cron job.
 
-docs/llm-shadow.md has the design. In short: after every real imessage-check
+ansible/roles/llm-shadow/README.md has the design. In short: after every real imessage-check
 run, this replays the same message batch through a local Ollama model with
 the same skill text as its system prompt, and records what the local model
 decided next to what the real run did.
@@ -1259,7 +1259,7 @@ def summarize(args):
     summary = {
         "about": "Local LLM shadow trial of the imessage-check job. Aggregates only: no message "
                  "content, numbers or titles. Source of truth: /persistent_data/application/llm-shadow "
-                 "on the router (root only). docs/llm-shadow.md in the homelab repo.",
+                 "on the router (root only). ansible/roles/llm-shadow/README.md in the homelab repo.",
         "generated_at": iso(now), "model": MODEL, "trial": {"start": TRIAL_START, "end": TRIAL_END},
         "total": block(runs, msgs),
         "last_7d": block([r for r in runs if r["ts"] >= now - wk], [m for m in msgs if m["ts"] >= now - wk]),

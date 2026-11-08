@@ -1,5 +1,5 @@
 # Shadow trial of a local model against the imessage-check OpenClaw job
-# (docs/llm-shadow.md). The shadow only records decisions; it has no tool that
+# (ansible/roles/llm-shadow/README.md). The shadow only records decisions; it has no tool that
 # sends, adds, deletes or writes state.
 
 llm_shadow_enabled: true

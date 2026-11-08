@@ -1,4 +1,4 @@
-# Local-model shadow of the imessage-check job (docs/llm-shadow.md).
+# Local-model shadow of the imessage-check job (ansible/roles/llm-shadow/README.md).
 # Code under /usr/local/lib, records under the data dir; both root-only.
 
 - name: Create the llm-shadow directories

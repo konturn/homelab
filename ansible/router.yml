@@ -131,7 +131,7 @@
   # restic-notify-failure@.service.
   - role: macmini-backup
     tags: [macmini-backup]
-  # Local-model shadow of the imessage-check OpenClaw job (docs/llm-shadow.md).
+  # Local-model shadow of the imessage-check OpenClaw job (ansible/roles/llm-shadow/README.md).
   # Records decisions only; it has no tool with a side effect.
   - role: llm-shadow
     tags: [llm-shadow]
