@@ -164,10 +164,15 @@ def load(root: Path = ROOT):
     """(hardware, dependencies with {{ vars }} resolved). Raises FactsError."""
     hw = load_yaml(HARDWARE, root)
     deps = load_yaml(DEPENDENCIES, root)
+    variables = inventory_vars(root)
     errors = validate_hardware(hw) + validate_dependencies(deps)
+    for name, dev in (hw.get("network_devices") or {}).items():
+        for key in ("address_var", "mac_var"):
+            if dev.get(key) and dev[key] not in variables:
+                errors.append(f"network_devices.{name}.{key}: {dev[key]} is not in {INVENTORY} all.vars")
     if errors:
         raise FactsError("\n".join(errors))
-    deps = substitute(deps, inventory_vars(root))
+    deps = substitute(deps, variables)
     return hw, deps
 
 

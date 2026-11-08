@@ -117,6 +117,8 @@ class DriftTest(unittest.TestCase):
         self.assertIn("`Device_1` on port 2-1.3.3", joined)
         self.assertIn("Office: no card named Office", joined)
         self.assertNotIn("Global", joined)
+        self.assertIn("doorbell (tcp", joined)
+        self.assertIn("affects amcrest2mqtt", joined)
         # the persistent_data_r mapper name is a note, not drift
         notes = [t for lvl, t in rep.sections["disks"] if lvl == "NOTE"]
         self.assertTrue(any("persistent_data_r" in t for t in notes))
@@ -134,6 +136,8 @@ class DriftTest(unittest.TestCase):
             path = render.usb_devpath(ctrls[z["controller"]], z["port"]) + f"/sound/card{10 + i}"
             cards.append({"card": f"card{10 + i}", "id": z["id"], "devpath": path, "usb_port": z["port"]})
         live["sound_cards"] = cards
+        for p in live["probes"].values():
+            p["ok"] = True
         for d in live["disks"].values():
             d["mappers"] = ["persistent_data" if m == "persistent_data_r" else m for m in d["mappers"]]
         return live

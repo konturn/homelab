@@ -100,6 +100,21 @@ nodes:
         on 2026-11-07 that went unnoticed for about an hour. The Zigbee
         silence alert watches for it.
 
+  # --- cameras (inventory/hardware.yml network_devices) --------------------
+  back_camera:
+    kind: device
+    desc: Amcrest back camera, PoE behind the upstairs IoT switch.
+    probe: {tcp: "{{ back_camera_address }}:554"}
+  doorbell:
+    kind: device
+    desc: Amcrest doorbell.
+    probe: {tcp: "{{ doorbell_address }}:80"}
+  amcrest2mqtt:
+    kind: container
+    desc: Doorbell events to MQTT.
+    needs: [doorbell, mqtt]
+    probe: {container: amcrest2mqtt}
+
   # --- Z-Wave (on the zwave Pi) ---------------------------------------------
   zwave_pi:
     kind: host

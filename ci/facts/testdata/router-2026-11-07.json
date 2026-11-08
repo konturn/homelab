@@ -211,6 +211,14 @@
  },
  "errors": [],
  "probes": {
+  "amcrest2mqtt": {
+   "detail": "running, healthy",
+   "ok": true
+  },
+  "back_camera": {
+   "detail": "connect ok",
+   "ok": true
+  },
   "ci_runner": {
    "detail": "active",
    "ok": true
@@ -218,6 +226,10 @@
   "dns": {
    "detail": "1 answer(s)",
    "ok": true
+  },
+  "doorbell": {
+   "detail": "connect failed: timed out",
+   "ok": false
   },
   "gitlab": {
    "detail": "running, healthy",
@@ -234,10 +246,6 @@
   "mosquitto": {
    "detail": "running, healthy",
    "ok": true
-  },
-  "mpool": {
-   "detail": "DEGRADED",
-   "ok": false
   },
   "mqtt": {
    "detail": "connect ok",
