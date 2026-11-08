@@ -7,7 +7,8 @@ so nothing is installed on the host). Python stdlib only.
     python3 collect.py < spec.json      spec: {"probes": {node: {kind: arg}}}
 
 Nothing here changes the host: it reads /sys, /dev/disk/by-path, lsblk,
-`zpool status`, `docker ps`/`docker inspect`, /dev/serial/by-id, `systemctl is-active`, and opens TCP/UDP
+`zpool status`, `docker ps`/`docker inspect`, containers' /proc/<pid>/net/dev,
+Home Assistant's .storage/core.network, /dev/serial/by-id, `systemctl is-active`, and opens TCP/UDP
 connections for the probes.
 """
 
@@ -163,6 +164,27 @@ def containers():
     return result
 
 
+def interfaces(names):
+    """{container: [interface names] | None} from /proc/<pid>/net/dev (the
+    container's network namespace); None when it is not running."""
+    out = {}
+    for name in names:
+        rc, pid, _ = run(["docker", "inspect", "-f", "{{.State.Pid}}", name])
+        pid = pid.strip()
+        if rc != 0 or pid in ("", "0"):
+            out[name] = None
+            continue
+        with open("/proc/%s/net/dev" % pid) as f:
+            out[name] = sorted(l.split(":")[0].strip() for l in f.readlines()[2:] if ":" in l)
+    return out
+
+
+def ha_adapters(path):
+    """configured_adapters from Home Assistant's core.network storage file."""
+    with open(path) as f:
+        return (json.load(f).get("data") or {}).get("configured_adapters")
+
+
 def serial_by_id():
     """{by-id name: tty} from /dev/serial/by-id."""
     base = "/dev/serial/by-id"
@@ -246,6 +268,15 @@ def collect(spec):
         try:
             out[key] = fn()
         except Exception as e:  # noqa: BLE001 - reported, the comparison marks the section as unchecked
+            out[key] = None
+            out["errors"].append("%s: %s" % (key, e))
+    for key, fn, arg in (("interfaces", interfaces, spec.get("interfaces")),
+                         ("ha_adapters", ha_adapters, spec.get("ha_core_network"))):
+        if arg is None:
+            continue
+        try:
+            out[key] = fn(arg)
+        except Exception as e:  # noqa: BLE001
             out[key] = None
             out["errors"].append("%s: %s" % (key, e))
     out["probes"] = {}

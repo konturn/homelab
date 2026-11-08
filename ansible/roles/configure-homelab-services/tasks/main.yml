@@ -1012,6 +1012,8 @@
 ### Frigate: MQTT user and UI users (after compose up)
 - ansible.builtin.import_tasks: frigate_post.yml
 
+- ansible.builtin.import_tasks: homeassistant_post.yml
+
 - name: Capture Nextcloud image ID after compose-up
   ansible.builtin.command:
     cmd: docker inspect --format '{% raw %}{{.Image}}{% endraw %}' nextcloud
