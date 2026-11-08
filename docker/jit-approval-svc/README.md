@@ -7,7 +7,7 @@ A Go HTTP service that brokers JIT (Just-In-Time) credential access between the 
 ```
 Agent → POST /request → Approval Service → Telegram inline buttons → Noah approves/denies
 Agent → GET /status/:id → polls for result
-On approve → Backend Registry → Dynamic backend or Vault → mint credential → return to agent
+On approve (or immediately, for tier 1) → Backend Registry → Dynamic backend or Vault → mint credential → return to agent
 ```
 
 ### Dynamic vs Static Backends
@@ -19,20 +19,25 @@ The service supports two types of credential backends:
 - Have service-managed lifecycle (auto-expiry, auto-cleanup)
 - Don't require Vault token management on the consumer side
 
-**Static backend** (fallback) mints a scoped Vault token that the consumer uses to read the static secret from Vault. This is the original behavior and is used for services without a dynamic backend.
+**Static backend** mints a scoped Vault token (policy `jit-tier1-services` or `jit-tier2-infra`) that the consumer uses to read the static secret from Vault. It is used for every resource without a dynamic backend.
 
-**Fallback behavior:** If a dynamic backend fails (service unreachable, auth error, etc.), the service automatically falls back to the static Vault token approach and logs a warning.
+**Failure behavior:** If a dynamic backend fails (service unreachable, auth error, etc.), the request fails and `dynamic_backend_failed` is logged. There is no fallback to a static Vault token.
 
 ### Backend Assignment
 
 | Resource | Backend | Credential Type |
 |----------|---------|----------------|
-| Grafana | Dynamic (GrafanaBackend) | Service account token with expiration |
-| InfluxDB | Dynamic (InfluxDBBackend) | Read-only authorization token (auto-cleaned after TTL) |
-| Plex | Static (Vault) | API key from Vault (transient token API deprecated in Plex 1.43+) |
-| Home Assistant | Dynamic (HomeAssistantBackend) | OAuth access token (30 min, via refresh flow) |
-| Radarr, Sonarr, Ombi, NZBGet, Deluge, Paperless, GitLab | Static (Vault) | Scoped Vault token |
-| Gmail | Static (Vault) | Email + app password from Vault |
+| `grafana` | Dynamic (GrafanaBackend) | Service account token with expiration |
+| `influxdb` | Dynamic (InfluxDBBackend) | Read-only authorization token (auto-cleaned after TTL) |
+| `homeassistant` | Dynamic (HomeAssistantBackend) | OAuth access token (30 min, via refresh flow) |
+| `gitlab` | Dynamic (GitLabBackend) | Project access token (project 4 by default), revoked best-effort when the request expires |
+| `gitlab-moltbot` | Dynamic (GitLabAgentBackend) | Impersonation token for the agent's own GitLab user, revoked by a sweeper after the TTL (1 h) |
+| `paperless` | Dynamic (PaperlessBackend) | Paperless API token (persistent per user; access gated by approval) |
+| `tailscale` | Dynamic (TailscaleBackend) | OAuth access token (client credentials) |
+| `gmail-read`, `gmail-send` | Dynamic (GmailBackend) | Google OAuth2 access token (read-only / send scope) |
+| `ssh-*` (router, satellite, zwave, macmini, user hosts; `-elevated` variants) | Dynamic (SSHBackend) | Vault-signed SSH certificate |
+| `vault` | Dynamic (VaultDynamicBackend) | Vault token with a per-request policy for the requested `vault_paths` |
+| Plex, Radarr, Sonarr, Prowlarr, Ombi, NZBGet, Deluge, Tautulli, MQTT, Pi-hole, IPMI | Static (Vault) | Scoped Vault token |
 
 ## API
 
@@ -114,6 +119,10 @@ Response (approved, first poll — static backend):
 }
 ```
 
+### `POST /webhook/refresh`
+
+Re-registers the Telegram webhook (e.g. after a public IP change). Requires `X-JIT-API-Key`; rate limited to once per 5 minutes.
+
 ### `GET /health`
 
 Health check.
@@ -164,9 +173,11 @@ longer active" and the client re-sends what it still needs.
 
 | Tier | TTL | Approval | Resources |
 |------|-----|----------|-----------|
-| 1 | 15 min | Auto | Grafana, InfluxDB, Plex, Radarr, Sonarr, Ombi, NZBGet, Deluge, Paperless, Gmail |
-| 2 | 30 min | Manual (Telegram) | GitLab, Home Assistant |
+| 1 | 15 min | Auto | grafana, influxdb, plex, radarr, sonarr, prowlarr, ombi, nzbget, deluge, tautulli, mqtt, gmail-read, ssh-macmini, gitlab-moltbot (1 h) |
+| 2 | 30 min | Manual (Telegram) | gitlab, homeassistant, paperless, gmail-send, tailscale, pihole, vault, ipmi, ssh-router, ssh-satellite, ssh-zwave, ssh-nkontur/konoahko/konturn (8 h), `ssh-*-elevated` |
 | 3 | 60 min | Manual (Telegram) | Critical (reserved) |
+
+The resource-to-tier map is `resourceTier` in `internal/vault/vault.go`; a request below a resource's minimum tier is rejected. Per-resource TTL overrides are in `internal/config/config.go`. Requests are rate limited to 5 per resource per requester per 15 minutes.
 
 Tiers represent **approval trust level**, not backend type. Dynamic vs static credential backends are orthogonal to the tier system.
 
@@ -183,13 +194,24 @@ All configuration via environment variables:
 | `TELEGRAM_CHAT_ID` | No | `8531859108` | Noah's Telegram chat ID |
 | `TELEGRAM_WEBHOOK_SECRET` | Yes | — | Secret for webhook verification |
 | `JIT_API_KEY` | Yes | — | API key for `/request` endpoint auth (passed as `X-JIT-API-Key` header) |
+| `TELEGRAM_WEBHOOK_URL` | No | — | If set, the webhook is registered with Telegram at startup |
 | `LISTEN_ADDR` | No | `:8080` | HTTP listen address |
-| `REQUEST_TIMEOUT` | No | `300` | Seconds before pending requests auto-timeout |
+| `REQUEST_TIMEOUT` | No | `1800` | Seconds before pending requests auto-timeout (deployed with `300`) |
 | `ALLOWED_REQUESTERS` | No | `prometheus` | Comma-separated requester allowlist |
+| `ACTIONS_SOCKET` | No | — | Unix socket path for the action-prompt API |
 | `HA_URL` | No | `https://homeassistant.lab.nkontur.com` | Home Assistant URL for dynamic backend |
 | `GRAFANA_URL` | No | `https://grafana.lab.nkontur.com` | Grafana URL for dynamic backend |
-| `PLEX_URL` | No | `http://plex.lab.nkontur.com:32400` | Plex URL for dynamic backend |
 | `INFLUXDB_URL` | No | `https://influxdb.lab.nkontur.com` | InfluxDB URL for dynamic backend |
+| `GITLAB_URL` | No | `https://gitlab.lab.nkontur.com` | GitLab URL for the `gitlab` and `gitlab-moltbot` backends |
+| `GITLAB_ADMIN_TOKEN` | No | — | Maintainer token for the `gitlab` backend (project access tokens) |
+| `GITLAB_PROJECT_ID` | No | `4` | Default project for `gitlab` tokens |
+| `GITLAB_AGENT_USER` | No | `moltbot` | User the `gitlab-<user>` backend impersonates |
+| `GITLAB_AGENT_ADMIN_TOKEN` | No | — | Administrator token for impersonation tokens; the backend is disabled without it |
+| `GITLAB_AGENT_SCOPES` | No | `api,read_api,read_repository,write_repository` | Scope allowlist for agent tokens |
+| `TAILSCALE_API_URL` | No | `https://api.tailscale.com` | Tailscale API for the dynamic backend |
+| `PAPERLESS_URL` | No | — | Paperless-ngx URL; enables the dynamic backend |
+| `SSH_VAULT_PATH` | No | `ssh-client-signer` | Vault SSH secrets engine mount |
+| `GOOGLE_TOKEN_URL` | No | `https://oauth2.googleapis.com/token` | Google token endpoint for the Gmail backends |
 
 ### Disabling Dynamic Backends
 
@@ -209,9 +231,10 @@ Dynamic backends read their upstream credentials from Vault:
 |---------|-----------|-----------------|
 | Home Assistant | `homelab/data/docker/homeassistant` | `refresh_token`, `client_id` |
 | Grafana | `homelab/data/docker/grafana` | `jit_admin_token`, `service_account_id` |
-| Plex | `homelab/data/docker/plex` | `token` |
 | InfluxDB | `homelab/data/docker/influxdb` | `admin_token`, `org_id` |
-| Gmail | `homelab/data/email/gmail` | `email`, `app_password` |
+| Paperless | `homelab/data/docker/paperless` | `username`, `password` |
+| Tailscale | `homelab/data/infrastructure/tailscale` | `oauth_client_id`, `oauth_client_secret` |
+| Gmail | `homelab/data/email/google-oauth` | `client_id`, `client_secret`, `refresh_token_read` / `refresh_token_send` |
 
 ## Build
 
@@ -233,7 +256,7 @@ docker build -t jit-approval-svc .
 docker run -e VAULT_ROLE_ID=... -e VAULT_SECRET_ID=... -e TELEGRAM_BOT_TOKEN=... -e TELEGRAM_WEBHOOK_SECRET=... -e JIT_API_KEY=... jit-approval-svc
 ```
 
-See `docker-compose.snippet.yml` for homelab integration.
+See the `jit-approval-svc` service in `docker/docker-compose.yml` for the homelab deployment.
 
 ## Logging
 
@@ -243,7 +266,7 @@ All output is structured JSON to stdout, designed for the Docker Loki log driver
 {"ts":"2026-02-06T14:30:00Z","level":"info","event":"backend_credential_minted","backend":"grafana","resource":"grafana","tier":0,"ttl":"5m0s"}
 ```
 
-Events logged: `request_received`, `approval_sent`, `approved`, `denied`, `timeout`, `token_issued`, `backend_credential_minted`, `credential_claimed`, `dynamic_backend_failed_fallback`, `backend_registered`, `influxdb_cleanup_start`, `influxdb_cleanup_success`, `http_request`, `health_check`, `error`.
+Events logged include: `request_received`, `approval_sent`, `auto_approve`, `approved`, `denied`, `timeout`, `token_issued`, `backend_credential_minted`, `credential_claimed`, `dynamic_backend_failed`, `request_rate_limited`, `backend_registered`, `influxdb_cleanup_start`, `influxdb_cleanup_success`, `http_request`.
 
 ## Security
 
@@ -253,8 +276,8 @@ Events logged: `request_received`, `approval_sent`, `approved`, `denied`, `timeo
 - Only callbacks from configured Telegram chat ID are processed
 - Credentials returned exactly once (claim-on-first-poll)
 - No credential data in logs (request_id and resource only, never tokens)
-- Request auto-timeout (5 min default)
-- Dynamic backend failures fall back to static Vault tokens (defense in depth)
+- Request auto-timeout (`REQUEST_TIMEOUT`, 5 min as deployed)
+- Rate limit: 5 requests per resource per requester per 15 minutes
 - All HTTP clients have 10-second timeouts
 - InfluxDB tokens are auto-cleaned via goroutine after TTL expiry
 
