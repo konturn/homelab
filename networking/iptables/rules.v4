@@ -116,6 +116,13 @@ COMMIT
 :OUTPUT ACCEPT [8568321:4893036657]
 :POSTROUTING ACCEPT [22046108:12573933019]
 
+# Traffic to the router's own addresses never gets the Mullvad mark. This
+# includes the public address, which nat PREROUTING then DNATs to nginx
+# (hairpin NAT); with the mark, routing would send it into the tunnel instead.
+# Packets for the router itself are delivered locally either way (ip rule
+# "lookup local" comes before the fwmark rule), so only hairpin flows change.
+-A PREROUTING -m addrtype --dst-type LOCAL -j RETURN
+
 # Mark internal VLAN (10.3.x.x) internet-bound traffic
 # Purpose: Policy routing for internal network outbound traffic
 # excel-vm routes via WAN for client M365 sign-in (skips the Mullvad mark)
