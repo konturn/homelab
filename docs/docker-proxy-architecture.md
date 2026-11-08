@@ -11,9 +11,9 @@ CI Runner (gitlab-ci-protected network)
   │
   │  mTLS :2376
   ▼
-lab_nginx (internal network)
+lab_nginx (internal + proxy-internal networks)
   │
-  │  HTTP :2375
+  │  plain TCP :2375
   ▼
 docker-socket-proxy (proxy-internal network)
   │
@@ -32,16 +32,22 @@ docker-socket-proxy (proxy-internal network)
 
 ### lab_nginx (mTLS Termination)
 
-- Sits on the `internal` Docker network
-- Terminates mTLS on port 2376, validates client certificates against the CA
-- Proxies authenticated requests as plain HTTP to `docker-socket-proxy:2375`
+- Sits on the `internal` and `proxy-internal` Docker networks
+- Terminates mTLS on port 2376 (stream block, `docker/docker-socket-proxy-tls/docker-proxy-tls.stream.conf`), validates client certificates against the CA
+- Proxies authenticated connections in plain text to `docker-socket-proxy:2375`
 
 ### docker-socket-proxy (Tecnativa)
 
-- Runs on a dedicated `docker-proxy` bridge network
+- Runs on the dedicated internal bridge network `proxy-internal`
 - Bind-mounts `/var/run/docker.sock` read-only
 - Whitelists specific Docker API endpoints (containers, images, networks, etc.)
 - Provides the security boundary: even with valid mTLS certs, only allowed API calls pass through
+
+### docker-socket-proxy-ro (promtail)
+
+- A second Tecnativa proxy on its own internal bridge `docker-ro`, used only by promtail (`tcp://docker-socket-proxy-ro:2375`) for container discovery and log tailing
+- GET only (`POST=0`): containers, events and networks; no builds, images, exec or volumes
+- Not reachable through lab_nginx or from CI
 
 ## Certificate Generation
 
@@ -94,10 +100,10 @@ A headless Chromium browser runs as a sidecar service for browser automation (CD
 
 | Interface | Address | Notes |
 |-----------|---------|-------|
-| CDP (Chrome DevTools Protocol) | `10.3.32.9:9222` | **IP only** — Chromium 144+ rejects Host headers containing hostnames |
+| CDP (Chrome DevTools Protocol) | `{{ chromium_cdp_ip }}:9222` on the `openclaw-browser` bridge | **IP only** — Chromium 144+ rejects Host headers containing hostnames |
 | noVNC (visual access) | `browser.lab.nkontur.com` | Auth-gated with VNC password from Vault |
 
-- Static IP `10.3.32.9` assigned via Ansible inventory variable `{{ chromium_browser_ip }}`
+- Static IP `10.3.32.9` on the internal network (`{{ chromium_browser_ip }}`, egress and noVNC) and `{{ chromium_cdp_ip }}` on `openclaw-browser`; CDP listens only on the latter
 - CDP connections must use the IP directly, not a hostname, due to Chromium 144's Host header validation
 
 ## Container Configuration
