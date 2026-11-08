@@ -18,7 +18,7 @@ If you want to force the installation, overwrite the binary or update restic, yo
 - `restic_user_home`: home directory of the restic_user (`/root`)
 - `restic_password`: password used for repository encryption
 - `restic_repository_name`: the name of the repository (`restic`)
-- `restic_check`: run `restic check` as `ExecStartPre` if true (`false`)
+- `restic_check`: run `restic check` as `ExecStartPre` and install the `restic-check` timer (below) if true (`true`)
 - `restic_default_folders`: a default list of folders that restic will backup (`/etc/`, `/root` and `/var/log`)
 - `restic_folders`: the list of folder you want to backup
 - `restic_dump_compression_enabled`: enable piping to pigz for database dumps
