@@ -42,6 +42,20 @@ def inventory_vars(root: Path = ROOT) -> dict:
     return out
 
 
+def host_vars(host: str, root: Path = ROOT) -> dict:
+    """The vars of one host in ansible/inventory.yml, wherever it is nested."""
+    def walk(group):
+        group = group or {}
+        if host in (group.get("hosts") or {}):
+            return (group["hosts"][host] or {})
+        for child in (group.get("children") or {}).values():
+            found = walk(child)
+            if found is not None:
+                return found
+        return None
+    return walk(load_yaml(INVENTORY, root).get("all")) or {}
+
+
 def substitute(value, variables: dict):
     """Replace {{ var }} in strings (recursively) with inventory values."""
     if isinstance(value, str):
@@ -122,7 +136,65 @@ def validate_hardware(hw: dict) -> list[str]:
             errors.append(f"{where}: unknown controller")
         elif not m or int(m.group(1)) != int(c.get("bus", -1)):
             errors.append(f"{where}: port must be <bus>-<port>[.<port>...] on bus {c.get('bus')}")
+    errors += validate_amps(hw, ids)
     return errors
+
+
+def validate_amps(hw: dict, stream_ids: set) -> list[str]:
+    errors = []
+    by_id, ha_ports, entities = set(), set(), set()
+    for name, amp in (hw.get("amps") or {}).items():
+        where = f"amps.{name}"
+        if amp.get("connected", True) is False:
+            continue
+        for key in ("serial_by_id", "ha_port"):
+            if not amp.get(key):
+                errors.append(f"{where}: {key} missing")
+        if amp.get("serial_by_id") in by_id:
+            errors.append(f"{where}: serial_by_id shared with another amp")
+        if amp.get("ha_port") in ha_ports:
+            errors.append(f"{where}: ha_port shared with another amp")
+        by_id.add(amp.get("serial_by_id"))
+        ha_ports.add(amp.get("ha_port"))
+        inputs = amp.get("inputs") or {}
+        if set(inputs) - set(range(1, 7)):
+            errors.append(f"{where}: inputs are numbered 1-6")
+        for n, inp in inputs.items():
+            if inp.get("stream") and inp["stream"] not in stream_ids:
+                errors.append(f"{where}.inputs.{n}: stream {inp['stream']} is not an audio_zones id")
+        zones = amp.get("zones") or {}
+        if set(zones) - set(range(11, 17)):
+            errors.append(f"{where}: zones are numbered 11-16 (standalone amp)")
+        for n, z in zones.items():
+            if not str(z.get("entity", "")).startswith("media_player."):
+                errors.append(f"{where}.zones.{n}: entity must be a media_player")
+            if z.get("entity") in entities:
+                errors.append(f"{where}.zones.{n}: duplicate entity {z.get('entity')}")
+            entities.add(z.get("entity"))
+    return errors
+
+
+COMPOSE = "docker/docker-compose.yml"
+
+
+def compose_services(root: Path = ROOT) -> dict:
+    """services of the router's compose file. It is an Ansible template, so
+    {{ ... }} becomes the string JINJA and {% ... %} lines are dropped."""
+    text = (root / COMPOSE).read_text(encoding="utf-8")
+    text = re.sub(r"\{\{.*?\}\}", "JINJA", text)
+    text = "\n".join(l for l in text.splitlines() if not l.strip().startswith("{%"))
+    return (yaml.safe_load(text) or {}).get("services") or {}
+
+
+def check_amp_devices(hw: dict, services: dict) -> list[str]:
+    """homeassistant's device mappings must be exactly the connected amps'."""
+    want = sorted(f"/dev/serial/by-id/{a['serial_by_id']}:{a['ha_port']}"
+                  for a in (hw.get("amps") or {}).values() if a.get("connected", True) is not False)
+    have = sorted(d for d in (services.get("homeassistant") or {}).get("devices") or []
+                  if str(d).startswith("/dev/serial/"))
+    if want != have:
+        return [f"{COMPOSE} homeassistant devices {have} do not match inventory/hardware.yml amps {want}"]
+    return []
 
 
 def validate_dependencies(deps: dict) -> list[str]:
@@ -170,6 +242,7 @@ def load(root: Path = ROOT):
         for key in ("address_var", "mac_var"):
             if dev.get(key) and dev[key] not in variables:
                 errors.append(f"network_devices.{name}.{key}: {dev[key]} is not in {INVENTORY} all.vars")
+    errors += check_amp_devices(hw, compose_services(root))
     if errors:
         raise FactsError("\n".join(errors))
     deps = substitute(deps, variables)

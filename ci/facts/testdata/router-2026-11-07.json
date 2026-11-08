@@ -1,4 +1,431 @@
 {
+ "containers": {
+  "ambientweather": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "amcrest2mqtt": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "anomaly-detector": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "audioserve": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "beautiful_darwin": {
+   "exit_code": 100,
+   "health": null,
+   "state": "exited"
+  },
+  "beautiful_murdock": {
+   "exit_code": 1,
+   "health": null,
+   "state": "exited"
+  },
+  "bitwarden": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "blissful_swanson": {
+   "exit_code": 100,
+   "health": null,
+   "state": "exited"
+  },
+  "bluebubbles-relay": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "chromium-browser": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "deluge": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "diagram": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "docker-socket-proxy": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "docker-socket-proxy-ro": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "eager_kepler": {
+   "exit_code": 1,
+   "health": null,
+   "state": "exited"
+  },
+  "ecstatic_poitras": {
+   "exit_code": 100,
+   "health": null,
+   "state": "exited"
+  },
+  "elastic_chatterjee": {
+   "exit_code": 101,
+   "health": null,
+   "state": "exited"
+  },
+  "exciting_bardeen": {
+   "exit_code": 4,
+   "health": null,
+   "state": "exited"
+  },
+  "funny_lamarr": {
+   "exit_code": 100,
+   "health": null,
+   "state": "exited"
+  },
+  "gitlab": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "grafana": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "headway-frontend": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "headway-frontend-init": {
+   "exit_code": 0,
+   "health": null,
+   "state": "exited"
+  },
+  "headway-travelmux-init": {
+   "exit_code": 0,
+   "health": null,
+   "state": "exited"
+  },
+  "homeassistant": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "hopeful_shirley": {
+   "exit_code": 100,
+   "health": null,
+   "state": "exited"
+  },
+  "infallible_mclean": {
+   "exit_code": 1,
+   "health": null,
+   "state": "exited"
+  },
+  "influxdb": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "interesting_swanson": {
+   "exit_code": 100,
+   "health": null,
+   "state": "exited"
+  },
+  "iot_nginx": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "iperf3": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "jackett": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "jit-approval-svc": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "keen_keldysh": {
+   "exit_code": 100,
+   "health": null,
+   "state": "exited"
+  },
+  "lab_nginx": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "lidarr": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "loki": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "mopidy": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "mosquitto": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "navidrome": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "nextcloud": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "nextcloud_database": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "nginx": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "nostalgic_newton": {
+   "exit_code": 4,
+   "health": null,
+   "state": "exited"
+  },
+  "novnc-dev1": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "novnc-dev2": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "novnc-dev3": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "nzbget": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "ollama": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "ombi": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "openclaw-gateway": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "otel-collector": {
+   "exit_code": null,
+   "health": null,
+   "state": "running"
+  },
+  "paperless-ai": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "paperless-ngx": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "paperless-redis": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "pelias-api": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "pelias-config-init": {
+   "exit_code": 0,
+   "health": null,
+   "state": "exited"
+  },
+  "pelias-elasticsearch": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "pelias-elasticsearch-init": {
+   "exit_code": 0,
+   "health": null,
+   "state": "exited"
+  },
+  "pelias-libpostal": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "pelias-placeholder": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "pelias-placeholder-init": {
+   "exit_code": 0,
+   "health": null,
+   "state": "exited"
+  },
+  "pihole": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "plex": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "promtail": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "prowlarr": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "radarr": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "romantic_curie": {
+   "exit_code": 100,
+   "health": null,
+   "state": "exited"
+  },
+  "snapclient_global": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "snapserver": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "sonarr": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "suspicious_spence": {
+   "exit_code": 4,
+   "health": null,
+   "state": "exited"
+  },
+  "tautulli": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "tempo": {
+   "exit_code": null,
+   "health": null,
+   "state": "running"
+  },
+  "tender_mestorf": {
+   "exit_code": 101,
+   "health": null,
+   "state": "exited"
+  },
+  "thirsty_chaplygin": {
+   "exit_code": 100,
+   "health": null,
+   "state": "exited"
+  },
+  "tileserver": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "travelmux": {
+   "exit_code": null,
+   "health": null,
+   "state": "running"
+  },
+  "unruffled_ellis": {
+   "exit_code": 100,
+   "health": null,
+   "state": "exited"
+  },
+  "valhalla": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "vault": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "wordpress": {
+   "exit_code": 0,
+   "health": null,
+   "state": "exited"
+  },
+  "wordpress_db": {
+   "exit_code": 0,
+   "health": null,
+   "state": "exited"
+  },
+  "zen_merkle": {
+   "exit_code": 100,
+   "health": null,
+   "state": "exited"
+  },
+  "zigbee2mqtt": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  }
+ },
  "disks": {
   "pci-0000:00:1f.2-ata-1": {
    "dev": "sdab",
@@ -275,6 +702,10 @@
    "detail": "connect ok",
    "ok": true
   }
+ },
+ "serial_by_id": {
+  "usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0": "ttyUSB0",
+  "usb-Prolific_Technology_Inc._USB-Serial_Controller_ETDRb11A920-if00-port0": "ttyUSB1"
  },
  "sound_cards": [
   {

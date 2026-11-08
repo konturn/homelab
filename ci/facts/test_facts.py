@@ -56,6 +56,26 @@ class DataTest(unittest.TestCase):
         deps = {"nodes": {"a": {"kind": "process", "needs": ["b"]}, "b": {"kind": "process", "needs": ["a"]}}}
         self.assertTrue(any("cycle" in e for e in facts.validate_dependencies(deps)))
 
+    def test_amp_devices_match_compose(self):
+        hw = facts.load_yaml(facts.HARDWARE)
+        services = facts.compose_services()
+        self.assertEqual(facts.check_amp_devices(hw, services), [])
+        hw["amps"]["A"]["ha_port"] = "/dev/ttyUSB9"
+        self.assertTrue(facts.check_amp_devices(hw, services))
+
+    def test_amp_input_stream_must_exist(self):
+        hw = facts.load_yaml(facts.HARDWARE)
+        hw["amps"]["A"]["inputs"][5]["stream"] = "Nowhere"
+        self.assertTrue(any("Nowhere" in e for e in facts.validate_hardware(hw)))
+
+    def test_expected_containers(self):
+        exp = drift.expected_containers()
+        self.assertEqual(exp["homeassistant"], "running")
+        self.assertEqual(exp["pelias-config-init"], "oneshot")
+        self.assertNotIn("wordpress", exp)  # compose profile
+        self.assertIn("snapclient_global", exp)
+        self.assertNotIn("snapclient_office", exp)  # snapclient_disabled_zones
+
     def test_vars_substituted(self):
         _hw, deps = facts.load()
         self.assertNotIn("{{", json.dumps(deps))
@@ -102,9 +122,10 @@ class DriftTest(unittest.TestCase):
     def setUp(self):
         self.hw, self.deps = facts.load()
         self.live = json.loads(SNAPSHOT.read_text())
+        self.expected = drift.expected_containers()
 
     def texts(self, live):
-        rep, _ = drift.compare(self.hw, self.deps, live)
+        rep, _ = drift.compare(self.hw, self.deps, live, self.expected)
         return rep, [t for items in rep.sections.values() for lvl, t in items if lvl == "DRIFT"]
 
     def test_snapshot_reports_known_drift(self):
@@ -119,6 +140,7 @@ class DriftTest(unittest.TestCase):
         self.assertNotIn("Global", joined)
         self.assertIn("doorbell (tcp", joined)
         self.assertIn("affects amcrest2mqtt", joined)
+        self.assertIn("issue #123", joined)  # known_issue shown
         # the persistent_data_r mapper name is a note, not drift
         notes = [t for lvl, t in rep.sections["disks"] if lvl == "NOTE"]
         self.assertTrue(any("persistent_data_r" in t for t in notes))
@@ -138,6 +160,9 @@ class DriftTest(unittest.TestCase):
         live["sound_cards"] = cards
         for p in live["probes"].values():
             p["ok"] = True
+        live["containers"] = {n: {"state": "running" if w == "running" else "exited", "health": None,
+                                  "exit_code": None if w == "running" else 0}
+                              for n, w in self.expected.items()}
         for d in live["disks"].values():
             d["mappers"] = ["persistent_data" if m == "persistent_data_r" else m for m in d["mappers"]]
         return live
@@ -169,8 +194,25 @@ class DriftTest(unittest.TestCase):
         _, items = self.texts(live)
         self.assertTrue(any("slzb_coordinator" in t and "zigbee2mqtt" in t for t in items), items)
 
+    def test_amp_adapter_missing(self):
+        live = self.healthy()
+        del live["serial_by_id"][self.hw["amps"]["B"]["serial_by_id"]]
+        _, items = self.texts(live)
+        self.assertTrue(any(t.startswith("amp B:") for t in items), items)
+
+    def test_container_down_and_oneshot_failed(self):
+        live = self.healthy()
+        live["containers"]["zigbee2mqtt"] = {"state": "exited", "exit_code": 1, "health": None}
+        live["containers"]["pelias-config-init"] = {"state": "exited", "exit_code": 2, "health": None}
+        live["containers"]["gitlab"]["health"] = "unhealthy"
+        _, items = self.texts(live)
+        joined = "\n".join(items)
+        self.assertIn("zigbee2mqtt: exited, exit code 1", joined)
+        self.assertIn("pelias-config-init: one-shot exited, exit code 2", joined)
+        self.assertIn("gitlab: running, unhealthy", joined)
+
     def test_render_report(self):
-        rep, checked = drift.compare(self.hw, self.deps, self.healthy())
+        rep, checked = drift.compare(self.hw, self.deps, self.healthy(), self.expected)
         text = rep.render(checked)
         self.assertIn("no drift", text)
 

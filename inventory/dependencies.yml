@@ -4,8 +4,6 @@
 #   ci/facts/drift.py   (scheduled facts:drift job) probes every node that
 #                        has a probe and reports the ones that are down,
 #                        with what depends on them
-#   ci/facts/render.py  renders the dependency section of OpenClaw's
-#                        docker/openclaw/workspace/infra/TOOLS.md
 #
 # A node:
 #   kind:   container | systemd | mount | zpool | device | endpoint | host | process
@@ -22,6 +20,7 @@
 #           "{{ var }}" is replaced by the variable from ansible/inventory.yml
 #           (all.vars), so addresses live in one place.
 #   rules:  operational rules learned the hard way (shown to agents)
+#   known_issue: printed next to the node's drift; does not silence it
 #
 # Every container on the router lives on /persistent_data (it is Docker's
 # data-root), so `persistent_data` is implied for every router container and
@@ -109,6 +108,7 @@ nodes:
     kind: device
     desc: Amcrest doorbell.
     probe: {tcp: "{{ doorbell_address }}:80"}
+    known_issue: "Offline since 2026-07-13 (issue #123); hardware fix pending."
   amcrest2mqtt:
     kind: container
     desc: Doorbell events to MQTT.

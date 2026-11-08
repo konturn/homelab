@@ -14,6 +14,11 @@ Checks:
             pool vdev; no undeclared disk in any slot; pools and vdevs ONLINE
   audio     a sound card named after each zone on the zone's port; no USB
             sound card left unnamed
+  amps      each connected amp's USB-serial adapter is present
+  containers every service in docker/docker-compose.yml (the router's) is
+            running and not unhealthy; one-shot init services (no restart
+            policy) exited 0. Skipped: services behind a compose profile and
+            snapclient_disabled_zones (ansible/inventory.yml)
   services  every node in dependencies.yml with a probe is up (container
             running and not unhealthy, unit active, mount readable, pool
             ONLINE, TCP port open, DNS answering); a down node is reported
@@ -248,20 +253,81 @@ def check_services(deps: dict, live: dict, rep: Report) -> str:
             target = arg if isinstance(arg, str) else f"{arg.get('name')} @ {arg.get('server')}"
             affects = facts.dependents(deps, name)
             rep.drift(S, f"{name} ({kind} {target}): {res['detail']}"
-                         + (f"; affects {', '.join(affects)}" if affects else "") + ".")
+                         + (f"; affects {', '.join(affects)}" if affects else "") + "." + suffix_note(n))
     total = sum(1 for n in nodes.values() if n.get("probe"))
     return f"{total - len(down)}/{total} probes up"
 
 
-def compare(hw: dict, deps: dict, live: dict) -> tuple[Report, dict]:
+def check_amps(hw: dict, live: dict, rep: Report) -> str:
+    S = "audio zones"
+    serial = live.get("serial_by_id")
+    amps = {n: a for n, a in (hw.get("amps") or {}).items() if a.get("connected", True) is not False}
+    if serial is None:
+        return "not checked"
+    ok = 0
+    for name, amp in amps.items():
+        if amp["serial_by_id"] in serial:
+            ok += 1
+        else:
+            rep.drift(S, f"amp {name}: USB-serial adapter /dev/serial/by-id/{amp['serial_by_id']} not present "
+                         f"(Home Assistant {amp['ha_port']}).")
+    return f"{ok}/{len(amps)} amps connected"
+
+
+def expected_containers(root: Path = facts.ROOT) -> dict:
+    """{container name: 'running' | 'oneshot'} for the router's compose file."""
+    disabled = set(facts.host_vars("router.lab.nkontur.com", root).get("snapclient_disabled_zones") or [])
+    out = {}
+    for svc, spec in facts.compose_services(root).items():
+        if spec.get("profiles"):
+            continue
+        if svc.startswith("snapclient_") and svc[len("snapclient_"):] in disabled:
+            continue
+        name = spec.get("container_name") or svc
+        out[name] = "running" if spec.get("restart", "no") != "no" else "oneshot"
+    return out
+
+
+def check_containers(expected: dict, live: dict, rep: Report) -> str:
+    S = "containers"
+    have = live.get("containers")
+    if have is None:
+        rep.drift(S, "could not list containers (see collector errors)")
+        return "not checked"
+    bad = 0
+    for name, want in sorted(expected.items()):
+        c = have.get(name)
+        if not c:
+            problem = "no such container"
+        elif want == "oneshot":
+            problem = None if c["state"] == "running" or c.get("exit_code") == 0 else \
+                f"one-shot {c['state']}, exit code {c.get('exit_code')}"
+        elif c["state"] != "running":
+            problem = c["state"] + (f", exit code {c['exit_code']}" if c.get("exit_code") is not None else "")
+        elif c.get("health") == "unhealthy":
+            problem = "running, unhealthy"
+        else:
+            problem = None
+        if problem:
+            bad += 1
+            rep.drift(S, f"{name}: {problem} (declared in docker/docker-compose.yml).")
+    return f"{len(expected) - bad}/{len(expected)} declared containers up"
+
+
+def compare(hw: dict, deps: dict, live: dict, expected: dict | None = None) -> tuple[Report, dict]:
     rep = Report()
+    audio = check_audio(hw, live, rep)
     checked = {
         "disks": check_disks(hw, live, rep),
-        "audio zones": check_audio(hw, live, rep),
-        "services and endpoints": check_services(deps, live, rep),
+        "audio zones": audio + "; " + check_amps(hw, live, rep),
     }
+    if expected is not None:
+        checked["containers"] = check_containers(expected, live, rep)
+    checked["services and endpoints"] = check_services(deps, live, rep)
     for e in live.get("errors") or []:
-        rep.drift("disks" if e.startswith(("disks", "zpools")) else "audio zones", f"collector error: {e}")
+        section = ("disks" if e.startswith(("disks", "zpools")) else
+                   "containers" if e.startswith("containers") else "audio zones")
+        rep.drift(section, f"collector error: {e}")
     return rep, checked
 
 
@@ -276,6 +342,7 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     try:
         hw, deps = facts.load(args.root)
+        expected = expected_containers(args.root)
         spec = probe_spec(deps)
         if args.snapshot:
             live = json.loads(args.snapshot.read_text())
@@ -291,7 +358,7 @@ def main(argv=None) -> int:
         return 1
     if args.save_snapshot:
         args.save_snapshot.write_text(json.dumps(live, indent=1, sort_keys=True) + "\n")
-    rep, checked = compare(hw, deps, live)
+    rep, checked = compare(hw, deps, live, expected)
     text = rep.render(checked)
     print(text)
     if args.report:

@@ -1875,6 +1875,7 @@ facts:test:
         - base/udev/**/*
         - base/disk/crypttab
         - ansible/inventory.yml
+        - docker/docker-compose.yml
         - .gitlab-ci.yml
 
 # Daily on the router BMC drift schedule (SCHEDULED_TASK=ipmi-drift), so it

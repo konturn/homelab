@@ -181,6 +181,74 @@ audio_zones:
 # the six zones stay in snapclient_disabled_zones (ansible/inventory.yml).
 
 # ---------------------------------------------------------------------------
+# Whole-house audio, end to end (issue #154 plans the replacement):
+#
+#   speaker zone (amps[].zones) -> amp input (amps[].inputs) -> stream
+#   (audio_zones[].id, one Snapcast zone / Spotify Connect target) -> output
+#   (today: the zone's USB card, audio_zones[].controller/port)
+#
+# When #154's multichannel interface arrives, a stream's output becomes an
+# output pair (`output: {interface: <card>, pair: <n>}` in place of
+# controller/port); amps, inputs and speaker zones keep this shape.
+#
+# Monoprice 10761 6-zone amps, each a standalone unit on its own Prolific
+# USB-serial adapter. Home Assistant's monoprice integration talks to them;
+# `ha_port` is the path inside the homeassistant container (its config entry
+# is named after it), `serial_by_id` the host device mapped there. facts:test
+# checks docker/docker-compose.yml maps exactly these. A zone can only play
+# its own amp's inputs; keep a room's speakers on one amp.
+# inputs: number -> {label: name in HA, stream: the audio_zones id meant to
+# feed it, judged from the label; RCA wiring not traced}.
+# zones: amp zone number -> {name: HA friendly name, entity}.
+# ---------------------------------------------------------------------------
+amps:
+  A:
+    model: Monoprice 10761
+    serial_by_id: usb-Prolific_Technology_Inc._USB-Serial_Controller_ETDRb11A920-if00-port0
+    ha_port: /dev/ttyUSB0
+    inputs:
+      1: {label: Global, stream: Global}
+      2: {label: Guest Bathroom, stream: Guest_Bathroom}
+      3: {label: Guest Bedroom, stream: Guest_Bedroom}
+      4: {label: Office, stream: Office}
+      5: {label: c}
+      6: {label: d}
+    zones:
+      11: {name: Living Room Speakers 2, entity: media_player.zone_11}
+      12: {name: Dining Room Speakers, entity: media_player.zone_12}
+      13: {name: Guest Bathroom Speakers, entity: media_player.zone_13}
+      14: {name: Deck Speakers, entity: media_player.zone_5}
+      15: {name: Kitchen Speakers, entity: media_player.zone_15}
+      16: {name: Living Room Speakers 1, entity: media_player.zone_16}
+  B:
+    model: Monoprice 10761
+    serial_by_id: usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0
+    ha_port: /dev/ttyUSB1
+    inputs:
+      1: {label: Global, stream: Global}
+      2: {label: test2}
+      3: {label: test3}
+      4: {label: test4}
+      5: {label: test5}
+      6: {label: test6}
+    zones:
+      11: {name: Main Bathroom Speakers, entity: media_player.zone_11_2}
+      12: {name: Gym Speakers, entity: media_player.zone_12_2}
+      13: {name: Front Basement Hallway Speakers, entity: media_player.zone_13_2}
+      14: {name: Ping Pong Speakers, entity: media_player.zone_14}
+      15: {name: Back Basement Hallways Speakers, entity: media_player.zone_15_2}
+      16: {name: Office Speakers, entity: media_player.zone_16_2}
+    note: >-
+      Office Speakers (zone 16) sit on B, but the Office stream is labelled on
+      A's input 4, so the Office speakers can only play Global today (#154).
+  C:
+    model: Monoprice 10761
+    connected: false
+    note: >-
+      Not connected yet. Planned (#154): Office, Main Bedroom, Guest Bedroom,
+      maybe Movie Room, on a third USB-serial adapter.
+
+# ---------------------------------------------------------------------------
 # Network-attached devices with no health signal of their own. Addresses and
 # MACs live in ansible/inventory.yml (named here by variable); probes in
 # inventory/dependencies.yml. `link` is the path from the core switch, as far
@@ -201,4 +269,4 @@ network_devices:
     mac_var: doorbell_mac
     vlan: 6
     link: not traced (its MAC is not in the S2500 forwarding table while it is offline)
-    known_issue: Unreachable since 2026-07-13 (issue #123); hardware fix pending.
+    known_issue: "Unreachable since 2026-07-13 (issue #123); hardware fix pending."

@@ -7,7 +7,7 @@ so nothing is installed on the host). Python stdlib only.
     python3 collect.py < spec.json      spec: {"probes": {node: {kind: arg}}}
 
 Nothing here changes the host: it reads /sys, /dev/disk/by-path, lsblk,
-`zpool status`, `docker inspect`, `systemctl is-active`, and opens TCP/UDP
+`zpool status`, `docker ps`/`docker inspect`, /dev/serial/by-id, `systemctl is-active`, and opens TCP/UDP
 connections for the probes.
 """
 
@@ -140,6 +140,29 @@ def usb_ports():
     return out
 
 
+def containers():
+    """{name: {state, exit_code, health}} for every container (docker ps -a)."""
+    rc, out, err = run(["docker", "ps", "-a", "--format", "{{.Names}}\t{{.State}}\t{{.Status}}"])
+    if rc != 0:
+        raise RuntimeError("docker ps failed: " + err)
+    result = {}
+    for line in out.splitlines():
+        name, state, status = (line.split("\t") + ["", ""])[:3]
+        m = re.search(r"Exited \((-?\d+)\)", status)
+        h = re.search(r"\((healthy|unhealthy|health: starting)\)", status)
+        result[name] = {"state": state, "exit_code": int(m.group(1)) if m else None,
+                        "health": h.group(1) if h else None}
+    return result
+
+
+def serial_by_id():
+    """{by-id name: tty} from /dev/serial/by-id."""
+    base = "/dev/serial/by-id"
+    if not os.path.isdir(base):
+        return {}
+    return {n: os.path.basename(os.path.realpath(os.path.join(base, n))) for n in sorted(os.listdir(base))}
+
+
 def mount_source(path):
     rc, out, _ = run(["findmnt", "-n", "-o", "SOURCE", path])
     return out.strip() if rc == 0 else None
@@ -211,7 +234,7 @@ def probe(kind, arg):
 def collect(spec):
     out = {"errors": []}
     for key, fn in (("disks", disks), ("zpools", zpool_status), ("sound_cards", sound_cards),
-                    ("usb_ports", usb_ports)):
+                    ("usb_ports", usb_ports), ("containers", containers), ("serial_by_id", serial_by_id)):
         try:
             out[key] = fn()
         except Exception as e:  # noqa: BLE001 - reported, the comparison marks the section as unchecked
