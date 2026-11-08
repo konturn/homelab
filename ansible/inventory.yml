@@ -398,7 +398,7 @@ all:
       vars:
         # macOS resolves *.lab.nkontur.com through mDNSResponder, which races
         # PiHole (10.3.32.2) against the 1.1.1.1 fallback. Public DNS answers
-        # with the WAN IP (75.89.46.11), where nothing listens on 8200, so
+        # with the WAN IP, where nothing listens on 8200, so
         # Python's getaddrinfo hands Ansible's uri module the wrong address and
         # the Vault auth fails instantly with ECONNREFUSED (errno 61 on macOS).
         # Address Vault by IP to bypass the resolver entirely, same as

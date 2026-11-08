@@ -479,7 +479,8 @@ signals:
       bucket: metrics
       measurement: net
       field: bytes_recv
-      tags: {host: router, interface: wg-mullvad}
+      # The live tunnel (wg-mullvad was the retired failover's interface)
+      tags: {host: router, interface: "{{ mullvad_interface_name }}"}
       derivative: true
     checks:
       - type: threshold
