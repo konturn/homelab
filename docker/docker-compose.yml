@@ -396,6 +396,12 @@ services:
     volumes:
       - {{ docker_persistent_data_path }}/pihole/conf:/etc/pihole
       - {{ docker_persistent_data_path }}/pihole/dnsmasq:/etc/dnsmasq.d
+    # Query/FTL logs in RAM: Pi-hole answers DNS on one thread and blocked on
+    # appending pihole.log to the shared ext4 journal of /persistent_data
+    # (stalls up to ~2s). Nothing reads these logs; the long-term query
+    # database (/etc/pihole/pihole-FTL.db) stays on disk.
+    tmpfs:
+      - /var/log/pihole:size=64m,mode=0755,uid=1000,gid=1000
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "dig", "+short", "+norecurse", "+retry=0", "@127.0.0.1", "pi.hole"]
