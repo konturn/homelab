@@ -1037,7 +1037,7 @@ groups:
       # being hidden forever. Re-enable early by deleting its entry once the
       # device is back; extend the date only with a reason.
       #   10.6.128.9   doorbell (amcrest2mqtt waits for it)  offline, added 2026-10-21
-      #   10.6.128.14  back camera                          offline, added 2026-10-21
+      #   (10.6.128.14 back camera: back online 2026-11-08, PoE cable reseated)
       - uid: iot-device-unreachable
         title: IoT Device Unreachable
         condition: C
@@ -1047,7 +1047,7 @@ groups:
             datasourceUid: influxdb
             model:
               query: |
-                known_offline = ["10.6.128.9", "10.6.128.14"]
+                known_offline = ["10.6.128.9"]
                 known_offline_until = 2026-11-04T00:00:00Z
                 from(bucket: "metrics")
                   |> range(start: -15m)
@@ -2456,3 +2456,114 @@ groups:
           description: "The InfluxDB-backed short-pending rules (container OOM kill, UPS on battery / battery low) hold their last state while this fires. Check: docker ps --filter name=influxdb; docker logs --tail 50 influxdb; then the datasource health check in Grafana (Connections > Data sources > InfluxDB > Test)."
         labels:
           severity: critical
+
+  # =========================================================================
+  # Radio silence: the Zigbee / Z-Wave bridge runs but hears nothing
+  # =========================================================================
+  # On 2026-11-07 an SLZB coordinator firmware update left zigbee2mqtt with a
+  # live TCP session to the coordinator and no frames for about an hour. The
+  # container stayed up and healthy, so nothing else fired.
+  # (inventory/dependencies.yml: restart zigbee2mqtt after a coordinator
+  # firmware update.)
+  #
+  # Zigbee: there is no steady stream of device publishes to watch (overnight
+  # the lights publish nothing for 14h at a time). zigbee2mqtt's own health
+  # report (zigbee2mqtt/bridge/health, logged every 10 min) carries a
+  # per-device count of received Zigbee messages since start; availability
+  # pings alone add ~20 per 10 min. A: the sum of those counters at the newest
+  # report minus at the oldest in a 21m window (21m always holds at least
+  # two 10-min reports). 0 = nothing received between them. A restart resets
+  # the counters, which makes A large (old max minus new min), not 0. C: the
+  # number of reports in the window, so a lone report after a long outage or
+  # restart cannot read as silence. Detection takes 15-25 min. Checked
+  # against Loki for 2026-11-07: A was 17-2,400 every window except the
+  # incident, where it read 0 from 18:20 to 18:50.
+  #
+  # The json stage must stay unparameterised and the aggregations without
+  # `by (...)`: with a grouping, Loki extracts only the grouped labels and the
+  # sum template sees no device fields (always 0). `keep` drops the per-line
+  # labels instead.
+  #
+  # Z-Wave: Z-Wave JS logs a "Value updated" line for every report a device
+  # sends; the multisensors report every few minutes, and no 15m window since
+  # 2026-10-28 (the start of Loki's retention) has had zero, outside the
+  # 2026-11-05 /persistent_data outage. A silent window means the stick or
+  # Z-Wave JS stopped hearing devices. Zero lines is no series, hence
+  # noDataState: Alerting.
+  #
+  # Notify once: repeat_interval in policies.yml is 24h.
+  - orgId: 1
+    name: radio-silence-alerts
+    folder: General Alerting
+    interval: 1m
+    rules:
+      - uid: zigbee-radio-silence
+        title: Zigbee Radio Silence (no device messages)
+        condition: E
+        data:
+          - refId: A
+            relativeTimeRange: {from: 1260, to: 0}
+            datasourceUid: loki
+            model:
+              queryType: instant
+              expr: |-
+                max_over_time({container="zigbee2mqtt"} |= "zigbee2mqtt/bridge/health" | regexp `payload .(?P<payload>\{.*\})` | line_format `{{ .payload }}` | json | line_format `{{ $s := 0 }}{{ range $k, $v := . }}{{ if ne (TrimSuffix $k "_messages") $k }}{{ $s = add $s $v }}{{ end }}{{ end }}{{ $s }}` | regexp `^(?P<messages>[0-9]+)$` | keep container, messages | unwrap messages [21m])
+                -
+                min_over_time({container="zigbee2mqtt"} |= "zigbee2mqtt/bridge/health" | regexp `payload .(?P<payload>\{.*\})` | line_format `{{ .payload }}` | json | line_format `{{ $s := 0 }}{{ range $k, $v := . }}{{ if ne (TrimSuffix $k "_messages") $k }}{{ $s = add $s $v }}{{ end }}{{ end }}{{ $s }}` | regexp `^(?P<messages>[0-9]+)$` | keep container, messages | unwrap messages [21m])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B}
+          - refId: C
+            relativeTimeRange: {from: 1260, to: 0}
+            datasourceUid: loki
+            model:
+              queryType: instant
+              expr: 'sum by (container) (count_over_time({container="zigbee2mqtt"} |= "zigbee2mqtt/bridge/health" [21m]))'
+              refId: C
+          - refId: D
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: C, reducer: last, refId: D}
+          - refId: E
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: math, expression: '($B < 1) && ($D >= 2)', refId: E}
+        # No health report at all in 21m: zigbee2mqtt is down or not logging.
+        noDataState: Alerting
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "zigbee2mqtt has received no Zigbee messages for ~20 minutes"
+          description: "The bridge is up but hears nothing from any device. Most likely the SLZB coordinator (zigbee_radio_address:7638) dropped frames after a firmware update or reboot: restart zigbee2mqtt (docker restart zigbee2mqtt) and watch for device publishes in its log. If the coordinator is unreachable, check it first. Deps: inventory/dependencies.yml."
+        labels:
+          severity: warning
+
+      - uid: zwave-radio-silence
+        title: Z-Wave Radio Silence (no device reports)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: loki
+            model:
+              queryType: instant
+              expr: 'sum(count_over_time({container="zwavejs2mqtt"} |= "Value updated" [15m]))'
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B, settings: {mode: replaceNN, replaceWithValue: 0}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [1]}}]}
+        noDataState: Alerting
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "Z-Wave JS has logged no device reports for 15+ minutes"
+          description: "zwavejs2mqtt on the zwave Pi has logged no 'Value updated' line in 15 minutes (normally several a minute). Check the Pi is up and shipping logs (Host Metrics Stale), then the container (docker logs --tail 50 zwavejs2mqtt on zwave.lab.nkontur.com) and the Zooz stick (/dev/serial/by-id/usb-Silicon_Labs_Zooz_ZST10_700*). Deps: inventory/dependencies.yml."
+        labels:
+          severity: warning
