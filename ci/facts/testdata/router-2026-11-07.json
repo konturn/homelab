@@ -270,6 +270,11 @@
    "health": "healthy",
    "state": "running"
   },
+  "petlibro-camera": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
   "pihole": {
    "exit_code": null,
    "health": "healthy",
@@ -647,6 +652,10 @@
   },
   "persistent_data": {
    "detail": "mounted from /dev/mapper/persistent_data_r",
+   "ok": true
+  },
+  "petlibro_camera": {
+   "detail": "running, healthy",
    "ok": true
   },
   "pihole": {

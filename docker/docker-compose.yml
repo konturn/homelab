@@ -1727,6 +1727,7 @@ services:
       - FRIGATE_MQTT_PASSWORD={{ vault_frigate_mqtt_password | trim | replace("$", "$$") }}
       - FRIGATE_BACK_CAMERA_PASSWORD={{ vault_rear_camera_pass | trim | replace("$", "$$") }}
       - FRIGATE_DOORBELL_PASSWORD={{ vault_doorbell_pass | trim | replace("$", "$$") }}
+      - FRIGATE_PETLIBRO_RTSP_PASSWORD={{ vault_petlibro_camera_rtsp_password | trim | replace("$", "$$") }}
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - "{{ docker_persistent_data_path }}/frigate:/config"
@@ -2240,6 +2241,43 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+  # PETLIBRO feeder camera -> RTSP for Frigate (docs/petlibro-camera.md).
+  # Camera only: the feeder stays on the PETLIBRO cloud (schedule, app). go2rtc
+  # loads only its RTSP server and the petlibro:// LAN source (no API, no
+  # WebRTC, no exec). It reaches the camera on the IoT VLAN and serves RTSP,
+  # with Frigate's login, on its internal address only.
+  petlibro-camera:
+    image: gitlab-registry.lab.nkontur.com:443/root/homelab/petlibro-camera:latest
+    container_name: petlibro-camera
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges=true
+    cap_drop:
+      - ALL
+    read_only: true
+    networks:
+      iot:
+        ipv4_address: {{ petlibro_camera_iot_ip }}
+      internal:
+        ipv4_address: {{ petlibro_camera_ip }}
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          pids: 64
+    environment:
+      RTSP_LISTEN: "{{ petlibro_camera_ip }}:8554"
+      PETLIBRO_SUBNET: "10.6.0.0/16"
+      PETLIBRO_CAMERA_UID: {{ vault_petlibro_camera_uid | trim | replace("$", "$$") }}
+      RTSP_PASSWORD: {{ vault_petlibro_camera_rtsp_password | trim | replace("$", "$$") }}
+    healthcheck:
+      # The RTSP listener only: a stream probe would wake the camera every
+      # interval. Camera trouble shows in Frigate (cat_feeder camera_fps 0).
+      test: ["CMD-SHELL", "nc -z -w 3 {{ petlibro_camera_ip }} 8554 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   ambientweather:
     image: ghcr.io/neilenns/ambientweather2mqtt:latest@sha256:cea17f44ba369de77fd47aff46b90bec6498188f969b20927e9c72511902249a

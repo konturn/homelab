@@ -75,6 +75,7 @@ All VLANs use macvlan Docker networks, allowing containers to have their own IP 
 | 10.3.32.2 | PiHole (DNS ad-blocking) |
 | 10.3.32.3 | Deluge (torrent client) |
 | 10.3.32.13 | Home Assistant (`homeassistant_ip`, interface `int0`) |
+| 10.3.32.14 | petlibro-camera RTSP for Frigate (`petlibro_camera_ip`, docs/petlibro-camera.md) |
 | 10.3.64.0 - 10.3.127.255 | DHCP range |
 
 **Services:**
@@ -154,6 +155,7 @@ for Home Assistant"). HA's other traffic stays on Mullvad.
 | 10.6.32.6 | Ambient Weather bridge |
 | 10.6.32.7 | Mopidy (music player) |
 | 10.6.32.24 - 10.6.32.31 | AirPlay receivers, one per audio zone (`airplay_*`, docs/AUDIO.md) |
+| 10.6.32.9 | petlibro-camera, LAN access to the feeder camera (`petlibro_camera_iot_ip`) |
 
 **Physical Devices:**
 | IP | Device |

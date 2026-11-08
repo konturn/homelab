@@ -94,6 +94,10 @@ go2rtc:
       - "rtsp://admin:{FRIGATE_DOORBELL_PASSWORD}@10.6.128.9:554/cam/realmonitor?channel=1&subtype=0&authbasic=64"
     front_door_sub:
       - "rtsp://admin:{FRIGATE_DOORBELL_PASSWORD}@10.6.128.9:554/cam/realmonitor?channel=1&subtype=1&authbasic=64"
+    # PETLIBRO feeder camera, relayed by the petlibro-camera container
+    # (docs/petlibro-camera.md). 640x360 H.264 ~15 fps, ~0.24 Mbit/s.
+    cat_feeder:
+      - "rtsp://frigate:{FRIGATE_PETLIBRO_RTSP_PASSWORD}@{{ petlibro_camera_ip }}:8554/cat_feeder"
 
 # Recording retention, sized to stay under ~800 GB on mpool/frigate
 # (ZFS quota 1T; Frigate also deletes the oldest recordings on its own when
@@ -113,6 +117,10 @@ go2rtc:
 #   snapshots, previews, thumbnails                 ~ 10 GB
 #   total                                          ~ 787 GB  (one camera: ~395 GB)
 # Check the real motion share after a week (System > Storage) and adjust.
+#
+# cat_feeder (PETLIBRO feeder camera, 0.24 Mbit/s = 2.6 GB/day) records
+# events only (its own record block below): even with an alert all day it is
+# 14 d x 2.6 GB = 36 GB worst case, a few GB in practice.
 record:
   enabled: true
   expire_interval: 60
@@ -204,3 +212,52 @@ cameras:
       streams:
         Main: front_door
         Sub: front_door_sub
+  # PETLIBRO PLAF203 feeder camera (docs/petlibro-camera.md), looking down
+  # at the bowl. One 640x360 stream for detect and record. Events only: no
+  # continuous or motion-only recording.
+  cat_feeder:
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/cat_feeder
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+            - record
+    detect:
+      width: 640
+      height: 360
+      fps: 2
+    objects:
+      track:
+        - cat
+        - person
+    motion:
+      mask:
+        # Burned-in logo and clock (top right): its seconds change every
+        # second, which would count as motion all day.
+        timestamp:
+          friendly_name: Timestamp
+          coordinates: "0.690,0.000,0.999,0.000,0.999,0.080,0.690,0.080"
+    record:
+      enabled: true
+      continuous:
+        days: 0
+      motion:
+        days: 0
+      alerts:
+        retain:
+          days: 14
+          mode: active_objects
+      detections:
+        retain:
+          days: 7
+          mode: active_objects
+    snapshots:
+      enabled: true
+      retain:
+        default: 14
+    review:
+      alerts:
+        labels:
+          - cat
+          - person

@@ -134,6 +134,15 @@ nodes:
         The config is repo-managed (docker/frigate/config.yml): edits in the
         Frigate UI are overwritten on the next deploy.
       - Recordings live on /mpool/frigate, never on /persistent_data.
+  petlibro_camera:
+    kind: container
+    desc: PETLIBRO feeder camera to RTSP for Frigate ({{ petlibro_camera_ip }}:8554, camera only; docs/petlibro-camera.md).
+    probe: {container: petlibro-camera}
+    rules:
+      - >-
+        Camera only: never redirect the feeder's MQTT/DNS or run the upstream
+        installer. The feeder's schedule and clock come from the PETLIBRO
+        cloud; feeding must not depend on this container.
   frigate_backup:
     kind: systemd
     desc: frigate-backup-events.timer (every 30 min) plus nightly recordings, to restic/B2 with tag frigate.
