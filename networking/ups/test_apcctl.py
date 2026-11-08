@@ -78,6 +78,14 @@ class CommandTests(unittest.TestCase):
                 with mock.patch.dict(os.environ, {}, clear=True):
                     self.assertEqual(apcctl.main(["apply", "--upload"]), 2)
 
+    def test_password_policy_flags_are_not_secrets(self):
+        out = apcctl.sanitize("[SystemUserManager]\nDefaultUserStrongPasswords=disabled\n"
+                              "DefaultUserPasswordPolicy=0\nDefaultUserPassword=hunter2\n")
+        self.assertIn("DefaultUserStrongPasswords=disabled", out)
+        self.assertIn("DefaultUserPasswordPolicy=0", out)
+        self.assertIn("DefaultUserPassword=<redacted>", out)
+        self.assertNotIn("hunter2", out)
+
     def test_download_complete_despite_missing_exit_status(self):
         with tempfile.TemporaryDirectory() as d:
             dst = os.path.join(d, "config.ini")

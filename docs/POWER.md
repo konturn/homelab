@@ -8,7 +8,7 @@ the UPS turns its outlets back on and the server powers up by itself.
 | | |
 |---|---|
 | UPS | APC Smart-UPS 1500, `ups.mfr.date` 01/06/2016, UPS firmware `UPS 09.3 (ID18)` |
-| Card | AP9631 (NMC2) at `ups.lab.nkontur.com` / 10.4.128.8 (mgmt VLAN), AOS 6.8.2, Smart-UPS app (sumx) 6.8.0 |
+| Card | AP9631 (NMC2) at `ups.lab.nkontur.com` / 10.4.128.8 (mgmt VLAN), AOS 7.2.2, Smart-UPS app (sumx) 7.2.2, bootmon 1.0.9 (updated 2026-11-08, #93) |
 | Monitoring | Telegraf SNMPv3 → InfluxDB `snmp` measurement → Grafana dashboard **UPS** and the `hardware-alerts` rules |
 | Shutdown control | NUT 2.8.1 on the router: `snmp-ups` driver (device `apc`), `upsd`, `upsmon` (primary), `upssched` |
 | Config | `base/nut/` (deployed by `configure-homelab-services`), settings in `ansible/roles/configure-homelab-services/defaults/main.yml` |
@@ -257,11 +257,14 @@ Desired state worth knowing (all in `apc-config.ini`):
 
 - SNMPv1 off. SNMPv3 only, one user profile (`apc2`, SHA-1 auth, AES priv),
   access only from the router (10.4.0.1). Profiles 1, 3 and 4 are unused.
-- HTTPS and SSH on; HTTP, telnet and FTP off.
-- NTP enabled against the router (10.4.0.1). AOS 6.8 sends **NTPv1**
-  requests, which the router's ntpsec does not answer, so the card's clock
-  is still wrong (it reads 2018). Event log timestamps are unreliable until
-  that is fixed: a firmware update, or an NTP server that answers v1.
+- HTTPS (minimum TLS 1.2) and SSH on; HTTP, telnet and FTP off. IPv6 off:
+  on AOS 7.2.2, SSH fails when IPv4 and IPv6 are both enabled (release notes).
+- NTP from the router (10.4.0.1; `networking/iptables/rules.v4` lets the card
+  in). AOS 6.8 sent NTPv1, which ntpsec ignores; 7.2.2 sends NTPv4.
+- Still legacy after the update: HTTPS has no secure renegotiation (OpenSSL 3
+  clients need `Options = UnsafeLegacyRenegotiation`) and the card's
+  self-signed certificate has expired; SSH offers only an `ssh-rsa` host key
+  (ecdh-sha2-nistp256, aes-ctr and hmac-sha2-256 otherwise).
 
 Card CLI notes (AOS 6.8, SSH): the card allows one session at a time and keeps
 an abandoned one for a few minutes. It drops input typed faster than it reads,
@@ -270,6 +273,11 @@ takes one option per command (several at once give `E102`), and a profile's
 privacy must be `none` before its authentication can be. SCP downloads finish
 without an exit status, so `scp` exits 1 after a complete copy; `apcctl.py`
 checks the announced size instead.
+
+**The card's SNMP agent stalls while it serves SSH/SCP** (10-35 s, slow CPU):
+NUT reports "Data stale" and Telegraf may miss a poll. So keep card sessions
+short, and `ups-card:drift` shares the `deploy-router` resource group with the
+router deploys, whose NUT check waits up to 3 minutes.
 
 Each command makes exactly one login attempt and never retries.
 `apcctl.py apply --plan` shows what an upload would send. `apply --upload
@@ -280,11 +288,23 @@ behaviour (outlet-group delays, transfer points, the self-test schedule), so
 use it only with someone present.
 
 The card's firmware is in the monthly firmware report (`ci/reports/firmware.py`,
-read from the local `upsc`, no credentials). AOS 6.8.2 / sumx 6.8.0 is behind:
-se.com lists NMC2 v7.2.2 (2025-09) for AP9630/31. Read the release notes
-before flashing. A card firmware update reboots only the card; afterwards run
-`apcctl.py drift` and re-check SNMP (`snmpv3-check.sh`, `upsc`). Never update
-the UPS's own firmware remotely.
+read from the local `upsc`, no credentials). It runs NMC2 v7.2.2 (2025-09),
+the latest se.com listed on 2026-11-08 (package
+`apc_hw05_aos722_sumx722_bootmon109.exe`, SHA-256 checked against the release
+notes TME12689E). The UPS's own firmware is `UPS 09.3 (ID18)`; never update
+it remotely (it can drop output power).
+
+**Updating the card firmware** reboots only the card, never the UPS output.
+Extract the `.bin` files from the package (it is a zip), then upload
+`apc_hw05_aos_<v>.bin` and **straight after it** `apc_hw05_sumx_<v>.bin` with
+`scp -O` to the card (bootmon only if the package's is newer). Each upload
+takes about 2 minutes. The card then flashes and reboots without closing the
+SCP session, so do not wait for scp to exit: watch for the card to drop off
+ping and come back. Between the two uploads the card runs the new AOS without
+a UPS application and NUT reports "Data stale": on 2026-11-08 that window
+lasted 18 minutes and failed three router deploys. So do it outside deploys and
+keep the window short. Afterwards check `snmpv3-check.sh`, `upsc`, and
+`apcctl.py drift`, then re-export the baseline (new firmware adds keys).
 
 ## SNMP credentials
 
