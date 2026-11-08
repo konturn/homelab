@@ -1,6 +1,6 @@
 services:
   promtail:
-    image: grafana/promtail:3.5.8@sha256:2a7c5469d687377de5cb7c8356cf96090c0069814d90ef35f9874db445999609
+    image: grafana/promtail:3.5.12@sha256:938367a076c467b721c37a141663407e1f23739d6d24c98eb2c325bfd9ea7462
     container_name: promtail
     restart: unless-stopped
     security_opt:
