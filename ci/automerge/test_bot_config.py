@@ -510,6 +510,154 @@ class GateTests(unittest.TestCase):
         self.assertEqual(automerge.plan_hold_services(plan), ["mopidy", policy.GRAFANA_HOLD])
 
 
+PB = "docker/event-router/playbooks/mosquitto-restart.yml"
+PB_FILE = """# Routing table row 3: restart mosquitto once.
+id: mosquitto-restart
+description: Restart mosquitto when the broker is down
+mode: shadow
+match:
+  source: grafana
+  rule_uid: critical-service-down
+  labels: {service: mqtt}
+node: mqtt
+action: {type: restart_container, target: mosquitto}
+verify:
+  alert_resolved: 10m
+limits: {max_runs: 1, per: 6h, cooldown: 30m}
+"""
+ALLOW_PB = copy.deepcopy(ALLOW)
+ALLOW_PB["bot_config"]["never"] = ["docker/event-router/**"]
+ALLOW_PB["bot_config"]["shadow_playbooks"] = {"enabled": True, "max_per_24h": 3}
+
+
+def evaluate_pb(new=None, *, author="moltbot", allow=ALLOW_PB, others=()):
+    """new: {path: head text} of NEW files; others: (FileChange, (base, head)) pairs."""
+    new = {PB: PB_FILE} if new is None else new
+    files = [FileChange(path=p, new_file=True) for p in new] + [fc for fc, _ in others]
+    contents = {p: (None, h) for p, h in new.items()}
+    contents.update({fc.path: pair for fc, pair in others})
+    return policy.evaluate_mr(author=author, target_branch="main", labels=[], files=files,
+                              composes=contents, deployments={C: [ROUTER]}, allowlist=allow,
+                              codeowners_text=CODEOWNERS, merger="automerge-bot")
+
+
+class ShadowPlaybookTests(unittest.TestCase):
+    def test_new_shadow_playbook_qualifies_and_deploys_the_router(self):
+        v = evaluate_pb()
+        self.assertTrue(v.eligible, v.reasons)
+        self.assertTrue(v.bot_config)
+        self.assertTrue(v.shadow_playbook)
+        self.assertEqual(v.deploy_jobs, ["router"])
+        self.assertEqual(v.config_services, [botconfig.PLAYBOOK_SERVICE])
+        self.assertIn(("router", "event-router"), v.hold_keys)
+        two = evaluate_pb({PB: PB_FILE, "docker/event-router/playbooks/x-y.yml":
+                           PB_FILE.replace("id: mosquitto-restart", "id: x-y")})
+        self.assertTrue(two.eligible, two.reasons)
+
+    def test_off_unless_enabled(self):
+        self.assertFalse(evaluate_pb(allow=ALLOW).eligible)
+        allow = copy.deepcopy(ALLOW_PB)
+        allow["bot_config"]["shadow_playbooks"]["enabled"] = False
+        self.assertFalse(evaluate_pb(allow=allow).eligible)
+        for bad in ({"enabled": True, "max_per_24h": "3"}, {"enabled": True, "extra": 1}, ["x"]):
+            with self.subTest(bad=bad):
+                allow = copy.deepcopy(ALLOW_PB)
+                allow["bot_config"]["shadow_playbooks"] = bad
+                self.assertFalse(evaluate_pb(allow=allow).eligible)
+
+    def test_only_moltbot(self):
+        self.assertFalse(evaluate_pb(author=RENOVATE).eligible)
+        self.assertFalse(evaluate_pb(author="someone").eligible)
+
+    def test_mode_must_be_shadow(self):
+        for head in (PB_FILE.replace("mode: shadow", "mode: active"),
+                     PB_FILE.replace("mode: shadow\n", ""),
+                     PB_FILE.replace("mode: shadow", "mode: Shadow"),
+                     PB_FILE.replace("mode: shadow", "mode: [shadow]")):
+            with self.subTest(head=head[:200]):
+                v = evaluate_pb({PB: head})
+                self.assertFalse(v.eligible)
+
+    def test_id_must_match_file_name(self):
+        self.assertFalse(evaluate_pb({PB: PB_FILE.replace("id: mosquitto-restart", "id: other")}).eligible)
+        self.assertFalse(evaluate_pb({"docker/event-router/playbooks/Bad Name.yml": PB_FILE}).eligible)
+
+    def test_action_must_be_allowlisted(self):
+        for t in ("power_off", "restart_systemd_unit", "cycle_pdu_outlet", "unban", ""):
+            with self.subTest(t=t):
+                self.assertFalse(evaluate_pb({PB: PB_FILE.replace("type: restart_container", f"type: {t}")}).eligible)
+        self.assertFalse(evaluate_pb({PB: PB_FILE.replace("action: {type: restart_container, target: mosquitto}",
+                                                          "action: restart_container")}).eligible)
+        cancel = PB_FILE.replace("type: restart_container, target: mosquitto",
+                                 "type: cancel_ci_job, target_from_event: job_id")
+        self.assertTrue(evaluate_pb({PB: cancel}).eligible)
+
+    def test_shape(self):
+        for head in ("- " + PB_FILE.replace("\n", "\n  "), "{{ not yaml", "#!/bin/sh\nid\n",
+                     PB_FILE + "# " + "x" * 9000 + "\n", "", "null\n"):
+            with self.subTest(head=head[:40]):
+                self.assertFalse(evaluate_pb({PB: head}).eligible)
+
+    def test_existing_playbook_changes_never_qualify(self):
+        # promotion to active, or any edit of an existing playbook
+        for fc, pair in (
+                (FileChange(path=PB), (PB_FILE, PB_FILE.replace("mode: shadow", "mode: active"))),
+                (FileChange(path=PB), (PB_FILE, PB_FILE.replace("10m", "15m"))),
+                (FileChange(path=PB, deleted_file=True), (PB_FILE, None)),
+                (FileChange(path=PB, old_path="docker/event-router/playbooks/old.yml", renamed_file=True),
+                 (PB_FILE, PB_FILE)),
+                (FileChange(path=PB, mode_changed=True), (PB_FILE, PB_FILE))):
+            with self.subTest(fc=fc):
+                v = evaluate_pb({}, others=[(fc, pair)])
+                self.assertFalse(v.eligible)
+        # a new file whose base is readable is not new
+        v = evaluate_pb({}, others=[(FileChange(path=PB, new_file=True), (PB_FILE, PB_FILE))])
+        self.assertFalse(v.eligible)
+
+    def test_nothing_else_in_the_mr(self):
+        for fc, pair in ((FileChange(path="docs/OBSERVABILITY.md"), ("a", "b")),
+                         (FileChange(path=C), (COMPOSE, MR_993)),
+                         (FileChange(path="docker/event-router/config.yml"), ("mode: active\n", "mode: shadow\n")),
+                         (FileChange(path="docker/event-router/playbooks/zigbee-silence-restart.yml"),
+                          (PB_FILE, PB_FILE.replace("mode: shadow", "mode: active"))),
+                         (FileChange(path="docker/event-router/router/config.py", new_file=True), (None, "x = 1\n"))):
+            with self.subTest(path=fc.path):
+                v = evaluate_pb(others=[(fc, pair)])
+                self.assertFalse(v.eligible)
+
+    def test_other_event_router_files_stay_never(self):
+        for p in ("docker/event-router/config.yml", "docker/event-router/playbooks/README.md",
+                  "docker/event-router/playbooks/sub/x.yml"):
+            with self.subTest(p=p):
+                self.assertFalse(evaluate_pb({}, others=[(FileChange(path=p, new_file=True), (None, PB_FILE))]).eligible)
+
+    def test_rate_gate_and_merge(self):
+        pbm = {"labels": ["automerged", automerge.LABEL_BOT_CONFIG, automerge.LABEL_SHADOW_PB]}
+        self.assertIsNone(automerge.shadow_playbook_rate_gate([pbm] * 2, ALLOW_PB))
+        self.assertIn("shadow playbook", automerge.shadow_playbook_rate_gate([pbm] * 3, ALLOW_PB))
+        self.assertIsNone(automerge.bot_config_rate_gate([pbm] * 5, ALLOW_PB))
+        self.assertIsNotNone(automerge.bot_config_rate_gate([pbm] * 6, ALLOW_PB))  # counts as bot-config
+
+        class GL:
+            dry_run = False
+            writes = []
+
+            def write(self, m, p, b=None):
+                self.writes.append((m, p, b))
+                return {}
+        gl = GL()
+        mr = {"iid": 1100, "sha": "b" * 40, "source_branch": "playbook/mosquitto", "target_branch": "main",
+              "title": "event-router: shadow playbook mosquitto-restart", "detailed_merge_status": "not_approved"}
+        self.assertTrue(automerge.do_merge(gl, mr, evaluate_pb()))
+        msg = next(b for m, p, b in gl.writes if p.endswith("/merge"))["merge_commit_message"]
+        self.assertIn("Automerge-Class: bot-config", msg)
+        self.assertIn("Automerge-Deploy: [router]", msg)
+        self.assertIn("Automerge-Policy: bot-config", msg)
+        labels = next(b for m, p, b in gl.writes if p.endswith("/1100") and "add_labels" in (b or {}))["add_labels"]
+        self.assertIn(automerge.LABEL_SHADOW_PB, labels)
+        self.assertIn(automerge.LABEL_BOT_CONFIG, labels)
+
+
 @unittest.skipIf(yaml is None, "PyYAML not installed")
 class RealRepoTests(unittest.TestCase):
     @classmethod
@@ -595,6 +743,32 @@ class RealRepoTests(unittest.TestCase):
                 continue
             head = text[:m.start(1)] + str(int(m.group(1)) + 1) + text[m.end(1):]
             self.assertFalse(self.eval_real(C, head).eligible, svc)
+
+    def test_shadow_playbooks_on_the_real_repo(self):
+        self.assertTrue(self.cfg["shadow_playbooks"]["enabled"])
+        self.assertEqual(self.cfg["shadow_playbooks"]["max_per_24h"], 3)
+        # the general class keeps refusing event-router files
+        self.assertIsNone(botconfig.classify("docker/event-router/config.yml", self.cfg)[0])
+        # the mirror is a subset of the router's allowlist (parsed, not imported)
+        import ast
+        tree = ast.parse((REPO / "docker/event-router/router/config.py").read_text())
+        router = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign)
+                      and any(getattr(t, "id", None) == "ALLOWED_ACTIONS" for t in n.targets))
+        self.assertLessEqual(set(botconfig.PLAYBOOK_ACTIONS), set(router))
+        # the deploy target is a real service on the router, and the bot may approve
+        self.assertIn("  event-router:\n", (REPO / C).read_text())
+        self.assertIn("@project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6", self.owners(PB) or [])
+        self.assertEqual(self.owners("docker/event-router/config.yml"), ["@root"])
+        # every existing playbook, as if it were new in shadow mode, has the shape
+        for p in sorted((REPO / "docker/event-router/playbooks").glob("*.yml")):
+            rel = str(p.relative_to(REPO))
+            text = re.sub(r"(?m)^mode: active$", "mode: shadow", p.read_text())
+            v = policy.evaluate_mr(author="moltbot", target_branch="main", labels=[],
+                                   files=[FileChange(path=rel, new_file=True)], composes={rel: (None, text)},
+                                   deployments=self.deps, allowlist=self.allow,
+                                   codeowners_text=self.codeowners, merger="automerge-bot")
+            self.assertTrue(v.eligible, (rel, v.reasons))
+            self.assertEqual(v.deploy_jobs, ["router"])
 
     def test_ci_rule_and_playbook(self):
         ci = (REPO / ".gitlab-ci.yml").read_text()
