@@ -81,7 +81,7 @@
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/snapclient/snapclient.service' }}"
     dest: '/etc/systemd/system/snapclient_{{ item.name }}.service'
-    mode: 0600
+    mode: 0644
   loop: "{{ snapclient_config }}"
 
 # A client with `enabled: false` in snapclient_config (its USB sound card is
