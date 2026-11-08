@@ -10,4 +10,4 @@
 UUID=56c60732-e03c-4853-9704-3622e1e30849 /boot           ext4    defaults        0       2
 /dev/mapper/Noah--Server--vg-swap_1 none            swap    sw              0       0
 hugetlbfs       /dev/hugepages  hugetlbfs       mode=01770,gid=118        0 0
-/dev/mapper/persistent_data /persistent_data           ext4    defaults        0       1
+/dev/mapper/persistent_data /persistent_data           ext4    defaults,lazytime        0       1
