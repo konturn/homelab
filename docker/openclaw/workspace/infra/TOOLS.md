@@ -107,7 +107,7 @@ with this file, they win: say so.
 - **Rule (zigbee2mqtt):** After an SLZB coordinator firmware update (or coordinator reboot), restart zigbee2mqtt. It keeps its TCP session but receives no frames; on 2026-11-07 that went unnoticed for about an hour. The Zigbee silence alert watches for it.
 - **Rule (frigate):** The config is repo-managed (docker/frigate/config.yml): edits in the Frigate UI are overwritten on the next deploy.
 - **Rule (frigate):** Recordings live on /mpool/frigate, never on /persistent_data.
-- **Rule (petlibro_camera):** Camera only: never redirect the feeder's MQTT/DNS or run the upstream installer. The feeder's schedule and clock come from the PETLIBRO cloud; feeding must not depend on this container.
+- **Rule (petlibro_camera):** Camera only: never redirect the feeder's MQTT/DNS or run its installer. Feeding is cloud-run; never make it depend on this.
 
 ## Home Assistant facts
 

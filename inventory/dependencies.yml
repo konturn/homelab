@@ -140,9 +140,8 @@ nodes:
     probe: {container: petlibro-camera}
     rules:
       - >-
-        Camera only: never redirect the feeder's MQTT/DNS or run the upstream
-        installer. The feeder's schedule and clock come from the PETLIBRO
-        cloud; feeding must not depend on this container.
+        Camera only: never redirect the feeder's MQTT/DNS or run its
+        installer. Feeding is cloud-run; never make it depend on this.
   frigate_backup:
     kind: systemd
     desc: frigate-backup-events.timer (every 30 min) plus nightly recordings, to restic/B2 with tag frigate.
