@@ -920,11 +920,15 @@
     - "'router' in inventory_hostname"
     - not ansible_check_mode
 
+# Up to 3 minutes: the UPS card (AP9631) answers no SNMP for 1-2 minutes
+# while its management interface reboots, and stalls SNMP for up to ~35 s
+# while it serves an SSH/SCP session. Either made a 30 s check fail deploys
+# (#93). A real NUT problem still fails the deploy, just later.
 - name: Check NUT sees the UPS after the deploy
   ansible.builtin.command:
     cmd: "upsc {{ ups_nut_name }}@localhost ups.status"
   register: nut_status
-  retries: 6
+  retries: 36
   delay: 5
   until: nut_status.rc == 0
   changed_when: false
