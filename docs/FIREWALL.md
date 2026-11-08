@@ -126,13 +126,70 @@ journalctl -u wan-bypass-update -n 20
 iptables -t mangle -vnL PREROUTING           # RETURN counter for wan_bypass_ha
 ```
 
+### IoT DNS
+
+IoT devices must not learn internal DNS names, so they resolve through
+iot-dns (`iot_dns_ip`), which forwards to Pi-hole and answers the internal
+zones NXDOMAIN (docs/NETWORK.md, "IoT resolver"). DHCP hands out only
+iot-dns on VLAN 6. The firewall makes sure devices cannot go around it:
+
+| Table / chain | Rule |
+|---|---|
+| nat `PREROUTING` → `IOT-DNS` | udp/tcp 53 arriving on `bond0.6`: the two Pis `RETURN`, traffic already for iot-dns `RETURN`, everything else DNAT to `iot_dns_ip:53` (Pi-hole, 1.1.1.1, hardcoded resolvers) |
+| mangle `PREROUTING` → `IOT-DNS` | the same packets (except the Pis) `ACCEPT` before the VLAN 6 Mullvad mark: after the DNAT they are for iot-dns, and table `mullvad` would route a marked packet into the tunnel |
+| nat `POSTROUTING` | MASQUERADE redirected flows (`--ctstate DNAT`) to iot-dns out `vlan6-shim` |
+| filter `FORWARD` | accept the redirected flows (`--ctstate DNAT`) `bond0.6` → `vlan6-shim` to iot-dns:53; the Pis to Pi-hole:53; drop anything else from `bond0.6` to Pi-hole; reject tcp/udp 853 (DoT, DoQ) from `bond0.6` |
+
+Interfaces: IoT devices arrive on `bond0.6`, containers on the iot docker
+network on `vlan6-shim` (the router's macvlan sibling). Only `bond0.6` is
+redirected, so container DNS and iot-dns's own queries to Pi-hole are not.
+Devices that ask iot-dns directly do not pass the router at all (same L2).
+
+**Why MASQUERADE here** (the [hairpin](#nat-table) needs none): the device
+and iot-dns share a subnet, so without it iot-dns would answer the device
+directly from its own address, and the device, which asked 1.1.1.1, would
+drop the reply. Masqueraded to the shim address (10.6.0.2), the reply comes
+back through the router and is un-DNATed. Pi-hole logs those redirected
+queries as coming from 10.6.0.2 (they are rare: devices use the DHCP
+resolver).
+
+**Limits:** DNS over HTTPS is not blocked (no DoH blocklist); a device with
+built-in DoH resolves around iot-dns and Pi-hole. Hardcoded IPs need no DNS.
+
+### IoT devices without internet
+
+ipset `iot_no_wan` (`hash:ip`, members rendered into `rules.ipset` from the
+DHCP reservations) holds IoT devices that work without the internet. FORWARD
+rejects anything they send out via Mullvad or the WAN, ahead of
+`RELATED,ESTABLISHED` so existing sessions stop too. LAN flows (Frigate, Home
+Assistant, NTP on the router at 10.6.0.1) are unaffected.
+
+| Device | Variable | Lost without internet |
+|---|---|---|
+| Back camera | `back_camera_address` | Amcrest app remote view (P2P is also off on the camera); NTP now from the router |
+| Projector | `projector_address` | nothing in use |
+| Brother printer | `brother_printer_address` | firmware-update checks, Brother cloud/mobile print relay |
+| NETGEAR GS308EP | `iot_poe_switch_address` | firmware checks |
+| SLZB-MR1 Zigbee coordinator | `zigbee_radio_address` | OTA checks; `binary_sensor.slzb_mr1_internet` goes off |
+
+Not in the set yet (they still use the cloud): doorbell (offline), Frame TV,
+weather station. Must keep the cloud: the PETLIBRO feeder (feeding schedule
+and clock over its MQTT session), the Litter-Robots, Miele, Thermador, Denon,
+Apple TV.
+
+**Adding a device:** give it a DHCP reservation (`ansible/inventory.yml`,
+`networking/dhcp/dhcpd.conf`), add `add iot_no_wan {{ <device>_address }}` to
+`rules.ipset`, list it here, merge. The deploy reloads the ipsets.
+
 ### Inter-VLAN Traffic
 
 | Source | Destination | Policy |
 |--------|-------------|--------|
 | mgmt (10.4.x.x) | Any | **ALLOW ALL** (trusted) |
 | internal (10.3.x.x) | mgmt | SSH, ICMP only |
-| iot (10.6.x.x) | Pi-hole | DNS only |
+| iot devices (`bond0.6`) | iot-dns | DNS; any other DNS is redirected there, Pi-hole is dropped, 853 refused ([IoT DNS](#iot-dns)) |
+| iot containers (`vlan6-shim`), zwave and satellite-2 Pis | Pi-hole | DNS only |
+| iot devices in `iot_no_wan` | internet | none ([IoT devices without internet](#iot-devices-without-internet)) |
 | iot Pis (zwave, satellite-2) | Vault | TCP 8200 |
 | Any | snapserver | Service ports only (1704, 1705, 1780, 80-87, 50000-50007) |
 | internal (10.3.x.x) | AirPlay receivers (`airplay_receivers_cidr`) | TCP 7000, 7100-7199; UDP 319, 320, 6001-6010, 7100-7199 (docs/AUDIO.md) |
@@ -352,6 +409,7 @@ Controls traffic TO the router itself:
 | NUT (upsd, to 10.4.0.1) | mgmt, internal (Home Assistant) | 3493 |
 | NTP (from the S2500, 10.100.0.1) | management link (`enp2s0f1`) | 123/udp |
 | TFTP | mgmt | 69 |
+| NTP (to 10.6.0.1) | iot (`bond0.6`) | 123/udp |
 | mDNS | !internet | 5353 |
 
 ### FORWARD Chain
@@ -370,6 +428,7 @@ Controls traffic THROUGH the router:
 1. **DNAT (port forwarding)** — Internet inbound to services
 2. **SNAT/MASQUERADE** — Outbound NAT for all networks
 3. **Hairpin NAT** — internal/mgmt/IoT (VLAN 3/4/6) reaching nginx via the WAN IP (DNAT only, no SNAT)
+4. **IoT DNS redirect** — DNS from IoT devices to anything but iot-dns is DNATed to it, and MASQUERADEd because both are on one subnet ([IoT DNS](#iot-dns))
 
 ---
 
@@ -418,3 +477,4 @@ iptables -A FORWARD -j LOG --log-prefix "FWD-DROPPED: "
 | 2026-10 | Vaultwarden, Audioserve, Home Assistant restricted to LAN + tailnet (Ombi stays public); game-server and port 22 forwards removed |
 | 2026-11 | Home Assistant reaches the connected-vehicle service hosts via WAN (ipset `wan_bypass_ha`); HA's internal address pinned |
 | 2026-11 | Docs audit: device rules (Shield TV gone, Apple TV limited), snapserver ports, NTP from the S2500, registry container retired, test/apply commands |
+| 2026-11 | IoT devices: DNS only via iot-dns (redirect, Pi-hole dropped, 853 refused); NTP from the router; ipset `iot_no_wan` (back camera, projector, Brother, GS308EP, SLZB) |

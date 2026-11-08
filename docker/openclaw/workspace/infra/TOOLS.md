@@ -63,10 +63,10 @@ with this file, they win: say so.
 - Amp A (HA /dev/ttyUSB0), inputs 1 Global, 2 Guest_Bathroom, 3 Guest_Bedroom, 4 Office; zones Living Room Speakers 2 (zone_11), Dining Room (zone_12), Guest Bathroom (zone_13), Deck (zone_5), Kitchen (zone_15), Living Room Speakers 1 (zone_16).
 - Amp B (HA /dev/ttyUSB1), inputs 1 Global; zones Main Bathroom (zone_11_2), Gym (zone_12_2), Front Basement Hallway (zone_13_2), Ping Pong (zone_14), Back Basement Hallways (zone_15_2), Office (zone_16_2). Office Speakers (zone 16) sit on B, but the Office stream is labelled on A's input 4, so the Office speakers can only play Global today (#154).
 - Amp C: Not connected yet. Planned (#154): Office, Main Bedroom, Guest Bedroom, maybe Movie Room, on a third USB-serial adapter.
-- Amcrest back camera (Home Assistant camera.10_6_128_14): Back 2026-11-08 after its PoE cable was reseated. Clock about 55 min slow (no NTP configured); recorded by Frigate since 2026-11-08.
+- Amcrest back camera (Home Assistant camera.10_6_128_14): No internet; NTP from the router.
 - Amcrest doorbell (amcrest2mqtt): Unreachable since 2026-07-13 (issue #123); hardware fix pending.
 - Denon AVR-X6700H (HA denonavr, local): 
-- Epson projector (HA pjlink, local): 
+- Epson projector (HA pjlink, local): No internet.
 - NVIDIA Shield TV: Offline 2026-11-08.
 - Apple TV 4K (HA apple_tv, local; Thread border router): 
 - Network amp `amp`, model unknown: Offline 2026-11-08.
@@ -74,15 +74,15 @@ with this file, they win: say so.
 - Awair air quality sensor, bedroom: Offline 2026-11-08.
 - Ambient Weather station (local push to ambientweather2mqtt): 
 - Dreame Z10 Pro vacuum, Valetudo (MQTT, local): Offline 2026-11-08.
-- SLZB-MR1 Zigbee coordinator (HA smlight, Zigbee2MQTT): 
+- SLZB-MR1 Zigbee coordinator (HA smlight, Zigbee2MQTT): No internet.
 - Samsung Frame TV QN65LS03DAFXZA (HA samsungtv_smart, local): 
-- Litter-Robot 4 x2 (cloud only): Dynamic leases; whiskerless pending.
-- PETLIBRO PLAF203 feeder (cloud only): Dynamic lease; camera going to Frigate.
-- Miele G7566 dishwasher (HA miele_lan, local): Dynamic lease.
+- Litter-Robot 4 x2, litter_robot_{1,2}_address (cloud only): Whiskerless pending.
+- PETLIBRO PLAF203 feeder (cloud only): Never block its cloud MQTT (feeding).
+- Miele G7566 dishwasher (HA miele_lan, local): 
 - Thermador HPIN54WS hood (hcpy, local): 
 - Thermador PRD48WISGU range (hcpy, local): 
-- Brother HL-L2350DW (HA brother + ipp, local): Dynamic lease; HA entries use that address.
-- NETGEAR GS308EP PoE switch (likely back_camera.link's): Dynamic lease.
+- Brother HL-L2350DW (HA brother + ipp, local): No internet.
+- NETGEAR GS308EP PoE switch (likely back_camera.link's): No internet. Mgmt on IoT VLAN; move to VLAN 4 on site.
 - Olimex ESPHome BT proxies x2: Offline since ~2025-11.
 - The daily `facts:drift` job compares all of this with the live router: it
   starts a declared container or unit that is stopped, opens a

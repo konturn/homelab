@@ -91,8 +91,9 @@
   become: yes
   when: netplan.changed
 
-- name: Copy the ipset rules file
-  ansible.builtin.copy:
+# Templated: iot_no_wan's members are inventory addresses.
+- name: Template the ipset rules file
+  ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/iptables/rules.ipset' }}"
     dest: /etc/iptables/rules.ipset
     owner: root

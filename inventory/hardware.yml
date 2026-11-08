@@ -272,8 +272,7 @@ network_devices:
     vlan: 6
     power: PoE
     link: S2500 gigabitethernet0/0/47 -> upstairs PoE switch (IoT; NETGEAR, not managed in networking/), port on that switch not traced
-    note: Back 2026-11-08 after its PoE cable was reseated.
-    known_issue: "Clock about 55 min slow (no NTP configured); recorded by Frigate since 2026-11-08."
+    note: No internet; NTP from the router.
   doorbell:
     desc: Amcrest doorbell (amcrest2mqtt)
     address_var: doorbell_address
@@ -294,6 +293,7 @@ network_devices:
     address_var: projector_address
     mac_var: projector_mac
     vlan: 6
+    note: No internet.
   shield:
     desc: NVIDIA Shield TV
     address_var: shield_address
@@ -339,23 +339,27 @@ network_devices:
     address_var: zigbee_radio_address
     mac_var: zigbee_radio_mac
     vlan: 6
+    note: No internet.
   frame_tv:
     desc: Samsung Frame TV QN65LS03DAFXZA (HA samsungtv_smart, local)
     address_var: frame_tv_address
     mac_var: frame_tv_mac
     vlan: 6
   litter_robots:
-    desc: Litter-Robot 4 x2 (cloud only)
+    desc: Litter-Robot 4 x2, litter_robot_{1,2}_address (cloud only)
     vlan: 6
-    note: Dynamic leases; whiskerless pending.
+    note: Whiskerless pending.
   petlibro_feeder:
     desc: PETLIBRO PLAF203 feeder (cloud only)
+    address_var: petlibro_feeder_address
+    mac_var: petlibro_feeder_mac
     vlan: 6
-    note: Dynamic lease; camera going to Frigate.
+    note: Never block its cloud MQTT (feeding).
   miele_dishwasher:
     desc: Miele G7566 dishwasher (HA miele_lan, local)
+    address_var: miele_dishwasher_address
+    mac_var: miele_dishwasher_mac
     vlan: 6
-    note: Dynamic lease.
   thermador_hood:
     desc: Thermador HPIN54WS hood (hcpy, local)
     address_var: thermador_hood_address
@@ -368,12 +372,16 @@ network_devices:
     vlan: 6
   brother_printer:
     desc: Brother HL-L2350DW (HA brother + ipp, local)
+    address_var: brother_printer_address
+    mac_var: brother_printer_mac
     vlan: 6
-    note: Dynamic lease; HA entries use that address.
+    note: No internet.
   iot_poe_switch:
     desc: NETGEAR GS308EP PoE switch (likely back_camera.link's)
+    address_var: iot_poe_switch_address
+    mac_var: iot_poe_switch_mac
     vlan: 6
-    note: Dynamic lease.
+    note: No internet. Mgmt on IoT VLAN; move to VLAN 4 on site.
   olimex_bt_proxies:
     desc: Olimex ESPHome BT proxies x2
     vlan: 6
