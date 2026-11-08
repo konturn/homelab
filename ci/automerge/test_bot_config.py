@@ -266,6 +266,20 @@ class ComposeTests(unittest.TestCase):
                 v = evaluate({C: (COMPOSE, edit(COMPOSE, old, new))})
                 self.assertTrue(v.eligible, v.reasons)
 
+    def test_size_spellings_docker_refuses(self):
+        # found by test_properties: values Python parses but Docker (and YAML,
+        # for the tab) do not; a sure deploy failure
+        for old, new in (("memory: 128M", "memory: 192\tM"), ("memory: 128M", "memory: 192  M"),
+                         ("memory: 128M", "memory: \u0661\u0669\u0662M"), ("cpus: '2'", "cpus: '3_0'"),
+                         ("cpus: '2'", "cpus: 'infinity'"), ("cpus: '2'", "cpus: '\u0663'")):
+            with self.subTest(new=new):
+                self.assertFalse(evaluate({C: (COMPOSE, edit(COMPOSE, old, new))}).eligible)
+        for old, new in (("memory: 128M", "memory: 192 M"), ("memory: 128M", "memory: 192MiB"),
+                         ("cpus: '2'", "cpus: '3.5'"), ("cpus: '2'", "cpus: 1.")):
+            with self.subTest(new=new):
+                v = evaluate({C: (COMPOSE, edit(COMPOSE, old, new))})
+                self.assertTrue(v.eligible, v.reasons)
+
     def test_denied_services(self):
         for old, new in (("memory: 512M", "memory: 600M"), ("memory: 4G", "memory: 6G")):
             with self.subTest(new=new):

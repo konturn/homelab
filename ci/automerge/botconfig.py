@@ -141,7 +141,10 @@ _SAFE_COMMENT = re.compile(r"^\s*#[^{}]*$")
 # `key: |`, `- |` (a sequence item, e.g. the script of `command: [sh, -c, ...]`),
 # with an optional anchor or tag before the indicator (`key: &a >-`).
 _BLOCK_START = re.compile(r"(?::\s*|^\s*-\s+)(?:[&!]\S*\s+)*[|>][-+0-9]*\s*(#.*)?$")
-_MEM_RE = re.compile(r"^(\d+(?:\.\d+)?)\s*([bkmgt]?)(?:i?b)?$", re.I)
+# as Docker reads sizes (go-units RAMInBytes): ASCII digits, at most one
+# space before the unit
+_MEM_RE = re.compile(r"^(\d+(?:\.\d+)?) ?([bkmgt]?)(?:i?b)?$", re.I | re.A)
+_CPUS_RE = re.compile(r"^(\d+(?:\.\d*)?|\.\d+)$", re.A)
 _LOG_KEY = re.compile(r"^[A-Z0-9_]*LOG_?LEVEL$")
 _ENV_LIST = re.compile(r"^(\s*)-\s+([A-Za-z0-9_]+)=(.*?)\s*$")
 _ENV_MAP = re.compile(r"^(\s*)([A-Za-z0-9_]+):\s+(.*?)\s*$")
@@ -195,10 +198,9 @@ def _mem_bytes(value: str) -> Optional[float]:
 
 
 def _cpus(value: str) -> Optional[float]:
-    try:
-        f = float(value)
-    except ValueError:
+    if not _CPUS_RE.match(value):      # float() also takes "1_0", "inf", non-ASCII digits
         return None
+    f = float(value)
     return f if f > 0 else None
 
 
