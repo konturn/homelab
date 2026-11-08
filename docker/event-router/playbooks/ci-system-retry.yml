@@ -1,17 +1,20 @@
-# Routing table rows 9 and 10: a job on main that failed for a runner or
-# system reason (runner_system_failure, stuck_or_timeout_failure,
-# api_failure, scheduler_failure, data_integrity_failure) is retried once.
+# Routing table row 9: a router deploy-group job on main (router:deploy,
+# router:deploy-service, facts:drift, ups-card:drift: `deploy_jobs` in
+# config.yml) that failed for a runner or system reason
+# (runner_system_failure, stuck_or_timeout_failure, api_failure,
+# scheduler_failure, data_integrity_failure) is retried once. Other jobs
+# (device firmware, Pi deploys, reports) are never retried automatically.
 # Never a script failure: those reach OpenClaw through their pipeline. The
 # executor re-checks the reason with GitLab and retries a job at most once
 # per pipeline. If the retried job fails too, OpenClaw gets it (main-pipeline
 # fix session).
 id: ci-system-retry
 description: Retry a main-branch job that failed for a runner/system reason
-mode: shadow
+mode: active
 match:
   source: gitlab
   kind: ci_job_failed
-  labels: {project_id: "4", failure_class: system}
+  labels: {project_id: "4", failure_class: system, deploy_job: "true"}
 node: gitlab
 action: {type: retry_ci_job, target_from_event: job_id}
 verify:

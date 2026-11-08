@@ -110,16 +110,18 @@ def _int(v):
         return None
 
 
-def from_gitlab(payload, projects, branch="main"):
+def from_gitlab(payload, projects, branch="main", deploy_jobs=()):
     """GitLab pipeline/job webhook payload -> list of Events (at most one).
 
     Pipelines on `branch`: failed -> `pipeline_failed` (firing), success ->
     the same fingerprint resolved. The fingerprint is per project, pipeline
     source and scheduled task, so a red main is one incident however many
     pipelines fail, and the next green pipeline of the same kind resolves it.
-    Jobs on `branch` that failed for a system reason -> `ci_job_failed`
-    (project 4 only acts; see config). Everything else is ignored: script
-    failures reach OpenClaw through their pipeline.
+    Jobs on `branch` that failed for a system reason -> `ci_job_failed`,
+    labelled deploy_job "true" for the router's deploy-group jobs
+    (`deploy_jobs` in config.yml), the only ones a playbook may retry.
+    Everything else is ignored: script failures reach OpenClaw through their
+    pipeline.
     """
     if not isinstance(payload, dict):
         raise BadPayload("payload must be an object")
@@ -174,6 +176,7 @@ def from_gitlab(payload, projects, branch="main"):
             return []
         labels = {"project_id": str(project), "job_id": str(job), "job_name": name,
                   "failure_reason": reason, "failure_class": "system",
+                  "deploy_job": "true" if (project == 4 and name in deploy_jobs) else "false",
                   "pipeline_id": str(_int(payload.get("pipeline_id")) or "")}
         return [Event(source="gitlab", kind="ci_job_failed", fp=f"gitlab:job:{project}:{job}",
                       status="firing", alertname=f"CI job {name} failed ({reason})"[:120], labels=labels)]

@@ -49,6 +49,13 @@ digest_only:
       zigbee2mqtt's log volume swings with normal Zigbee work (OTA updates,
       interviews, re-pairing); the 10x-baseline rule fires on routine activity
   - source: gitlab
+    kind: ci_job_failed
+    labels: {deploy_job: "false"}
+    reason: >-
+      a runner/system failure of a job no playbook may retry (device
+      firmware, Pi deploys, reports, project 14); its failed pipeline
+      reaches OpenClaw on its own
+  - source: gitlab
     kind: pipeline_failed
     labels: {handled_by: automerge-rollback}
     reason: >-

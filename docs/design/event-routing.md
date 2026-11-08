@@ -1138,8 +1138,13 @@ for runner/system failures: `ci-system-retry` retries such a job once
 (executor: never a script failure, once per pipeline and job name, not when a
 newer job of that name exists). After `ci-orphan-cancel` is verified, the
 router raises `ci_orphan_cancelled`; `ci-orphan-retry` retries the cancelled
-job, which the executor allows only for a job it cancelled itself. Both
-retry playbooks start in shadow (decision 10). CI incidents never act as root
+job, which the executor allows only for a job it cancelled itself. Retries
+are limited to the router's deploy-group jobs (`deploy_jobs`), like
+cancellation: a device firmware or Pi deploy job is never retried
+automatically, and a system failure of one is digest-only (its failed
+pipeline reaches OpenClaw anyway). Both retry playbooks were added in shadow
+and promoted the same night after their executor checks were tested
+(decision 10: a reviewed MR). CI incidents never act as root
 causes for correlation: a red pipeline mapped to `gitlab` must not suppress
 alerts for what depends on GitLab.
 

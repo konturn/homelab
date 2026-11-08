@@ -257,6 +257,8 @@ class TestExecutor(unittest.TestCase):
         self.refused("not_allowed", action="retry_ci_job", target="101")
         self.env.job = dict(base, failure_reason="runner_system_failure", ref="feature")
         self.refused("not_allowed", action="retry_ci_job", target="101")
+        self.env.job = dict(base, failure_reason="runner_system_failure", name="aruba-s2500:firmware")
+        self.refused("not_allowed", action="retry_ci_job", target="101")
         self.env.job = dict(base, failure_reason="runner_system_failure")
         self.env.newer_jobs = [{"id": 150, "name": "router:deploy", "ref": "main", "status": "pending"}]
         self.refused("superseded", action="retry_ci_job", target="101")

@@ -28,7 +28,8 @@ FWD_CONFIG = dict(CONFIG, openclaw={"forward": True}, gitlab_events={"projects":
 
 CI_PLAYBOOKS = PLAYBOOKS + [
     {"id": "ci-system-retry", "mode": "active",
-     "match": {"source": "gitlab", "kind": "ci_job_failed", "labels": {"project_id": "4", "failure_class": "system"}},
+     "match": {"source": "gitlab", "kind": "ci_job_failed",
+               "labels": {"project_id": "4", "failure_class": "system", "deploy_job": "true"}},
      "node": "gitlab", "action": {"type": "retry_ci_job", "target_from_event": "job_id"},
      "verify": {"ci_job_succeeded": "75m"}, "limits": {"max_runs": 1, "per": "24h", "cooldown": "0s"},
      "on_failure": {"notify": "agent"}},
@@ -406,13 +407,17 @@ class TestGitLab(Fwd):
         self.assertEqual(from_gitlab(self.pipeline("failed", ref="feature"), [4]), [])
         self.assertEqual(from_gitlab(self.pipeline("failed", project=99), [4]), [])
         self.assertEqual(from_gitlab(self.pipeline("running"), [4]), [])
-        [ev] = from_gitlab(self.job("runner_system_failure"), [4])
-        self.assertEqual((ev.kind, ev.labels["failure_class"]), ("ci_job_failed", "system"))
+        [ev] = from_gitlab(self.job("runner_system_failure"), [4], deploy_jobs=["router:deploy"])
+        self.assertEqual((ev.kind, ev.labels["failure_class"], ev.labels["deploy_job"]),
+                         ("ci_job_failed", "system", "true"))
+        [ev] = from_gitlab(self.job("runner_system_failure", name="aruba-s2500:firmware"), [4],
+                           deploy_jobs=["router:deploy"])
+        self.assertEqual(ev.labels["deploy_job"], "false")
         self.assertEqual(from_gitlab(self.job("script_failure"), [4]), [])
         self.assertEqual(from_gitlab(self.job("job_execution_timeout"), [4]), [])
 
     def ingest_gitlab(self, payload):
-        for ev in from_gitlab(payload, [4, 14]):
+        for ev in from_gitlab(payload, [4, 14], deploy_jobs=["router:deploy"]):
             self.e.ingest(ev)
 
     def test_failed_main_pipeline_reaches_openclaw_and_green_resolves(self):
@@ -449,6 +454,17 @@ class TestGitLab(Fwd):
         self.tick()
         self.assertEqual(self.inc("gitlab:job:4:55")["status"], "resolved")
         self.assertEqual(self.w.openclaw.delivered, [])
+
+    def test_firmware_job_system_failure_is_never_retried(self):
+        cfg = dict(FWD_CONFIG, digest_only=FWD_CONFIG["digest_only"] + [
+            {"source": "gitlab", "kind": "ci_job_failed", "labels": {"deploy_job": "false"}, "reason": "no"}])
+        self.w.cfg = parse_config(cfg)
+        self.e = self.w.new_engine()
+        self.ingest_gitlab(self.job("runner_system_failure", name="aruba-s2500:firmware"))
+        self.tick()
+        self.assertEqual(self.w.executor.calls, [])
+        self.assertEqual(self.w.openclaw.delivered, [])
+        self.assertEqual(self.inc("gitlab:job:4:55")["status"], "digest")
 
     def test_failed_retry_goes_to_openclaw(self):
         self.ingest_gitlab(self.job("runner_system_failure"))

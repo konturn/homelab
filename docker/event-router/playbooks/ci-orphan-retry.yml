@@ -5,7 +5,7 @@
 # name on main exists (a queued newer deploy supersedes it).
 id: ci-orphan-retry
 description: Retry the newest router deploy after its orphaned job was cancelled
-mode: shadow
+mode: active
 match:
   source: reconciler
   kind: ci_orphan_cancelled

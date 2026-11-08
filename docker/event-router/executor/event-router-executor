@@ -413,6 +413,11 @@ def check_retry(cfg, target):
         raise Refused("unavailable", f"GitLab: {e}") from None
     if job.get("ref") != g.get("branch", "main"):
         raise Refused("not_allowed", f"job {target} is not on {g.get('branch', 'main')}")
+    # Only the router's deploy-group jobs. Device groups (switch and AP
+    # firmware) and Pi deploys are never retried automatically, as they are
+    # never cancelled: re-running a firmware job is worse than waiting.
+    if job.get("name") not in g["deploy_jobs"]:
+        raise Refused("not_allowed", f"job {target} ({job.get('name')}) is not a router deploy-group job")
     status, reason = job.get("status"), job.get("failure_reason")
     if status == "failed":
         if reason not in SYSTEM_FAILURES:

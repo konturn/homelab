@@ -142,7 +142,7 @@ def make_handler(state):
                     if not state.gitlab_token or not hmac.compare_digest(tok.encode(), state.gitlab_token.encode()):
                         return self._send(401, {"error": "unauthorized"})
                     ge = eng.cfg["gitlab_events"]
-                    events = from_gitlab(self._body(), ge["projects"], ge["branch"])
+                    events = from_gitlab(self._body(), ge["projects"], ge["branch"], eng.cfg["deploy_jobs"])
                     if events:
                         eng.store.inbox_put(time.time(), [e.to_dict() for e in events])
                     return self._send(200, {"accepted": len(events)})
