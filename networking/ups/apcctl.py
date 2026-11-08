@@ -51,6 +51,12 @@ REDACTED = "<redacted>"
 
 # Keys whose values are secrets (matched against the key name, any section).
 SECRET_KEY_RE = re.compile(r"(?i)(pass|phrase|community|secret|key|psk|token|hash|cert)")
+# Settings whose names match SECRET_KEY_RE but hold no secret (policy flags).
+NOT_SECRET_KEY_RE = re.compile(r"(?i)^DefaultUser(StrongPasswords|PasswordPolicy)$")
+
+
+def is_secret_key(key: str) -> bool:
+    return bool(SECRET_KEY_RE.search(key)) and not NOT_SECRET_KEY_RE.match(key.strip())
 # Values that change on their own (clock, uptime, counters, card-generated ids).
 VOLATILE_KEYS = {
     ("SystemDate/Time", "Date"), ("SystemDate/Time", "Time"),
@@ -118,7 +124,7 @@ def sanitize(text: str) -> str:
         key, value = key.strip(), value.strip()
         if (section, key) in VOLATILE_KEYS or VOLATILE_KEY_RE.search(key):
             continue
-        if SECRET_KEY_RE.search(key) and value:
+        if is_secret_key(key) and value:
             value = REDACTED
         out.append(f"{key}={value}")
     return "\n".join(out).strip() + "\n"
@@ -132,7 +138,7 @@ def unredacted_secrets(text: str) -> List[str]:
         if line.startswith((";", "#", "[")) or "=" not in line:
             continue
         key, _, value = line.partition("=")
-        if SECRET_KEY_RE.search(key) and value.strip() not in ("", REDACTED):
+        if is_secret_key(key) and value.strip() not in ("", REDACTED):
             bad.append(f"line {n}: {key.strip()}")
     return bad
 
@@ -150,7 +156,7 @@ def upload_payload(desired: str) -> Tuple[str, int]:
         line = raw.strip()
         if line.startswith((";", "#")):
             continue
-        if "=" in line and not line.startswith("[") and SECRET_KEY_RE.search(line.partition("=")[0]):
+        if "=" in line and not line.startswith("[") and is_secret_key(line.partition("=")[0]):
             skipped += 1
             continue
         lines.append(raw)
