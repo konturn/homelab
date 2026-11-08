@@ -374,10 +374,24 @@ process_iso() {
         fi
         log "  Title $tid (${pick#*$'\t'}); Radarr runtime ${runtime}m"
 
-        local rc=0
+        # makemkvcon sometimes spins at 100% CPU after "Copy complete" and never
+        # exits; stop it once the copy has been reported done for a while.
+        local rc=0 mpid done_at=0
         timeout "$CONVERSION_TIMEOUT" nice -n 19 ionice -c3 \
             "$MKVCON" -r --noscan --minlength="$MIN_TITLE_SECONDS" mkv "$src" "$tid" "$work" \
-            >"$riplog" 2>&1 || rc=$?
+            >"$riplog" 2>&1 &
+        mpid=$!
+        while kill -0 "$mpid" 2>/dev/null; do
+            if grep -q '^MSG:5036,' "$riplog"; then
+                [[ $done_at -eq 0 ]] && done_at=$SECONDS
+                if (( SECONDS - done_at > 120 )); then
+                    log "  makemkvcon still running 120s after copy complete, stopping it"
+                    kill "$mpid" 2>/dev/null
+                fi
+            fi
+            sleep 10
+        done
+        wait "$mpid" || rc=$?
         [[ $rc -eq 124 ]] && fail "makemkvcon timed out after ${CONVERSION_TIMEOUT}s"
 
         local ripped
