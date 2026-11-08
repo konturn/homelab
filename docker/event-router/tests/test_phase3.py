@@ -424,6 +424,9 @@ class TestGitLab(Fwd):
         self.ingest_gitlab(self.pipeline("failed", pid=11))           # still red: same incident
         self.tick()
         self.assertEqual(len(self.w.openclaw.delivered), 1)
+        # every failed pipeline id is in the log (the safety-net crons check it)
+        self.assertEqual({d.get("pipeline_id") for d in self.w.decisions() if d["decision"] in ("opened", "deduped")},
+                         {"10", "11"})
         self.ingest_gitlab(self.pipeline("success", pid=12))
         self.assertEqual(self.inc("gitlab:pipeline:4:push:-")["alert_state"], "resolved")
         self.ingest_gitlab(self.pipeline("failed", pid=13))           # red again: new incident

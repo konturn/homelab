@@ -199,13 +199,17 @@ class Engine:
     def ingest(self, ev):
         now = self.clock.now()
         inc = self.store.latest_for_fp(ev.fp)
+        # GitLab events: the pipeline or job id of this delivery, in every
+        # decision, so the safety-net crons can check that the router saw
+        # each failed pipeline (8.4, missed incidents).
+        ids = {k: ev.labels[k] for k in ("pipeline_id", "job_id") if ev.source == "gitlab" and ev.labels.get(k)}
         if ev.status == "resolved":
             if inc is None:
                 return
             self._set(inc, alert_state="resolved")
             if inc["status"] in ("open", "symptom", "maint"):           # AlertResolves
                 self._close(inc, "resolved", note="alert resolved before any action")
-                self._log({"decision": "resolved", "reason": "alert resolved"}, inc)
+                self._log({"decision": "resolved", "reason": "alert resolved", **ids}, inc)
             elif inc["status"] in TERMINAL and inc["closed_at"] is None:
                 self._set(inc, closed_at=now)
             return
@@ -213,7 +217,7 @@ class Engine:
         if inc is not None and (inc["status"] in ACTIVE or (
                 inc["alert_state"] == "firing" and now - inc["opened_at"] < DEDUPE_TERMINAL_FOR)):
             self._set(inc, deliveries=inc["deliveries"] + 1)            # same incident
-            self._log({"decision": "deduped", "deliveries": inc["deliveries"]}, inc)
+            self._log({"decision": "deduped", "deliveries": inc["deliveries"], **ids}, inc)
             return
 
         pb = match_playbook(self.pb_list, ev) if ev.kind != "datasource_error" else None
@@ -226,7 +230,7 @@ class Engine:
                       alert_state="firing", page_class=pcls, status="open", summary=ev.summary or None)
         inc_id = self.store.new_incident(now, **fields)
         inc = self.store.get(inc_id)
-        extra = {"summary": ev.summary} if ev.summary else {}
+        extra = dict({"summary": ev.summary} if ev.summary else {}, **ids)
 
         if pcls and not self.in_maint(inc, pb, page_cls=pcls):           # S9, S11
             self._close(inc, "paged")
