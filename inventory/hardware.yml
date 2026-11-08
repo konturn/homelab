@@ -194,6 +194,9 @@ audio_zones:
 #   (audio_zones[].id, one Snapcast zone / Spotify Connect target) -> output
 #   (today: the zone's USB card, audio_zones[].controller/port)
 #
+# Sources into a stream: Spotify Connect, Mopidy, and one AirPlay receiver per
+# zone (airplay_receivers in ansible/inventory.yml, docs/AUDIO.md).
+#
 # When #154's multichannel interface arrives, a stream's output becomes an
 # output pair (`output: {interface: <card>, pair: <n>}` in place of
 # controller/port); amps, inputs and speaker zones keep this shape.

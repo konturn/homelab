@@ -135,6 +135,8 @@ iptables -t mangle -vnL PREROUTING           # RETURN counter for wan_bypass_ha
 | iot (10.6.x.x) | Pi-hole | DNS only |
 | iot Pis (zwave, satellite-2) | Vault | TCP 8200 |
 | Any | snapserver | Service ports only (1704, 1705, 1780, 80-87, 50000-50007) |
+| internal (10.3.x.x) | AirPlay receivers (`airplay_receivers_cidr`) | TCP 7000, 7100-7199; UDP 319, 320, 6001-6010, 7100-7199 (docs/AUDIO.md) |
+| AirPlay receivers | internal, mgmt | UDP to ports >= 1024 (classic AirPlay timing and resend requests) |
 | frigate (`frigate_ip`, internal) | back camera, doorbell (iot) | TCP 80, 554 |
 | frigate (`frigate_ip`, internal) | mosquitto (iot) | TCP 8883 |
 | hcpy (`hcpy_ip`, internal) | Thermador hood and range (iot) | TCP 80 |
@@ -193,6 +195,7 @@ Smart home and media devices:
 | Zigbee2MQTT | `zigbee2mqtt` | Zigbee gateway |
 | Snapserver | `snapserver` | Multi-room audio server |
 | Snapclients | `snapclient_*` | Audio zone endpoints |
+| AirPlay receivers | `airplay_*` | AirPlay 2 into snapserver, one per zone (docs/AUDIO.md) |
 | Mopidy | `mopidy` | Music player |
 | iot_nginx | `iot_nginx` | IoT reverse proxy |
 | Amcrest2MQTT | `amcrest2mqtt` | Doorbell bridge |

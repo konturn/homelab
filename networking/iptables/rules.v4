@@ -472,4 +472,19 @@ COMMIT
 #   50000-50007 librespot zeroconf (Spotify Connect, one per room)
 -A FORWARD -d {{ snapserver_address }} -p tcp -m multiport --dports 80:87,1704,1705,1780,50000:50007 -j ACCEPT
 
+# AirPlay receivers (shairport-sync, airplay_receivers_cidr; docs/AUDIO.md)
+# from the internal VLAN (phones, Macs). VLAN 4 needs no rule (full forward
+# access).
+#   tcp 7000 RTSP; 7100-7199 the receivers' ephemeral port range (sysctl in
+#       docker-compose.yml): AirPlay 2 event and buffered-audio channels
+#   udp 319,320 PTP (NQPTP); 6001-6010 classic AirPlay; 7100-7199 AirPlay 2
+#       realtime audio and control
+-A FORWARD -s 10.3.0.0/16 -d {{ airplay_receivers_cidr }} -p tcp -m multiport --dports 7000,7100:7199 -j ACCEPT
+-A FORWARD -s 10.3.0.0/16 -d {{ airplay_receivers_cidr }} -p udp -m multiport --dports 319,320,6001:6010,7100:7199 -j ACCEPT
+# Classic AirPlay senders on VLAN 3/4: the receiver sends timing and resend
+# requests to the sender's own UDP ports, new flows that RELATED,ESTABLISHED
+# does not cover. UDP from the receivers only, to unprivileged ports.
+-A FORWARD -s {{ airplay_receivers_cidr }} -d 10.3.0.0/16 -p udp -m udp --dport 1024:65535 -j ACCEPT
+-A FORWARD -s {{ airplay_receivers_cidr }} -d 10.4.0.0/16 -p udp -m udp --dport 1024:65535 -j ACCEPT
+
 COMMIT

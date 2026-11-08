@@ -104,6 +104,23 @@ all:
     iot_nginx_ip: 10.6.32.5
     weather_mqtt_bridge_ip: 10.6.32.6
     mopidy_address: 10.6.32.7
+    # AirPlay 2 receivers (shairport-sync), one per Snapcast zone plus House
+    # (Global); docs/AUDIO.md. Each feeds the snapserver tcp:// source on
+    # `port` (`stream`, docker/snapserver/snapserver.conf). Each is its own
+    # container with its own address and MAC, so each runs its own NQPTP on
+    # UDP 319/320; the MAC is also its AirPlay device ID, which the Home app
+    # keys on, so keep it when moving a receiver. The addresses fill
+    # airplay_receivers_cidr (the firewall rules).
+    airplay_receivers_cidr: 10.6.32.24/29
+    airplay_receivers:
+      airplay_house: {name: "House", address: 10.6.32.24, mac: "02:00:0a:06:20:18", port: 80, stream: Network}
+      airplay_movie_room: {name: "Movie Room", address: 10.6.32.25, mac: "02:00:0a:06:20:19", port: 81, stream: Network_Movie_Room}
+      airplay_office: {name: "Office", address: 10.6.32.26, mac: "02:00:0a:06:20:1a", port: 82, stream: Network_Office}
+      airplay_kitchen: {name: "Kitchen", address: 10.6.32.27, mac: "02:00:0a:06:20:1b", port: 83, stream: Network_Kitchen}
+      airplay_main_bedroom: {name: "Main Bedroom", address: 10.6.32.28, mac: "02:00:0a:06:20:1c", port: 84, stream: Network_Main_Bedroom}
+      airplay_main_bathroom: {name: "Main Bathroom", address: 10.6.32.29, mac: "02:00:0a:06:20:1d", port: 85, stream: Network_Main_Bathroom}
+      airplay_guest_bathroom: {name: "Guest Bathroom", address: 10.6.32.30, mac: "02:00:0a:06:20:1e", port: 86, stream: Network_Guest_Bathroom}
+      airplay_guest_bedroom: {name: "Guest Bedroom", address: 10.6.32.31, mac: "02:00:0a:06:20:1f", port: 87, stream: Network_Guest_Bedroom}
     # libvirt guest on the router (ansible/roles/configure-excel-vm). Static
     # address: must stay inside 10.3.0.0/18, see the role defaults.
     excel_vm_mac: "52:54:00:3a:48:0a"

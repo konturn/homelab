@@ -35,7 +35,7 @@ with this file, they win: say so.
 
 ## Services *(from the compose files each host renders)*
 
-- **router**: ambientweather, amcrest2mqtt, anomaly-detector, bitwarden, bluebubbles-relay, booksonic, chromium-browser, deluge, diagram, docker-socket-proxy, docker-socket-proxy-ro, event-router, frigate, gitlab, grafana, hcpy, homeassistant, influxdb, iot_nginx, iperf3, jackett, jit-approval-svc, lab_nginx, lidarr, loki, mopidy, mosquitto, navidrome, nextcloud, nextcloud_db, nginx, novnc-dev1, novnc-dev2, novnc-dev3, nzbget, ollama, ombi, openclaw-gateway, otel-collector, paperless-ai, paperless-ngx, paperless-redis, pihole, plex, promtail, prowlarr, radarr, snapclient_global, snapserver, sonarr, tautulli, tempo, vault, zigbee2mqtt.
+- **router**: airplay_guest_bathroom, airplay_guest_bedroom, airplay_house, airplay_kitchen, airplay_main_bathroom, airplay_main_bedroom, airplay_movie_room, airplay_office, ambientweather, amcrest2mqtt, anomaly-detector, bitwarden, bluebubbles-relay, booksonic, chromium-browser, deluge, diagram, docker-socket-proxy, docker-socket-proxy-ro, event-router, frigate, gitlab, grafana, hcpy, homeassistant, influxdb, iot_nginx, iperf3, jackett, jit-approval-svc, lab_nginx, lidarr, loki, mopidy, mosquitto, navidrome, nextcloud, nextcloud_db, nginx, novnc-dev1, novnc-dev2, novnc-dev3, nzbget, ollama, ombi, openclaw-gateway, otel-collector, paperless-ai, paperless-ngx, paperless-redis, pihole, plex, promtail, prowlarr, radarr, snapclient_global, snapserver, sonarr, tautulli, tempo, vault, zigbee2mqtt.
   Defined, not running: snapclient_{guest_bathroom,guest_bedroom,kitchen,main_bathroom,main_bedroom,office} (no sound card, snapclient_disabled_zones); blog, wordpress_db (compose profile).
 - **zwave**: promtail, telegraf, zwavejs2mqtt.
 - **satellite-2**: promtail, telegraf.
@@ -59,6 +59,7 @@ with this file, they win: say so.
 - hba/phy13 (dev25, WD241KFGX): hot spare in `mpool`.
 - hba/phy19 (dev12): Moved here 2026-11-08 from phy13 after 55 read errors there with clean SMART; resilvering. If it stays clean through a scrub, phy13's slot or cable was the cause (then record that on phy13).
 - Audio: speaker zone -> Monoprice amp input -> Snapcast stream -> USB card (udev rule generated, by port). Streams: Main_Bedroom, Office, Kitchen, Main_Bathroom, Guest_Bathroom, Guest_Bedroom, Global.
+- AirPlay 2 receivers (docs/AUDIO.md), name -> snapserver source: House (airplay_house, 10.6.32.24) -> Network, Movie Room (airplay_movie_room, 10.6.32.25) -> Network_Movie_Room, Office (airplay_office, 10.6.32.26) -> Network_Office, Kitchen (airplay_kitchen, 10.6.32.27) -> Network_Kitchen, Main Bedroom (airplay_main_bedroom, 10.6.32.28) -> Network_Main_Bedroom, Main Bathroom (airplay_main_bathroom, 10.6.32.29) -> Network_Main_Bathroom, Guest Bathroom (airplay_guest_bathroom, 10.6.32.30) -> Network_Guest_Bathroom, Guest Bedroom (airplay_guest_bedroom, 10.6.32.31) -> Network_Guest_Bedroom.
 - Amp A (HA /dev/ttyUSB0), inputs 1 Global, 2 Guest_Bathroom, 3 Guest_Bedroom, 4 Office; zones Living Room Speakers 2 (zone_11), Dining Room (zone_12), Guest Bathroom (zone_13), Deck (zone_5), Kitchen (zone_15), Living Room Speakers 1 (zone_16).
 - Amp B (HA /dev/ttyUSB1), inputs 1 Global; zones Main Bathroom (zone_11_2), Gym (zone_12_2), Front Basement Hallway (zone_13_2), Ping Pong (zone_14), Back Basement Hallways (zone_15_2), Office (zone_16_2). Office Speakers (zone 16) sit on B, but the Office stream is labelled on A's input 4, so the Office speakers can only play Global today (#154).
 - Amp C: Not connected yet. Planned (#154): Office, Main Bedroom, Guest Bedroom, maybe Movie Room, on a third USB-serial adapter.
@@ -182,7 +183,7 @@ with this file, they win: say so.
 
 ## Where things are written down
 
-- `docs/`: AUTOMERGE, backups, CANARY, CONTAINER-REGISTRY, DEADMAN, denon, DEPLOY, DISASTER_RECOVERY, docker-proxy-architecture, FIREWALL, frigate, GITLAB_SETTINGS, HOMEASSISTANT, IPMI, jit-access-design, jit-webhook-design, minidsp, NETWORK, OBSERVABILITY, ollama, paperless-ai, plex-gpu, POWER, raspberry-pi, RENOVATE, SECRET_ROTATION.
+- `docs/`: AUDIO, AUTOMERGE, backups, CANARY, CONTAINER-REGISTRY, DEADMAN, denon, DEPLOY, DISASTER_RECOVERY, docker-proxy-architecture, FIREWALL, frigate, GITLAB_SETTINGS, HOMEASSISTANT, IPMI, jit-access-design, jit-webhook-design, minidsp, NETWORK, OBSERVABILITY, ollama, paperless-ai, plex-gpu, POWER, raspberry-pi, RENOVATE, SECRET_ROTATION.
 - The GitLab project wiki (private, not mirrored) holds the security and
   network reviews.
 - Your checkout `workspace/homelab` is hard-reset to `origin/main` every

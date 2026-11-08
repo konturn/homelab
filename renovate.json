@@ -292,6 +292,13 @@
       "allowedVersions": "<3.6.0"
     },
     {
+      "description": "shairport-sync 5.6.1 and 5.6.2 exit when a classic AirPlay sender offers a format they cannot decode (pyatv sends L16), taking the receiver down; 5.6/5.6.0 untested and skipped too (docs/AUDIO.md)",
+      "matchPackageNames": [
+        "mikebrady/shairport-sync"
+      ],
+      "allowedVersions": "!/^5\\.6(\\.[0-2])?$/"
+    },
+    {
       "description": "influxdb 3 is a different product (storage engine and query language)",
       "matchPackageNames": [
         "influxdb"
