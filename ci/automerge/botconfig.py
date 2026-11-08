@@ -176,6 +176,48 @@ def _block_lines(lines: List[str]) -> Set[int]:
     return out
 
 
+def _loose_layout(lines: List[str], blocks: Set[int]) -> List[Tuple[int, str]]:
+    """Comment and blank lines outside block scalars, each with the number of
+    significant lines before it: equal layouts mean no such line was added,
+    removed, changed or moved."""
+    out, sig = [], 0
+    for i, l in enumerate(lines):
+        if i in blocks or (l.strip() and not l.lstrip().startswith("#")):
+            sig += 1
+        else:
+            out.append((sig, l))
+    return out
+
+
+_JINJA = re.compile(r"\{\{.*?\}\}|\{%.*?%\}|\{#.*?#\}")
+
+
+def _has_multiline_flow_scalar(text: str) -> bool:
+    """Does the file hold a quoted or plain scalar spanning lines? Inside one,
+    a `#` line or a blank line is part of the value, not a comment. Jinja is
+    masked (same length) so the YAML parses; a file that still does not parse
+    counts as yes (fail closed)."""
+    import yaml
+    try:
+        root = yaml.compose(_JINJA.sub(lambda m: "J" * len(m.group(0)), text))
+    except yaml.YAMLError:
+        return True
+    stack, seen = [root], set()
+    while stack:
+        n = stack.pop()
+        if n is None or id(n) in seen:
+            continue
+        seen.add(id(n))
+        if isinstance(n, yaml.ScalarNode):
+            if n.style not in ("|", ">") and n.start_mark.line != n.end_mark.line:
+                return True
+        elif isinstance(n, yaml.MappingNode):
+            stack += [x for kv in n.value for x in kv]
+        elif isinstance(n, yaml.SequenceNode):
+            stack += n.value
+    return False
+
+
 def _significant(lines: List[str]) -> List[int]:
     """Line indices that are not blank and not comments (block content counts)."""
     blocks = _block_lines(lines)
@@ -248,6 +290,10 @@ def diff_compose_config(base: str, head: str, path: str, cfg: dict, allowlist: d
             continue
         if not _SAFE_COMMENT.match(l):
             raise PolicyError(f"{path} line {i + 1}: comment contains '{{' or '}}' (Jinja)")
+    if _loose_layout(b_lines, b_blocks) != _loose_layout(h_lines, h_blocks) and (
+            _has_multiline_flow_scalar(base) or _has_multiline_flow_scalar(head)):
+        raise PolicyError(f"{path}: comment or blank lines changed in a file with a quoted or plain "
+                          "scalar spanning lines, where such a line can be part of the value")
     b_sig, h_sig = _significant(b_lines), _significant(h_lines)
     if len(b_sig) != len(h_sig):
         raise PolicyError(f"{path}: lines other than comments were added or removed")
