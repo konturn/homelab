@@ -694,3 +694,62 @@ notification history):
 16. **Learning-loop tuning by bot-config.** Threshold/`for`/wording tuning of existing rules would auto-merge through the bot-config class (8.3). Comfortable with that being driven by the routing review, or should tuning MRs that come from it wait for you for the first few months?
 17. **Feedback capture.** Is a Telegram reply ("useless", "should have paged me", "expected") enough, or do you want reactions or inline buttons on pages too?
 18. **Routing-review cadence and output.** Weekly, results in the Monday Morning Digest: right cadence and place? Should findings that need a decision go to the monthly decision queue instead of separate issues?
+
+## 12. Formal model: properties to check (for review)
+
+Before the router is implemented, a TLA+ (PlusCal) model of sections 4–7 is
+model-checked with TLC. It lives in `docs/design/event-routing.tla`. Noah
+reviews **this list**, not the TLA+: the model checker only checks what is
+listed here. Add anything you would consider a disaster; strike anything you
+do not care about. Each property names the section it comes from.
+
+### 12.1 Safety: things that must never happen
+
+| # | Property | From |
+|---|---|---|
+| S1 | Two playbook actions never run against the same target (container, unit, outlet, CI job) at the same time. | 4.6 |
+| S2 | No action outside the allowlist ever runs, whatever an event contains. A hard-denied action (power, UPS, locks/doors/garage/alarm, router reboot, S2500 uplinks/mgmt, deleting data) is unreachable from any event. | 4.5, 7.1 |
+| S3 | While the kill switch is on, no action runs. Every event is forwarded to OpenClaw and nothing is dropped. | 7.3 |
+| S4 | A playbook never runs more than `max_runs` times per window, and never twice within `cooldown`. | 4.4, 7.2 |
+| S5 | Once a playbook's breaker is open, that playbook never acts again until the breaker is explicitly reset or 24 h pass with no triggers. | 7.2 |
+| S6 | One root cause makes one incident. When a dependency is down (e.g. MQTT), events for things that depend on it (Zigbee silence) are attached to that incident and never start their own playbooks. | 4.7 |
+| S7 | An action against a target never starts while a deploy holds that host's resource group, except the "cancel orphaned CI job" playbook, which exists to free it. | 4.5 |
+| S8 | An event is never acted on twice. Duplicates and re-deliveries of the same alert, including across a router restart, map to the same incident. | 4.3, 4.7 |
+| S9 | Always-page classes (security, data at risk, UPS) always reach Noah, even if a playbook also handles them. | 5, 6.3 |
+
+### 12.2 Liveness: things that must eventually happen
+
+| # | Property | From |
+|---|---|---|
+| L1 | Every event ends in exactly one terminal state: handled by a playbook (verified), escalated to OpenClaw, paged to Noah, or deliberately suppressed with a recorded reason. None is silently lost. | 4.3, 4.8 |
+| L2 | A playbook whose verification fails escalates to OpenClaw within one cycle, and pages Noah if OpenClaw is unavailable. | 4.4, 7.4 |
+| L3 | An open breaker always produces an escalation and a page. It never fails silent. | 7.2 |
+| L4 | If the router is down, alerts still reach OpenClaw through the Grafana fallback route, and critical/warning alerts still reach email. | 7.4 |
+| L5 | An incident whose underlying alert resolves is eventually closed, and its playbook lock released. Nothing is left holding a lock forever: the lesson of the orphaned CI job. | 4.6, 1.2 (I3) |
+| L6 | A suppression always expires. Nothing stays hidden indefinitely. | 8.3 |
+
+### 12.3 Assumptions the model allows (the "adversary")
+
+- Alerts can arrive duplicated, out of order, late, or during a router restart. Grafana re-sends unresolved alerts on its repeat interval.
+- Any action can fail, hang until its timeout, or succeed without fixing the problem (verification fails).
+- OpenClaw, the Claude API, GitLab and Telegram can each be unavailable at any time, independently.
+- The kill switch can flip at any moment, including mid-action.
+- A deploy can start or finish at any moment, and a deploy job can be orphaned (the GitLab outage case).
+- Events are adversarial text: the model treats event content as arbitrary data that can only select among existing playbooks by their match rules.
+
+### 12.4 How we know the model is meaningful
+
+The spec is mutation-tested. Each of these deliberate design bugs must make TLC fail with a counterexample; if one does not, the spec is too weak and gets fixed before anyone trusts it:
+
+1. Remove the per-target lock → S1 must fail.
+2. Remove the rate limit → S4 must fail.
+3. Let the kill switch be checked only at playbook start → S3 must fail mid-action.
+4. Dedupe by alert name only, not fingerprint plus dependency → S6 or S8 must fail.
+5. Drop the escalation when OpenClaw is down → L2 must fail.
+6. Never release a lock when an incident resolves → L5 must fail.
+
+Bounds for checking: up to 4 concurrent events, 3 playbooks, 2 targets, 1 shared dependency, a window of 3 runs. That is small enough to check in minutes and large enough to show the interleavings above.
+
+### 12.5 Depends on open questions
+
+The spec is written after the open questions in section 11 are answered, so it models what will actually be built. These questions change properties: whether handled events also notify OpenClaw (affects L1's terminal states), which classes always page (S9), breaker reset rules (S5), and whether the receiver lives in OpenClaw or standalone (affects L4).
