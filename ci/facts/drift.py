@@ -161,6 +161,11 @@ def check_disks(hw: dict, live: dict, rep: Report) -> str:
                 rep.drift(S, f"{slot}: pool {zp['pool']} not imported.")
             elif not leaf:
                 rep.drift(S, f"{slot} ({mapper}): not a member of {zp['pool']}; declared in {zp['vdev']}.{suffix_note(d)}")
+            elif d["role"] == "spare":
+                if leaf["vdev"] != "spares":
+                    rep.drift(S, f"{slot} ({mapper}): declared a spare, is in {leaf['vdev']} of {zp['pool']}.")
+                elif leaf["state"] not in ("AVAIL", "INUSE"):
+                    rep.drift(S, f"{slot} ({mapper}, spare): {leaf['state']} in {zp['pool']}.{suffix_note(d)}")
             elif leaf["vdev"] != zp["vdev"]:
                 rep.drift(S, f"{slot} ({mapper}): in {leaf['vdev']}, declared {zp['vdev']}.")
             elif leaf["state"] != "ONLINE":
@@ -182,13 +187,13 @@ def check_disks(hw: dict, live: dict, rep: Report) -> str:
                 rep.drift(S, f"pool {pname} not imported.")
                 continue
             if pool["state"] != "ONLINE":
-                bad = [f"{v} {s}" for v, s in pool["vdevs"].items() if s != "ONLINE"]
+                bad = [f"{v} {s}" for v, s in pool["vdevs"].items() if s != "ONLINE" and v not in facts.SPECIAL_VDEVS]
                 rep.drift(S, f"pool {pname} is {pool['state']}" + (f" ({', '.join(bad)})" if bad else "") + ".")
             for v in spec.get("vdevs") or []:
                 if v not in pool["vdevs"]:
                     rep.drift(S, f"pool {pname}: vdev {v} missing.")
             for v in pool["vdevs"]:
-                if v not in (spec.get("vdevs") or []):
+                if v not in (spec.get("vdevs") or []) and v not in facts.SPECIAL_VDEVS:
                     rep.drift(S, f"pool {pname}: undeclared vdev {v}.")
             for leaf in pool["leaves"]:
                 if (pname, leaf) not in leaf_seen:

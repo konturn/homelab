@@ -8,6 +8,8 @@ Generated (committed, so a change shows up in the MR diff and the deploy
 path stays a plain copy):
     base/udev/85-my-usb-audio.rules   from inventory/hardware.yml audio_zones
     base/disk/crypttab                from inventory/hardware.yml disks[].luks
+                                      (boot, persistent_data, then data and
+                                      spare disks by mapper number)
 """
 
 from __future__ import annotations

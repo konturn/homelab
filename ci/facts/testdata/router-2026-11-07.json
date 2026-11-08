@@ -85,10 +85,20 @@
    "health": null,
    "state": "exited"
   },
+  "elastic_dubinsky": {
+   "exit_code": null,
+   "health": null,
+   "state": "running"
+  },
   "exciting_bardeen": {
    "exit_code": 4,
    "health": null,
    "state": "exited"
+  },
+  "frigate": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
   },
   "funny_lamarr": {
    "exit_code": 100,
@@ -340,6 +350,66 @@
    "health": null,
    "state": "exited"
   },
+  "runner-txrnnfjnf-project-4-concurrent-0-1ec00f9fabc0a367-build": {
+   "exit_code": null,
+   "health": "health: starting",
+   "state": "running"
+  },
+  "runner-txrnnfjnf-project-4-concurrent-0-1ec00f9fabc0a367-predefined": {
+   "exit_code": 0,
+   "health": null,
+   "state": "exited"
+  },
+  "runner-txrnnfjnf-project-4-concurrent-1-3c83a75fc469c5d9-build": {
+   "exit_code": null,
+   "health": null,
+   "state": "running"
+  },
+  "runner-txrnnfjnf-project-4-concurrent-1-3c83a75fc469c5d9-predefined": {
+   "exit_code": 0,
+   "health": null,
+   "state": "exited"
+  },
+  "runner-txrnnfjnf-project-4-concurrent-2-eabca1968c2878ef-build": {
+   "exit_code": null,
+   "health": "health: starting",
+   "state": "running"
+  },
+  "runner-txrnnfjnf-project-4-concurrent-2-eabca1968c2878ef-predefined": {
+   "exit_code": 0,
+   "health": null,
+   "state": "exited"
+  },
+  "runner-txrnnfjnf-project-4-concurrent-3-9b982017448baa88-build": {
+   "exit_code": null,
+   "health": "health: starting",
+   "state": "running"
+  },
+  "runner-txrnnfjnf-project-4-concurrent-3-9b982017448baa88-predefined": {
+   "exit_code": 0,
+   "health": null,
+   "state": "exited"
+  },
+  "runner-txrnnfjnf-project-4-concurrent-4-b1379854adcb2e2b-build": {
+   "exit_code": null,
+   "health": "health: starting",
+   "state": "running"
+  },
+  "runner-txrnnfjnf-project-4-concurrent-4-b1379854adcb2e2b-predefined": {
+   "exit_code": 0,
+   "health": null,
+   "state": "exited"
+  },
+  "runner-txrnnfjnf-project-4-concurrent-5-f7a7f125c59f403a-build": {
+   "exit_code": null,
+   "health": "health: starting",
+   "state": "running"
+  },
+  "runner-txrnnfjnf-project-4-concurrent-5-f7a7f125c59f403a-predefined": {
+   "exit_code": 0,
+   "health": null,
+   "state": "exited"
+  },
   "snapclient_global": {
    "exit_code": null,
    "health": "healthy",
@@ -462,10 +532,10 @@
   "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy13-lun-0": {
    "dev": "sde",
    "mappers": [
-    "dev12"
+    "dev25"
    ],
-   "model": "WDC WD201KFGX-68",
-   "serial_suffix": "SGBR"
+   "model": "WDC WD241KFGX-68",
+   "serial_suffix": "R9WY"
   },
   "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy14-lun-0": {
    "dev": "sdf",
@@ -508,12 +578,12 @@
    "serial_suffix": "ALLU"
   },
   "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy19-lun-0": {
-   "dev": "sdk",
+   "dev": "sda",
    "mappers": [
-    "dev22"
+    "dev12"
    ],
-   "model": "WDC WD240KFGX-68",
-   "serial_suffix": "X6RK"
+   "model": "WDC WD201KFGX-68",
+   "serial_suffix": "SGBR"
   },
   "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy20-lun-0": {
    "dev": "sdl",
@@ -655,7 +725,7 @@
    "ok": true
   },
   "doorbell": {
-   "detail": "connect failed: timed out",
+   "detail": "connect failed: [Errno 113] No route to host",
    "ok": false
   },
   "gitlab": {
@@ -775,8 +845,8 @@
      "vdev": "raidz2-1"
     },
     "dev12": {
-     "errors": "55 0 0 too many errors",
-     "state": "FAULTED",
+     "errors": "0 0 0 (resilvering)",
+     "state": "ONLINE",
      "vdev": "raidz2-1"
     },
     "dev13": {
@@ -839,6 +909,11 @@
      "state": "ONLINE",
      "vdev": "raidz2-1"
     },
+    "dev25": {
+     "errors": "",
+     "state": "AVAIL",
+     "vdev": "spares"
+    },
     "dev3": {
      "errors": "0 0 0",
      "state": "ONLINE",
@@ -875,11 +950,12 @@
      "vdev": "raidz2-2"
     }
    },
-   "state": "DEGRADED",
+   "state": "ONLINE",
    "vdevs": {
     "raidz2-0": "ONLINE",
-    "raidz2-1": "DEGRADED",
-    "raidz2-2": "ONLINE"
+    "raidz2-1": "ONLINE",
+    "raidz2-2": "ONLINE",
+    "spares": ""
    }
   }
  }

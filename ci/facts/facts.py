@@ -16,7 +16,9 @@ HARDWARE = "inventory/hardware.yml"
 DEPENDENCIES = "inventory/dependencies.yml"
 INVENTORY = "ansible/inventory.yml"
 
-ROLES = {"data", "boot", "persistent_data", "retired", "empty"}
+ROLES = {"data", "spare", "boot", "persistent_data", "retired", "empty"}
+# Pool sections in `zpool status` that are not data vdevs.
+SPECIAL_VDEVS = {"spares", "logs", "cache", "special", "dedup"}
 KINDS = {"container", "systemd", "mount", "zpool", "device", "endpoint", "host", "process"}
 PROBES = {"container", "systemd", "mount", "zpool", "tcp", "dns"}
 PORT_RE = re.compile(r"^(\d+)-(\d+(?:\.\d+)*)$")
@@ -119,8 +121,11 @@ def validate_hardware(hw: dict) -> list[str]:
                 errors.append(f"{where}: role data needs zpool")
             elif zp.get("pool") not in pools or zp.get("vdev") not in (pools[zp["pool"]].get("vdevs") or []):
                 errors.append(f"{where}: zpool {zp} is not a declared pool/vdev")
+        elif role == "spare":
+            if not zp or zp.get("pool") not in pools or zp.get("vdev") != "spares":
+                errors.append(f"{where}: role spare needs zpool {{pool: <declared pool>, vdev: spares}}")
         elif zp:
-            errors.append(f"{where}: only role data disks are pool members")
+            errors.append(f"{where}: only data and spare disks are pool members")
     ctrls_usb = hw.get("usb_controllers") or {}
     ids = set()
     for i, z in enumerate(hw.get("audio_zones") or []):
