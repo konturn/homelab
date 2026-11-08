@@ -23,7 +23,19 @@
       {%- else -%}{{ ansible_architecture }}
       {%- endif -%}
 
+# Only download the .deb when 0.1.7 is not installed, so a github.com outage
+# cannot fail an otherwise no-op deploy. check_mode: false so the query also
+# runs in the MR --check job; a missing package leaves stdout empty and the
+# install runs as before.
+- name: Check installed minidsp version
+  ansible.builtin.command: "dpkg-query -W -f=${Version} minidsp"
+  register: _minidsp_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
 - name: Install minidsp-rs package
+  when: _minidsp_installed.stdout is not match('^0\\.1\\.7(-|$)')
   ansible.builtin.apt:
     deb: "https://github.com/mrene/minidsp-rs/releases/download/v0.1.7/minidsp_0.1.7_{{ minidsp_arch }}.deb"
   register: minidsp_package
