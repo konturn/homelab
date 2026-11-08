@@ -239,6 +239,54 @@ func (vc *Client) DeletePolicy(name string) error {
 	return nil
 }
 
+// ListPolicies lists the names of all ACL policies.
+func (vc *Client) ListPolicies() ([]string, error) {
+	secret, err := vc.client.Logical().List("sys/policies/acl")
+	if err != nil {
+		if authErr := vc.authenticate(); authErr != nil {
+			return nil, fmt.Errorf("re-auth failed: %w (original: %v)", authErr, err)
+		}
+		secret, err = vc.client.Logical().List("sys/policies/acl")
+		if err != nil {
+			return nil, fmt.Errorf("list policies (after re-auth): %w", err)
+		}
+	}
+	if secret == nil || secret.Data == nil {
+		return nil, nil
+	}
+	keys, _ := secret.Data["keys"].([]interface{})
+	names := make([]string, 0, len(keys))
+	for _, k := range keys {
+		if s, ok := k.(string); ok {
+			names = append(names, s)
+		}
+	}
+	return names, nil
+}
+
+// GetPolicy returns the rules of an ACL policy.
+func (vc *Client) GetPolicy(name string) (string, error) {
+	path := "sys/policies/acl/" + name
+	secret, err := vc.client.Logical().Read(path)
+	if err != nil {
+		if authErr := vc.authenticate(); authErr != nil {
+			return "", fmt.Errorf("re-auth failed: %w (original: %v)", authErr, err)
+		}
+		secret, err = vc.client.Logical().Read(path)
+		if err != nil {
+			return "", fmt.Errorf("read policy (after re-auth): %w", err)
+		}
+	}
+	if secret == nil || secret.Data == nil {
+		return "", fmt.Errorf("policy %s not found", name)
+	}
+	rules, ok := secret.Data["policy"].(string)
+	if !ok {
+		return "", fmt.Errorf("policy %s has no rules", name)
+	}
+	return rules, nil
+}
+
 // Health checks if Vault is reachable and the token is valid.
 func (vc *Client) Health() error {
 	_, err := vc.client.Auth().Token().LookupSelf()

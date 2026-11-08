@@ -77,6 +77,99 @@ type VaultPolicyManager interface {
 	DeletePolicy(name string) error
 }
 
+// VaultPolicyStore can also list and read ACL policies (CleanupExpiredPolicies).
+type VaultPolicyStore interface {
+	VaultPolicyManager
+	ListPolicies() ([]string, error)
+	GetPolicy(name string) (string, error)
+}
+
+// policyExpiryMarker starts the first line of every generated policy,
+// followed by the time its token expires (RFC 3339, UTC). The request store
+// and the per-request cleanup goroutines live in memory and are lost when the
+// broker restarts; Vault returns policy text unchanged, so the expiry kept in
+// the policy itself is what CleanupExpiredPolicies goes by.
+const policyExpiryMarker = "# jit-expires-at: "
+
+// PolicyCleanupGrace is how long a per-request policy is kept after its
+// token's recorded expiry. The expiry is recorded just before the token is
+// minted, so the token expires a moment later than recorded; the grace covers
+// that and clock differences. It matches the delay of the in-process cleanup.
+const PolicyCleanupGrace = 5 * time.Minute
+
+// withExpiry prefixes a generated policy with its expiry marker.
+func withExpiry(rules string, expiresAt time.Time) string {
+	return policyExpiryMarker + expiresAt.UTC().Format(time.RFC3339) + "\n" + rules
+}
+
+// PolicyExpiry returns the expiry recorded on the first line of a generated
+// policy, and false if there is none.
+func PolicyExpiry(rules string) (time.Time, bool) {
+	line, _, _ := strings.Cut(rules, "\n")
+	v, ok := strings.CutPrefix(line, policyExpiryMarker)
+	if !ok {
+		return time.Time{}, false
+	}
+	t, err := time.Parse(time.RFC3339, strings.TrimSpace(v))
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t, true
+}
+
+// CleanupExpiredPolicies deletes the per-request policies (jit-vault-*)
+// whose token expired more than grace before now. It is what removes them
+// when the broker restarted before its in-process cleanup ran.
+//
+// A policy is deleted only on its own recorded expiry: tokens are minted
+// non-renewable with exactly that TTL, so after expiry plus grace no live
+// token can carry it.
+//
+// A policy without a readable expiry marker was written by an older broker
+// version, so by a process that stopped before this one started. Those are
+// kept until unmarkedDeadAfter (zero: kept forever), which the caller sets to
+// its own start time plus the longest TTL it issues plus grace: after that,
+// no token minted by an earlier process can still be valid.
+//
+// Errors on single policies are logged and skipped; the error returned is
+// only for listing.
+func CleanupExpiredPolicies(ps VaultPolicyStore, now time.Time, grace time.Duration, unmarkedDeadAfter time.Time) (int, error) {
+	names, err := ps.ListPolicies()
+	if err != nil {
+		return 0, fmt.Errorf("list policies: %w", err)
+	}
+	deleted := 0
+	for _, name := range names {
+		if !strings.HasPrefix(name, policyPrefix) {
+			continue
+		}
+		rules, err := ps.GetPolicy(name)
+		if err != nil {
+			logger.Error("vault_policy_cleanup_read_failed", logger.Fields{"policy_name": name, "error": err.Error()})
+			continue
+		}
+		expiresAt, ok := PolicyExpiry(rules)
+		if !ok {
+			if unmarkedDeadAfter.IsZero() || now.Before(unmarkedDeadAfter) {
+				logger.Info("vault_policy_cleanup_unmarked_kept", logger.Fields{"policy_name": name})
+				continue
+			}
+		} else if now.Before(expiresAt.Add(grace)) {
+			continue
+		}
+		if err := ps.DeletePolicy(name); err != nil {
+			logger.Error("vault_policy_cleanup_failed", logger.Fields{"policy_name": name, "error": err.Error()})
+			continue
+		}
+		logger.Info("vault_policy_cleanup_deleted", logger.Fields{
+			"policy_name": name,
+			"marked":      ok,
+		})
+		deleted++
+	}
+	return deleted, nil
+}
+
 // VaultDynamicBackend creates Vault tokens with dynamically scoped policies.
 // Instead of pre-built policies, the requester specifies exactly which paths
 // and capabilities they need. A temporary policy is created, a token is minted
@@ -165,7 +258,7 @@ func (b *VaultDynamicBackend) MintCredential(resource string, tier int, ttl time
 
 	// Build and create temporary policy
 	policyName := policyPrefix + opts.RequestID
-	policyHCL := BuildPolicyHCL(opts.VaultPaths)
+	policyHCL := withExpiry(BuildPolicyHCL(opts.VaultPaths), time.Now().Add(ttl))
 
 	if err := b.policyManager.PutPolicy(policyName, policyHCL); err != nil {
 		return nil, fmt.Errorf("create temporary policy %s: %w", policyName, err)
@@ -190,9 +283,10 @@ func (b *VaultDynamicBackend) MintCredential(resource string, tier int, ttl time
 		return nil, fmt.Errorf("mint dynamic token: %w", err)
 	}
 
-	// Schedule policy cleanup after TTL expires (with buffer)
+	// Schedule policy cleanup after TTL expires (with buffer). If the broker
+	// restarts first, CleanupExpiredPolicies removes it on the next start.
 	go func() {
-		cleanupDelay := ttl + 5*time.Minute
+		cleanupDelay := ttl + PolicyCleanupGrace
 		time.Sleep(cleanupDelay)
 		if delErr := b.policyManager.DeletePolicy(policyName); delErr != nil {
 			logger.Error("vault_dynamic_policy_cleanup_failed", logger.Fields{

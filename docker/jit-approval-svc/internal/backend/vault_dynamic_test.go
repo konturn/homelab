@@ -34,6 +34,132 @@ func (m *mockPolicyManager) DeletePolicy(name string) error {
 	return nil
 }
 
+func (m *mockPolicyManager) ListPolicies() ([]string, error) {
+	names := make([]string, 0, len(m.policies))
+	for n := range m.policies {
+		names = append(names, n)
+	}
+	return names, nil
+}
+
+func (m *mockPolicyManager) GetPolicy(name string) (string, error) {
+	rules, ok := m.policies[name]
+	if !ok {
+		return "", fmt.Errorf("policy %s not found", name)
+	}
+	return rules, nil
+}
+
+// TestMintCredential_RecordsExpiry: the generated policy carries its token's
+// expiry, which is what the restart cleanup goes by.
+func TestMintCredential_RecordsExpiry(t *testing.T) {
+	pm := newMockPolicyManager()
+	b := NewVaultDynamicBackend(&mockVaultMinter{token: "hvs.x", leaseID: "acc"}, pm)
+	before := time.Now()
+	_, err := b.MintCredential("vault", 2, 30*time.Minute, MintOptions{
+		RequestID:  "req-expiry",
+		VaultPaths: []VaultPathRequest{{Path: "homelab/data/docker/nginx", Capabilities: []string{"read"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	exp, ok := PolicyExpiry(pm.policies["jit-vault-req-expiry"])
+	if !ok {
+		t.Fatalf("no expiry marker in policy:\n%s", pm.policies["jit-vault-req-expiry"])
+	}
+	want := before.Add(30 * time.Minute)
+	if exp.Before(want.Add(-time.Second)) || exp.After(want.Add(time.Minute)) {
+		t.Errorf("expiry %v, want about %v", exp, want)
+	}
+}
+
+// TestCleanupExpiredPolicies: after a restart, only per-request policies
+// whose token expired more than the grace period ago are deleted. Live
+// grants, ones still within the grace, ones without a recorded expiry and
+// every other policy are kept.
+func TestCleanupExpiredPolicies(t *testing.T) {
+	now := time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC)
+	grace := PolicyCleanupGrace
+	body := BuildPolicyHCL([]VaultPathRequest{{Path: "homelab/data/docker/nginx", Capabilities: []string{"read"}}})
+	pm := newMockPolicyManager()
+	pm.policies = map[string]string{
+		"jit-vault-req-old":       withExpiry(body, now.Add(-time.Hour)),
+		"jit-vault-req-justpast":  withExpiry(body, now.Add(-grace-time.Second)),
+		"jit-vault-req-ingrace":   withExpiry(body, now.Add(-grace+time.Second)),
+		"jit-vault-req-live":      withExpiry(body, now.Add(20*time.Minute)),
+		"jit-vault-req-nomarker":  body,
+		"jit-vault-req-badmarker": policyExpiryMarker + "yesterday\n" + body,
+		"jit-static-plex":         withExpiry(body, now.Add(-time.Hour)),
+		"ci-deploy":               "path \"homelab/data/*\" {}",
+	}
+
+	deleted, err := CleanupExpiredPolicies(pm, now, grace, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted != 2 {
+		t.Errorf("deleted %d, want 2", deleted)
+	}
+	for _, gone := range []string{"jit-vault-req-old", "jit-vault-req-justpast"} {
+		if _, ok := pm.policies[gone]; ok {
+			t.Errorf("%s not deleted", gone)
+		}
+	}
+	for _, kept := range []string{"jit-vault-req-ingrace", "jit-vault-req-live", "jit-vault-req-nomarker",
+		"jit-vault-req-badmarker", "jit-static-plex", "ci-deploy"} {
+		if _, ok := pm.policies[kept]; !ok {
+			t.Errorf("%s deleted", kept)
+		}
+	}
+}
+
+// TestCleanupExpiredPolicies_Unmarked: policies without an expiry marker
+// (older broker versions) are kept until unmarkedDeadAfter, then deleted;
+// marked live ones are still kept.
+func TestCleanupExpiredPolicies_Unmarked(t *testing.T) {
+	now := time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC)
+	body := BuildPolicyHCL([]VaultPathRequest{{Path: "homelab/data/docker/nginx", Capabilities: []string{"read"}}})
+	fresh := func() *mockPolicyManager {
+		pm := newMockPolicyManager()
+		pm.policies = map[string]string{
+			"jit-vault-req-legacy": body,
+			"jit-vault-req-live":   withExpiry(body, now.Add(50*time.Minute)),
+			"jit-static-plex":      body,
+		}
+		return pm
+	}
+
+	pm := fresh()
+	if n, _ := CleanupExpiredPolicies(pm, now, PolicyCleanupGrace, now.Add(time.Second)); n != 0 {
+		t.Errorf("before unmarkedDeadAfter: deleted %d, want 0", n)
+	}
+
+	pm = fresh()
+	if n, _ := CleanupExpiredPolicies(pm, now, PolicyCleanupGrace, now); n != 1 {
+		t.Errorf("at unmarkedDeadAfter: deleted %d, want 1", n)
+	}
+	if _, ok := pm.policies["jit-vault-req-legacy"]; ok {
+		t.Error("legacy policy not deleted")
+	}
+	for _, kept := range []string{"jit-vault-req-live", "jit-static-plex"} {
+		if _, ok := pm.policies[kept]; !ok {
+			t.Errorf("%s deleted", kept)
+		}
+	}
+}
+
+// TestCleanupExpiredPolicies_ListError: a listing error deletes nothing.
+func TestCleanupExpiredPolicies_ListError(t *testing.T) {
+	deleted, err := CleanupExpiredPolicies(&failingLister{}, time.Now(), PolicyCleanupGrace, time.Now())
+	if err == nil || deleted != 0 {
+		t.Fatalf("deleted %d, err %v; want 0 and an error", deleted, err)
+	}
+}
+
+type failingLister struct{ mockPolicyManager }
+
+func (*failingLister) ListPolicies() ([]string, error) { return nil, fmt.Errorf("permission denied") }
+
 // --- ValidateVaultPaths tests ---
 
 func TestValidateVaultPaths_Valid(t *testing.T) {
