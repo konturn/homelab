@@ -377,64 +377,6 @@ resource "vault_policy" "jit_static" {
 }
 
 # =============================================================================
-# Policy: jit-tier1-services (being retired)
-# =============================================================================
-# Tier-wide policy used by brokers before jit-static-<resource>. Kept, limited
-# to static resources, until no token minted with it remains; then removed.
-
-resource "vault_policy" "jit_tier1_services" {
-  name = "jit-tier1-services"
-
-  policy = <<-EOT
-    path "homelab/data/docker/plex" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/docker/radarr" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/docker/sonarr" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/docker/ombi" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/docker/nzbget" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/docker/deluge" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/docker/tautulli" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/docker/prowlarr" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/mqtt/mosquitto" {
-      capabilities = ["read"]
-    }
-  EOT
-}
-
-# =============================================================================
-# Policy: jit-tier2-infra (being retired)
-# =============================================================================
-# As jit-tier1-services, for the tier-2 static resources.
-
-resource "vault_policy" "jit_tier2_infra" {
-  name = "jit-tier2-infra"
-
-  policy = <<-EOT
-    path "homelab/data/infrastructure/pihole" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/infrastructure/ipmi" {
-      capabilities = ["read"]
-    }
-  EOT
-}
-
-# =============================================================================
 # Policy: ha-config-deploy
 # =============================================================================
 # CI of the private Home Assistant config repo (JWT roles in roles.tf).
