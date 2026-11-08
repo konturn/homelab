@@ -1,0 +1,43 @@
+# Local-model shadow of the imessage-check job (docs/llm-shadow.md).
+# Code under /usr/local/lib, records under the data dir; both root-only.
+
+- name: Create the llm-shadow directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  loop:
+    - "{{ llm_shadow_install_dir }}"
+    - "{{ llm_shadow_data_dir }}"
+
+- name: Install the llm-shadow harness
+  ansible.builtin.copy:
+    src: llm_shadow.py
+    dest: "{{ llm_shadow_install_dir }}/llm_shadow.py"
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install the llm-shadow units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - llm-shadow.service
+    - llm-shadow.timer
+  notify: Reload systemd for llm-shadow
+
+- name: Flush handlers (units must be loaded before the timer is changed)
+  ansible.builtin.meta: flush_handlers
+
+- name: Set the llm-shadow timer state
+  ansible.builtin.systemd:
+    name: llm-shadow.timer
+    state: "{{ 'started' if llm_shadow_enabled | bool else 'stopped' }}"
+    enabled: "{{ llm_shadow_enabled | bool }}"
+  when: not ansible_check_mode  # unit files are not written in check mode
