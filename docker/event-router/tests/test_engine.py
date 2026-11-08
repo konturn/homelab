@@ -5,6 +5,7 @@ import os
 import unittest
 
 from router.engine import Engine
+from router.events import Event
 
 from .helpers import CONFIG, PLAYBOOKS, World, event
 
@@ -52,6 +53,21 @@ class TestHappyPath(Base):
         self.e.ingest(event("mqtt"))
         self.e.step()
         self.assertEqual(status(self.w, "mqtt"), "escalated")
+        self.assertEqual(self.w.executor.calls, [])
+
+    def test_ephemeral_containers_are_never_restarted(self):
+        # 2026-11-08: restart-once matched an unhealthy gitlab-runner build
+        # container and decided to run. Throwaway containers are denied.
+        for name in ("runner-abcd1234-project-4-concurrent-3-0123456789abcdef-build", "canary-web", "e2e-tasky"):
+            fp = f"grafana:{name}"
+            self.e.ingest(Event(source="grafana", kind="alert", fp=fp, status="firing",
+                                rule_uid="container-health-failure", alertname="health",
+                                labels={"container_name": name, "alertname": "health"}))
+            self.run_steps()
+            self.assertEqual(self.e.store.latest_for_fp(fp)["status"], "escalated")
+            d = [d for d in self.w.decisions() if d.get("decision") == "denied"][-1]
+            self.assertIn("ephemeral container", d["reason"])
+            self.assertIn(name, d["reason"])
         self.assertEqual(self.w.executor.calls, [])
 
     def test_page_class_pages_even_in_maintenance(self):

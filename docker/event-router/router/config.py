@@ -43,6 +43,11 @@ HARD_DENIED_ACTIONS = (
 # router itself and the socket proxy. config.yml's restart_denylist must
 # contain at least these.
 HARD_DENIED_TARGETS = ("gitlab", "vault", "pihole", "event-router", "docker-socket-proxy")
+# Throwaway containers, never restarted by any playbook: gitlab-runner's
+# docker executor (runner-<token>-project-N-concurrent-M-...-build) and test
+# containers. Restarting one is meaningless at best and can wedge a CI job.
+# Glob patterns; the executor has the same list.
+EPHEMERAL_TARGETS = ("runner-*", "canary-*", "e2e-*")
 
 TARGET_LABELS = ("container_name", "container")   # labels a target may come from
 SOURCES = ("grafana", "reconciler", "gitlab")
@@ -58,6 +63,14 @@ VERIFY_KINDS = ("alert_resolved", "ci_job_finished", "ci_job_succeeded")
 # in this span (compose recreates exactly the services a deploy changed).
 PRECONDITIONS = ("no_deploy_touching",)
 _NAME = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,62}$")
+
+
+def ephemeral(name):
+    """The EPHEMERAL_TARGETS pattern a container name matches, or None."""
+    for pattern in EPHEMERAL_TARGETS:
+        if fnmatch.fnmatchcase(name or "", pattern):
+            return pattern
+    return None
 
 
 class ConfigError(ValueError):
@@ -275,6 +288,8 @@ class Playbook:
                 raise ConfigError(f"{where}: target must be a container name")
             if self.target in HARD_DENIED_TARGETS:
                 raise ConfigError(f"{where}: target {self.target} is hard-denied")
+            if self.target and ephemeral(self.target):
+                raise ConfigError(f"{where}: target {self.target} is an ephemeral container")
         if self.action in JOB_KINDS:
             kinds = JOB_KINDS[self.action]
             if self.target_event != "job_id" or self.match_kind not in kinds:

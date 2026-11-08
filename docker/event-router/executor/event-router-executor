@@ -29,6 +29,7 @@ Python standard library plus PyYAML (python3-yaml on the host).
 """
 
 import fcntl
+import fnmatch
 import json
 import os
 import re
@@ -52,6 +53,10 @@ CI_ACTIONS = ("cancel_ci_job", "retry_ci_job")
 SYSTEM_FAILURES = ("runner_system_failure", "stuck_or_timeout_failure", "api_failure",
                    "scheduler_failure", "data_integrity_failure")
 HARD_DENIED_TARGETS = ("gitlab", "vault", "pihole", "event-router", "docker-socket-proxy")
+# Throwaway containers (gitlab-runner docker executor builds, canaries, e2e
+# runs): never restarted, whatever the playbook says. Same list as the
+# router's EPHEMERAL_TARGETS (tests/test_executor.py checks).
+EPHEMERAL_TARGETS = ("runner-*", "canary-*", "e2e-*")
 NAME = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,62}$")
 INCIDENT = re.compile(r"^inc-[0-9a-f]{12}$")
 PLAYBOOK = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,62}$")
@@ -280,6 +285,8 @@ def check_request(req):
         raise Refused("not_allowed", "bad playbook id")
     if action == "restart_container" and (not NAME.match(target) or target in HARD_DENIED_TARGETS):
         raise Refused("not_allowed", f"target {target!r} is not allowed")
+    if action == "restart_container" and any(fnmatch.fnmatchcase(target, p) for p in EPHEMERAL_TARGETS):
+        raise Refused("not_allowed", f"target {target!r} is an ephemeral container (CI runner or test)")
     if action in CI_ACTIONS and not JOB_ID.match(target):
         raise Refused("not_allowed", "target must be a job id")
     return action, target, inc, pb

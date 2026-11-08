@@ -37,7 +37,7 @@ from datetime import datetime, timedelta
 
 from . import maint_text, modes, outcomes
 from . import suppressions as supp
-from .config import CI_ACTIONS, digest_only, match_playbook, page_class
+from .config import CI_ACTIONS, digest_only, ephemeral, match_playbook, page_class
 from .events import Event
 from .shared import SharedState
 from .store import ACTIVE, TERMINAL
@@ -380,6 +380,9 @@ class Engine:
         target = inc["target"]
         if not target:
             return self._forward(inc, "escalated", reason="no valid target in the event")
+        if pb.action == "restart_container" and ephemeral(target):
+            return self._forward(inc, "denied", reason=f"{target} is an ephemeral container "
+                                 f"({ephemeral(target)}: CI runner or test), never a restart target")
         if target in self.cfg["restart_denylist"] and pb.action == "restart_container":
             return self._forward(inc, "denied", reason=f"{target} is on the restart denylist")
         lim = pb.limits
