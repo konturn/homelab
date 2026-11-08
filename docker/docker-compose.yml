@@ -1230,6 +1230,11 @@ services:
       - JIT_API_KEY={{ vault_jit_api_key | replace("$", "$$") }}
       - GITLAB_URL=https://gitlab.lab.nkontur.com
       - GITLAB_ADMIN_TOKEN={{ vault_jit_gitlab_admin_token | replace("$", "$$") }}
+      # resource gitlab-moltbot: 1h impersonation tokens for the agent's own
+      # GitLab user, auto-approved (tier 1) and revoked after the TTL.
+      - GITLAB_AGENT_ADMIN_TOKEN={{ vault_jit_gitlab_admin_token | replace("$", "$$") }}
+      - GITLAB_AGENT_USER=moltbot
+      - GITLAB_AGENT_SCOPES=api,read_api,read_repository,write_repository
       - SSH_VAULT_PATH=ssh-client-signer
       - TAILSCALE_API_URL=https://api.tailscale.com
       - TELEGRAM_WEBHOOK_URL=https://jit-webhook.nkontur.com/telegram/webhook
@@ -2583,6 +2588,7 @@ services:
       - {{ docker_persistent_data_path }}/chromium-browser/uploads:/uploads
       - {{ docker_persistent_data_path }}/openclaw/entrypoint-wrapper.sh:/usr/local/bin/entrypoint-wrapper.sh:ro
       - {{ docker_persistent_data_path }}/openclaw/git-credential-gitlab:/usr/local/bin/git-credential-gitlab:ro
+      - {{ docker_persistent_data_path }}/openclaw/jit-gitlab-token:/usr/local/bin/jit-gitlab-token:ro
     entrypoint: ["entrypoint-wrapper.sh"]
     command: ["node", "/app/dist/index.js", "gateway", "--port", "18789"]
 

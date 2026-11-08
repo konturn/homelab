@@ -51,6 +51,12 @@ type Config struct {
 	// GitLab default project ID for access token creation (default: "4")
 	GitLabProjectID string
 
+	// GitLab agent tokens (resource "gitlab-moltbot"): short-lived impersonation
+	// tokens for the agent's own GitLab user. Needs an administrator token.
+	GitLabAgentUser       string
+	GitLabAgentAdminToken string
+	GitLabAgentScopes     []string
+
 	// Tailscale API URL (enables dynamic OAuth token backend)
 	TailscaleAPIURL string
 
@@ -119,6 +125,10 @@ func Load() (*Config, error) {
 		GitLabAdminToken: os.Getenv("GITLAB_ADMIN_TOKEN"),
 		GitLabProjectID:  getEnvOrEmpty("GITLAB_PROJECT_ID", "4"),
 
+		GitLabAgentUser:       getEnvOrEmpty("GITLAB_AGENT_USER", "moltbot"),
+		GitLabAgentAdminToken: os.Getenv("GITLAB_AGENT_ADMIN_TOKEN"),
+		GitLabAgentScopes:     splitList(getEnv("GITLAB_AGENT_SCOPES", "api,read_api,read_repository,write_repository")),
+
 		TailscaleAPIURL: getEnvOrEmpty("TAILSCALE_API_URL", "https://api.tailscale.com"),
 		PaperlessURL:    getEnvOrEmpty("PAPERLESS_URL", ""),
 		SSHVaultPath:    getEnv("SSH_VAULT_PATH", "ssh-client-signer"),
@@ -128,6 +138,9 @@ func Load() (*Config, error) {
 			"ssh-nkontur":  8 * time.Hour,
 			"ssh-konoahko": 8 * time.Hour,
 			"ssh-konturn":  8 * time.Hour,
+			// Auto-approved (tier 1) but audited; revoked by the backend's
+			// sweeper once the hour is up.
+			"gitlab-moltbot": time.Hour,
 		},
 	}
 
@@ -209,4 +222,15 @@ func getEnvOrEmpty(key, defaultVal string) string {
 		return v
 	}
 	return defaultVal
+}
+
+// splitList splits a comma-separated list, dropping empty entries.
+func splitList(v string) []string {
+	var out []string
+	for _, part := range strings.Split(v, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }

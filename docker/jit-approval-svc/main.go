@@ -86,6 +86,14 @@ func main() {
 		cfg.GoogleTokenURL,
 	)
 
+	// The agent's own GitLab identity: short-lived impersonation tokens,
+	// auto-approved at tier 1 and revoked by the sweeper after their TTL.
+	if cfg.GitLabURL != "" && cfg.GitLabAgentAdminToken != "" && cfg.GitLabAgentUser != "" {
+		gl := backend.NewGitLabAgentBackend(cfg.GitLabURL, cfg.GitLabAgentAdminToken, cfg.GitLabAgentUser, cfg.GitLabAgentScopes)
+		backends.Register("gitlab-"+cfg.GitLabAgentUser, gl)
+		gl.StartSweeper(time.Minute, nil)
+	}
+
 	// Initialize handler
 	h := handler.New(cfg, reqStore, vaultClient, tgClient, backends)
 
