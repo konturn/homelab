@@ -65,6 +65,18 @@ for bin in ffprobe python3 flock curl; do
     command -v "$bin" >/dev/null 2>&1 || { echo "ERROR: $bin not found in PATH."; exit 1; }
 done
 
+# makemkvcon reads its registration key from $HOME/.MakeMKV/settings.conf.
+# Without it (e.g. under systemd-run, which sets no HOME) an expired build
+# refuses every disc, which would mark every ISO as failed.
+export HOME="${HOME:-/root}"
+# Capture first: grep -q in a pipeline would SIGPIPE makemkvcon and, with
+# pipefail, hide the match.
+MKV_PREFLIGHT=$("$MKVCON" -r info disc:9999 2>&1)
+if grep -q '^MSG:5021,' <<<"$MKV_PREFLIGHT"; then
+    echo "iso-convert summary: aborted, makemkvcon refuses to run (MSG 5021: version too old / no valid registration key in $HOME/.MakeMKV/settings.conf)"
+    exit 1
+fi
+
 mkdir -p "$RUN_DIR/locks" "$WORK_ROOT"
 chmod 700 "$RUN_DIR"
 
@@ -299,7 +311,11 @@ process_iso() {
 
         fail() {
             log "  FAILED: $1"
-            printf '%s %s\n' "$(date -Is)" "$1" >"$failed_marker"
+            # A MakeMKV licensing/version refusal says nothing about the ISO;
+            # do not mark it, so it is retried once MakeMKV is fixed.
+            if ! grep -qs '^MSG:5021,' "$info" "$riplog"; then
+                printf '%s %s\n' "$(date -Is)" "$1" >"$failed_marker"
+            fi
             echo "FAIL" >>"$RESULTS"
             exit 0
         }
