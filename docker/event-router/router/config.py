@@ -16,10 +16,18 @@ from .modes import MODES
 from .util import parse_duration
 
 # Action types the executor implements (4.5). Anything else is rejected; the
-# rest of the allowlist (restart_systemd_unit, retry_ci_job,
-# run_pipeline_schedule, collect, cycle_pdu_outlet) is added with the
-# executor support for it, never here alone.
-ALLOWED_ACTIONS = ("restart_container", "cancel_ci_job")
+# rest of the allowlist (restart_systemd_unit, run_pipeline_schedule,
+# collect, cycle_pdu_outlet) is added with the executor support for it, never
+# here alone.
+ALLOWED_ACTIONS = ("restart_container", "cancel_ci_job", "retry_ci_job")
+# CI actions: they act on GitLab jobs, not on the host, so the deploy lock
+# (S7) does not hold them back: cancelling frees the lock, retrying queues.
+CI_ACTIONS = ("cancel_ci_job", "retry_ci_job")
+# What an outcome record's `fix` may name (8.2): the whole allowlist of 4.5,
+# including types no playbook can use yet, so the agent can say "this would
+# have been a restart_systemd_unit" and the review can propose the executor
+# support for it.
+OUTCOME_FIX_ACTIONS = ALLOWED_ACTIONS + ("restart_systemd_unit", "run_pipeline_schedule", "collect")
 
 # Hard-denied (4.5): not expressible, whatever the data says. Kept in code,
 # not in config, so no learned change can touch them (8.3).
@@ -37,13 +45,18 @@ HARD_DENIED_ACTIONS = (
 HARD_DENIED_TARGETS = ("gitlab", "vault", "pihole", "event-router", "docker-socket-proxy")
 
 TARGET_LABELS = ("container_name", "container")   # labels a target may come from
-SOURCES = ("grafana", "reconciler")
-KINDS = ("alert", "ci_orphan")
+SOURCES = ("grafana", "reconciler", "gitlab")
+KINDS = ("alert", "ci_orphan", "ci_orphan_cancelled", "pipeline_failed", "ci_job_failed")
+# Kinds whose action target is a job id taken from the event.
+JOB_KINDS = {"cancel_ci_job": ("ci_orphan",), "retry_ci_job": ("ci_job_failed", "ci_orphan_cancelled")}
 PB_KEYS = {"id", "description", "mode", "enabled", "match", "node",
            "preconditions", "action", "verify", "limits", "on_success",
            "on_failure"}
-VERIFY_KINDS = ("alert_resolved", "ci_job_finished")
-PRECONDITIONS = ("no_recent_deploy",)
+VERIFY_KINDS = ("alert_resolved", "ci_job_finished", "ci_job_succeeded")
+# Checked by the executor on the host, where the facts are (14, phase 3):
+# no_deploy_touching: the target container was not (re)created by a deploy
+# in this span (compose recreates exactly the services a deploy changed).
+PRECONDITIONS = ("no_deploy_touching",)
 _NAME = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,62}$")
 
 
@@ -67,7 +80,8 @@ def load_config(path):
 def parse_config(raw):
     known = {"mode", "limits", "correlation", "maintenance", "quiet_hours",
              "reconcile_interval", "step_interval", "restart_denylist",
-             "page_classes", "ci_orphan", "deploy_jobs", "verify_grace"}
+             "page_classes", "ci_orphan", "deploy_jobs", "verify_grace",
+             "openclaw", "gitlab_events", "digest_only"}
     unknown = set(raw) - known
     if unknown:
         raise ConfigError(f"config: unknown keys {sorted(unknown)}")
@@ -91,6 +105,13 @@ def parse_config(raw):
         "ci_orphan": raw.get("ci_orphan") or {},
         "deploy_jobs": list(raw.get("deploy_jobs") or []),
     }
+    cfg["openclaw"] = _openclaw(raw.get("openclaw") or {})
+    cfg["gitlab_events"] = _gitlab_events(raw.get("gitlab_events") or {})
+    cfg["digest_only"] = [_selector(r, f"digest_only[{i}]", extra={"reason"})
+                          for i, r in enumerate(raw.get("digest_only") or [])]
+    for i, r in enumerate(cfg["digest_only"]):
+        if not r.get("reason"):
+            raise ConfigError(f"digest_only[{i}]: needs a reason")
     missing = set(HARD_DENIED_TARGETS) - set(cfg["restart_denylist"])
     if missing:
         raise ConfigError(f"config: restart_denylist must include {sorted(missing)}")
@@ -107,6 +128,58 @@ def parse_config(raw):
         "grace": _dur(cfg["ci_orphan"].get("grace", "5m"), "ci_orphan.grace"),
     }
     return cfg
+
+
+def _openclaw(raw):
+    """Residue forwarding to OpenClaw (phase 3, doc 6.1 and 7.4). With
+    `forward: false` the router behaves as in phases 1-2: OpenClaw gets every
+    alert straight from Grafana and the router only records."""
+    keys = {"forward", "url", "max_age", "jit_after", "ack_window"}
+    if set(raw) - keys:
+        raise ConfigError(f"openclaw: unknown keys {sorted(set(raw) - keys)}")
+    if not isinstance(raw.get("forward", False), bool):
+        raise ConfigError("openclaw.forward must be true or false")
+    return {"forward": raw.get("forward", False),
+            "url": str(raw.get("url") or "http://openclaw-gateway:18789/hooks/event-router"),
+            "max_age": _dur(raw.get("max_age", "6h"), "openclaw.max_age"),
+            "jit_after": _dur(raw.get("jit_after", "2m"), "openclaw.jit_after"),
+            "ack_window": _dur(raw.get("ack_window", "6h"), "openclaw.ack_window")}
+
+
+def _gitlab_events(raw):
+    keys = {"projects", "branch"}
+    if set(raw) - keys:
+        raise ConfigError(f"gitlab_events: unknown keys {sorted(set(raw) - keys)}")
+    projects = raw.get("projects") or [4]
+    if not all(isinstance(p, int) and not isinstance(p, bool) for p in projects):
+        raise ConfigError("gitlab_events.projects must be project ids")
+    return {"projects": list(projects), "branch": str(raw.get("branch") or "main")}
+
+
+def _selector(raw, what, extra=()):
+    """{source, kind, rule_uid, labels}: exact values, as in playbook matches."""
+    keys = {"source", "kind", "rule_uid", "labels"} | set(extra)
+    if not isinstance(raw, dict) or set(raw) - keys:
+        raise ConfigError(f"{what}: takes {sorted(keys)}")
+    if raw.get("source") not in SOURCES:
+        raise ConfigError(f"{what}: source must be one of {SOURCES}")
+    if raw.get("kind", "alert") not in KINDS:
+        raise ConfigError(f"{what}: kind must be one of {KINDS}")
+    labels = raw.get("labels") or {}
+    if not isinstance(labels, dict) or not all(isinstance(k, str) and isinstance(v, str)
+                                                for k, v in labels.items()):
+        raise ConfigError(f"{what}: labels must map names to exact string values")
+    if raw.get("source") == "grafana" and not raw.get("rule_uid"):
+        raise ConfigError(f"{what}: a grafana selector needs rule_uid")
+    return dict(raw, kind=raw.get("kind", "alert"), labels=labels, rule_uid=raw.get("rule_uid", ""))
+
+
+def selector_matches(sel, ev):
+    if ev.source != sel["source"] or ev.kind != sel["kind"]:
+        return False
+    if sel["rule_uid"] and ev.rule_uid != sel["rule_uid"]:
+        return False
+    return all(ev.labels.get(k) == v for k, v in sel["labels"].items())
 
 
 def _limits(raw, what, default=None):
@@ -176,6 +249,8 @@ class Playbook:
                 raise ConfigError(f"{where}: preconditions take only {PRECONDITIONS}")
             k, v = next(iter(p.items()))
             self.preconditions.append((k, _dur(v, f"{where}: {k}")))
+        if self.preconditions and (raw.get("action") or {}).get("type") != "restart_container":
+            raise ConfigError(f"{where}: no_deploy_touching applies to restart_container")
 
         a = raw.get("action")
         if not isinstance(a, dict) or set(a) - {"type", "target", "target_from_label", "target_from_event"}:
@@ -200,14 +275,21 @@ class Playbook:
                 raise ConfigError(f"{where}: target must be a container name")
             if self.target in HARD_DENIED_TARGETS:
                 raise ConfigError(f"{where}: target {self.target} is hard-denied")
-        if self.action == "cancel_ci_job":
-            if self.target_event != "job_id" or self.match_kind != "ci_orphan":
-                raise ConfigError(f"{where}: cancel_ci_job takes target_from_event: job_id and matches kind ci_orphan")
+        if self.action in JOB_KINDS:
+            kinds = JOB_KINDS[self.action]
+            if self.target_event != "job_id" or self.match_kind not in kinds:
+                raise ConfigError(f"{where}: {self.action} takes target_from_event: job_id and matches kind "
+                                  f"{' or '.join(kinds)}")
+        elif self.target_event:
+            raise ConfigError(f"{where}: target_from_event is only for CI job actions")
 
         v = raw.get("verify")
         if not isinstance(v, dict) or len(v) != 1 or next(iter(v)) not in VERIFY_KINDS:
             raise ConfigError(f"{where}: verify is mandatory, one of {VERIFY_KINDS}")
         self.verify_kind, vt = next(iter(v.items()))
+        if (self.verify_kind == "alert_resolved") != (self.match_source == "grafana"):
+            raise ConfigError(f"{where}: alert_resolved verifies grafana alerts; CI playbooks use "
+                              f"ci_job_finished or ci_job_succeeded")
         self.verify_within = _dur(vt, f"{where}: verify")
         if "limits" not in raw:
             raise ConfigError(f"{where}: limits are mandatory")
@@ -329,6 +411,16 @@ def validate(cfg, pbs, graph, rules=None, services=None):
             for r in cls.get("rules") or []:
                 if r["rule_uid"] not in rules:
                     errs.append(f"page_classes.{name}: rule_uid {r['rule_uid']} is not an alert rule")
+    for sel in cfg["digest_only"]:
+        if rules is not None and sel["rule_uid"] and sel["rule_uid"] not in rules:
+            errs.append(f"digest_only: rule_uid {sel['rule_uid']} is not an alert rule")
+        if sel["rule_uid"] in page_rule_uids(cfg):
+            errs.append(f"digest_only: {sel['rule_uid']} is a page class; it cannot be digest-only")
+        hits = [p.id for p in pbs if p.match_source == sel["source"] and p.match_kind == sel["kind"]
+                and p.match_rule == sel["rule_uid"]
+                and all(p.match_labels.get(k, v) == v for k, v in sel["labels"].items())]
+        if hits:
+            errs.append(f"digest_only {sel}: overlaps playbooks {hits}")
     for pattern in cfg["deploy_jobs"]:
         if not isinstance(pattern, str) or not pattern:
             errs.append("deploy_jobs: entries must be job names")
@@ -344,3 +436,14 @@ def page_class(cfg, ev):
                     for k, v in (r.get("labels") or {}).items()):
                 return name, bool(cls.get("urgent"))
     return None, False
+
+
+def page_rule_uids(cfg):
+    return {r["rule_uid"] for cls in cfg["page_classes"].values() for r in cls.get("rules") or []}
+
+
+def digest_only(cfg, ev):
+    for sel in cfg["digest_only"]:
+        if selector_matches(sel, ev):
+            return sel
+    return None

@@ -2,7 +2,7 @@
 
   python -m router serve
   python -m router validate --config config.yml --playbooks playbooks \
-      --deps ../../inventory/dependencies.yml [--rules DIR] [--compose FILE]
+      --deps ../../inventory/dependencies.yml [--rules DIR] [--compose FILE] [--suppressions FILE]
   python -m router maint open --scope zigbee2mqtt,mqtt --for 2h --reason "..." [--by NAME]
   python -m router maint close <id> | maint list
   python -m router mode show | mode set notify-only|shadow|clear
@@ -20,6 +20,7 @@ import sys
 import tempfile
 import time
 
+from . import suppressions
 from .config import (ConfigError, compose_services, load_config, load_playbooks,
                      rule_uids, validate)
 from .deps import Graph
@@ -35,26 +36,31 @@ ENV = os.environ.get
 def _paths():
     return dict(config=ENV("CONFIG", "/app/config.yml"), playbooks=ENV("PLAYBOOKS", "/app/playbooks"),
                 deps=ENV("DEPENDENCIES", "/config/dependencies.yml"), db=ENV("DB", "/data/router.db"),
-                shared=ENV("SHARED_DIR", "/data/shared"), override=ENV("HOST_OVERRIDE", "/override/mode"))
+                shared=ENV("SHARED_DIR", "/data/shared"), override=ENV("HOST_OVERRIDE", "/override/mode"),
+                suppressions=ENV("SUPPRESSIONS", "/app/suppressions.yml"))
 
 
 def build_engine(p, with_clients=True, out=None):
-    from .clients import ExecutorClient, GitLab
+    from .clients import ExecutorClient, GitLab, OpenClaw
     cfg = load_config(p["config"])
     pbs = load_playbooks(p["playbooks"])
     graph = Graph.load(p["deps"])
+    sups = suppressions.load(p["suppressions"])
     errs = validate(cfg, pbs, graph)
     if errs:
         raise ConfigError("; ".join(errs))
-    executor = gitlab = None
+    executor = gitlab = openclaw = None
     if with_clients:
         sock = ENV("EXECUTOR_SOCKET", "/run/event-router/executor.sock")
         executor = ExecutorClient(sock) if os.path.exists(sock) else None
         if ENV("GITLAB_TOKEN"):
             gitlab = GitLab(ENV("GITLAB_URL", "https://gitlab.lab.nkontur.com"), ENV("GITLAB_TOKEN"),
                             cfg["ci_orphan"]["project_id"])
+        if ENV("OPENCLAW_HOOKS_TOKEN"):
+            openclaw = OpenClaw(cfg["openclaw"]["url"], ENV("OPENCLAW_HOOKS_TOKEN"))
     return Engine(cfg, pbs, graph, Store(p["db"]), Clock(), executor=executor, gitlab=gitlab,
-                  host_override_path=p["override"], shared=SharedState(p["shared"]), out=out)
+                  host_override_path=p["override"], shared=SharedState(p["shared"]), out=out,
+                  openclaw=openclaw, suppressions=sups)
 
 
 def cmd_serve(_args):
@@ -62,9 +68,12 @@ def cmd_serve(_args):
     p = _paths()
     eng = build_engine(p)
     state = State(eng, ENV("GRAFANA_TOKEN"), ENV("CONTROL_TOKEN"),
-                  [c.strip() for c in (ENV("ALLOWED_CLIENTS") or "").split(",")])
+                  [c.strip() for c in (ENV("ALLOWED_CLIENTS") or "").split(",")],
+                  gitlab_token=ENV("GITLAB_WEBHOOK_TOKEN"))
     serve(state, int(ENV("PORT", "8080")))
     eng._log({"decision": "started", "executor": bool(eng.executor), "gitlab": bool(eng.gitlab),
+              "openclaw": bool(eng.openclaw), "forwarding": eng.forwarding,
+              "suppressions": len(eng.suppressions),
               "playbooks": {pid: pb.mode for pid, pb in eng.playbooks.items()}})
     deps_mtime = os.stat(p["deps"]).st_mtime
     while True:
@@ -88,6 +97,13 @@ def cmd_validate(a):
         errs = validate(cfg, pbs, graph,
                         rules=rule_uids(a.rules) if a.rules else None,
                         services=compose_services(a.compose) if a.compose else None)
+        if a.suppressions:
+            sups = suppressions.load(a.suppressions)
+            errs += suppressions.validate(sups, cfg)
+            rules = rule_uids(a.rules) if a.rules else None
+            errs += [f"suppression {s['id']}: rule_uid {s['match']['rule_uid']} is not an alert rule"
+                     for s in sups if rules is not None and s["match"]["rule_uid"]
+                     and s["match"]["rule_uid"] not in rules]
     except (ConfigError, OSError) as e:
         errs = [str(e)]
     for e in errs:
@@ -162,6 +178,7 @@ def main(argv=None):
     v.add_argument("--deps", required=True)
     v.add_argument("--rules")
     v.add_argument("--compose")
+    v.add_argument("--suppressions")
     m = sub.add_parser("maint")
     m.add_argument("op", choices=["open", "close", "list"])
     m.add_argument("id", nargs="?")

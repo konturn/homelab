@@ -1,11 +1,21 @@
 """HTTP API.
 
   POST /grafana        Grafana webhook contact point (Bearer GRAFANA_TOKEN)
+  POST /gitlab         GitLab project webhook, pipeline and job events (X-Gitlab-Token)
   GET  /mode           effective mode and overrides            (Bearer CONTROL_TOKEN)
   GET  /maint          open windows                              (Bearer CONTROL_TOKEN)
   POST /maint          {"scope": [...], "duration": "2h", "reason": "...", "by": "..."}
   POST /maint/<id>/close
-  GET  /summary?days=7 weekly summary (CONTROL_TOKEN or an ALLOWED_CLIENTS address)
+  Read and report endpoints, CONTROL_TOKEN or an ALLOWED_CLIENTS address
+  (the OpenClaw gateway):
+  GET  /summary?days=7 weekly summary
+  GET  /decisions?days=7  raw decision log (routing review)
+  GET  /incident/<id>  incident, its decisions, forward and outcome
+  GET  /ack?fp=<grafana fingerprint>&status=firing|resolved
+                       does the router own this alert? (OpenClaw's Grafana route)
+  POST /outcome        OpenClaw's outcome record for an escalation (router/outcomes.py)
+  POST /maint/text     {"text": "/maint zwave_js 2h kernel update"} from Telegram,
+                       parsed strictly here (router/maint_text.py)
   GET  /healthz        worker alive and database readable
 
 Events are written to the SQLite inbox before the reply, so a restart never
@@ -21,17 +31,20 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from .events import BadPayload, from_grafana
+from .events import BadPayload, from_gitlab, from_grafana
+from .maint_text import BadCommand
+from .outcomes import BadOutcome
 from .util import parse_duration
 
 MAX_BODY = 1 << 20
 
 
 class State:
-    def __init__(self, engine, grafana_token, control_token, allowed_clients=()):
+    def __init__(self, engine, grafana_token, control_token, allowed_clients=(), gitlab_token=""):
         self.engine = engine
         self.grafana_token = grafana_token or ""
         self.control_token = control_token or ""
+        self.gitlab_token = gitlab_token or ""
         self.allowed = [ipaddress.ip_network(c) for c in allowed_clients if c]
         self.heartbeat = time.time()
 
@@ -83,13 +96,26 @@ def make_handler(state):
                 except Exception:
                     ok = False
                 return self._send(200 if ok else 503, {"ok": ok})
-            if u.path == "/summary":
+            q = parse_qs(u.query)
+            if u.path in ("/summary", "/decisions", "/ack") or u.path.startswith("/incident/"):
                 if not (self._control() or self._client_allowed()):
                     return self._send(401, {"error": "unauthorized"})
+                if u.path == "/ack":
+                    fp = (q.get("fp") or [""])[0]
+                    st = (q.get("status") or ["firing"])[0]
+                    if not re.match(r"^[0-9a-f]{1,32}$", fp):
+                        return self._send(400, {"error": "fp must be a Grafana fingerprint"})
+                    return self._send(200, {"accepted": eng.ack(f"grafana:{fp}", st)})
+                if u.path.startswith("/incident/"):
+                    view = eng.incident_view(u.path[len("/incident/"):])
+                    return self._send(200 if view else 404, view or {"error": "no such incident"})
                 try:
-                    days = max(1, min(90, int((parse_qs(u.query).get("days") or ["7"])[0])))
+                    days = max(1, min(90, int((q.get("days") or ["7"])[0])))
                 except ValueError:
                     return self._send(400, {"error": "days must be an integer"})
+                if u.path == "/decisions":
+                    rows = eng.store.decisions_since(eng.clock.now() - days * 86400)
+                    return self._send(200, {"decisions": rows[-5000:], "truncated": len(rows) > 5000})
                 return self._send(200, eng.summary(days))
             if not self._control():
                 return self._send(401, {"error": "unauthorized"})
@@ -111,6 +137,30 @@ def make_handler(state):
                     events = from_grafana(self._body())
                     eng.store.inbox_put(time.time(), [e.to_dict() for e in events])
                     return self._send(200, {"accepted": len(events)})
+                if u.path == "/gitlab":
+                    tok = self.headers.get("X-Gitlab-Token", "")
+                    if not state.gitlab_token or not hmac.compare_digest(tok.encode(), state.gitlab_token.encode()):
+                        return self._send(401, {"error": "unauthorized"})
+                    ge = eng.cfg["gitlab_events"]
+                    events = from_gitlab(self._body(), ge["projects"], ge["branch"])
+                    if events:
+                        eng.store.inbox_put(time.time(), [e.to_dict() for e in events])
+                    return self._send(200, {"accepted": len(events)})
+                if u.path in ("/outcome", "/maint/text"):
+                    if not (self._control() or self._client_allowed()):
+                        return self._send(401, {"error": "unauthorized"})
+                    body = self._body()
+                    if u.path == "/outcome":
+                        try:
+                            rec = eng.record_outcome(body)
+                        except BadOutcome as e:
+                            return self._send(400, {"error": str(e)})
+                        return self._send(200, {"recorded": rec})
+                    try:
+                        reply = eng.maint_command(str(body.get("text") or ""), by="telegram")
+                    except (BadCommand, ValueError) as e:
+                        return self._send(400, {"reply": str(e)})
+                    return self._send(200, {"reply": reply})
                 if not self._control():
                     return self._send(401, {"error": "unauthorized"})
                 body = self._body()

@@ -85,6 +85,8 @@ vault_secret_paths:
       vault_event_router_gitlab_read_token: "gitlab_read_token"
       # host executor only (cancel orphaned deploy jobs; Developer, api)
       vault_event_router_executor_gitlab_token: "executor_gitlab_token"
+      # GitLab project webhook secret (X-Gitlab-Token), pipeline and job events
+      vault_event_router_gitlab_webhook_token: "gitlab_webhook_token"
 
   # Docker service secrets
   - path: "docker/audioserve"

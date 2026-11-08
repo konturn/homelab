@@ -3,6 +3,18 @@
 {%- set rcfg = lookup('file', lookup('env', 'CI_PROJECT_DIR') ~ '/docker/event-router/config.yml') | from_yaml -%}
 {%- set deps_text = lookup('file', lookup('env', 'CI_PROJECT_DIR') ~ '/inventory/dependencies.yml') -%}
 {%- set names = deps_text | regex_findall('\\{\\{\\s*([a-z_0-9]+)\\s*\\}\\}') | unique -%}
+{#- The executor's own playbook list (doc 14, phase 3): the router passes a
+    playbook id with every request and the executor acts only for an active
+    playbook listed here, with that playbook's action and fixed target. -#}
+{%- set pbs = {} -%}
+{%- for f in query('fileglob', lookup('env', 'CI_PROJECT_DIR') ~ '/docker/event-router/playbooks/*.yml') | sort -%}
+{%-   set pb = lookup('file', f) | from_yaml -%}
+{%-   set pre = {} -%}
+{%-   for c in pb.preconditions | default([]) -%}{%- set _ = pre.update(c) -%}{%- endfor -%}
+{%-   set _ = pbs.update({pb.id: {'mode': ('disabled' if (pb.enabled | default(true)) is false else pb.mode | default('shadow')), 'action': pb.action.type,
+                                  'target': pb.action.target | default(none),
+                                  'no_deploy_touching': pre.no_deploy_touching | default(none)}}) -%}
+{%- endfor -%}
 {%- set probe_vars = {} -%}
 {%- for n in names if n != 'var' -%}
 {%-   set _ = probe_vars.update({n: lookup('vars', n, default='')}) -%}
@@ -18,9 +30,11 @@
   'dependencies_file': event_router_data_dir ~ '/config/dependencies.yml',
   'vars': probe_vars,
   'restart_denylist': rcfg.restart_denylist,
+  'playbooks': pbs,
   'limits': {'per_target_max': 2, 'per_target_window': 21600,
              'global_per_hour': rcfg.limits.global_actions_per_hour | int},
   'gitlab': {'url': 'https://gitlab.lab.nkontur.com', 'project_id': rcfg.ci_orphan.project_id | int,
+             'branch': rcfg.gitlab_events.branch | default('main'),
              'deploy_jobs': rcfg.deploy_jobs, 'orphan_jobs': rcfg.ci_orphan.jobs,
              'grace': rcfg.ci_orphan.grace},
 } | to_nice_json }}

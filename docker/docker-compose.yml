@@ -1354,7 +1354,11 @@ services:
       - CONTROL_TOKEN={{ vault_event_router_control_token | trim | replace("$", "$$") }}
       - GITLAB_URL=https://gitlab.lab.nkontur.com
       - GITLAB_TOKEN={{ vault_event_router_gitlab_read_token | trim | replace("$", "$$") }}
-      # /summary without the control token: OpenClaw gateway and localhost.
+      - GITLAB_WEBHOOK_TOKEN={{ vault_event_router_gitlab_webhook_token | trim | replace("$", "$$") }}
+      # Residue to OpenClaw /hooks/event-router (phase 3): the gateway hooks token.
+      - OPENCLAW_HOOKS_TOKEN={{ vault_openclaw_hooks_token | trim | replace("$", "$$") }}
+      # Without the control token: /summary, /decisions, /incident, /ack,
+      # /outcome and /maint/text. The OpenClaw gateway and localhost.
       - ALLOWED_CLIENTS={{ openclaw_gateway_ip }}/32,127.0.0.1/32
     logging:
       driver: json-file

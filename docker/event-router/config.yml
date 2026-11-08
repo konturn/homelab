@@ -21,6 +21,40 @@ maintenance:
 
 quiet_hours: {start: "23:00", end: "08:00", tz: America/New_York}   # decision 6
 
+# Residue to OpenClaw (phase 3; doc 6.1, 7.4). forward: false keeps phases
+# 1-2 behaviour: Grafana delivers every alert to OpenClaw itself and the
+# router only records. With forward: true the router queues residue and pages
+# for OpenClaw's /hooks/event-router, OpenClaw's Grafana route defers to the
+# router for every alert the router acknowledges (/ack), and an alert the
+# router never saw still reaches OpenClaw that way (L4).
+openclaw:
+  forward: false
+  url: http://openclaw-gateway:18789/hooks/event-router
+  max_age: 6h          # queued residue older than this goes to the digest instead
+  jit_after: 2m        # a page OpenClaw has not taken by then goes out through the JIT bot
+  ack_window: 6h       # > the event-router route's repeat_interval (4h)
+
+# GitLab webhook (POST /gitlab; routing table rows 9 and 10).
+gitlab_events:
+  projects: [4, 14]
+  branch: main
+
+# Handled by recording only: the decision log and the digest, never OpenClaw
+# (doc 6.1). Each needs a reason. Page classes cannot be listed here.
+digest_only:
+  - source: grafana
+    rule_uid: container-log-flood
+    labels: {container: zigbee2mqtt}
+    reason: >-
+      zigbee2mqtt's log volume swings with normal Zigbee work (OTA updates,
+      interviews, re-pairing); the 10x-baseline rule fires on routine activity
+  - source: gitlab
+    kind: pipeline_failed
+    labels: {handled_by: automerge-rollback}
+    reason: >-
+      only <host>:deploy-service jobs failed: the auto-merge sweep already
+      rolled back, opened an automerge-rollback issue and a revert MR, and mailed Noah
+
 reconcile_interval: 5m             # level-triggered checks (4.3)
 step_interval: 15s
 

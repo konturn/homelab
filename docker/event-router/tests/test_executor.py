@@ -44,6 +44,15 @@ class Env:
             "override_file": os.path.join(d, "mode"), "shared_dir": self.shared,
             "state_file": os.path.join(d, "state.json"), "jit_socket": os.path.join(d, "jit.sock"),
             "restart_denylist": ["gitlab", "vault", "pihole", "event-router", "docker-socket-proxy", "mosquitto"],
+            "playbooks": {
+                "zigbee-silence-restart": {"mode": "active", "action": "restart_container",
+                                           "target": "zigbee2mqtt", "no_deploy_touching": None},
+                "restart-once": {"mode": "active", "action": "restart_container", "target": None,
+                                 "no_deploy_touching": 7200},
+                "ci-orphan-cancel": {"mode": "active", "action": "cancel_ci_job", "target": None},
+                "ci-system-retry": {"mode": "active", "action": "retry_ci_job", "target": None},
+                "shadow-pb": {"mode": "shadow", "action": "restart_container", "target": None},
+            },
             "limits": {"per_target_max": 2, "per_target_window": 21600, "global_per_hour": 6},
             "gitlab": {"url": "https://gitlab.invalid", "project_id": 4, "deploy_jobs": ["router:deploy"],
                        "orphan_jobs": {"router:deploy": 2700}, "grace": 300},
@@ -64,6 +73,9 @@ class Env:
         X.probe = lambda spec: not (set(map(str, spec.values())) & self.down)
         X.deploy_running = lambda cfg: list(self.deploys)
         X.container_started = lambda name: 0
+        self.created = 0          # container creation time (epoch)
+        X.container_created = lambda name: self.created
+        self.newer_jobs = []
 
         class R:
             def __init__(self, out="", rc=0):
@@ -78,8 +90,10 @@ class Env:
 
         def gitlab(cfg, method, path):
             if method == "POST":
-                self.ran.append(("cancel", path))
-                return {}
+                self.ran.append(("retry" if path.endswith("/retry") else "cancel", path))
+                return {"id": 999} if path.endswith("/retry") else {}
+            if path.startswith("jobs?"):
+                return list(self.newer_jobs)
             return dict(self.job)
         X.gitlab = gitlab
 
@@ -87,8 +101,12 @@ class Env:
         with open(os.path.join(self.shared, "windows.json"), "w") as f:
             json.dump({"windows": windows}, f)
 
-    def req(self, action="restart_container", target="zigbee2mqtt", inc=INC):
-        return {"action_type": action, "target": target, "incident_id": inc}
+    def req(self, action="restart_container", target="zigbee2mqtt", inc=INC, playbook=None):
+        if playbook is None:
+            playbook = {"restart_container": "zigbee-silence-restart" if target == "zigbee2mqtt"
+                        else "restart-once", "cancel_ci_job": "ci-orphan-cancel",
+                        "retry_ci_job": "ci-system-retry"}.get(action, "restart-once")
+        return {"action_type": action, "target": target, "incident_id": inc, "playbook": playbook}
 
     def close(self):
         self.tmp.cleanup()
@@ -111,7 +129,7 @@ class TestExecutor(unittest.TestCase):
         self.assertEqual(cm.exception.why, why, cm.exception.detail)
 
     def test_restart(self):
-        self.assertEqual(self.handle(), "restarted zigbee2mqtt")
+        self.assertEqual(self.handle()["detail"], "restarted zigbee2mqtt")
         self.assertEqual(self.env.ran[0][:1], ("restart",))
 
     def test_same_lists_as_router(self):
@@ -160,7 +178,7 @@ class TestExecutor(unittest.TestCase):
 
     def test_cancel_orphan_ignores_deploy_lock(self):
         self.env.deploys = ["router:deploy"]
-        self.assertEqual(self.handle(action="cancel_ci_job", target="101"), "cancelled job 101")
+        self.assertEqual(self.handle(action="cancel_ci_job", target="101")["detail"], "cancelled job 101")
 
     def test_cancel_refuses_young_or_other_jobs(self):
         self.env.job = {"status": "running", "name": "router:deploy",
@@ -195,6 +213,65 @@ class TestExecutor(unittest.TestCase):
             self.assertEqual((pid, uid), (os.getpid(), os.getuid()))
 
 
+    # ---- playbook identity (phase 3) ------------------------------------------
+    def test_playbook_must_be_listed_active_and_match(self):
+        self.refused("not_allowed", playbook="no-such-playbook")
+        self.refused("not_allowed", playbook="shadow-pb", target="svc1")          # shadow never acts
+        self.refused("not_allowed", playbook="zigbee-silence-restart", target="svc1")  # fixed target
+        self.refused("not_allowed", playbook="ci-orphan-cancel")                  # wrong action
+        self.assertEqual(self.env.ran, [])
+
+    def test_assist_window_lets_only_listed_playbooks_through(self):
+        w = {"id": "maint-1", "scope": ["mosquitto"], "expires_at": self.now + 60, "mode": "assist",
+             "playbooks": ["zigbee-silence-restart"]}
+        self.env.write_windows([w])
+        self.handle()                                                              # listed
+        self.env.write_windows([dict(w, playbooks=["restart-once"])])
+        self.refused("maintenance", inc="inc-0000000000a1")                        # not listed
+        self.env.write_windows([dict(w, mode="quiet")])
+        self.refused("maintenance", inc="inc-0000000000a2")                        # quiet: nothing
+
+    def test_no_deploy_touching(self):
+        self.env.created = self.now - 600                     # recreated 10 min ago
+        self.refused("recent_deploy", target="app1")
+        self.env.created = self.now - 3 * 3600
+        self.handle(target="app1")
+        # zigbee-silence-restart has no such precondition
+        self.env.created = self.now - 60
+        self.handle(inc="inc-0000000000a3")
+
+    def test_retry_system_failure_once(self):
+        self.env.job = {"status": "failed", "failure_reason": "runner_system_failure", "ref": "main",
+                        "name": "router:deploy", "pipeline": {"id": 7}}
+        self.env.deploys = ["router:deploy"]                  # CI actions ignore the deploy lock
+        r = self.handle(action="retry_ci_job", target="101")
+        self.assertEqual(r["new_job_id"], 999)
+        self.refused("duplicate", action="retry_ci_job", target="101", inc="inc-0000000000a1")
+
+    def test_retry_refuses_script_failures_branches_and_superseded(self):
+        base = {"status": "failed", "failure_reason": "script_failure", "ref": "main",
+                "name": "router:deploy", "pipeline": {"id": 7}}
+        self.env.job = base
+        self.refused("not_allowed", action="retry_ci_job", target="101")
+        self.env.job = dict(base, failure_reason="job_execution_timeout")
+        self.refused("not_allowed", action="retry_ci_job", target="101")
+        self.env.job = dict(base, failure_reason="runner_system_failure", ref="feature")
+        self.refused("not_allowed", action="retry_ci_job", target="101")
+        self.env.job = dict(base, failure_reason="runner_system_failure")
+        self.env.newer_jobs = [{"id": 150, "name": "router:deploy", "ref": "main", "status": "pending"}]
+        self.refused("superseded", action="retry_ci_job", target="101")
+        self.assertEqual(self.env.ran, [])
+
+    def test_retry_cancelled_orphan_only_if_cancelled_here(self):
+        self.env.job = {"status": "canceled", "ref": "main", "name": "router:deploy", "pipeline": {"id": 8}}
+        self.refused("not_allowed", action="retry_ci_job", target="101")
+        self.env.job = {"status": "running", "name": "router:deploy", "started_at": "2026-01-01T00:00:00Z"}
+        self.handle(action="cancel_ci_job", target="101", inc="inc-0000000000a1")
+        self.env.job = {"status": "canceled", "ref": "main", "name": "router:deploy", "pipeline": {"id": 8}}
+        self.assertEqual(self.handle(action="retry_ci_job", target="101", playbook="ci-system-retry",
+                                     inc="inc-0000000000a2")["new_job_id"], 999)
+
+
 class TestLoadConfig(unittest.TestCase):
     def test_vars_and_durations(self):
         with tempfile.TemporaryDirectory() as d:
@@ -205,8 +282,11 @@ class TestLoadConfig(unittest.TestCase):
             cfgp = os.path.join(d, "executor.json")
             with open(cfgp, "w") as f:
                 json.dump({"dependencies_file": deps, "vars": {"zigbee_radio_address": "192.0.2.7"},
-                           "gitlab": {"orphan_jobs": {"router:deploy": "45m"}, "grace": "5m"}}, f)
+                           "gitlab": {"orphan_jobs": {"router:deploy": "45m"}, "grace": "5m"},
+                           "playbooks": {"restart-once": {"mode": "active", "action": "restart_container",
+                                                          "target": None, "no_deploy_touching": "2h"}}}, f)
             cfg = X.load_config(cfgp)
+        self.assertEqual(cfg["playbooks"]["restart-once"]["no_deploy_touching"], 7200)
         self.assertEqual(cfg["dependencies"]["slzb"]["probe"], {"tcp": "192.0.2.7:7638"})
         self.assertEqual(cfg["gitlab"]["orphan_jobs"]["router:deploy"], 2700)
         self.assertEqual(X.ancestors(cfg, "z2m"), {"slzb"})

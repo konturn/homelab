@@ -466,6 +466,7 @@ event-router:test:
       python -m router validate --config config.yml --playbooks playbooks
       --deps ../../inventory/dependencies.yml
       --rules ../grafana/provisioning/alerting --compose ../docker-compose.yml
+      --suppressions suppressions.yml
   rules:
     - !reference [.automerge_task_skip, rules]
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"

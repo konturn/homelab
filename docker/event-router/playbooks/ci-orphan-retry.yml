@@ -1,0 +1,18 @@
+# Routing table row 11, second half: after ci-orphan-cancel freed the router
+# deploy lock, the cancelled job may have been the newest deploy, so nothing
+# queued behind it will deploy that commit. Retry it. The executor retries
+# only a job it cancelled itself, and only while no newer job of the same
+# name on main exists (a queued newer deploy supersedes it).
+id: ci-orphan-retry
+description: Retry the newest router deploy after its orphaned job was cancelled
+mode: shadow
+match:
+  source: reconciler
+  kind: ci_orphan_cancelled
+node: gitlab
+action: {type: retry_ci_job, target_from_event: job_id}
+verify:
+  ci_job_succeeded: 75m
+limits: {max_runs: 1, per: 24h, cooldown: 0s}
+on_success: {notify: digest}
+on_failure: {notify: agent}
