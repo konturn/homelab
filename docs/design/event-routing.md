@@ -1090,9 +1090,10 @@ Phase 3 went live on 2026-11-08 without the 1–2 week burn-in of phase 2
 alert's state, so "send to OpenClaw only while the router is down" is not
 expressible as a notification policy. Instead Grafana keeps a route to
 OpenClaw's `/hooks/grafana` for every alert, and that hook's transform
-(`grafana.js`) asks the router `GET /ack?fp=<fingerprint>&status=...` first.
-It drops the alert (no agent session) only when the router has accepted that
-fingerprint and is forwarding; otherwise (router down, an alert the router
+(`grafana.js`) asks the router `GET /ack?fp=<fingerprint>&status=...&starts_at=...`
+first. It drops the alert (no agent session) only when the router has
+accepted that delivery (fingerprint, status and startsAt, so one episode:
+finding f in 12.6) and is forwarding; otherwise (router down, an alert the router
 never received, or OpenClaw rejecting the router's deliveries) the agent gets
 it as before, marked as a fallback. The router's route has a shorter
 `group_wait` (10s against 30s), so its copy is normally already in the inbox
@@ -1118,8 +1119,9 @@ would expire. Items expire into the digest after 6h. A 4xx from OpenClaw
 (token or mapping broken) also stops `/ack` from claiming alerts, so the
 Grafana route takes over.
 
-**Quiet hours (decision 6).** Non-urgent page items are held until 08:00 and
-dropped to the digest if the alert cleared overnight; Grafana's email routes
+**Quiet hours (decision 6).** Non-urgent page items are held until 08:00; a
+page-class alert that cleared overnight is dropped to the digest, a failed
+remediation is not (finding g in 12.6); Grafana's email routes
 use a mute timing for the same span. Urgent classes (security, data at risk,
 UPS) are never held. Residue is delivered at once, flagged `quiet_hours`, and
 OpenClaw does not message Noah about it until morning.
@@ -1138,8 +1140,13 @@ for runner/system failures: `ci-system-retry` retries such a job once
 (executor: never a script failure, once per pipeline and job name, not when a
 newer job of that name exists). After `ci-orphan-cancel` is verified, the
 router raises `ci_orphan_cancelled`; `ci-orphan-retry` retries the cancelled
-job, which the executor allows only for a job it cancelled itself. Both
-retry playbooks start in shadow (decision 10). CI incidents never act as root
+job, which the executor allows only for a job it cancelled itself. Retries
+are limited to the router's deploy-group jobs (`deploy_jobs`), like
+cancellation: a device firmware or Pi deploy job is never retried
+automatically, and a system failure of one is digest-only (its failed
+pipeline reaches OpenClaw anyway). Both retry playbooks were added in shadow
+and promoted the same night after their executor checks were tested
+(decision 10: a reviewed MR). CI incidents never act as root
 causes for correlation: a red pipeline mapped to `gitlab` must not suppress
 alerts for what depends on GitLab.
 

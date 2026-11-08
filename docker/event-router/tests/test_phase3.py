@@ -28,7 +28,8 @@ FWD_CONFIG = dict(CONFIG, openclaw={"forward": True}, gitlab_events={"projects":
 
 CI_PLAYBOOKS = PLAYBOOKS + [
     {"id": "ci-system-retry", "mode": "active",
-     "match": {"source": "gitlab", "kind": "ci_job_failed", "labels": {"project_id": "4", "failure_class": "system"}},
+     "match": {"source": "gitlab", "kind": "ci_job_failed",
+               "labels": {"project_id": "4", "failure_class": "system", "deploy_job": "true"}},
      "node": "gitlab", "action": {"type": "retry_ci_job", "target_from_event": "job_id"},
      "verify": {"ci_job_succeeded": "75m"}, "limits": {"max_runs": 1, "per": "24h", "cooldown": "0s"},
      "on_failure": {"notify": "agent"}},
@@ -224,23 +225,48 @@ class TestQuietHoursAndAck(Fwd):
         [p] = self.w.openclaw.delivered
         self.assertTrue(p["quiet_hours"])
 
+    def ev(self, starts="2027-01-15T19:00:00Z", status="firing"):
+        e = event("mqtt", status)
+        e.starts_at = starts
+        return e.to_dict()
+
     def test_ack(self):
-        self.e.store.inbox_put(self.w.clock.now(), [event("mqtt").to_dict()])
-        self.assertTrue(self.e.ack("grafana:mqtt", "firing"))
-        self.assertFalse(self.e.ack("grafana:mqtt", "resolved"))
-        self.assertFalse(self.e.ack("grafana:other", "firing"))
+        self.e.store.inbox_put(self.w.clock.now(), [self.ev()])
+        self.assertTrue(self.e.ack("grafana:mqtt", "firing", "2027-01-15T19:00:00Z"))
+        self.assertFalse(self.e.ack("grafana:mqtt", "resolved", "2027-01-15T19:00:00Z"))
+        self.assertFalse(self.e.ack("grafana:other", "firing", "2027-01-15T19:00:00Z"))
+        self.assertFalse(self.e.ack("grafana:mqtt", "firing", ""))
+        self.assertTrue(self.e.ack("grafana:mqtt", "firing", None))       # legacy transform
         self.w.clock.advance(7 * 3600)
-        self.assertFalse(self.e.ack("grafana:mqtt", "firing"))
+        self.assertFalse(self.e.ack("grafana:mqtt", "firing", "2027-01-15T19:00:00Z"))
+
+    def test_ack_is_per_episode(self):                                   # 12.6 f
+        self.e.store.inbox_put(self.w.clock.now(), [self.ev()])
+        # the next episode of the same alert, which the router never received
+        self.assertFalse(self.e.ack("grafana:mqtt", "firing", "2027-01-15T20:30:00Z"))
 
     def test_rejected_deliveries_stop_the_ack(self):
-        self.e.store.inbox_put(self.w.clock.now(), [event("mqtt").to_dict()])
+        self.e.store.inbox_put(self.w.clock.now(), [self.ev()])
         self.w.openclaw.result = "rejected"
         self.tick()
-        self.assertFalse(self.e.ack("grafana:mqtt", "firing"))
+        self.assertFalse(self.e.ack("grafana:mqtt", "firing", "2027-01-15T19:00:00Z"))
         self.w.openclaw.result = "ok"
         self.w.clock.advance(600)
         self.tick()
-        self.assertTrue(self.e.ack("grafana:mqtt", "firing"))
+        self.assertTrue(self.e.ack("grafana:mqtt", "firing", "2027-01-15T19:00:00Z"))
+
+    def test_held_failed_remediation_pages_even_if_the_alert_cleared(self):    # 12.6 g, L3
+        self.w.clock.t = DAY - 13 * 3600 + 2 * 3600      # 03:00
+        self.e.ingest(event("zig"))
+        self.tick()
+        self.w.clock.advance(11 * 60)                    # verification fails
+        self.tick()
+        self.assertEqual(self.inc("grafana:zig")["status"], "paged")
+        self.e.ingest(event("zig", "resolved"))
+        self.w.clock.advance(6 * 3600)
+        self.tick()
+        [p] = self.w.openclaw.delivered
+        self.assertEqual(p["page"]["class"], "failed_remediation")
 
 
 class TestNoForwarding(unittest.TestCase):
@@ -254,7 +280,7 @@ class TestNoForwarding(unittest.TestCase):
             for _ in range(3):
                 w.engine.tick()
             self.assertEqual(w.openclaw.delivered, [])
-            self.assertFalse(w.engine.ack("grafana:mqtt", "firing"))
+            self.assertFalse(w.engine.ack("grafana:mqtt", "firing", ""))
             self.assertEqual([d["delivery"] for d in w.decisions() if d["decision"] == "no_match"],
                              ["grafana-direct"])
         finally:
@@ -406,13 +432,17 @@ class TestGitLab(Fwd):
         self.assertEqual(from_gitlab(self.pipeline("failed", ref="feature"), [4]), [])
         self.assertEqual(from_gitlab(self.pipeline("failed", project=99), [4]), [])
         self.assertEqual(from_gitlab(self.pipeline("running"), [4]), [])
-        [ev] = from_gitlab(self.job("runner_system_failure"), [4])
-        self.assertEqual((ev.kind, ev.labels["failure_class"]), ("ci_job_failed", "system"))
+        [ev] = from_gitlab(self.job("runner_system_failure"), [4], deploy_jobs=["router:deploy"])
+        self.assertEqual((ev.kind, ev.labels["failure_class"], ev.labels["deploy_job"]),
+                         ("ci_job_failed", "system", "true"))
+        [ev] = from_gitlab(self.job("runner_system_failure", name="aruba-s2500:firmware"), [4],
+                           deploy_jobs=["router:deploy"])
+        self.assertEqual(ev.labels["deploy_job"], "false")
         self.assertEqual(from_gitlab(self.job("script_failure"), [4]), [])
         self.assertEqual(from_gitlab(self.job("job_execution_timeout"), [4]), [])
 
     def ingest_gitlab(self, payload):
-        for ev in from_gitlab(payload, [4, 14]):
+        for ev in from_gitlab(payload, [4, 14], deploy_jobs=["router:deploy"]):
             self.e.ingest(ev)
 
     def test_failed_main_pipeline_reaches_openclaw_and_green_resolves(self):
@@ -449,6 +479,17 @@ class TestGitLab(Fwd):
         self.tick()
         self.assertEqual(self.inc("gitlab:job:4:55")["status"], "resolved")
         self.assertEqual(self.w.openclaw.delivered, [])
+
+    def test_firmware_job_system_failure_is_never_retried(self):
+        cfg = dict(FWD_CONFIG, digest_only=FWD_CONFIG["digest_only"] + [
+            {"source": "gitlab", "kind": "ci_job_failed", "labels": {"deploy_job": "false"}, "reason": "no"}])
+        self.w.cfg = parse_config(cfg)
+        self.e = self.w.new_engine()
+        self.ingest_gitlab(self.job("runner_system_failure", name="aruba-s2500:firmware"))
+        self.tick()
+        self.assertEqual(self.w.executor.calls, [])
+        self.assertEqual(self.w.openclaw.delivered, [])
+        self.assertEqual(self.inc("gitlab:job:4:55")["status"], "digest")
 
     def test_failed_retry_goes_to_openclaw(self):
         self.ingest_gitlab(self.job("runner_system_failure"))
@@ -512,7 +553,11 @@ class TestHTTP(Fwd):
         self.e.store.inbox_put(self.w.clock.now(), [event("mqtt").to_dict()])
         self.assertEqual(self.req("GET", "/ack?fp=mqtt&status=firing")[1], {"error": "fp must be a Grafana fingerprint"})
         self.e.store.inbox_put(self.w.clock.now(), [Event(source="grafana", kind="alert", fp="grafana:abc123",
-                                                          status="firing").to_dict()])
+                                                          status="firing", starts_at="2027-01-15T19:00:00Z").to_dict()])
+        self.assertEqual(self.req("GET", "/ack?fp=abc123&status=firing&starts_at=2027-01-15T19%3A00%3A00Z"),
+                         (200, {"accepted": True}))
+        self.assertEqual(self.req("GET", "/ack?fp=abc123&status=firing&starts_at=2027-01-15T20%3A00%3A00Z"),
+                         (200, {"accepted": False}))
         self.assertEqual(self.req("GET", "/ack?fp=abc123&status=firing"), (200, {"accepted": True}))
         st, out = self.req("POST", "/maint/text", {"text": "/maint zigbee2mqtt 1h testing the parser"})
         self.assertEqual(st, 200, out)
