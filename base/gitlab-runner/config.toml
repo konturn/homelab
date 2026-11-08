@@ -23,7 +23,10 @@
 # Default image: only used by a job that sets no image of its own (every job
 # in this repo sets one). Pinned by digest; Renovate updates it
 # (customManagers in renovate.json).
-concurrent = 7
+# 6 protected + 6 unprotected + 1 firmware. Deploys stay serial per host
+# through resource groups (.gitlab-ci.yml); this only lets validate, test,
+# build-check and scheduled jobs run side by side.
+concurrent = 13
 check_interval = 0
 
 [session_server]
@@ -35,7 +38,8 @@ check_interval = 0
   tls-ca-file = "/persistent_data/application/certs/nkontur.com/live/iot.lab.nkontur.com-0003/chain.pem"
   token = "{{ gitlab_runner_protected_token }}"
   executor = "docker"
-  limit = 4
+  limit = 6
+  request_concurrency = 2
   [runners.docker]
     image = "ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852"
     # Job, helper and service containers all join this network. Not host
@@ -51,7 +55,8 @@ check_interval = 0
     # Observed peak across 207 build containers in the last 30 days is 117 MB
     # (the *:build jobs push the real work to the remote daemon via
     # DOCKER_HOST, so the build container itself stays small). 4g is ~34x that
-    # and still caps the worst case at concurrent(7) x 4g = 28g of 126g.
+    # and still caps the worst case at concurrent(13) x 4g = 52g of 126g, a
+    # ceiling real jobs (~117 MB each) never approach.
     #
     # Deliberately generous rather than tight: this limit applies to the jobs
     # that deploy this file, so a limit low enough to OOM a job would also OOM
@@ -91,7 +96,8 @@ check_interval = 0
   tls-ca-file = "/persistent_data/application/certs/nkontur.com/live/iot.lab.nkontur.com-0003/chain.pem"
   token = "{{ lookup('env', 'GITLAB_RUNNER_TOKEN') }}"
   executor = "docker"
-  limit = 2
+  limit = 6
+  request_concurrency = 2
   [runners.docker]
     image = "ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852"
     # Job, helper and service containers all join this network
