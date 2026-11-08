@@ -1072,6 +1072,14 @@ def process_window(jid, w, force=False):
     except Exception as e:  # noqa: BLE001
         status, err = "load-timeout", "%s" % type(e).__name__
     t1 = time.time()
+    if status == "load-timeout" and now_ms() - w["queued_ms"] < RETRY_WINDOW_S * 1000:
+        # Ollama gives up on a load after 5 min (OLLAMA_LOAD_TIMEOUT); cold
+        # loads from the pool can take that long while it resilvers. Keep the
+        # window queued and try again on a later tick.
+        sampler.stop.set()
+        ollama_unload(base)
+        print("llm-shadow: model load failed, will retry")
+        return "retry"
     if status == "ok":
         shadow.deadline = t1 + RUN_DEADLINE_S
         try:
