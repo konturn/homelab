@@ -851,6 +851,10 @@ groups:
                   |> filter(fn: (r) => r._value > 20)
                   |> map(fn: (r) => ({r with _time: now()}))
                   |> keep(columns: ["_time", "_value", "host", "serial_no", "device", "model"])
+                  // One table per disk. Grafana turns each table into a frame and
+                  // the group-key columns into labels; a single ungrouped table
+                  // with string columns is "long" and the reduce step rejects it.
+                  |> group(columns: ["host", "serial_no", "device", "model"])
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
