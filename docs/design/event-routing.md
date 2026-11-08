@@ -753,3 +753,59 @@ Bounds for checking: up to 4 concurrent events, 3 playbooks, 2 targets, 1 shared
 ### 12.5 Depends on open questions
 
 The spec is written after the open questions in section 11 are answered, so it models what will actually be built. These questions change properties: whether handled events also notify OpenClaw (affects L1's terminal states), which classes always page (S9), breaker reset rules (S5), and whether the receiver lives in OpenClaw or standalone (affects L4).
+
+## 13. Planned maintenance (addendum)
+
+Maintenance that knocks things down on purpose must not trigger playbooks, page
+Noah, or count against the learning loop. It also must not hide a problem
+that outlasts the work.
+
+### 13.1 Declaring a window
+
+A maintenance window is a record with:
+- **Scope:** one or more nodes from `inventory/dependencies.yml`, from a single container up to `site`.
+- **Mode:** `quiet` (log only) or `assist` (log, and still run explicitly listed safe playbooks).
+- **Expiry:** mandatory, with a maximum of 12 hours.
+- **Reason.**
+
+Ways to open one:
+- a Telegram command to the router (`/maint zwave 2h kernel update`);
+- a CI job or label on an MR (deploys that knowingly restart services);
+- `scripts/maint` on the router;
+- OpenClaw, for work it schedules itself.
+
+Every open and close is logged and shown in the digest.
+
+Windows are opened automatically in two cases:
+- **Deploy jobs:** while `<host>:deploy` or `deploy-service` holds a resource group, its host's containers are in a scoped window (S7 already forbids acting on them).
+- **Rack day:** a declared `site` window for planned shutdowns. The router only logs during it, and Grafana's own notifications are muted for the same span through a mute timing, so email doesn't fire either.
+
+### 13.2 Behaviour during a window
+
+- **Events for nodes in scope:** recorded in the window's incident, no playbook runs, nobody is paged.
+- **Dependents of an in-scope node** (via `needs`), e.g. every container when `persistent_data` is in scope: treated as in scope automatically.
+- **Events outside the scope:** handled normally. A disk failing during Zigbee work still pages.
+- **Always-page classes:** still page during a window unless the window names them explicitly. Security events and data-at-risk events are never silenced, and UPS on battery still pages.
+
+### 13.3 Closing a window: the important part
+
+When a window closes, either explicitly or at expiry, the router runs a **recovery check** on every in-scope node:
+- alerts cleared;
+- health and probes green;
+- for radios, device traffic seen.
+
+Then:
+- **Everything healthy:** the window's incident closes, with a summary line in the digest.
+- **Anything still failing:** normal handling resumes immediately, as if the alert had just fired. Playbook first, then OpenClaw, then a page.
+
+Forgotten or overrun maintenance surfaces this way, and a window can never become a permanent silence.
+
+### 13.4 Additional properties for the model (section 12)
+
+| # | Property |
+|---|---|
+| S10 | No playbook acts on a node, or a dependent of a node, that is inside an open maintenance window. |
+| S11 | Security, data-at-risk and UPS events page during any window that does not name them explicitly. |
+| L7 | Every window closes by its expiry. |
+| L8 | After a window closes, every in-scope node is either verified healthy or re-enters normal handling within one cycle. |
+| Mutation | Skip the post-window recovery check → L8 must fail. Let a window have no expiry → L7 must fail. |
