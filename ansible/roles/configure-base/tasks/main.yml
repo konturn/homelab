@@ -103,7 +103,8 @@
 # conffiles stay deleted on package upgrades). Which datasets are snapshotted
 # is the com.sun:auto-snapshot property on each ("//" = all where it is true);
 # mpool/frigate is set false in frigate_pre.yml. Lowering a keep prunes the
-# oldest snapshots of that label on its next run.
+# oldest snapshots of that label on its next run. Per-dataset exceptions
+# (labels switched off, lower keeps) are zfs_auto_snapshot_dataset_overrides.
 - name: Install zfs-auto-snapshot
   apt:
     name: zfs-auto-snapshot
@@ -122,6 +123,38 @@
       {% for s in zfs_auto_snapshot_schedule %}
       {{ s.cron }} root /sbin/zfs-auto-snapshot -q -g --label={{ s.label }} --keep={{ s.keep }} //
       {% endfor %}
+      {% for d in zfs_auto_snapshot_dataset_overrides %}
+      {% for p in d.prune | default([]) %}
+      {{ p.cron }} root /sbin/zfs-auto-snapshot -q -g --destroy-only --label={{ p.label }} --keep={{ p.keep }} {{ d.dataset }}
+      {% endfor %}
+      {% endfor %}
+
+# Per-label switches from zfs_auto_snapshot_dataset_overrides (defaults/main.yml).
+- name: Set per-dataset ZFS auto-snapshot label properties
+  ansible.builtin.shell: |
+    set -euo pipefail
+    ds={{ item.dataset | quote }}
+    disable=" {{ item.disable | default([]) | join(' ') }} "
+    for label in {{ zfs_auto_snapshot_schedule | map(attribute='label') | join(' ') }}; do
+      prop="com.sun:auto-snapshot:$label"
+      read -r value source < <(zfs get -H -o value,source "$prop" "$ds")
+      if [[ "$disable" == *" $label "* ]]; then
+        if [ "$value" != false ] || [ "$source" != local ]; then
+          zfs set "$prop=false" "$ds"
+          echo "set $prop=false"
+        fi
+      elif [ "$source" = local ]; then
+        zfs inherit "$prop" "$ds"
+        echo "inherited $prop"
+      fi
+    done
+  args:
+    executable: /bin/bash
+  loop: "{{ zfs_auto_snapshot_dataset_overrides }}"
+  loop_control:
+    label: "{{ item.dataset }}"
+  register: zfs_snapshot_label_props
+  changed_when: zfs_snapshot_label_props.stdout | length > 0
 
 - name: Remove the package's duplicate periodic ZFS snapshot scripts
   ansible.builtin.file:

@@ -8,3 +8,19 @@ zfs_auto_snapshot_schedule:
   - {label: daily, cron: "59 23 * * *", keep: 14}
   - {label: weekly, cron: "59 23 * * 0", keep: 4}
   - {label: monthly, cron: "0 0 1 * *", keep: 6}
+
+# Per-dataset exceptions to the schedule above.
+#   disable: labels this dataset gets no snapshots for. Applied as
+#     com.sun:auto-snapshot:<label>=false on the dataset; any other label of
+#     the schedule set locally on it is reverted to inherited. zfs-auto-snapshot
+#     then skips the dataset for that label even when it is named explicitly,
+#     and also stops pruning its existing snapshots of that label.
+#   prune: keep fewer snapshots of a label than the global keep. A
+#     --destroy-only run for this dataset alone, scheduled after the global run,
+#     trims it back to `keep` (the global run still creates them).
+# mpool/plex keeps about a week: 2 h of frequent, 24 h of hourly, 7 daily.
+zfs_auto_snapshot_dataset_overrides:
+  - dataset: mpool/plex
+    disable: [weekly, monthly]
+    prune:
+      - {label: daily, cron: "15 0 * * *", keep: 7}
