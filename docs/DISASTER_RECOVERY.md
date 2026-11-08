@@ -47,7 +47,8 @@ These values are everything needed for full recovery:
 
 ## Phase 1: Base OS (~30 min)
 
-1. Install Ubuntu Server 22.04 LTS on the boot NVMe
+1. Install Ubuntu Server 24.04 LTS on the boot SSD (480 GB SATA; leave the 1 TB
+   `/persistent_data` SSD and the data drives alone)
 2. Enable root SSH, update system
 3. Install essentials: `apt install -y git curl wget vim htop`
 
@@ -87,13 +88,14 @@ netplan apply
 # Install ZFS
 apt install -y zfsutils-linux
 
-# Unlock LUKS drives
-cryptsetup luksOpen /dev/sdX cryptdata1
+# Unlock LUKS drives (one shared password, LUKS_PASSWORD_BASE64 decoded)
+cryptsetup luksOpen /dev/sdX persistent_data   # the 1 TB /persistent_data SSD
+cryptsetup luksOpen /dev/sdY dev1              # each mpool disk; names as in base/disk/crypttab
 # ... repeat for each encrypted drive
 
-# Import ZFS pools
+# /persistent_data is ext4 on LUKS, not ZFS; mpool is the only pool
+mkdir -p /persistent_data && mount /dev/mapper/persistent_data /persistent_data
 zpool import mpool
-zpool import persistent_data
 zfs mount -a
 ```
 
@@ -103,7 +105,7 @@ zfs mount -a
 
 ```bash
 cd /root
-git clone https://github.com/<mirror>/homelab.git  # or restore from backup first
+git clone https://github.com/konturn/homelab.git  # public push mirror of GitLab root/homelab
 cd homelab
 bash scripts/bootstrap.sh
 ```
@@ -142,15 +144,17 @@ The script walks through 7 steps in order:
    git remote set-url origin https://gitlab.lab.nkontur.com/root/homelab.git
    git push -u origin main
    ```
-4. **Configure CI/CD variables** in GitLab (Settings → CI/CD → Variables):
+4. **Configure CI/CD variables** in GitLab (Settings → CI/CD → Variables), only
+   if GitLab came back without them. The project keeps just the bootstrap set:
    - `ROUTER_PRIVATE_KEY_BASE64`
-   - `VAULT_UNSEAL_KEYS`, `VAULT_TOKEN`
-   - `PIHOLE_PASSWORD`, `OMAPI_SECRET`
-   - `B2_ACCOUNT_ID`, `B2_ACCOUNT_KEY`, `RESTIC_REPOSITORY`, `RESTIC_PASSWORD`
-   - `TAILSCALE_AUTH_KEY`, `TAILSCALE_API_TOKEN`
-   - `CLOUDFLARE_API_KEY`, `CLOUDFLARE_ZONE_ID` (SSL certs use Cloudflare DNS-01 via `networking/ssl/renew.sh`)
-   - `GRAFANA_TOKEN`
-   - `GITLAB_RUNNER_TOKEN`, `IMAGES_GITLAB_RUNNER_TOKEN`
+   - `VAULT_UNSEAL_KEYS`, `VAULT_TOKEN`, `VAULT_ADDR`
+   - `VAULT_APPROLE_ROLE_ID`, `VAULT_APPROLE_SECRET_ID` (rewritten by `vault:rotate-approles`), `APPROLE_ROTATION_PAT`
+   - `GITLAB_RUNNER_TOKEN`, `AUTOMERGE_TOKEN`, `RENOVATE_TOKEN`
+
+   Every service secret (Backblaze, restic, Pi-hole, OMAPI, Tailscale,
+   Cloudflare, Grafana, ...) is read from Vault's `homelab/` KV mount by
+   `fetch-vault-secrets`, not from CI variables; the old CI copies are named
+   `DEPRECATED_*` and unused.
 5. **GitLab instance settings.** A restored GitLab keeps them. On a fresh
    GitLab, the project has more pipeline schedules than the default limit
    of 10 allows: run the `gitlab:settings` job (Run pipeline on `main` with
@@ -228,7 +232,9 @@ for **35 days** after the change (bucket lifecycle rule, see `docs/backups.md`,
 *Deletion resistance*). Act inside that window.
 
 1. **Freeze.** Stop the router timers (`systemctl stop restic-backup.timer
-   restic-prune.timer restic-check.timer`) or keep the router off the network.
+   restic-prune.timer restic-check.timer frigate-backup-events.timer
+   frigate-backup-recordings.timer`; the Frigate jobs write to the same
+   repository) or keep the router off the network.
    From a clean machine, in the B2 web console, delete the B2 application key the
    router used and create a new one with the same restricted capabilities. If the
    timeline is unclear, raise the bucket's lifecycle `daysFromHidingToDeleting` (for
@@ -352,9 +358,9 @@ systemctl status restic-backup.timer
 ## Quick Reference Card
 
 ```
-1. Install Ubuntu 22.04 on boot drive
+1. Install Ubuntu 24.04 on boot drive
 2. Minimal netplan (WAN DHCP + bond0)
-3. Unlock LUKS, import ZFS pools
+3. Unlock LUKS, mount /persistent_data (ext4), import mpool
 4. Run scripts/bootstrap.sh
    - When prompted, restore from B2 (need: B2_ACCOUNT_ID, B2_ACCOUNT_KEY,
      RESTIC_REPOSITORY, RESTIC_PASSWORD)

@@ -22,14 +22,14 @@ Vault automatically unseals on container startup using a wrapper entrypoint scri
 
 ### Unseal Keys
 
-The unseal keys are managed via the `VAULT_UNSEAL_KEYS` CI/CD variable (protected). During deployment, Ansible writes them to:
+The unseal keys are managed via the `VAULT_UNSEAL_KEYS` CI/CD variable (protected). `ansible/bootstrap.yml` (the manual `router:bootstrap` CI job) writes them to:
 ```
 /persistent_data/application/vault/unseal/unseal-keys
 ```
 
 This file contains hex-encoded unseal keys, one per line. Only 3 keys (the threshold) are needed. The directory is created by Ansible with mode `0700` (root only), and the file with mode `0600`.
 
-The keys are automatically deployed on every CI/CD pipeline run. No manual placement is needed.
+Only `bootstrap.yml` writes this file; the normal `router:deploy` does not touch it. Once it is in place, every container restart auto-unseals with no manual step.
 
 ### Security Considerations
 
@@ -50,7 +50,7 @@ docker exec vault vault operator unseal <key3>
 
 ## Initial Setup (First Time Only)
 
-After the container starts for the first time, Vault needs to be initialized:
+`bootstrap.yml` initializes an uninitialized Vault itself (5 shares, threshold 3) and saves the result to `/persistent_data/application/vault/init-output.json` (0600); back that file up off-box. By hand:
 
 ```bash
 # SSH to router
@@ -71,10 +71,8 @@ docker exec vault vault operator init
 
 ## File Storage
 
-Data is stored in the `vault_data` Docker volume, backed by `/vault/file` inside the container.
+Data is stored in the `vault_data` Docker volume (`docker_vault_data`, on the host `/persistent_data/docker/volumes/docker_vault_data/_data`), backed by `/vault/file` inside the container. restic backs it up with the other Docker volumes; the `unseal/` directory is excluded from offsite backups.
 
-## Future Enhancements
+## Auth and secrets
 
-1. **GitLab JWT Auth** - Allow GitLab CI to authenticate without static tokens
-2. **AppRole** - Service-to-service authentication
-3. **Secret Migration** - Move secrets from CI/CD variables to Vault
+GitLab JWT auth, AppRole, policies and the SSH CA are managed by `terraform/vault/` (`vault:configure` CI job). Service secrets live in the `homelab/` KV v2 mount, which neither Terraform nor `bootstrap.yml` creates. Roles, paths and rotation: `docs/SECRET_ROTATION.md`.

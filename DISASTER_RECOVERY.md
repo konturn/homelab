@@ -4,6 +4,14 @@ Complete guide to recovering the homelab from bare metal. Target audience: Noah 
 
 **Estimated Total Recovery Time:** 2-6 hours (depending on data restore volume)
 
+> **Current procedure: [docs/DISASTER_RECOVERY.md](docs/DISASTER_RECOVERY.md)**
+> (`scripts/bootstrap.sh`, then the `router:bootstrap` CI job, then a normal
+> deploy). Phase 4 below, running `router.yml` locally with secrets exported as
+> environment variables, no longer works on its own: the service secrets are
+> not CI variables any more, and `fetch-vault-secrets` reads every one of them
+> from Vault (CI JWT or AppRole) and fails closed. Phases 3, 4.5 and 5 and the
+> appendices still apply.
+
 ---
 
 ## Table of Contents
@@ -25,7 +33,7 @@ Complete guide to recovering the homelab from bare metal. Target audience: Noah 
 
 ### What You Need
 
-- [ ] Ubuntu Server 22.04 LTS USB installer
+- [ ] Ubuntu Server 24.04 LTS USB installer
 - [ ] Physical access to router hardware (or IPMI access from 10.4.128.7)
 - [ ] Internet connection (separate from the homelab network)
 - [ ] Access to secrets (see [Appendix A](#appendix-a-secrets-reference))
@@ -38,8 +46,9 @@ Complete guide to recovering the homelab from bare metal. Target audience: Noah 
 | Router | Custom server with dual 10GbE NICs (bond0) |
 | WAN NIC | `enx6c1ff76b2ec9` (USB Ethernet adapter) |
 | IPMI | 10.4.128.7 (requires separate network access) |
-| Boot drive | NVMe (OS only) |
-| Data drives | LUKS-encrypted, ZFS pools |
+| Boot drive | 480 GB SATA SSD (OS only; LUKS + LVM, passphrase at boot) |
+| `/persistent_data` | 1 TB SATA SSD, LUKS + ext4, no redundancy (Docker data-root, every app config) |
+| Data drives | LUKS-encrypted, one ZFS pool `mpool`: 3 raidz2 vdevs (23 disks) + 1 hot spare. Per-disk map: `inventory/hardware.yml` |
 
 ---
 
@@ -61,7 +70,7 @@ Choose these options during install:
 | Keyboard | US |
 | Install type | Ubuntu Server (minimized) |
 | Network | DHCP on WAN interface initially |
-| Storage | **Use entire NVMe for OS only** - Do NOT touch data drives |
+| Storage | **Use the boot SSD for the OS only** - Do NOT touch the `/persistent_data` SSD or the data drives |
 | Username | `root` enabled, or create user and enable root later |
 | SSH | Install OpenSSH server |
 | Snaps | None |
@@ -155,28 +164,33 @@ ping -c 3 10.4.128.3
 lsblk
 ```
 
-Look for your data drives (likely `/dev/sda`, `/dev/sdb`, etc.). The NVMe with the OS should be separate.
+Look for the data drives (`sdX`, 10-24 TB each, `crypto_LUKS`) and the 1 TB
+`/persistent_data` SSD (Samsung 870 EVO). The boot SSD with the OS is separate.
 
 ### 3.2 Unlock LUKS Encrypted Drives
 
-For each encrypted drive:
+All data drives and the `/persistent_data` SSD share one password, the
+`LUKS_PASSWORD_BASE64` value (Vault `homelab/infrastructure/luks`, field
+`password_base64`). Ansible later writes it to `/etc/password_file.txt` and
+deploys `/etc/crypttab` from `base/disk/crypttab`, which maps each LUKS UUID
+to its name (`persistent_data`, `dev1`...`dev25`).
 
 ```bash
 # List LUKS devices
 blkid | grep crypto_LUKS
 
-# Unlock each device (you'll need LUKS_PASSWORD)
-cryptsetup luksOpen /dev/sdX cryptdata1
-cryptsetup luksOpen /dev/sdY cryptdata2
+echo "$LUKS_PASSWORD_BASE64" | base64 -d > /etc/password_file.txt
+chmod 600 /etc/password_file.txt
+
+# The /persistent_data SSD: this name is what /etc/fstab mounts
+cryptsetup luksOpen --key-file /etc/password_file.txt /dev/sdX persistent_data
+# Each mpool disk (ZFS finds members by label, so the names are cosmetic;
+# base/disk/crypttab has the usual ones)
+cryptsetup luksOpen --key-file /etc/password_file.txt /dev/sdY dev1
 # etc.
 ```
 
-**LUKS Password**: Decode from `LUKS_PASSWORD_BASE64`:
-```bash
-echo "$LUKS_PASSWORD_BASE64" | base64 -d
-```
-
-### 3.3 Import ZFS Pools
+### 3.3 Import the ZFS Pool
 
 ```bash
 # Install ZFS
@@ -185,9 +199,8 @@ apt install -y zfsutils-linux
 # Scan for pools
 zpool import
 
-# Import pools (adjust names based on your setup)
+# mpool is the only pool. /persistent_data is not ZFS (see 3.4)
 zpool import mpool
-zpool import persistent_data
 
 # Verify
 zpool status
@@ -197,18 +210,16 @@ zfs list
 ### 3.4 Verify Mount Points
 
 Expected mounts:
-- `/mpool` — Media, Nextcloud data
-- `/persistent_data` — Application configs, Docker volumes
+- `/mpool` — ZFS: media, Nextcloud data, backups staging
+- `/persistent_data` — ext4 on the LUKS SSD: application configs, Docker volumes
 
 ```bash
+mkdir -p /persistent_data
+mount /dev/mapper/persistent_data /persistent_data
+zfs mount -a
+
 # Check mounts
 df -h | grep -E "mpool|persistent"
-```
-
-If not auto-mounted, check `/etc/fstab` or mount manually:
-
-```bash
-zfs mount -a
 ```
 
 ---
@@ -224,10 +235,10 @@ git clone https://gitlab.lab.nkontur.com/root/homelab.git
 cd homelab
 ```
 
-**Option B: From backup/mirror (if GitLab not available)**
+**Option B: From the GitHub mirror (if GitLab not available)**
 ```bash
-# See Appendix B for repo mirror setup
-# For now, restore from restic first (Phase 5) then clone from restored GitLab
+# GitLab push-mirrors the repo to GitHub (Appendix B)
+git clone https://github.com/konturn/homelab.git
 ```
 
 ### 4.2 Install Ansible
@@ -296,7 +307,7 @@ This will:
 - Set up Docker and Docker Compose
 - Deploy all container configurations
 - Configure DHCP, DNS, iptables
-- Set up Wireguard VPN
+- Set up Tailscale and the outbound Mullvad WireGuard tunnel
 - Configure backup schedules
 
 ### 4.6 Verify Services Starting
@@ -337,20 +348,21 @@ Run just the Vault phase with `--tags vault` if the rest is already up.
 ### 4.5.2 Which case are you in?
 
 Vault uses the **file** storage backend (`storage "file" { path = "/vault/file" }`),
-bind-mounted from `/persistent_data/application/vault`. So:
+backed by the Docker volume `docker_vault_data`
+(`/persistent_data/docker/volumes/docker_vault_data/_data`). So:
 
-| Did `/persistent_data/application/vault/file` survive? | Case |
+| Did `/persistent_data/docker/volumes/docker_vault_data/_data` survive? | Case |
 |---|---|
 | Yes (ZFS pool imported intact, or restored from restic first) | **A — unseal** |
 | No (fresh pool, or Vault data lost) | **B — re-initialise** |
 
 ```bash
 # Check before running anything
-ls -la /persistent_data/application/vault/file/
+ls -la /persistent_data/docker/volumes/docker_vault_data/_data/
 ```
 
 If you are in Case B but the data exists in a restic snapshot, it is far less
-work to restore `/persistent_data/application/vault` from Phase 5 **first** and
+work to restore `/persistent_data/docker/volumes/docker_vault_data` from Phase 5 **first** and
 then come back here as Case A. Case B loses every secret in Vault.
 
 ### 4.5.3 Case A — Vault data survived (unseal only)
@@ -423,22 +435,30 @@ restored from restic, the state comes back with it. If the state is gone,
 Terraform will plan to create everything from nothing — which is correct here,
 but read the plan before applying.
 
-This creates the JWT backend (`ci-deploy` role) and the AppRole backend with
-roles `openclaw`, `jit-approval-svc`, `vault-admin` and `vault-read`.
+This creates the JWT backend (roles `ci-deploy`, `vault-admin`, `vault-read`,
+`ha-config-deploy`), the AppRole backend (roles `openclaw`, `jit-approval-svc`)
+and the `ssh-client-signer` SSH CA. It does not create the `homelab/` KV mount
+(step 3).
 
 **2. Re-issue AppRole secret_ids**
 
 `role_id` is stable per role; `secret_id` is not and is not stored anywhere
 recoverable. Run the manual **`vault:rotate-approles`** pipeline job, which
 generates fresh secret_ids, verifies a login with each before adopting it, and
-writes `VAULT_APPROLE_ROLE_ID` / `VAULT_APPROLE_SECRET_ID` back into the GitLab
-CI variables. It needs `APPROLE_ROTATION_PAT` set, or the rotation succeeds in
-Vault and silently fails to update CI.
+writes the `openclaw` pair back into the GitLab CI variables
+`VAULT_APPROLE_ROLE_ID` / `VAULT_APPROLE_SECRET_ID` and the `jit-approval-svc`
+pair into Vault `homelab/docker/jit-approval-svc` (so the `homelab/` mount from
+step 3 must exist first). It needs `APPROLE_ROTATION_PAT` set, or the rotation
+succeeds in Vault and fails to update CI.
 
 **3. Repopulate KV**
 
-`bootstrap.yml` enables KV v2 at `secret/`, but only the mount — not the data.
-Service credentials under `homelab/data/*` (API keys for radarr/sonarr/plex/
+`bootstrap.yml` enables KV v2 at `secret/`, which nothing uses. The service
+credentials live in a separate KV v2 mount, `homelab/`, that neither
+`bootstrap.yml` nor Terraform creates: `vault secrets enable -path=homelab kv-v2`.
+The paths `fetch-vault-secrets` reads are listed in
+`ansible/roles/fetch-vault-secrets/defaults/main.yml`. Service credentials under
+`homelab/data/*` (API keys for radarr/sonarr/plex/
 ombi/nzbget/deluge/paperless/prowlarr, the `openclaw` tokens, the JIT API key,
 the Telegram bot token) must be written back from your off-box copy or
 regenerated at each service.
@@ -608,8 +628,7 @@ restic backup --dry-run /persistent_data/application
 ### 6.4 External Access
 
 - [ ] Can access `https://nkontur.com` from internet
-- [ ] Tailscale shows router as connected
-- [ ] Wireguard VPN connects (test from phone)
+- [ ] Tailscale shows router as connected (remote access is Tailscale; the old WireGuard tunnels are retired)
 
 ---
 
@@ -641,9 +660,14 @@ restic backup --dry-run /persistent_data/application
 
 ### Current Secret Storage
 
-⚠️ **All secrets currently live in GitLab CI variables only.**
+⚠️ **All secrets currently live only on the router.** Service secrets are in
+Vault (`homelab/` KV v2); GitLab CI keeps only the bootstrap set
+(`VAULT_UNSEAL_KEYS`, `VAULT_TOKEN`, `VAULT_APPROLE_ROLE_ID`/`_SECRET_ID`,
+`APPROLE_ROTATION_PAT`, `ROUTER_PRIVATE_KEY_BASE64` and the runner/automation
+tokens). The old service-secret CI variables are renamed `DEPRECATED_*` and
+nothing reads them.
 
-This is a chicken-and-egg problem: if the router dies, GitLab is gone, and so are the secrets needed to restore it.
+This is a chicken-and-egg problem: if the router dies, GitLab and Vault are gone, and so are the secrets needed to restore them.
 
 Vault does not solve this — it makes it sharper. Vault's own unseal keys are a
 GitLab CI variable (`VAULT_UNSEAL_KEYS`), and Vault runs on the router being
@@ -659,7 +683,7 @@ whichever off-box mitigation below you adopt, or Phase 4.5 has no Case A.
 
 ### 🔴 Critical Gap: Secrets Bootstrap
 
-**Problem**: Secrets only exist in GitLab CI, which runs on the router being recovered.
+**Problem**: Secrets only exist in Vault and GitLab CI, both of which run on the router being recovered.
 
 **Mitigations** (choose one or more):
 
@@ -675,16 +699,12 @@ whichever off-box mitigation below you adopt, or Phase 4.5 has no Case A.
 
 ### 🔴 Critical Gap: Repository Mirror
 
-**Problem**: The homelab repo lives on self-hosted GitLab. No external mirror exists.
+**Status: mitigated.** GitLab push-mirrors the repo (all branches) to
+`https://github.com/konturn/homelab` (public, so cloning needs no credentials).
 
 **Mitigations**:
 
-1. **GitHub mirror**
-   ```bash
-   # Set up as secondary remote
-   git remote add github git@github.com:nkontur/homelab.git
-   git push github main
-   ```
+1. **GitHub mirror** (in place, GitLab *Settings → Repository → Mirroring repositories*)
    
 2. **Include repo in restic backup**
    - Already backing up `/persistent_data/application/gitlab`, which includes the repos
@@ -721,10 +741,11 @@ For printing/laminating:
 ```
 DISASTER RECOVERY QUICK REFERENCE
 
-1. Install Ubuntu Server 22.04 on boot drive
+1. Install Ubuntu Server 24.04 on boot drive
 2. Create minimal netplan (WAN DHCP + bond0)
 3. Unlock LUKS drives: cryptsetup luksOpen /dev/sdX name
-4. Import ZFS: zpool import mpool && zpool import persistent_data
+   (the /persistent_data SSD as "persistent_data")
+4. Import ZFS: zpool import mpool; mount /dev/mapper/persistent_data /persistent_data
 5. Clone repo: git clone <homelab repo>
 6. Export secrets as env vars
 7. Run: ansible-playbook -i ansible/inventory.yml ansible/router.yml --connection=local
@@ -747,3 +768,4 @@ Last tested: ___________________________
 |------|--------|---------|
 | 2025-02-01 | Moltbot | Initial version based on DR tracing session |
 | 2026-09-01 | Moltbot | Added Phase 4.5 (Vault & JIT recovery); documented `ansible/bootstrap.yml`; added Vault secrets to Appendix A |
+| 2026-11-08 | Claude | Audit: Ubuntu 24.04; `/persistent_data` is LUKS ext4, not a ZFS pool; Vault data is the `docker_vault_data` volume; `homelab/` KV mount; Vault roles; secrets now in Vault; GitHub mirror exists; WireGuard retired; pointer to docs/DISASTER_RECOVERY.md |

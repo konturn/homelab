@@ -4,10 +4,10 @@ This document lists all secrets used in the homelab infrastructure, how to rotat
 
 ## Overview
 
-Secrets are managed through a **Vault-first** architecture with CI environment variable fallback:
+Secrets are managed through a **Vault-only** architecture:
 
-1. **HashiCorp Vault** at `vault.lab.nkontur.com:8200` — canonical source of truth, organized under the `homelab/` KV v2 mount.
-2. **GitLab CI/CD variables** — fallback when Vault is unreachable. These mirror Vault values.
+1. **HashiCorp Vault** at `vault.lab.nkontur.com:8200` — the only source for service secrets, organized under the `homelab/` KV v2 mount.
+2. **GitLab CI/CD variables** — only the bootstrap set that Vault itself depends on (see *Secrets NOT in Vault*). The former service-secret CI variables are renamed `DEPRECATED_*` and nothing reads them; there is no fallback to them.
 
 ### How Secrets Flow
 
@@ -22,7 +22,7 @@ Secrets are managed through a **Vault-first** architecture with CI environment v
        │ role runs FIRST                │
        ▼                                ▼
 ┌─────────────┐                   ┌───────────┐
-│  Ansible    │                   │  Moltbot  │
+│  Ansible    │                   │ OpenClaw  │
 │  Variables  │                   │ (runtime) │
 └──────┬──────┘                   └───────────┘
        │
@@ -45,10 +45,11 @@ Secrets are managed through a **Vault-first** architecture with CI environment v
 
 | Method | Role | Policy | Used By |
 |--------|------|--------|---------|
-| JWT (GitLab OIDC) | `vault-admin` | `vault-admin` | `vault:configure`, `vault:rotate-approle` (main only) |
-| JWT (GitLab OIDC) | `ci-deploy` | `ci-deploy` | `router:deploy`, `zwave:deploy`, `satellite-2:deploy`, `router:validate` (main/MR) |
+| JWT (GitLab OIDC) | `vault-admin` | `vault-admin` | `vault:rotate-approles` (main only; `vault:configure` uses the `VAULT_TOKEN` CI variable) |
+| JWT (GitLab OIDC) | `ci-deploy` | `ci-deploy` | `router:deploy`, `zwave:deploy`, `satellite-2:deploy`, `macmini:deploy` and other main-branch jobs (role bound to `ref=main`) |
 | JWT (GitLab OIDC) | `vault-read` | `vault-read` | `vault:validate` (MR only — terraform plan) |
-| AppRole | `moltbot` | `moltbot-ops` | Moltbot container (scoped read-only) |
+| JWT (GitLab OIDC) | `ha-config-deploy` | `ha-config-deploy` | CI of the Home Assistant config repo `root/homeassistant` (main only) |
+| AppRole | `openclaw` | `openclaw-ops` | OpenClaw container (scoped read-only) |
 | AppRole | `jit-approval-svc` | `jit-approval-svc` | JIT approval service (credential broker) |
 
 ### Vault Secret Layout
@@ -62,7 +63,7 @@ homelab/
 ├── email/           # Gmail, SMTP, DKIM
 ├── gitlab/          # Runner tokens
 ├── infrastructure/  # Aruba, IPMI, LUKS, OMAPI, Pi-hole, router, SNMP, Tailscale, VRRP
-├── moltbot/         # Gateway, GitLab, Telegram tokens
+├── openclaw/        # Gateway, hooks, Telegram, clawd-memory tokens
 ├── mqtt/            # Mosquitto credentials
 └── networking/      # Cloudflare, Mullvad, Wireguard
 ```
@@ -71,7 +72,7 @@ homelab/
 
 The `fetch-vault-secrets` role runs as the **first role** in every playbook. It:
 
-1. Authenticates to Vault via JWT (CI pipeline) or AppRole (moltbot)
+1. Authenticates to Vault via JWT (CI pipeline) or AppRole (OpenClaw)
 2. Reads all secret paths from `homelab/` KV v2 mount
 3. Sets each secret as an Ansible fact (e.g., `vault_pihole_password`)
 4. Fails the play if Vault is unreachable or a required secret is missing or empty
@@ -113,8 +114,8 @@ To rotate a secret:
 | `ANTHROPIC_API_KEY` | `api-keys/anthropic` | `api_key` | moltbot (future) |
 | `BRAVE_API_KEY` | `api-keys/brave` | `api_key` | moltbot-gateway |
 | `ACLAWDEMY_API_KEY` | `api-keys/aclawdemy` | `api_key` | moltbot-gateway |
-| `MOLTBOT_GATEWAY_TOKEN` | `moltbot/tokens` | `gateway_token` | moltbot-gateway |
-| `MOLTBOT_TELEGRAM_TOKEN` | `moltbot/tokens` | `telegram_token` | moltbot-gateway |
+| `MOLTBOT_GATEWAY_TOKEN` | `openclaw/tokens` | `gateway_token` | openclaw |
+| `MOLTBOT_TELEGRAM_TOKEN` | `openclaw/tokens` | `telegram_token` | openclaw |
 | `HASS_TOKEN` | `docker/homeassistant` | `token` | moltbot-gateway |
 | `PLEX_TOKEN` | `docker/plex` | `token` | moltbot-gateway |
 | `RADARR_API_KEY` | `docker/radarr` | `api_key` | moltbot-gateway |
@@ -162,7 +163,7 @@ To rotate a secret:
 | `VAULT_APPROLE_ROLE_ID` | Circular dependency — needed to auth to Vault |
 | `VAULT_APPROLE_SECRET_ID` | Circular dependency — needed to auth to Vault |
 | `VAULT_UNSEAL_KEYS` | Break-glass secret — must not depend on Vault |
-| `ROUTER_PRIVATE_KEY_BASE64` | CI `before_script` fallback — Vault JWT fetch attempted first |
+| `ROUTER_PRIVATE_KEY_BASE64` | CI `before_script` writes the deploy key from this variable (a copy also sits in Vault `infrastructure/router`, read by nothing) |
 | `SMTP_PASSWORD` | Appears unused — candidate for deletion |
 
 ---
@@ -327,11 +328,11 @@ broker (resource `gitlab-moltbot`), minted with the broker's own admin token
 (Vault `homelab/docker/jit-approval-svc`, field `gitlab_admin_token`, not
 readable by the `openclaw-ops` policy). Nothing to rotate on the OpenClaw side.
 
-**Vault path:** `homelab/moltbot/tokens`
+**Vault path:** `homelab/openclaw/tokens`
 
 **How to rotate:**
 1. Generate new token (varies by service)
-2. Update in Vault: `homelab/moltbot/tokens` → relevant field
+2. Update in Vault: `homelab/openclaw/tokens` → relevant field
 3. Update GitLab CI variable (fallback)
 4. Redeploy moltbot-gateway container
 
@@ -362,7 +363,7 @@ old one. No redeploy is needed; the helper reads Vault per use.
 
 **Vault path:** `infrastructure/router` → `private_key_base64`
 
-**Note:** The CI `.ansible` template's `before_script` now fetches this key from Vault via JWT auth (role `ci-deploy`) before Ansible runs. The CI variable `ROUTER_PRIVATE_KEY_BASE64` is kept as a fallback if Vault is unreachable.
+**Note:** The CI `.ansible` template's `before_script` writes the key from the CI variable `ROUTER_PRIVATE_KEY_BASE64`; it does not fetch it from Vault. The Vault copy is optional and unused by any template, so the CI variable is the one that matters.
 
 **Used by:**
 - GitLab CI pipeline (all ansible playbook runs)
@@ -403,7 +404,7 @@ Contains MQTT credentials. Update when rotating MQTT_PASS.
 | Frequency | Secrets |
 |-----------|---------|
 | **When Compromised** | OPENAI_API_KEY, MOLTBOT_GATEWAY_TOKEN, MOLTBOT_TELEGRAM_TOKEN, DOORBELL_PASS |
-| **Monthly** | VAULT_APPROLE_SECRET_ID (via `vault:rotate-approle` CI job) |
+| **Monthly** (planned; no schedule exists yet) | VAULT_APPROLE_SECRET_ID (via `vault:rotate-approles` CI job) |
 | **Annually** | All others |
 | **After Employee Offboarding** | All secrets they had access to |
 
@@ -435,9 +436,9 @@ If a secret is compromised:
 
 ---
 
-## Vault AppRole Rotation (Moltbot)
+## Vault AppRole Rotation (OpenClaw)
 
-Moltbot authenticates to Vault using AppRole (`role_id` + `secret_id`).
+OpenClaw authenticates to Vault using AppRole `openclaw` (`role_id` + `secret_id`).
 The `secret_id` should be rotated periodically.
 
 **CI Variables:**
@@ -446,19 +447,20 @@ The `secret_id` should be rotated periodically.
 
 **Automated rotation:**
 
-A manual CI job `vault:rotate-approle` is available on main branch pipelines.
-It can also be triggered via pipeline schedule for automatic monthly rotation.
+A manual CI job `vault:rotate-approles` is available on main branch pipelines.
+It could also be triggered via a pipeline schedule; none is set up yet.
 
 The job:
 1. Authenticates to Vault via JWT (`vault-admin` role)
-2. Generates a new `secret_id` for the moltbot AppRole
+2. Generates a new `secret_id` for the `openclaw` AppRole
 3. Verifies the new credentials work (login test)
-4. Updates the `VAULT_APPROLE_SECRET_ID` CI variable
-5. Next moltbot deploy picks up the new secret automatically
+4. Updates the `VAULT_APPROLE_ROLE_ID` / `VAULT_APPROLE_SECRET_ID` CI variables (needs `APPROLE_ROTATION_PAT`)
+5. Does the same for `jit-approval-svc`, writing to Vault (below)
+6. Next deploy picks up the new credentials automatically
 
 **To trigger manually:**
 1. Go to CI/CD → Pipelines → Run pipeline (on main)
-2. Find `vault:rotate-approle` in the configure stage
+2. Find `vault:rotate-approles` in the deploy stage
 3. Click the play button
 
 **To schedule:**
@@ -478,21 +480,22 @@ scoped policies (`jit-tier1-services`, `jit-tier2-infra`).
 - `jit-approval-svc` — service's own policy (token management + read brokered secrets)
 - Child tokens minted with tier-specific policies only
 
-**Rotation:** Same procedure as moltbot AppRole — generate new `secret_id`, update the
-service's environment, restart.
+**Rotation:** the same `vault:rotate-approles` job rotates it and writes the new
+`approle_role_id` / `approle_secret_id` into Vault `homelab/docker/jit-approval-svc`;
+the next deploy re-templates the service's environment and restarts it.
 
 ---
 
 ## Transcript Hygiene
 
-OpenClaw session transcripts (`.jsonl` files) may contain credentials that were pasted or echoed during interactive sessions. A cron job runs every 6 hours on the router to scrub these automatically.
+OpenClaw session transcripts (`.jsonl` files) may contain credentials that were pasted or echoed during interactive sessions. A cron job runs every 10 minutes on the router to scrub these automatically.
 
 ### What it does
 
-1. **Credential redaction** — Scans all transcript files under `{{ docker_persistent_data_path }}/moltbot-gateway/agents/main/sessions/` and replaces known secret patterns with `[REDACTED]` in-place.
+1. **Credential redaction** — Scans all transcript files under `{{ docker_persistent_data_path }}/openclaw/data/agents/main/sessions/` with gitleaks (~160 rules plus `docker/scrub-transcripts/gitleaks-transcripts.toml`) and replaces each finding with `[REDACTED]` in-place. A second, legacy entry does the same for `moltbot/data/agents/main/sessions/` while that directory exists.
 2. **Archive purge** — Deletes archived sub-agent transcripts (`*.deleted.*` files) older than 7 days to reclaim disk space.
 
-### Patterns redacted
+### Patterns redacted (examples)
 
 | Pattern | Example |
 |---------|---------|
@@ -513,15 +516,15 @@ OpenClaw session transcripts (`.jsonl` files) may contain credentials that were 
 ### Configuration
 
 - **Script:** `/usr/local/bin/scrub-transcripts.sh` (deployed by Ansible)
-- **Source:** `docker/openclaw/scripts/scrub-transcripts.sh` in this repo
-- **Schedule:** Every 6 hours at :30 (cron)
+- **Source:** `docker/scrub-transcripts/scrub-transcripts.sh` in this repo
+- **Schedule:** Every 10 minutes (root cron, `*/10`)
 - **Logging:** Output goes to syslog via `logger -t scrub-transcripts`
-- **Ansible task:** In `configure-docker` role
+- **Ansible task:** In `configure-homelab-services` role
 
 ### Manual run
 
 ```bash
-/usr/local/bin/scrub-transcripts.sh /persistent_data/application/moltbot-gateway/agents/main/sessions/
+/usr/local/bin/scrub-transcripts.sh /persistent_data/application/openclaw/data/agents/main/sessions
 ```
 
 ### Monitoring

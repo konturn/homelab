@@ -11,7 +11,7 @@ The homelab runs containerized services with data stored on ZFS (mpool) with aut
 ### Storage Architecture
 
 - **Primary storage**: ZFS pool (`mpool`) mounted at `/mpool/`
-- **Container data**: `/persistent_data/application/` (mapped to `{{ docker_persistent_data_path }}` in compose)
+- **Container data**: `/persistent_data/application/` (mapped to `{{ docker_persistent_data_path }}` in compose). `/persistent_data` is a single LUKS + ext4 SSD, not ZFS: no redundancy and no ZFS snapshots, so restic is its only copy
 - **Docker volumes**: `/persistent_data/docker/volumes/` 
 - **Network shares**: `/mpool/samba_share/nfs/`
 
@@ -123,7 +123,7 @@ The homelab runs containerized services with data stored on ZFS (mpool) with aut
 
 ### InfluxDB
 **Data locations:**
-- Database: `influxdb-storage` Docker volume
+- Database: `docker_influxdb-storage` Docker volume (`/var/lib/influxdb2`)
 - Config: `/persistent_data/application/influxdb/config/`
 
 **Critical components:**
@@ -134,8 +134,8 @@ The homelab runs containerized services with data stored on ZFS (mpool) with aut
 
 **Restore procedure:**
 1. Stop InfluxDB: `docker stop influxdb`
-2. Restore volume: `docker volume rm influxdb-storage && docker volume create influxdb-storage`
-3. Restore from backup: Mount backup and copy data
+2. Restore the volume's files from restic (`/persistent_data/docker/volumes/docker_influxdb-storage`)
+3. If InfluxDB will not start from them, use the weekly `influx backup` instead (*Database Recovery*, InfluxDB)
 4. Start InfluxDB: `docker start influxdb`
 5. Verify buckets and data: `influx bucket list`
 
@@ -160,7 +160,7 @@ The homelab runs containerized services with data stored on ZFS (mpool) with aut
 ### Mosquitto (MQTT)
 **Data locations:**
 - Config: `/persistent_data/application/mqtt/conf/`
-- Data: `mosquitto` Docker volume (retained messages)
+- Data: `docker_mosquitto` Docker volume (retained messages)
 
 **Critical components:**
 - `mosquitto.conf` configuration
@@ -171,7 +171,7 @@ The homelab runs containerized services with data stored on ZFS (mpool) with aut
 **Restore procedure:**
 1. Stop Mosquitto: `docker stop mosquitto`
 2. Restore config: `/persistent_data/application/mqtt/conf/`
-3. Restore volume: `mosquitto`
+3. Restore volume: `docker_mosquitto`
 4. Start container: `docker start mosquitto`
 5. Verify with: `mosquitto_sub -t '$SYS/#' -C 1`
 
@@ -231,7 +231,7 @@ no new archive is written; the last 7 archives (and restic's history) remain.
 ### Additional Services
 
 **Grafana:**
-- Data: `grafana-storage` Docker volume
+- Data: `docker_grafana-storage` Docker volume
 - Config: `/persistent_data/application/grafana/`
 - Contains dashboards, datasources, users
 
@@ -468,21 +468,25 @@ main 90-day `forget`. Restore: `restic restore latest --tag macmini --target /tm
 
 ### ZFS Snapshots
 
-**Strategy:** Local ZFS snapshots for quick recovery
-**Recommended schedule:**
-- Hourly snapshots (keep 24)
-- Daily snapshots (keep 7) 
-- Weekly snapshots (keep 4)
+**Strategy:** Local ZFS snapshots for quick recovery, from the `zfs-auto-snapshot`
+package (installed by hand, not managed by Ansible). Only datasets with
+`com.sun:auto-snapshot=true` are snapshotted: `mpool/nextcloud`, `mpool/plex`,
+`mpool/backups` (not `mpool/frigate`, `mpool/dv-scratch` or `mpool` itself, and
+`/persistent_data` is not ZFS).
+**Schedule** (`/etc/cron.d/zfs-auto-snapshot`): every 5 min (keep 24), hourly
+(keep 24), daily (keep 14), weekly (keep 4), monthly (keep 4). The package's
+`/etc/cron.{hourly,daily,weekly,monthly}/zfs-auto-snapshot` scripts also run,
+with their own `--keep` values, so actual counts can differ.
 
 ```bash
-# Create snapshot
-zfs snapshot mpool@backup-$(date +%Y%m%d-%H%M)
-
 # List snapshots
-zfs list -t snapshot
+zfs list -t snapshot mpool/nextcloud
 
-# Restore from snapshot
-zfs rollback mpool@backup-20240204-1200
+# Copy one file back (snapshots are browsable read-only)
+ls /mpool/nextcloud/.zfs/snapshot/
+
+# Roll a whole dataset back (destroys everything newer)
+zfs rollback -r mpool/nextcloud@zfs-auto-snap_daily-<date>
 ```
 
 ### Off-Site Strategy
@@ -653,7 +657,7 @@ restic restore latest --target /tmp/test --include /etc/hostname
 
 **ZFS integrity:**
 ```bash
-# Scrub ZFS pool monthly
+# zpool-scrub.timer scrubs mpool monthly (1st, 00:00); by hand:
 zpool scrub mpool
 zpool status mpool
 ```
@@ -738,7 +742,8 @@ what surfaces it. Details and remediation: `ansible/roles/restic/README.md`.
 
 ### Storage Monitoring
 
-- **ZFS pool health** alerts
+- **ZFS pool and disk** alerts (Grafana): *ZFS Pool Unhealthy*, *ZFS Pool Health
+  Collection Failed*, *Disk Vanished*, *Disk Temperature High*, *SMART Disk Error*
 - **Disk space monitoring** for backup destinations  
 - **Backup repository growth** tracking
 
@@ -763,7 +768,7 @@ what surfaces it. Details and remediation: `ansible/roles/restic/README.md`.
 
 ### Access Control
 
-- **Backup credentials** stored in Ansible vault
+- **Backup credentials** stored in HashiCorp Vault (`homelab/backup/restic`, `homelab/backup/backblaze`) and rendered to `/root/.restic_env`
 - **Separate service account** for backup operations only
 - **Minimal permissions** for backup destination access
 
@@ -810,6 +815,6 @@ what surfaces it. Details and remediation: `ansible/roles/restic/README.md`.
 
 ---
 
-**Last updated:** 2026-11-07  
+**Last updated:** 2026-11-08  
 **Review schedule:** Quarterly  
 **Owner:** Infrastructure Team
