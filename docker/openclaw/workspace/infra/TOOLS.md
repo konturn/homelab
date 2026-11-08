@@ -161,15 +161,60 @@ Never without Noah's explicit go-ahead in the current conversation:
   CODEOWNERS path, except by an MR that Noah reviews.
 - Freezing or unfreezing auto-merge, or editing `AUTOMERGE_*` variables.
 
-Known open item: homelab issue #149 (`GITLAB_TOKEN` is stripped from
-claude-cli sessions by OpenClaw's host-env policy) is waiting on Noah's
-decision. Don't change that behaviour. Use `gitlab_token` from
-`tools/jit-lib.sh`.
+GitLab credentials: always `gitlab_token` from `tools/jit-lib.sh` (git uses
+the same token through the credential helper). It is a short-lived moltbot
+token from JIT resource `gitlab-moltbot`: auto-approved, no Telegram prompt,
+logged, revoked after 1h, cached between sessions. There is no static GitLab
+token; never read one from `/proc` or another process's environment, and
+never use the T2 `gitlab` resource (admin) for routine work.
 
-## Merging your own MRs
+## Merging your own MRs (policy `bot_config`)
 
-<!-- PLACEHOLDER: the bot-config auto-merge allowlist is pending. Fill this
-     section when it is merged (docs/AUTOMERGE.md). -->
-Pending: rules for which of your own MRs may merge without review are being
-defined. Until this section says otherwise, don't merge or approve your own
-MRs. Open them, and leave them for Noah.
+<!-- Rendered by hand from ci/automerge-policy.yml, section bot_config (!1048).
+     The policy file is the source of truth; this section will be generated
+     from it. -->
+You never merge or approve anything yourself. The auto-merge sweep (every
+15 min) merges your MR when it qualifies; it deploys with the same health
+gate and rollback as image updates (Grafana changes: provisioning reload with
+a read-back check). Anything that doesn't qualify waits for Noah.
+
+Qualifies only if all of these hold:
+
+- Author moltbot, target `main`, not a draft, MR pipeline passed on the latest
+  commit, no `freeze`, `security` or `major` label.
+- At most 6 bot-config merges per 24h (they also count against the general
+  daily budget).
+- Files: at most 30; no adds, deletes, renames or mode changes; no scripts
+  (by extension or `#!` line).
+- Never, whatever else applies: `networking/**`, iptables/nftables,
+  `ansible/**`, `.gitlab-ci.yml`, `ci/**`, `renovate.json`, `CODEOWNERS`,
+  `CLAUDE.md`, `terraform/**`, `base/**`, `scripts/**`, `docker/vault/**`,
+  `docker/jit-approval-svc/**`, `docker/nginx/**`, `docker/promtail/**`,
+  `docker/telegraf/**`, any path containing `openclaw`, `moltbot`, `secret` or
+  `vault`, `*.env*`, `*.j2`, Grafana contact points, notification policies and
+  datasources, `docker/grafana/provisioning/dashboards/homelab.yml`.
+
+What may change:
+
+- **Compose** (`docker-compose.yml`, `-observability.yml`, `-zwave.yml`): the
+  value of an existing `deploy.resources` memory/cpus limit or reservation,
+  within 0.5x-2x of the old value (adding a line doesn't qualify); an existing
+  `*LOG_LEVEL`/`*LOGLEVEL` env value, to a known level; comment lines without
+  `{ }` outside multi-line blocks. Not for gitlab, vault,
+  docker-socket-proxy, init containers, nginx, lab_nginx, iot_nginx,
+  jit-approval-svc, anomaly-detector, chromium-browser or any
+  openclaw/moltbot service.
+- **Grafana alert rules** (`alerting/infrastructure.yml`,
+  `alerting/anomaly.yml`), existing rules only: `for`, summary/description
+  text, severity (critical/warning/info), threshold numbers. No new, removed
+  or reordered rules.
+- **Dashboards** (`dashboards/json/*.json`): edits that keep the uid and add
+  no new datasource.
+- **Docs**: `docs/*.md`, `README.md`, `docs/**/README*.md`, except AUTOMERGE,
+  DISASTER_RECOVERY, RENOVATE, DEPLOY, FIREWALL, SECRET_ROTATION,
+  GITLAB_SETTINGS, docker-proxy-architecture, `jit-*` and anything with
+  "security" in the name.
+
+Keep one concern per MR so it can qualify. If a change falls outside these
+rules, open the MR and leave it for Noah; never split or reshape a change to
+get past the rules.
