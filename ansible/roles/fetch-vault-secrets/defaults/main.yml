@@ -217,12 +217,6 @@ vault_secret_paths:
       vault_openclaw_hooks_token: "hooks_token"
       vault_openclaw_claude_oauth_token: "claude_code_oauth_token"
 
-  # ClawRouter
-  - path: "clawrouter"
-    fields:
-      vault_openclaw_clawrouter_wallet_address: "wallet_address"
-    optional: true  # telegraf.conf skips the clawrouter input when empty
-
   # Router heartbeat (ansible/roles/deadman, docs/DEADMAN.md). Optional: the
   # timer stays disabled until the ping URL is stored.
   - path: "monitoring/healthchecks"

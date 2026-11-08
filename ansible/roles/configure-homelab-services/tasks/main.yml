@@ -119,6 +119,15 @@
     mode: '0755'
   when: "'router' in inventory_hostname"
 
+# Scripts of telegraf inputs that were removed from telegraf.conf.
+- name: Remove retired Telegraf scripts
+  ansible.builtin.file:
+    path: "/etc/telegraf/scripts/{{ item }}"
+    state: absent
+  loop:
+    - clawrouter-balance.sh
+  when: "'router' in inventory_hostname"
+
 - name: Enable and start Telegraf service
   ansible.builtin.systemd:
     name: telegraf
