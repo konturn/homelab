@@ -1555,6 +1555,75 @@ services:
       timeout: 10s
       retries: 3
       start_period: 120s
+  # Frigate NVR (docs/frigate.md): back_door and front_door cameras, NVDEC
+  # decode and YOLOv9 (ONNX) detection on the Quadro P5000, shared with Plex
+  # and Ollama. Internal VLAN only; the cameras (IoT VLAN) and mosquitto are
+  # reached through narrow FORWARD rules for frigate_ip (rules.v4). UI at
+  # frigate.lab.nkontur.com (lab_nginx, LAN + tailnet), Home Assistant on 8971.
+  # Version: a 0.x minor (0.18 -> 0.19) migrates the database one way and
+  # needs `version:` in docker/frigate/config.yml updated (renovate.json).
+  frigate:
+    container_name: frigate
+    image: ghcr.io/blakeblackshear/frigate:0.18.2-tensorrt@sha256:1cafb6ebbaff0aaf275cc3f31951bcf7e29f3989f18a10ba9565091367d8736c
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges=true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN          # s6-overlay init chowns its runtime directories
+      - DAC_OVERRIDE   # s6-overlay init and nginx write across users
+      - FOWNER         # s6-overlay sets modes on files it does not own
+      - SETUID         # nginx workers and s6 services drop privileges
+      - SETGID
+    networks:
+      internal:
+        ipv4_address: {{ frigate_ip }}
+    extra_hosts:
+      - "mqtt.lab.nkontur.com:{{ mosquitto_address }}"
+    # /dev/shm holds decoded detect frames. Frigate's formula
+    # (docs/frigate/installation.md, calculate_shm_requirements): 50 MB for
+    # logs and nginx cache + frames x (w*h*1.5 + 270480 B) per camera, with
+    # room for 2 more 720p cameras: 704x480 (0.7 MB) + 640x480 (0.7 MB)
+    # + 2 x 1.6 MB = 4.6 MB/frame set. The full 50-frame ring is
+    # 50 + 4.6 x 50 = 280 MB.
+    shm_size: "320mb"
+    # Host RAM: ~1.5-2.5 GB resident for two cameras with GPU detection, plus
+    # the 1 GB recording-segment tmpfs (charged to this cgroup).
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+        reservations:
+          memory: 1G
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu, video, compute, utility]
+    environment:
+      - FRIGATE_MQTT_PASSWORD={{ vault_frigate_mqtt_password | trim | replace("$", "$$") }}
+      - FRIGATE_BACK_CAMERA_PASSWORD={{ vault_rear_camera_pass | trim | replace("$", "$$") }}
+      - FRIGATE_DOORBELL_PASSWORD={{ vault_doorbell_pass | trim | replace("$", "$$") }}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - "{{ docker_persistent_data_path }}/frigate:/config"
+      # Recordings, clips and exports: mpool/frigate (quota 1T), never the SSD
+      - /mpool/frigate:/media/frigate
+      - type: tmpfs
+        target: /tmp/cache
+        tmpfs:
+          size: 1000000000
+    stop_grace_period: 30s
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    healthcheck:
+      # Port 5000 listens on loopback only (config.yml networking.listen)
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:5000/api/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
   snapserver:
     container_name: snapserver
     security_opt:

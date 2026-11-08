@@ -1,0 +1,44 @@
+---
+# Frigate host state that must exist before compose up (docs/frigate.md).
+
+# Recordings live on their own dataset with a hard quota, so Frigate can never
+# fill the pool, and outside zfs-auto-snapshot (a snapshot would keep deleted
+# footage on disk, past both the retention and the quota). Created when
+# missing; quota and auto-snapshot are re-asserted on every deploy. Never
+# destroyed or shrunk here.
+- name: Ensure the Frigate recordings dataset
+  ansible.builtin.shell: |
+    set -euo pipefail
+    ds={{ frigate_dataset | quote }}
+    if ! zfs list -H -o name "$ds" >/dev/null 2>&1; then
+      zfs create -o mountpoint={{ frigate_media_path | quote }} \
+        -o quota={{ frigate_dataset_quota | quote }} -o com.sun:auto-snapshot=false \
+        -o atime=off -o recordsize=1M "$ds"
+      echo "created $ds"
+    fi
+    for kv in quota={{ frigate_dataset_quota | quote }} com.sun:auto-snapshot=false; do
+      k=${kv%%=*}; v=${kv#*=}
+      if [ "$(zfs get -H -o value "$k" "$ds")" != "$v" ]; then
+        zfs set "$kv" "$ds"
+        echo "set $kv"
+      fi
+    done
+    [ "$(zfs get -H -o value mounted "$ds")" = yes ]
+    [ "$(zfs get -H -o value mountpoint "$ds")" = {{ frigate_media_path | quote }} ]
+  args:
+    executable: /bin/bash
+  register: _frigate_dataset
+  changed_when: _frigate_dataset.stdout | length > 0
+  when: not ansible_check_mode
+
+# The detection model is not in the image. Build it once (CPU-only export in a
+# throwaway build container, ~10 min) when the file is missing; restic keeps a
+# copy with the rest of /persistent_data/application.
+- name: Build the Frigate detection model when missing
+  ansible.builtin.script:
+    cmd: >-
+      {{ lookup('env', 'CI_PROJECT_DIR') }}/docker/frigate/build-yolov9-model.sh
+      s 320 {{ (docker_persistent_data_path ~ '/frigate/model_cache') | quote }}
+    creates: "{{ docker_persistent_data_path }}/frigate/model_cache/yolov9-s-320.onnx"
+  timeout: 2400
+  when: not ansible_check_mode

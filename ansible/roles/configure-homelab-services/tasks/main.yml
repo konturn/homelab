@@ -940,6 +940,10 @@
     - "'router' in inventory_hostname"
     - vault_nut_monitor_password | default('') | length == 0
 
+### Frigate: recordings dataset and detection model (before compose up)
+- ansible.builtin.import_tasks: frigate_pre.yml
+  when: "'router' in inventory_hostname"
+
 ### Snapserver FIFO pipe
 # Snapserver reads Bluetooth audio from /tmp/snapfifo (a named pipe).
 # If the path doesn't exist, Docker creates it as a directory on bind-mount,
@@ -1004,6 +1008,9 @@
   # docker_conf is registered by configure-docker, which a partial
   # (changed-only) deploy may skip.
   when: docker_conf is defined and docker_conf is changed and not ansible_check_mode
+
+### Frigate: MQTT user and UI users (after compose up)
+- ansible.builtin.import_tasks: frigate_post.yml
 
 - name: Capture Nextcloud image ID after compose-up
   ansible.builtin.command:

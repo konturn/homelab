@@ -96,6 +96,8 @@ Exception: excel-vm (`excel_vm_address`, VLAN 3) routes via WAN for client M365 
 | iot (10.6.x.x) | Pi-hole | DNS only |
 | iot (10.6.x.x) | registry | Container pulls |
 | Any | snapserver | **ALLOW ALL** |
+| frigate (`frigate_ip`, internal) | back camera, doorbell (iot) | TCP 80, 554 |
+| frigate (`frigate_ip`, internal) | mosquitto (iot) | TCP 8883 |
 | Shield TV | Any | **ALLOW ALL** |
 | Apple TV | Any | **ALLOW ALL** |
 
