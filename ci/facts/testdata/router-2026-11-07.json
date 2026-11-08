@@ -140,6 +140,11 @@
    "health": null,
    "state": "exited"
   },
+  "iot-dns": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
   "iot_nginx": {
    "exit_code": null,
    "health": "healthy",
@@ -636,6 +641,14 @@
   },
   "influxdb": {
    "detail": "running, healthy",
+   "ok": true
+  },
+  "iot-dns": {
+   "detail": "running, healthy",
+   "ok": true
+  },
+  "iot_resolver": {
+   "detail": "1 answer(s)",
    "ok": true
   },
   "mosquitto": {

@@ -63,7 +63,7 @@ with this file, they win: say so.
 - Amp A (HA /dev/ttyUSB0), inputs 1 Global, 2 Guest_Bathroom, 3 Guest_Bedroom, 4 Office; zones Living Room Speakers 2 (zone_11), Dining Room (zone_12), Guest Bathroom (zone_13), Deck (zone_5), Kitchen (zone_15), Living Room Speakers 1 (zone_16).
 - Amp B (HA /dev/ttyUSB1), inputs 1 Global; zones Main Bathroom (zone_11_2), Gym (zone_12_2), Front Basement Hallway (zone_13_2), Ping Pong (zone_14), Back Basement Hallways (zone_15_2), Office (zone_16_2). Office Speakers (zone 16) sit on B, but the Office stream is labelled on A's input 4, so the Office speakers can only play Global today (#154).
 - Amp C: Not connected yet. Planned (#154): Office, Main Bedroom, Guest Bedroom, maybe Movie Room, on a third USB-serial adapter.
-- Amcrest back camera (Home Assistant camera.10_6_128_14): Offline 2026-10-21 to 2026-11-08; back after its PoE cable was reseated at the switch. Clock about 55 min slow (no NTP configured); recorded by Frigate since 2026-11-08.
+- Amcrest back camera (Home Assistant camera.10_6_128_14): Back 2026-11-08 after its PoE cable was reseated. Clock about 55 min slow (no NTP configured); recorded by Frigate since 2026-11-08.
 - Amcrest doorbell (amcrest2mqtt): Unreachable since 2026-07-13 (issue #123); hardware fix pending.
 - Denon AVR-X6700H (HA denonavr, local): 
 - Epson projector (HA pjlink, local): 
@@ -105,7 +105,6 @@ with this file, they win: say so.
 - zwave_js (zwave) needs zwave_pi, zwave_stick.
 - homeassistant needs mqtt, zwave_js, influxdb, dns.
 - Every router container needs `/persistent_data` (the 870 EVO, Docker's data-root).
-- **Rule (iot_resolver):** VLAN 6 devices have no other resolver: DHCP hands out only iot-dns and the router redirects their other DNS to it. If iot-dns is down, IoT devices cannot resolve anything.
 - **Rule (zigbee2mqtt):** After an SLZB coordinator firmware update (or coordinator reboot), restart zigbee2mqtt. It keeps its TCP session but receives no frames; on 2026-11-07 that went unnoticed for about an hour. The Zigbee silence alert watches for it.
 - **Rule (frigate):** The config is repo-managed (docker/frigate/config.yml): edits in the Frigate UI are overwritten on the next deploy.
 - **Rule (frigate):** Recordings live on /mpool/frigate, never on /persistent_data.

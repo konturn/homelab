@@ -71,15 +71,13 @@ nodes:
     probe: {dns: {server: "{{ pihole_ip }}", name: router.lab.nkontur.com}}
   iot-dns:
     kind: container
-    desc: iot-dns (dnsmasq), the resolver of the IoT VLAN's devices; forwards to Pi-hole, internal zones NXDOMAIN (docs/NETWORK.md, "IoT resolver").
+    desc: Resolver of the IoT VLAN's devices (docs/NETWORK.md, "IoT resolver").
     probe: {container: iot-dns}
   iot_resolver:
     kind: endpoint
-    desc: DNS answers for IoT devices, from iot-dns via Pi-hole.
+    desc: DNS for IoT devices (they have no other resolver).
     needs: [iot-dns, dns]
     probe: {dns: {server: "{{ iot_dns_ip }}", name: example.com}}
-    rules:
-      - "VLAN 6 devices have no other resolver: DHCP hands out only iot-dns and the router redirects their other DNS to it. If iot-dns is down, IoT devices cannot resolve anything."
   mosquitto:
     kind: container
     desc: MQTT broker.
