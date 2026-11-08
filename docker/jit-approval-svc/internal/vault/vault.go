@@ -2,6 +2,7 @@ package vault
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	vaultapi "github.com/hashicorp/vault/api"
@@ -295,11 +296,27 @@ var resourceTier = map[string]int{
 	"ipmi":                   2,
 }
 
+// GitLabAgentResourcePrefix starts the resource name of the GitLab agent
+// identity backend, "gitlab-" + GITLAB_AGENT_USER (main.go).
+const GitLabAgentResourcePrefix = "gitlab-"
+
 // MinTierForResource returns the minimum tier required for a resource.
 // Returns 0 if the resource is unknown (caller should allow unknown resources
 // to pass through so tier validation still applies via config).
+//
+// Exception: an unknown "gitlab-<user>" resource needs tier 2. The agent
+// identity backend is registered under whatever GITLAB_AGENT_USER names, but
+// only the reviewed user (gitlab-moltbot) has a tier entry; if the variable
+// named anyone else, a tier-1 request would otherwise be auto-approved with
+// that user's GitLab identity.
 func MinTierForResource(resource string) int {
-	return resourceTier[resource]
+	if tier, ok := resourceTier[resource]; ok {
+		return tier
+	}
+	if strings.HasPrefix(resource, GitLabAgentResourcePrefix) {
+		return 2
+	}
+	return 0
 }
 
 // staticResourcePaths lists the resources served by the static backend and

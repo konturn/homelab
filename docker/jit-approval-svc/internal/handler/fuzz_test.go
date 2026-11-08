@@ -398,3 +398,37 @@ func FuzzTelegramWebhook(f *testing.F) {
 		}
 	})
 }
+
+// TestUnknownGitLabAgentUserNeedsApproval: with GITLAB_AGENT_USER set to a
+// user other than moltbot, main.go registers the agent backend as
+// gitlab-<user>, which has no tier entry. A tier-1 request for it must be
+// refused rather than auto-approved, and a tier-2 one must wait for approval.
+func TestUnknownGitLabAgentUserNeedsApproval(t *testing.T) {
+	for _, user := range []string{"root", "alice", "moltbot2"} {
+		res := "gitlab-" + user
+		h, rec := propHandler()
+		h.backends.Register(res, &recBackend{name: "dyn:" + res, rec: rec})
+
+		raw, _ := json.Marshal(CreateRequestBody{Requester: "prometheus", Resource: res, Tier: 1, Reason: "agent"})
+		w := doRequest(h, "fake-api-key", raw)
+		if calls := rec.take(); len(calls) != 0 {
+			t.Errorf("%s tier 1: minted %+v", res, calls)
+		}
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("%s tier 1: status %d, want %d", res, w.Code, http.StatusBadRequest)
+		}
+
+		raw, _ = json.Marshal(CreateRequestBody{Requester: "prometheus", Resource: res, Tier: 2, Reason: "agent"})
+		w = doRequest(h, "fake-api-key", raw)
+		if calls := rec.take(); len(calls) != 0 {
+			t.Errorf("%s tier 2: minted %+v without approval", res, calls)
+		}
+		var resp struct {
+			Status string `json:"status"`
+		}
+		_ = json.Unmarshal(w.Body.Bytes(), &resp)
+		if resp.Status != "pending" {
+			t.Errorf("%s tier 2: status %d %q, want a pending request", res, w.Code, resp.Status)
+		}
+	}
+}
