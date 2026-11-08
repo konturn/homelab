@@ -283,6 +283,7 @@ tailnet sources (see "Services restricted to LAN + tailnet" below).
 - Traffic from VLAN 3 (internal) destined outside 10.0.0.0/8 → marked
 - Traffic from VLAN 6 (iot) destined outside 10.0.0.0/8 → marked
 - Traffic from VLAN 7 destined outside 10.0.0.0/8 → marked
+- Except traffic to the router's own addresses (`-m addrtype --dst-type LOCAL -j RETURN`, first rule): the WAN address is hairpin-DNATed to nginx and must not go into the tunnel
 
 **Kill Switch:**
 Route table 252 has a `prohibit` route as fallback — if Mullvad is down, traffic is blocked rather than leaking to WAN.
@@ -314,10 +315,12 @@ When LAN clients on VLAN 3, 4 or 6 access external services via public DNS:
    └────────────────────────────────────┘
 ```
 
-Known gap: VLAN 3/6 traffic to the WAN address is marked for Mullvad in mangle
-PREROUTING before the DNAT, so it is routed into the tunnel and never reaches
-nginx; only the VLAN 4 hairpin works today. Clients using Pi-hole are not
-affected, because Pi-hole answers `*.nkontur.com` with the nginx address.
+VLAN 3/6 traffic is marked for Mullvad in mangle PREROUTING, which runs before
+the DNAT. Packets addressed to one of the router's own addresses (`addrtype
+LOCAL`, which includes the WAN address) skip the mark, so hairpinned VLAN 3/6
+flows are routed to nginx by the main table instead of into the tunnel.
+Internet-bound traffic is still marked. Clients using Pi-hole do not hairpin at
+all, because Pi-hole answers `*.nkontur.com` with the nginx address.
 
 ---
 
@@ -385,7 +388,7 @@ allow 100.64.0.0/10; deny all;` restriction and the removal of unused port forwa
 were applied once client devices were confirmed working over Tailscale.
 
 Off-tailnet clients get `403` from those vhosts. Hairpinned LAN clients (via the WAN
-address; see the hairpin gap above) keep their real 10.x source and are allowed; the guest VLAN has no
+address) keep their real 10.x source and are allowed; the guest VLAN has no
 hairpin and no access.
 
 ---
