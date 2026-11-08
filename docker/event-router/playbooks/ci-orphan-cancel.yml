@@ -5,7 +5,7 @@
 # newest_ready_first). Exempt from the deploy lock (S7): it exists to free it.
 id: ci-orphan-cancel
 description: Cancel an orphaned job holding the router deploy lock
-mode: shadow
+mode: active
 match:
   source: reconciler
   kind: ci_orphan

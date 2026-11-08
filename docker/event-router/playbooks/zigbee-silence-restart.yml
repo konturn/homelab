@@ -5,7 +5,7 @@
 # so a dead coordinator is escalated, not restarted around.
 id: zigbee-silence-restart
 description: Restart zigbee2mqtt when it hears no Zigbee messages
-mode: shadow
+mode: active
 match:
   source: grafana
   rule_uid: zigbee-radio-silence

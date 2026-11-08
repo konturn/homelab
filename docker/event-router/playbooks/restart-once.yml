@@ -5,7 +5,7 @@
 # I2). A second failure in 6h trips the breaker and goes to OpenClaw.
 id: restart-once
 description: Restart an unhealthy non-platform container once
-mode: shadow
+mode: active
 match:
   source: grafana
   rule_uid: container-health-failure
