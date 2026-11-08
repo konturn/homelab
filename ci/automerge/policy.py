@@ -15,6 +15,8 @@ tag changes whose version scheme is ambiguous, never qualify.
 from __future__ import annotations
 
 import fnmatch
+import functools
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Collection, Dict, List, Optional, Set, Tuple
@@ -820,6 +822,517 @@ def is_stateful(service: Optional[str], image: Optional[str], allowlist: dict) -
 
 
 # ---------------------------------------------------------------------------
+# Dependency class (docs/AUTOMERGE.md, "Dependency updates")
+# ---------------------------------------------------------------------------
+# Renovate MRs that bump a version in our own build and deploy files: base
+# images on Dockerfile FROM lines, Renovate-managed pin lines (npm global
+# installs, `# renovate:` annotations) in Dockerfiles and ansible
+# tasks/defaults, and the OpenClaw tool npm dependencies. Every changed line
+# is checked here; anything the checks cannot read is refused (fails closed).
+
+DEP_HOLD_JOB = "dep"
+SECURITY_KINDS = ("digest", "patch")
+_SAFE_PATH = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]*(/[A-Za-z0-9_][A-Za-z0-9._-]*)*$")
+_ANNOTATION = re.compile(r"^\s*#\s*renovate:\s*datasource=(\S+)\s+depName=(\S+)", re.A)
+_NPM_GLOBAL = re.compile(r"npm install (?:-g|--global) (@?[a-z0-9][a-z0-9._-]*(?:/[a-z0-9._-]+)?)@(\d+\.\d+\.\d+)(?![\w.])", re.A)
+# A version token: digits separated by dots, not glued to other word characters.
+_VER_TOKEN = re.compile(r"(?<![\w.])v?(\d+(?:\.\d+){1,3})(?![\w.]|-(?:rc|alpha|beta|pre|dev)\b)", re.A)
+_HEX_TOKEN = re.compile(r"(?<![0-9a-fA-F])([0-9a-f]{64}|[0-9a-f]{128})(?![0-9a-fA-F])")
+_FROM_RE = re.compile(r"^( *FROM +)((?:--[a-z][a-z-]*=[!-~]+ +)*)([!-~]+)( +AS +[A-Za-z0-9_.-]+)? *$", re.I | re.A)
+_EXACT_SEMVER = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
+_DEP_SECTIONS = ("dependencies", "optionalDependencies", "devDependencies", "peerDependencies")
+
+
+def _glob_re(pattern: str) -> "re.Pattern[str]":
+    """A path glob: `*` matches within one path segment, `**` across segments."""
+    out = ""
+    i = 0
+    while i < len(pattern):
+        if pattern.startswith("**", i):
+            out += ".*"
+            i += 2
+        elif pattern[i] == "*":
+            out += "[^/]*"
+            i += 1
+        else:
+            out += re.escape(pattern[i])
+            i += 1
+    return re.compile("^" + out + "$")
+
+
+def glob_match(pattern: str, path: str) -> bool:
+    """`path` is a plain repository path (no `.`/`..` segments, no doubled or
+    leading slash, ASCII) that `pattern` matches."""
+    return bool(_SAFE_PATH.match(path)) and ".." not in path.split("/") \
+        and bool(_glob_re(pattern).match(path))
+
+
+def _reasons_map(value, where: str) -> Dict[str, str]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise PolicyError(f"{where} must be a mapping of name: reason")
+    out = {}
+    for name, reason in value.items():
+        if not isinstance(name, str) or not isinstance(reason, str) or not reason.strip():
+            raise PolicyError(f"{where} {name}: a reason is required")
+        out[name] = " ".join(reason.split())
+    return out
+
+
+def _str_list(value, where: str) -> List[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list) or any(not isinstance(x, str) or not x for x in value):
+        raise PolicyError(f"{where} must be a list of strings")
+    return list(value)
+
+
+def dependencies_config(allowlist: dict) -> dict:
+    """Validated `dependencies` section. Raises PolicyError on anything
+    malformed, so a typo fails closed."""
+    sec = allowlist.get("dependencies")
+    empty = {"enabled": False, "authors": [], "codeowner": "", "dockerfiles": [], "npm": {},
+             "pin_files": [], "zero_minor": set(), "denylist": {}, "critical_files": {}, "critical_jobs": {}}
+    if sec is None:
+        return empty
+    if not isinstance(sec, dict):
+        raise PolicyError("`dependencies` must be a mapping")
+    npm = sec.get("npm") or {}
+    if not isinstance(npm, dict):
+        raise PolicyError("dependencies.npm must be a mapping")
+    if npm:
+        for key in ("package_json", "lockfile", "registry"):
+            if not isinstance(npm.get(key), str) or not npm[key]:
+                raise PolicyError(f"dependencies.npm.{key} is required")
+        if not npm["registry"].startswith("https://") or not npm["registry"].endswith("/"):
+            raise PolicyError("dependencies.npm.registry must be an https:// URL ending in /")
+        for key in ("package_json", "lockfile"):
+            if not _SAFE_PATH.match(npm[key]):
+                raise PolicyError(f"dependencies.npm.{key} must be a repository path")
+    crit = sec.get("security_critical") or {}
+    if not isinstance(crit, dict):
+        raise PolicyError("dependencies.security_critical must be a mapping")
+    codeowner = sec.get("codeowner") or ""
+    if not isinstance(codeowner, str) or (codeowner and not codeowner.startswith("@")):
+        raise PolicyError("dependencies.codeowner must be a CODEOWNERS owner (@name)")
+    dockerfiles = _str_list(sec.get("dockerfiles"), "dependencies.dockerfiles")
+    if any(not d.endswith("/Dockerfile") for d in dockerfiles):
+        raise PolicyError("dependencies.dockerfiles entries must name Dockerfiles")
+    return {
+        "enabled": sec.get("enabled") is True,
+        "authors": _str_list(sec.get("authors"), "dependencies.authors"),
+        "codeowner": codeowner,
+        "dockerfiles": dockerfiles,
+        "npm": dict(npm),
+        "pin_files": _str_list(sec.get("pin_files"), "dependencies.pin_files"),
+        "zero_minor": set(_str_list(sec.get("zero_minor_is_minor"), "dependencies.zero_minor_is_minor")),
+        "denylist": _reasons_map(sec.get("denylist"), "dependencies.denylist"),
+        "critical_files": _reasons_map(crit.get("files"), "dependencies.security_critical.files"),
+        "critical_jobs": _reasons_map(crit.get("ci_jobs"), "dependencies.security_critical.ci_jobs"),
+    }
+
+
+def dependency_file_kind(path: str, cfg: dict) -> Optional[str]:
+    """'dockerfile' | 'package_json' | 'lockfile' | 'pins', or None when the
+    class does not cover the path (or the class is disabled)."""
+    if not cfg.get("enabled"):
+        return None
+    npm = cfg.get("npm") or {}
+    if npm and path == npm.get("package_json"):
+        return "package_json"
+    if npm and path == npm.get("lockfile"):
+        return "lockfile"
+    if any(glob_match(p, path) for p in cfg["dockerfiles"]):
+        return "dockerfile"
+    if any(glob_match(p, path) for p in cfg["pin_files"]):
+        return "pins"
+    return None
+
+
+def dependency_paths(paths: Collection[str], allowlist: dict) -> List[str]:
+    """The paths the dependency class covers (empty if it is disabled or malformed)."""
+    try:
+        cfg = dependencies_config(allowlist)
+    except PolicyError:
+        return []
+    return [p for p in paths if dependency_file_kind(p, cfg)]
+
+
+def critical_job_reason(job: str, cfg: dict) -> Optional[str]:
+    for pat, why in cfg["critical_jobs"].items():
+        if fnmatch.fnmatchcase(job, pat):
+            return why
+    return None
+
+
+@dataclass
+class DepChange:
+    file: str
+    line: int              # 1-based; 0 for whole-file (npm) changes
+    name: str              # image, package or depName
+    old: str
+    new: str
+    kind: str              # 'digest' | 'patch' | 'minor' | 'checksum' | 'lock'
+    old_line: str = ""
+    new_line: str = ""
+
+    def as_dict(self) -> dict:
+        return {"file": self.file, "line": self.line, "name": self.name, "kind": self.kind,
+                "old": self.old, "new": self.new}
+
+
+def dockerfile_structure(text: str) -> List[str]:
+    """Per line: 'blank', 'comment', 'cont' (a continuation of the previous
+    instruction), 'heredoc' (here-document body) or 'instr:<NAME>'. Raises
+    PolicyError for an `escape` parser directive (it changes what a line
+    continuation is)."""
+    lines = text.split("\n")
+    for line in lines[:20]:
+        s = line.strip()
+        if not s.startswith("#"):
+            break
+        if re.match(r"^#\s*escape\s*=", s, re.I):
+            raise PolicyError("Dockerfile sets an escape parser directive")
+    out: List[str] = []
+    in_cont = False
+    heredocs: List[Tuple[str, bool]] = []
+    for line in lines:
+        if in_cont:
+            out.append("cont")
+            heredocs += [(m.group(2), bool(m.group(1))) for m in
+                         re.finditer(r"<<(-?)\s*[\"']?([A-Za-z0-9_]+)[\"']?", line)]
+            in_cont = line.rstrip().endswith("\\")
+            continue
+        if heredocs:
+            delim, strip_tabs = heredocs[0]
+            out.append("heredoc")
+            if (line.lstrip("\t") if strip_tabs else line) == delim:
+                heredocs.pop(0)
+            continue
+        s = line.strip()
+        if not s:
+            out.append("blank")
+        elif s.startswith("#"):
+            out.append("comment")
+        else:
+            out.append("instr:" + s.split()[0].upper())
+            heredocs += [(m.group(2), bool(m.group(1))) for m in
+                         re.finditer(r"<<(-?)\s*[\"']?([A-Za-z0-9_]+)[\"']?", line)]
+            in_cont = line.rstrip().endswith("\\")
+    return out
+
+
+def _version_only_change(old: str, new: str, where: str, zero_minor: bool) -> List[Tuple[str, str, str]]:
+    """The (old, new, kind) version changes of a line whose only change is
+    version tokens. Raises PolicyError (MajorVersionChange for a major)."""
+    o_toks, n_toks = _VER_TOKEN.findall(old), _VER_TOKEN.findall(new)
+    if _VER_TOKEN.sub("\0", old) != _VER_TOKEN.sub("\0", new) or len(o_toks) != len(n_toks):
+        raise PolicyError(f"{where}: the change is not only a version")
+    pairs = {(o, n) for o, n in zip(o_toks, n_toks) if o != n}
+    if not pairs:
+        raise PolicyError(f"{where}: non-functional edit")
+    if len(pairs) > 1:
+        raise PolicyError(f"{where}: more than one version changed")
+    o, n = pairs.pop()
+    return [(o, n, classify_tag_change(o, n, zero_minor))]
+
+
+def _annotation(lines: List[str], i: int) -> Optional[str]:
+    """depName of a `# renovate:` annotation on the line above line i."""
+    if i == 0:
+        return None
+    m = _ANNOTATION.match(lines[i - 1])
+    return m.group(2) if m else None
+
+
+def _pin_block(lines: List[str], i: int) -> range:
+    """The lines a pin's checksum may sit on: from the pin to the next blank
+    line, at most 12 lines."""
+    end = i + 1
+    while end < len(lines) and end < i + 12 and lines[end].strip():
+        end += 1
+    return range(i + 1, end)
+
+
+def _diff_pin_lines(path: str, base: str, head: str, cfg: dict, jinja: bool,
+                    kinds: Optional[List[str]] = None, from_ok: bool = False) -> List[DepChange]:
+    """In-place edits of Renovate-managed pin lines (and Dockerfile FROM lines
+    when `from_ok`). `kinds` (Dockerfiles) is the per-line structure."""
+    b_lines, h_lines = base.split("\n"), head.split("\n")
+    if len(b_lines) != len(h_lines):
+        raise PolicyError(f"{path}: line count changed ({len(b_lines)} -> {len(h_lines)}); "
+                          "only in-place version edits qualify")
+    changed = [i for i, (b, h) in enumerate(zip(b_lines, h_lines)) if b != h]
+    pins: Dict[int, str] = {}
+    out: List[DepChange] = []
+    for i in changed:
+        bl, hl = b_lines[i], h_lines[i]
+        where = f"{path} line {i + 1}"
+        check_changed_line(hl, where, jinja=jinja)
+        if _ODD_LINE_BREAK.search(bl):
+            raise PolicyError(f"{where}: line contains a line break other than \\n (e.g. \\r)")
+        if kinds is not None and kinds[i] == "heredoc":
+            raise PolicyError(f"{where} is inside a here-document")
+        if from_ok and kinds is not None and kinds[i] == "instr:FROM":
+            out.append(_diff_from_line(path, i, bl, hl, cfg))
+            continue
+        npm_b, npm_h = _NPM_GLOBAL.search(bl), _NPM_GLOBAL.search(hl)
+        dep = _annotation(h_lines, i) if b_lines[i - 1:i] == h_lines[i - 1:i] else None
+        npm_pin = bool(npm_b and npm_h and npm_b.group(1) == npm_h.group(1) and kinds is not None)
+        if npm_pin:
+            dep = npm_b.group(1)
+        if dep is None:
+            continue           # maybe a checksum line, checked below
+        pins[i] = dep
+        for o, n, kind in _version_only_change(bl, hl, where, dep in cfg["zero_minor"]):
+            if npm_pin and (npm_b.group(2), npm_h.group(2)) != (o, n):
+                raise PolicyError(f"{where}: the version that changed is not the {dep} pin")
+            out.append(DepChange(path, i + 1, dep, o, n, kind, bl, hl))
+    pin_blocks = {j: p for p in pins for j in _pin_block(h_lines, p)}
+    for i in changed:
+        if i in pins or (from_ok and kinds is not None and kinds[i] == "instr:FROM"):
+            continue
+        bl, hl = b_lines[i], h_lines[i]
+        where = f"{path} line {i + 1}"
+        if i not in pin_blocks:
+            raise PolicyError(f"{where} is not a Renovate-managed version pin"
+                              + (" or a FROM line" if from_ok else ""))
+        if _HEX_TOKEN.sub("\0", bl) != _HEX_TOKEN.sub("\0", hl) or bl == hl:
+            raise PolicyError(f"{where}: next to a pin, only a checksum may change")
+        out.append(DepChange(path, i + 1, pins[pin_blocks[i]], _HEX_TOKEN.search(bl).group(1)[:12],
+                             _HEX_TOKEN.search(hl).group(1)[:12], "checksum", bl, hl))
+    # A pin with a checksum next to it must move it too.
+    for p in pins:
+        for j in _pin_block(h_lines, p):
+            if j in pins:
+                break
+            if _HEX_TOKEN.search(b_lines[j]) and b_lines[j] == h_lines[j]:
+                raise PolicyError(f"{path} line {j + 1}: checksum next to the {pins[p]} pin was not updated")
+    return out
+
+
+def _diff_from_line(path: str, i: int, bl: str, hl: str, cfg: dict) -> DepChange:
+    where = f"{path} line {i + 1}"
+    mb, mh = _FROM_RE.match(bl), _FROM_RE.match(hl)
+    if not mb or not mh:
+        raise PolicyError(f"{where}: FROM line not understood")
+    if (mb.group(1), mb.group(2), mb.group(4)) != (mh.group(1), mh.group(2), mh.group(4)):
+        raise PolicyError(f"{where}: FROM options or stage name changed")
+    try:
+        old, new = parse_image_ref(mb.group(3)), parse_image_ref(mh.group(3))
+    except PolicyError as e:
+        raise PolicyError(f"{where}: {e}")
+    if old.name != new.name:
+        raise PolicyError(f"{where}: base image changed ({old.name} -> {new.name})")
+    if not new.digest:
+        raise PolicyError(f"{where}: new base image is not pinned by digest")
+    if old.tag == new.tag:
+        if old.digest == new.digest:
+            raise PolicyError(f"{where}: non-functional edit")
+        kind = "digest"
+    else:
+        if old.tag is None or new.tag is None:
+            raise PolicyError(f"{where}: tag added or removed")
+        try:
+            kind = classify_tag_change(old.tag, new.tag)
+        except MajorVersionChange as e:
+            raise MajorVersionChange(f"{where}: {e}", image=new.name)
+        except PolicyError as e:
+            raise PolicyError(f"{where}: {e}")
+    return DepChange(path, i + 1, new.name, str(old), str(new), kind, bl, hl)
+
+
+def _load_json(text: str, where: str):
+    def no_dupes(pairs):
+        keys = [k for k, _ in pairs]
+        if len(keys) != len(set(keys)):
+            raise PolicyError(f"{where}: duplicate JSON key")
+        return dict(pairs)
+    try:
+        return json.loads(text, object_pairs_hook=no_dupes)
+    except (ValueError, RecursionError) as e:
+        raise PolicyError(f"{where}: not valid JSON ({str(e)[:80]})")
+
+
+def _diff_package_json(path: str, base: str, head: str, cfg: dict) -> Tuple[List[DepChange], dict]:
+    b, h = _load_json(base, path), _load_json(head, path)
+    if not isinstance(b, dict) or not isinstance(h, dict):
+        raise PolicyError(f"{path}: not a JSON object")
+    if set(b) != set(h):
+        raise PolicyError(f"{path}: top-level keys changed")
+    out = []
+    for key in b:
+        if key not in _DEP_SECTIONS:
+            if b[key] != h[key]:
+                raise PolicyError(f"{path}: `{key}` changed; only dependency versions may")
+            continue
+        bd, hd = b[key], h[key]
+        if not isinstance(bd, dict) or not isinstance(hd, dict) or list(bd) != list(hd):
+            raise PolicyError(f"{path}: packages added, removed or reordered in `{key}`")
+        for name in bd:
+            if bd[name] == hd[name]:
+                continue
+            ov, nv = bd[name], hd[name]
+            if not (isinstance(ov, str) and isinstance(nv, str) and _EXACT_SEMVER.match(ov)
+                    and _EXACT_SEMVER.match(nv)):
+                raise PolicyError(f"{path}: {name}: only exact versions (x.y.z) qualify")
+            try:
+                kind = classify_tag_change(ov, nv, name in cfg["zero_minor"])
+            except MajorVersionChange as e:
+                raise MajorVersionChange(f"{path}: {name}: {e}", image=name)
+            out.append(DepChange(path, 0, name, ov, nv, kind))
+    if not out:
+        raise PolicyError(f"{path}: no dependency version changed")
+    return out, h
+
+
+def _check_lockfile(path: str, base: str, head: str, pkg: dict, cfg: dict) -> None:
+    b, h = _load_json(base, path), _load_json(head, path)
+    if not isinstance(b, dict) or not isinstance(h, dict):
+        raise PolicyError(f"{path}: not a JSON object")
+    if set(b) != set(h) or any(b[k] != h[k] for k in b if k not in ("packages", "dependencies")):
+        raise PolicyError(f"{path}: lockfile metadata changed")
+    if not isinstance(h.get("lockfileVersion"), int) or h["lockfileVersion"] < 2:
+        raise PolicyError(f"{path}: lockfileVersion 2 or later required")
+    pkgs = h.get("packages")
+    if not isinstance(pkgs, dict) or not isinstance(pkgs.get(""), dict):
+        raise PolicyError(f"{path}: no packages map")
+    root = pkgs[""]
+    for sec in _DEP_SECTIONS:
+        if (root.get(sec) or {}) != (pkg.get(sec) or {}):
+            raise PolicyError(f"{path}: `{sec}` does not match package.json (lockfile not updated?)")
+    registry = cfg["npm"]["registry"]
+    for key, entry in pkgs.items():
+        if key == "":
+            continue
+        if not isinstance(entry, dict) or not key.startswith("node_modules/"):
+            raise PolicyError(f"{path}: unexpected package entry {key[:60]!r}")
+        if entry.get("link") or "resolved" not in entry:
+            if entry.get("link") or not entry.get("inBundle"):
+                raise PolicyError(f"{path}: {key}: not resolved from the registry")
+            continue
+        if not isinstance(entry.get("resolved"), str) or not entry["resolved"].startswith(registry):
+            raise PolicyError(f"{path}: {key}: resolved outside {registry}")
+        if not isinstance(entry.get("integrity"), str) or not entry["integrity"].startswith("sha512-"):
+            raise PolicyError(f"{path}: {key}: no sha512 integrity hash")
+    for sec in _DEP_SECTIONS:
+        for name, ver in (pkg.get(sec) or {}).items():
+            entry = pkgs.get("node_modules/" + name)
+            if not isinstance(entry, dict) or entry.get("version") != ver:
+                raise PolicyError(f"{path}: {name} is not locked at {ver}")
+
+
+@dataclass
+class DepResult:
+    changes: List[DepChange] = field(default_factory=list)
+    reasons: List[str] = field(default_factory=list)
+    major: bool = False
+    required_jobs: List[str] = field(default_factory=list)
+    names: List[str] = field(default_factory=list)
+
+
+def build_check_jobs(ci_text: str) -> Dict[str, str]:
+    """BUILD_CONTEXT -> `<image>:build-check` job, from a CI file. Needs PyYAML."""
+    return dict(_build_check_jobs(ci_text))
+
+
+@functools.lru_cache(maxsize=4)
+def _build_check_jobs(ci_text: str) -> Tuple[Tuple[str, str], ...]:
+    import yaml
+
+    class _Loader(yaml.SafeLoader):
+        pass
+
+    _Loader.add_constructor("!reference", lambda loader, node: loader.construct_sequence(node))
+    doc = yaml.load(ci_text, Loader=_Loader) or {}
+    out = {}
+    for name, job in doc.items():
+        if isinstance(name, str) and name.endswith(":build-check") and isinstance(job, dict):
+            ctx = (job.get("variables") or {}).get("BUILD_CONTEXT")
+            if isinstance(ctx, str) and _SAFE_PATH.match(ctx):
+                out[ctx] = name
+    return tuple(sorted(out.items()))
+
+
+def dependency_changes(paths: List[str], contents: Dict[str, "ComposePair"], allowlist: dict,
+                       ci_text: Optional[str]) -> DepResult:
+    """Check every dependency-class file of an MR (or of a merge). `contents`
+    maps each path to its (base, head) text."""
+    r = DepResult()
+    cfg = dependencies_config(allowlist)
+    deny = {**denylist(allowlist)["images"], **cfg["denylist"]}
+    npm = cfg.get("npm") or {}
+    pkg_head = None
+    kinds = {p: dependency_file_kind(p, cfg) for p in paths}
+    if npm and (npm["package_json"] in paths) != (npm["lockfile"] in paths):
+        r.reasons.append(f"{npm['package_json']} and {npm['lockfile']} must change together")
+    for path in sorted(paths, key=lambda p: kinds[p] == "lockfile"):
+        base, head = contents.get(path, (None, None))
+        if base is None or head is None:
+            r.reasons.append(f"could not read both versions of {path}")
+            continue
+        try:
+            if kinds[path] == "dockerfile":
+                b_kinds, h_kinds = dockerfile_structure(base), dockerfile_structure(head)
+                if b_kinds != h_kinds:
+                    raise PolicyError(f"{path}: instruction structure changed")
+                found = _diff_pin_lines(path, base, head, cfg, jinja=False, kinds=h_kinds, from_ok=True)
+            elif kinds[path] == "pins":
+                found = _diff_pin_lines(path, base, head, cfg, jinja=True)
+            elif kinds[path] == "package_json":
+                found, pkg_head = _diff_package_json(path, base, head, cfg)
+            elif kinds[path] == "lockfile":
+                if pkg_head is None:
+                    raise PolicyError(f"{path}: changed without a valid package.json change")
+                _check_lockfile(path, base, head, pkg_head, cfg)
+                found = [DepChange(path, 0, "package-lock", "", "", "lock")]
+            else:
+                raise PolicyError(f"{path} is not covered by the dependency class")
+        except MajorVersionChange as e:
+            r.major = True
+            r.reasons.append(f"dependency: {e}")
+            continue
+        except PolicyError as e:
+            r.reasons.append(f"dependency: {e}")
+            continue
+        if not found:
+            r.reasons.append(f"dependency: {path}: no version change found")
+        r.changes += found
+        crit = cfg["critical_files"].get(path)
+        for c in found:
+            if c.kind in ("checksum", "lock"):
+                continue
+            if c.name in deny:
+                r.reasons.append(f"{path}: {c.name}: {DENIED_MARK} ({deny[c.name]})")
+            if crit and c.kind not in SECURITY_KINDS:
+                r.reasons.append(f"{path}: {c.kind} update of {c.name} in a security-critical image "
+                                 f"(digest and patch only): {crit}")
+    # Files under an image's build context need its build-check job.
+    if ci_text is None:
+        contexts = None
+    else:
+        try:
+            contexts = build_check_jobs(ci_text)
+        except Exception as e:  # noqa: BLE001 (any parse failure fails closed)
+            contexts = None
+            r.reasons.append(f"cannot read the build-check jobs: {str(e)[:80]}")
+    for path in paths:
+        if kinds[path] not in ("dockerfile", "package_json", "lockfile"):
+            continue
+        if contexts is None:
+            r.reasons.append(f"{path}: no CI file to find its build-check job in")
+            continue
+        job = next((j for ctx, j in contexts.items() if path.startswith(ctx + "/")), None)
+        if job is None:
+            r.reasons.append(f"{path}: no <image>:build-check job builds it")
+        elif job not in r.required_jobs:
+            r.required_jobs.append(job)
+    r.names = sorted({c.name for c in r.changes if c.kind not in ("checksum", "lock")})
+    return r
+
+
+# ---------------------------------------------------------------------------
 # Whole-MR evaluation (MR-local checks; global gates are added by the caller)
 # ---------------------------------------------------------------------------
 
@@ -848,6 +1361,10 @@ class Verdict:
     config_services: List[Tuple[str, str]] = field(default_factory=list)   # (compose file, service)
     grafana_files: List[str] = field(default_factory=list)
     hold_keys: List[Tuple[str, str]] = field(default_factory=list)          # (deploy job, service)
+    dependency: bool = False                           # dependency class (Dockerfiles, pins, npm)
+    dep_changes: List[DepChange] = field(default_factory=list)
+    dep_names: List[str] = field(default_factory=list)     # images/packages it changes
+    required_jobs: List[str] = field(default_factory=list)  # MR pipeline jobs that must have passed
 
     def reject(self, reason: str) -> None:
         self.eligible = False
@@ -862,6 +1379,8 @@ class Verdict:
 
     def as_dict(self) -> dict:
         return {"eligible": self.eligible, "fast_track": self.fast_track, "ci_image": self.ci_image,
+                "dependency": self.dependency, "dep_changes": [c.as_dict() for c in self.dep_changes],
+                "required_jobs": self.required_jobs,
                 "bot_config": self.bot_config, "shadow_playbook": self.shadow_playbook,
                 "bot_changes": [c.as_dict() for c in self.bot_changes],
                 "heavy": self.heavy,
@@ -888,16 +1407,17 @@ def evaluate_mr(*, author: str, target_branch: str, labels: List[str],
                 base_compose: Optional[str] = None, head_compose: Optional[str] = None,
                 composes: Optional[Dict[str, ComposePair]] = None,
                 deployments: Optional[Dict[str, List[Deployment]]] = None,
-                merger: Optional[str] = None) -> Verdict:
-    """Image-update policy (general, fast track, CI image), and for MRs by a
+                merger: Optional[str] = None, ci_text: Optional[str] = None) -> Verdict:
+    """Image-update policy (general, fast track, CI image, dependency), and for MRs by a
     bot-config author that are not image updates, the bot-config class.
     `composes` maps changed files to their (base, head) text (every changed
-    file for a bot-config author)."""
+    file for a bot-config author; every dependency-class file). `ci_text` is
+    main's .gitlab-ci.yml, for the build-check jobs of the dependency class."""
     v = _evaluate_images(author=author, target_branch=target_branch, labels=labels, files=files,
                          allowlist=allowlist, codeowners_text=codeowners_text, base_compose=base_compose,
                          head_compose=head_compose, composes=composes, deployments=deployments,
-                         merger=merger)
-    if v.eligible or v.changes or v.major:
+                         merger=merger, ci_text=ci_text)
+    if v.eligible or v.changes or v.major or v.dep_changes:
         return v
     import botconfig
     try:
@@ -1000,7 +1520,7 @@ def _evaluate_images(*, author: str, target_branch: str, labels: List[str],
                 base_compose: Optional[str] = None, head_compose: Optional[str] = None,
                 composes: Optional[Dict[str, ComposePair]] = None,
                 deployments: Optional[Dict[str, List[Deployment]]] = None,
-                merger: Optional[str] = None) -> Verdict:
+                merger: Optional[str] = None, ci_text: Optional[str] = None) -> Verdict:
     """`composes` maps each changed compose file to its (base, head) text;
     `base_compose`/`head_compose` are shorthand for the router file.
     `deployments` comes from `compose_deployments` (default: every listed
@@ -1014,7 +1534,7 @@ def _evaluate_images(*, author: str, target_branch: str, labels: List[str],
         deployments = default_deployments(allowlist)
 
     # A malformed policy section fails closed for every MR.
-    for check in (fast_track_config, denylist, pre_upgrade_config, ci_images_config):
+    for check in (fast_track_config, denylist, pre_upgrade_config, ci_images_config, dependencies_config):
         try:
             check(allowlist)
         except PolicyError as e:
@@ -1038,13 +1558,14 @@ def _evaluate_images(*, author: str, target_branch: str, labels: List[str],
     allowed = set(compose_files(allowlist))
     ci_allowed = set(ci_files(allowlist))
     paths = sorted({f.path for f in files} | {f.old_path for f in files if f.old_path})
+    dep_allowed = set(dependency_paths(paths, allowlist))
     if not files:
         v.reject("MR has no file changes")
     for f in files:
         if f.new_file or f.deleted_file or f.renamed_file or f.mode_changed:
             v.reject(f"{f.path}: file added, deleted, renamed or mode-changed")
     for p in paths:
-        if p in allowed or p in ci_allowed:
+        if p in allowed or p in ci_allowed or p in dep_allowed:
             continue
         if COMPOSE_GLOB.match(p):
             if not deployments.get(p):
@@ -1058,10 +1579,14 @@ def _evaluate_images(*, author: str, target_branch: str, labels: List[str],
     # CODEOWNERS: the listed compose files and CI files are special-cased
     # (allowed only for image-only diffs, verified below); any other
     # code-owned path disqualifies.
-    owned = [p for p in protected_paths(paths, codeowners_text) if p not in allowed | ci_allowed]
+    owned = [p for p in protected_paths(paths, codeowners_text) if p not in allowed | ci_allowed | dep_allowed]
     if owned:
         v.reject("touches CODEOWNERS-protected paths: " + ", ".join(owned))
 
+    if dep_allowed:
+        _evaluate_dependencies(v, author, sorted(dep_allowed), [p for p in paths if p not in dep_allowed],
+                               composes, allowlist, codeowners_text, ci_text)
+        return v
     changed_ci = [p for p in paths if p in ci_allowed]
     if changed_ci:
         _evaluate_ci(v, author, changed_ci, [p for p in paths if p not in ci_allowed], composes, allowlist)
@@ -1153,6 +1678,8 @@ def _evaluate_ci(v: Verdict, author: str, changed_ci: List[str], others: List[st
         for r in ci_change_reasons(changes, allowlist):
             v.reject(r)
             v.denied = True
+        for r in ci_critical_reasons(changes, allowlist):
+            v.reject(r)
     v.ci_images = sorted({c.new.name for c in v.changes})
     for c in v.changes:
         v.notes.append(f"{c.service}: {c.kind} update {c.old.tag or ''} -> {c.new.tag or ''}"
@@ -1161,6 +1688,69 @@ def _evaluate_ci(v: Verdict, author: str, changed_ci: List[str], others: List[st
         v.reject("CI file changed but no image updates were found")
     if v.eligible:
         v.notes.append("class: CI image (nothing to deploy; the sweep watches the main pipeline)")
+
+
+def ci_critical_reasons(changes: List[ImageChange], allowlist: dict) -> List[str]:
+    """Security-critical CI jobs (`dependencies.security_critical.ci_jobs`)
+    take digest refreshes and patch releases only."""
+    try:
+        cfg = dependencies_config(allowlist)
+    except PolicyError as e:
+        return [f"policy: {e}"]
+    out = []
+    for c in changes:
+        why = critical_job_reason(c.service, cfg)
+        if why and c.kind not in SECURITY_KINDS:
+            out.append(f"{c.service}: {c.kind} update of {c.new.name} in a security-critical job "
+                       f"(digest and patch only): {why}")
+    return out
+
+
+def codeowner_of(path: str, codeowners_text: str) -> List[str]:
+    """Owners of the last matching CODEOWNERS rule (GitLab semantics)."""
+    found: List[str] = []
+    for pat, own in parse_codeowners(codeowners_text):
+        if codeowners_match(pat, path):
+            found = own
+    return found
+
+
+def _evaluate_dependencies(v: Verdict, author: str, dep_paths: List[str], others: List[str],
+                           files: Dict[str, ComposePair], allowlist: dict, codeowners_text: str,
+                           ci_text: Optional[str]) -> None:
+    """The dependency class. Nothing special is deployed: the merge deploys
+    like a reviewed one, and the sweep watches its main pipeline."""
+    cfg = dependencies_config(allowlist)
+    v.dependency = True
+    if others:
+        v.reject("a dependency update must not change other files: " + ", ".join(others))
+    if author not in cfg["authors"]:
+        v.reject(f"author {author!r} may not auto-merge dependency updates (dependencies.authors)")
+    for p in dep_paths:
+        if not cfg["codeowner"] or cfg["codeowner"] not in codeowner_of(p, codeowners_text):
+            v.reject(f"CODEOWNERS does not list the auto-merge bot for {p}, so its approval would not count")
+    r = dependency_changes(dep_paths, files, allowlist, ci_text)
+    for reason in r.reasons:
+        v.reject(reason)
+        if DENIED_MARK in reason:
+            v.denied = True
+    v.major = v.major or r.major
+    v.dep_changes = r.changes
+    v.dep_names = r.names
+    v.required_jobs = r.required_jobs
+    v.hold_keys = [(DEP_HOLD_JOB, n) for n in r.names]
+    for c in r.changes:
+        if c.kind == "lock":
+            v.notes.append(f"{c.file}: lockfile consistent with package.json, registry-only, sha512")
+        else:
+            v.notes.append(f"{c.name}: {c.kind} update {c.old} -> {c.new} [{c.file}"
+                           + (f" line {c.line}]" if c.line else "]"))
+    if v.required_jobs:
+        v.notes.append("needs passed MR pipeline jobs: " + ", ".join(v.required_jobs))
+    if v.eligible and not r.changes:
+        v.reject("no dependency updates were found")
+    if v.eligible:
+        v.notes.append("class: dependency (normal deploy; the sweep watches the main pipeline)")
 
 
 def change_reasons(changes: List[ImageChange], allowlist: dict,

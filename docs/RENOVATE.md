@@ -66,8 +66,20 @@ for the CUDA 12 runner the Pascal GPU needs ([ollama.md](ollama.md#testing-an-up
 - **Denylist** (rule "Auto-merge denylist"): GitLab, Vault, the Docker socket
   proxy and the GitLab runner image get the label `automerge-manual` and a
   note in the MR body; the sweep never merges them.
-- Other digest refreshes (Dockerfile bases, the denylisted CI image) are
-  batched to Monday mornings.
+- **Dependency class** (rules "Dependency class ..."): patch, minor, digest
+  and `pinDigest` updates of Dockerfile base images and pins, the OpenClaw
+  tool npm dependencies and annotated ansible pins, on the same nightly
+  schedule and limits as the auto-merge class. The sweep merges them
+  ([AUTOMERGE.md](AUTOMERGE.md#dependency-updates)). `.gitlab-ci.yml` updates get
+  `ci-` branches, so they never share an MR with a Dockerfile update of the
+  same image; the security-critical Dockerfiles (JIT approval
+  service, event-router) get `critical-` branches with patches apart from
+  minors, and their minors are labelled `automerge-manual`, as are updates of
+  the OpenClaw base image.
+- CI job images are pinned by digest (`gitlabci.pinDigests`): an image
+  referenced by tag only gets a "pin" MR first.
+- Other digest refreshes (the denylisted images) are batched to Monday
+  mornings.
 - **Fast track** (two rules near the end of `packageRules`). For the images of
   services reachable from outside the LAN, in the router compose file only:
   digest refreshes, `pinDigest` and patch releases are created at any hour
@@ -85,7 +97,7 @@ for the CUDA 12 runner the Pascal GPU needs ([ollama.md](ollama.md#testing-an-up
 - Limits: 8 open Renovate MRs at a time, 4 new per hour, MRs created between
   01:00 and 07:00. Fast-track MRs are exempt from all three, auto-merge class
   MRs from the first and the branch limit. Both still count towards the 8, so
-  a backlog of them can delay the MRs that need a human (Dockerfiles, majors)
+  a backlog of them can delay the MRs that need a human (majors, denylisted images)
   until the sweep has merged it. Security fixes (OSV/GitLab
   advisories) ignore the schedule and get the `security` label.
 - Running-image CVE scan (`report:cves`, daily): labels open MRs for affected

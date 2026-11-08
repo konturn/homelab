@@ -69,6 +69,14 @@ CI_TRAILER = "Automerge-Policy: ci-image"
 CI_CLASS_TRAILER = "Automerge-Class: ci-image"
 # Rollback issues and holds of the CI image class use this deploy "job".
 CI_HOLD_JOB = "ci"
+# Dependency class (Dockerfile base images, pinned versions, OpenClaw npm deps):
+# a normal merge (no Automerge-Policy value that .automerged_commit_manual
+# matches), so the image builds and the changed-only host deploys run as for a
+# reviewed MR. The sweep watches its main pipeline like a CI image merge.
+LABEL_DEPENDENCY = "automerge-dependency"
+LABEL_DEP_WATCH = "automerge-dep-watch"
+DEP_TRAILER = "Automerge-Policy: dependency"
+DEP_CLASS_TRAILER = "Automerge-Class: dependency"
 # Bot-config class (moltbot's own low-risk config MRs, ci/automerge/botconfig.py).
 LABEL_BOT_CONFIG = "automerge-bot-config"
 BOT_TRAILER = "Automerge-Policy: bot-config"
@@ -133,6 +141,15 @@ def load_deployments(allow: dict) -> Dict[str, List[policy.Deployment]]:
     """Compose file -> hosts, from this checkout's ansible/inventory.yml."""
     with open(INVENTORY_PATH) as f:
         return policy.compose_deployments(yaml.safe_load(f) or {}, allow)
+
+
+def read_ci_file() -> Optional[str]:
+    """This checkout's .gitlab-ci.yml (main's, in the sweep): the build-check
+    jobs of the dependency class come from it, never from the MR."""
+    try:
+        return (REPO_ROOT / policy.CI_PATH).read_text()
+    except FileNotFoundError:
+        return None
 
 
 def read_codeowners() -> str:
@@ -218,6 +235,8 @@ class GitLab:
             LABEL_FAST_TRACK: ("#6699cc", "Merged under the fast-track class (docs/AUTOMERGE.md)"),
             LABEL_CI_IMAGE: ("#8fbc8f", "Merged under the CI image class (docs/AUTOMERGE.md)"),
             LABEL_CI_WATCH: ("#c0c0c0", "CI image merge whose main pipeline the sweep has not checked yet"),
+            LABEL_DEPENDENCY: ("#7fb3d5", "Merged under the dependency class (docs/AUTOMERGE.md)"),
+            LABEL_DEP_WATCH: ("#c0c0c0", "Dependency merge whose main pipeline the sweep has not checked yet"),
             LABEL_BOT_CONFIG: ("#b07cd8", "moltbot config change merged under the bot-config class (docs/AUTOMERGE.md)"),
             LABEL_SHADOW_PB: ("#8e6cc0", "new shadow event-router playbook merged under the bot-config class (docs/AUTOMERGE.md)"),
             LABEL_MANUAL: ("#e9be74", "Update the auto-merge policy leaves to a human: major, denylist "
@@ -392,6 +411,7 @@ def evaluate_api(gl: GitLab, mr: dict, allow: dict, merger: Optional[str] = None
     files = mr_file_changes(gl, mr["iid"])
     composes: Dict[str, policy.ComposePair] = {}
     wanted = {f.path for f in files} & (set(policy.compose_files(allow)) | set(policy.ci_files(allow)))
+    wanted |= set(policy.dependency_paths([f.path for f in files if not (f.new_file or f.deleted_file)], allow))
     if is_bot_config_author(mr["author"]["username"], allow) and len(files) <= 30:
         # the bot-config class reads every changed file (as data)
         wanted |= {f.path for f in files if not (f.new_file or f.deleted_file or f.renamed_file)}
@@ -404,7 +424,7 @@ def evaluate_api(gl: GitLab, mr: dict, allow: dict, merger: Optional[str] = None
         author=mr["author"]["username"], target_branch=mr["target_branch"],
         labels=mr.get("labels") or [], files=files, composes=composes,
         deployments=deployments if deployments is not None else load_deployments(allow),
-        allowlist=allow, codeowners_text=read_codeowners(), merger=merger)
+        allowlist=allow, codeowners_text=read_codeowners(), merger=merger, ci_text=read_ci_file())
 
 
 def is_bot_config_author(author: str, allow: dict) -> bool:
@@ -497,6 +517,7 @@ def cmd_mr_check(args: argparse.Namespace) -> int:
         files.append(policy.FileChange(path=path, new_file=status == "A", deleted_file=status == "D",
                                        mode_changed=status == "T"))
     listed = set(policy.compose_files(allow)) | set(policy.ci_files(allow))
+    listed |= set(policy.dependency_paths([f.path for f in files if not (f.new_file or f.deleted_file)], allow))
     if is_bot_config_author(args.author or "", allow):
         listed |= {f.path for f in files if not (f.new_file or f.deleted_file)}
         listed |= {f.path for f in files if f.new_file and botconfig.PLAYBOOK_PATH.match(f.path)}
@@ -505,7 +526,7 @@ def cmd_mr_check(args: argparse.Namespace) -> int:
         author=args.author or "", target_branch=args.target or "",
         labels=[l for l in (args.labels or "").split(",") if l], files=files,
         composes=composes, deployments=load_deployments(allow),
-        allowlist=allow, codeowners_text=read_codeowners())
+        allowlist=allow, codeowners_text=read_codeowners(), ci_text=read_ci_file())
     for n in v.notes:
         log(f"  + {n}")
     for r in v.reasons:
@@ -543,16 +564,17 @@ def cmd_sweep(args: argparse.Namespace) -> int:
     log(f"General class: {'DRY RUN (no labels, approvals or merges)' if dry else 'live'}; "
         f"fast track: {'DRY RUN' if ft_dry else 'live'}")
 
-    # Merged CI image MRs: check the main pipeline of each merge (reverts on a
-    # failure in a job that runs the changed image).
+    # Merged CI image and dependency MRs: check the main pipeline of each
+    # merge (reverts on a failure in a job the change affects).
     ci_pending = ci_watch(gl, allow)
 
     candidates: Dict[int, dict] = {}
     authors = list(allow.get("authors") or [])
-    try:
-        authors += [a for a in policy.ci_images_config(allow)["authors"] if a not in authors]
-    except policy.PolicyError:
-        pass
+    for cfg in (policy.ci_images_config, policy.dependencies_config):
+        try:
+            authors += [a for a in cfg(allow)["authors"] if a not in authors]
+        except policy.PolicyError:
+            pass
     for author in authors:
         for mr in gl.get_all(f"projects/{PROJECT}/merge_requests", state="opened",
                              author_username=author, target_branch=allow.get("target_branch", "main")):
@@ -596,15 +618,16 @@ def cmd_sweep(args: argparse.Namespace) -> int:
     for iid in order:
         mr, v = candidates[iid], verdicts[iid]
         rb = rollback_gate(holds, v) if v.eligible else None
-        ci_gate = (f"CI image merge(s) still awaiting their main pipeline: "
-                   + ", ".join(f"!{i}" for i in ci_pending)) if v.eligible and v.ci_image and ci_pending else None
+        ci_gate = (f"CI image or dependency merge(s) still awaiting their main pipeline: "
+                   + ", ".join(f"!{i}" for i in ci_pending)) \
+            if v.eligible and (v.ci_image or v.dependency) and ci_pending else None
         bot_gate = bot_rate if v.eligible and v.bot_config else None
         pb_gate = pb_rate if v.eligible and v.shadow_playbook else None
         mr_gates = gates + [g for g in (rate[v.fast_track], rb, ci_gate, bot_gate, pb_gate) if g]
         eligible = v.eligible and not mr_gates
         print_verdict(mr, v, mr_gates if v.eligible else [])
         if v.eligible:
-            log(f"  class: {'fast track' if v.fast_track else 'CI image' if v.ci_image else 'bot-config' if v.bot_config else 'general'}"
+            log(f"  class: {'fast track' if v.fast_track else 'CI image' if v.ci_image else 'dependency' if v.dependency else 'bot-config' if v.bot_config else 'general'}"
                 f"{' (dry run)' if (ft_dry if v.fast_track else dry) else ''}")
         writer = gl_ft if v.fast_track else gl
         has_label = LABEL_ELIGIBLE in (mr.get("labels") or [])
@@ -618,6 +641,8 @@ def cmd_sweep(args: argparse.Namespace) -> int:
         if not eligible:
             continue
         blockers = readiness(mr)
+        if not blockers:
+            blockers += required_job_blockers(gl, mr, v)
         for d in v.deploy_hosts:
             if d.job != "router":
                 down = host_unreachable(d.address)
@@ -634,11 +659,27 @@ def cmd_sweep(args: argparse.Namespace) -> int:
     return 0
 
 
+def required_job_blockers(gl: GitLab, mr: dict, v: policy.Verdict) -> List[str]:
+    """Jobs the verdict needs to have passed in the MR's head pipeline (the
+    dependency class: `<image>:build-check`). A build-check that did not run
+    (manual) or failed blocks the merge, whatever the pipeline status."""
+    if not v.required_jobs:
+        return []
+    pipe = mr.get("head_pipeline") or {}
+    if not pipe.get("id") or pipe.get("sha") != mr.get("sha"):
+        return ["no MR pipeline for the head commit"]
+    status: Dict[str, str] = {}
+    for j in sorted(gl.get_all(f"projects/{PROJECT}/pipelines/{pipe['id']}/jobs"), key=lambda j: j["id"]):
+        status[j["name"]] = j.get("status") or ""      # the latest attempt wins
+    return [f"required job {n} is {status.get(n) or 'missing'}"
+            for n in v.required_jobs if status.get(n) != "success"]
+
+
 def is_update_mr(mr: dict, v: policy.Verdict) -> bool:
     """A dependency-update MR: opened by Renovate, or an image change in a
     compose file. Other MRs by the listed authors (moltbot's config changes)
     are simply not eligible and get no label or note."""
-    return LABEL_RENOVATE in (mr.get("labels") or []) or bool(v.changes) or v.major
+    return LABEL_RENOVATE in (mr.get("labels") or []) or bool(v.changes) or bool(v.dep_changes) or v.major
 
 
 def mark_manual(gl: GitLab, mr: dict, v: policy.Verdict) -> None:
@@ -664,7 +705,7 @@ def deploy_trailer(v: policy.Verdict) -> str:
 def do_merge(gl: GitLab, mr: dict, v: policy.Verdict) -> bool:
     iid, sha = mr["iid"], mr["sha"]
     services = ", ".join(c.service for c in v.changes)
-    if not v.deploy_jobs and not v.ci_image and not v.bot_config:
+    if not v.deploy_jobs and not v.ci_image and not v.bot_config and not v.dependency:
         log(f"  not merging !{iid}: no per-service deploy target")
         return False
     if v.bot_config:
@@ -672,6 +713,11 @@ def do_merge(gl: GitLab, mr: dict, v: policy.Verdict) -> bool:
         services = ", ".join(sorted({c.file for c in v.bot_changes}))
         what = f"moltbot {'shadow playbook' if v.shadow_playbook else 'config change'}: {mr.get('title', '')}"
         labels = LABEL_MERGED + "," + LABEL_BOT_CONFIG + ("," + LABEL_SHADOW_PB if v.shadow_playbook else "")
+    elif v.dependency:
+        trailers = DEP_CLASS_TRAILER + "\n" + DEP_TRAILER
+        services = ", ".join(v.dep_names)
+        what = "Dependency update: " + services
+        labels = ",".join((LABEL_MERGED, LABEL_DEPENDENCY, LABEL_DEP_WATCH))
     elif v.ci_image:
         trailers = CI_CLASS_TRAILER + "\n" + CI_TRAILER
         what = "CI image update: " + ", ".join(v.ci_images) + f" ({services})"
@@ -706,9 +752,12 @@ def do_merge(gl: GitLab, mr: dict, v: policy.Verdict) -> bool:
             log(f"  could not remove {LABEL_MERGED} label: {e2}")
         return False
     cls = (" under the fast-track class" if v.fast_track else " under the CI image class" if v.ci_image
+           else " under the dependency class" if v.dependency
            else " under the bot-config class" if v.bot_config else "")
     lines = [f"Merged by the auto-merge policy{cls} (pipeline {os.environ.get('CI_PIPELINE_URL', 'n/a')}).", ""]
     lines += [f"- `{c.service}`: {c.kind} `{c.old}` -> `{c.new}`" for c in v.changes]
+    lines += [f"- `{c.name}` ({c.file}): {c.kind} `{c.old}` -> `{c.new}`" for c in v.dep_changes
+              if c.kind != "lock"]
     lines += [f"- `{c.file}`{' ' + c.service if c.service else ''}: {c.what}" for c in v.bot_changes]
     if v.bot_config and not v.deploy_jobs:
         lines += ["", "Nothing to deploy (documentation only)."]
@@ -717,6 +766,12 @@ def do_merge(gl: GitLab, mr: dict, v: policy.Verdict) -> bool:
                   ", ".join(f"`{j}:deploy-service`" for j in v.deploy_jobs) +
                   "): changed services are recreated behind the health gate, Grafana provisioning is "
                   "reloaded through its API, and either rolls back automatically on failure."]
+    elif v.dependency:
+        lines += ["", "The main pipeline builds and deploys this like a reviewed merge"
+                      + (f" (after {', '.join(v.required_jobs)} passed here)" if v.required_jobs else "")
+                      + ". The sweep checks its main pipeline; if an image build or host deploy job fails "
+                      "there, it opens a revert MR and a rollback issue, and holds the next update of "
+                      + ", ".join(v.dep_names) + " for a human."]
     elif v.ci_image:
         lines += ["", "Nothing is deployed. The sweep checks the main pipeline of this merge; if a job "
                       "that runs the changed image fails there, it opens a revert MR and a rollback "
@@ -773,48 +828,189 @@ def revert_ci_text(text: str, changes: List[policy.ImageChange]) -> Optional[str
 
 
 def ci_watch(gl: GitLab, allow: dict) -> List[int]:
-    """Check the main pipeline of every merged MR labelled automerge-ci-watch.
-    Returns the iids still waiting for a finished pipeline."""
+    """Check the main pipeline of every merged MR labelled automerge-ci-watch
+    (CI image class) or automerge-dep-watch (dependency class). Returns the
+    iids still waiting for a finished pipeline."""
     pending: List[int] = []
-    for mr in gl.get_all(f"projects/{PROJECT}/merge_requests", state="merged", labels=LABEL_CI_WATCH):
-        iid, sha = mr["iid"], mr.get("merge_commit_sha") or mr.get("squash_commit_sha")
-        if not sha:
-            log(f"CI watch !{iid}: no merge commit")
-            continue
-        pipes = gl.get(f"projects/{PROJECT}/pipelines", sha=sha, ref="main", per_page=20) or []
-        pipes = sorted(pipes, key=lambda p: p["id"])
-        pipe = pipes[-1] if pipes else None
-        jobs = gl.get_all(f"projects/{PROJECT}/pipelines/{pipe['id']}/jobs") if pipe and \
-            pipe.get("status") in PIPELINE_DONE else []
-        try:
+    for label in (LABEL_CI_WATCH, LABEL_DEP_WATCH):
+        for mr in gl.get_all(f"projects/{PROJECT}/merge_requests", state="merged", labels=label):
+            if watch_one(gl, allow, mr, label):
+                pending.append(mr["iid"])
+    return pending
+
+
+def watch_one(gl: GitLab, allow: dict, mr: dict, label: str) -> bool:
+    """One merged MR of the CI image or dependency class. True while its main
+    pipeline has not finished."""
+    iid, sha = mr["iid"], mr.get("merge_commit_sha") or mr.get("squash_commit_sha")
+    what = "CI watch" if label == LABEL_CI_WATCH else "Dependency watch"
+    if not sha:
+        log(f"{what} !{iid}: no merge commit")
+        return False
+    pipes = gl.get(f"projects/{PROJECT}/pipelines", sha=sha, ref="main", per_page=20) or []
+    pipes = sorted(pipes, key=lambda p: p["id"])
+    pipe = pipes[-1] if pipes else None
+    jobs = gl.get_all(f"projects/{PROJECT}/pipelines/{pipe['id']}/jobs") if pipe and \
+        pipe.get("status") in PIPELINE_DONE else []
+    try:
+        if label == LABEL_CI_WATCH:
             changes = ci_merge_changes(gl, sha)
             names = sorted({c.new.name for c in changes})
             users = policy.ci_image_jobs(gl.file_at(policy.CI_PATH, sha) or "", names)
-        except (policy.PolicyError, RuntimeError, ValueError) as e:
-            log(f"CI watch !{iid}: cannot read the merged change ({e}); leaving it to a human")
-            gl.write("PUT", f"projects/{PROJECT}/merge_requests/{iid}", {"remove_labels": LABEL_CI_WATCH})
-            continue
-        outcome, which = ci_watch_verdict(pipe, jobs, users)
-        log(f"CI watch !{iid} ({', '.join(names)}): pipeline {pipe['id'] if pipe else '-'} "
-            f"{pipe.get('status') if pipe else 'not found'} -> {outcome}"
-            + (f" ({', '.join(which)})" if which else ""))
-        if outcome == "pending":
-            pending.append(iid)
-            continue
-        url = pipe.get("web_url", "")
-        if outcome == "revert":
+        else:
+            dep = dep_merge_changes(gl, sha, allow)
+            names = dep["names"]
+            users = dep_watch_jobs(dep["required_jobs"], jobs)
+    except (policy.PolicyError, RuntimeError, ValueError) as e:
+        log(f"{what} !{iid}: cannot read the merged change ({e}); leaving it to a human")
+        gl.write("PUT", f"projects/{PROJECT}/merge_requests/{iid}", {"remove_labels": label})
+        return False
+    outcome, which = ci_watch_verdict(pipe, jobs, users)
+    log(f"{what} !{iid} ({', '.join(names)}): pipeline {pipe['id'] if pipe else '-'} "
+        f"{pipe.get('status') if pipe else 'not found'} -> {outcome}"
+        + (f" ({', '.join(which)})" if which else ""))
+    if outcome == "pending":
+        return True
+    url = pipe.get("web_url", "")
+    if outcome == "revert":
+        if label == LABEL_CI_WATCH:
             ci_rollback(gl, mr, changes, which, url)
         else:
-            text = {"passed": f"Main pipeline of the merge passed ({url})." if not which else
-                    f"Jobs that run the image passed in the main pipeline of the merge: "
-                    f"{', '.join(which)} ({url}).",
-                    "unrelated": f"Main pipeline of the merge failed only in jobs that do not run "
-                                 f"{', '.join(names)}: {', '.join(which)} ({url}). Not reverted.",
-                    "unverified": f"Main pipeline of the merge was {pipe.get('status')} ({url}); "
-                                  "the change was not verified there."}[outcome]
-            gl.write("POST", f"projects/{PROJECT}/merge_requests/{iid}/notes", {"body": text})
-        gl.write("PUT", f"projects/{PROJECT}/merge_requests/{iid}", {"remove_labels": LABEL_CI_WATCH})
-    return pending
+            dep_rollback(gl, mr, dep, which, url)
+    else:
+        affected = ("run " + ", ".join(names)) if label == LABEL_CI_WATCH else "build or deploy the update"
+        text = {"passed": f"Main pipeline of the merge passed ({url})." if not which else
+                f"Jobs the change affects passed in the main pipeline of the merge: "
+                f"{', '.join(which)} ({url}).",
+                "unrelated": f"Main pipeline of the merge failed only in jobs that do not {affected}: "
+                             f"{', '.join(which)} ({url}). Not reverted.",
+                "unverified": f"Main pipeline of the merge was {pipe.get('status')} ({url}); "
+                              "the change was not verified there."}[outcome]
+        gl.write("POST", f"projects/{PROJECT}/merge_requests/{iid}/notes", {"body": text})
+    gl.write("PUT", f"projects/{PROJECT}/merge_requests/{iid}", {"remove_labels": label})
+    return False
+
+
+def dep_watch_jobs(required_jobs: List[str], jobs: List[dict]) -> List[str]:
+    """Main-pipeline jobs a dependency merge affects: the image builds of the
+    build contexts it changed (`<image>:build` for `<image>:build-check`) and
+    the host deploys (`<host>:deploy`)."""
+    builds = {j[:-len("-check")] for j in required_jobs if j.endswith(":build-check")}
+    return sorted({j["name"] for j in jobs if j["name"] in builds or j["name"].endswith(":deploy")})
+
+
+def dep_merge_changes(gl: GitLab, sha: str, allow: dict) -> dict:
+    """The dependency-class change a merge commit made (first-parent diff):
+    {paths, contents, names, required_jobs, changes}."""
+    parent = (gl.get(f"projects/{PROJECT}/repository/commits/{sha}").get("parent_ids") or [None])[0]
+    if not parent:
+        raise ValueError("merge commit has no parent")
+    diff = gl.get(f"projects/{PROJECT}/repository/compare", **{"from": parent, "to": sha})
+    paths = sorted({d["new_path"] for d in (diff or {}).get("diffs") or []})
+    deps = policy.dependency_paths(paths, allow)
+    if not deps:
+        raise ValueError("no dependency changes in the merge")
+    contents = {p: (gl.file_at(p, parent), gl.file_at(p, sha)) for p in deps}
+    r = policy.dependency_changes(deps, contents, allow, gl.file_at(policy.CI_PATH, sha))
+    if not r.names:
+        raise ValueError("; ".join(r.reasons) or "no dependency updates found")
+    return {"paths": deps, "contents": contents, "names": r.names, "required_jobs": r.required_jobs,
+            "changes": r.changes, "parent": parent}
+
+
+def revert_file_text(main_text: Optional[str], base: str, head: str,
+                     changes: List[policy.DepChange]) -> Optional[str]:
+    """`main_text` with a dependency change undone: the pre-merge file if main
+    still has the merged one, else the changed lines put back (line edits
+    only). None if neither is possible."""
+    if main_text is None:
+        return None
+    if main_text == head:
+        return base
+    pairs = [(c.new_line, c.old_line) for c in changes if c.line and c.new_line]
+    if not pairs or len(base.split("\n")) != len(head.split("\n")):
+        return None
+    lines = main_text.split("\n")
+    for new_line, old_line in pairs:
+        idx = [i for i, l in enumerate(lines) if l == new_line]
+        if not idx:
+            return None
+        for i in idx:
+            lines[i] = old_line
+    return "\n".join(lines)
+
+
+def dep_rollback(gl: GitLab, mr: dict, dep: dict, failed: List[str], url: str) -> None:
+    """A dependency merge broke an image build or host deploy on main: open a
+    revert MR and a rollback issue (which holds the next update of the same
+    dependencies), label the MR and mail root."""
+    gl.ensure_labels()
+    iid, names = mr["iid"], dep["names"]
+    branch = f"automerge-revert/{iid}"
+    revert = None
+    try:
+        found = gl.get(f"projects/{PROJECT}/merge_requests", source_branch=branch, state="opened")
+        if found:
+            revert = found[0]["iid"]
+        else:
+            actions = []
+            for path in dep["paths"]:
+                base, head = dep["contents"][path]
+                content = revert_file_text(gl.file_at(path, "main"), base or "", head or "",
+                                           [c for c in dep["changes"] if c.file == path])
+                if content is None:
+                    actions = []
+                    log(f"  !{iid}: {path} changed on main since the merge; no revert MR")
+                    break
+                actions.append({"action": "update", "file_path": path, "content": content})
+            if actions:
+                try:
+                    gl.get(f"projects/{PROJECT}/repository/branches/{urllib.parse.quote(branch, safe='')}")
+                except RuntimeError:
+                    gl.write("POST", f"projects/{PROJECT}/repository/commits", {
+                        "branch": branch, "start_branch": "main",
+                        "commit_message": "Revert dependency update for " + ", ".join(names),
+                        "actions": actions,
+                    })
+                r = gl.write("POST", f"projects/{PROJECT}/merge_requests", {
+                    "source_branch": branch, "target_branch": "main", "remove_source_branch": True,
+                    "title": f"Revert dependency update from !{iid}",
+                    "description": f"Undoes !{iid}: jobs it affects failed in the main pipeline ({url}).",
+                    "labels": LABEL_ROLLBACK,
+                })
+                revert = r["iid"] if r else None
+    except (RuntimeError, OSError) as e:
+        log(f"  could not open the revert MR for !{iid}: {e}")
+    body = [
+        f"The dependency update !{iid} ({mr['title']}) was merged, and jobs it affects failed in the "
+        f"main pipeline of the merge: {', '.join(failed)}.",
+        "",
+        f"- Pipeline: {url}",
+        f"- Merge commit: {mr.get('merge_commit_sha')}",
+        "",
+        "| file | dependency | from | to |", "|---|---|---|---|",
+    ] + [f"| {c.file} | {c.name} | `{c.old}` | `{c.new}` |" for c in dep["changes"] if c.kind != "lock"] + [
+        "",
+        f"While this issue is open, the sweep holds further updates of {', '.join(names)}.",
+        "Merge the revert MR (or fix forward), then close this issue.",
+        "",
+        f"<!-- automerge-rollback job={policy.DEP_HOLD_JOB} services={','.join(names)} -->",
+    ]
+    if revert:
+        body += ["", f"Revert MR: !{revert}"]
+    title = f"Auto-merge rollback: {', '.join(names)} on {policy.DEP_HOLD_JOB} (!{iid})"
+    issue = gl.write("POST", f"projects/{PROJECT}/issues",
+                     {"title": title, "description": "\n".join(body), "labels": LABEL_ROLLBACK})
+    gl.write("PUT", f"projects/{PROJECT}/merge_requests/{iid}", {"add_labels": LABEL_ROLLBACK})
+    gl.write("POST", f"projects/{PROJECT}/merge_requests/{iid}/notes",
+             {"body": f"Jobs this update affects failed on main ({', '.join(failed)}): {url}. "
+                      + (f"Revert MR !{revert}; " if revert else "No revert MR could be opened; ")
+                      + f"rollback issue #{issue['iid'] if issue else '?'}."})
+    if gl.dry_run:
+        log("  [dry-run] would mail root")
+        return
+    mail_root(f"Homelab auto-merge ROLLBACK: dependency {', '.join(names)} (!{iid})",
+              "\n".join(body + ["", f"MR: {mr.get('web_url', '')}"]) + "\n")
 
 
 def ci_merge_changes(gl: GitLab, sha: str) -> List[policy.ImageChange]:

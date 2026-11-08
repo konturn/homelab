@@ -126,6 +126,32 @@
 /docker/anomaly-detector/                @root
 /terraform/vault/                        @root
 
+# === DEPENDENCY CLASS (auto-merge) ===
+# The automerge bot is a second owner of the files the dependency class may
+# change: Dockerfiles (FROM lines and Renovate-managed version pins only), the
+# OpenClaw tool npm manifest and lockfile, and ansible files with
+# `# renovate:` version pins. The sweep approves only diffs that
+# ci/automerge/policy.py verifies line by line (docs/AUTOMERGE.md,
+# "Dependency updates"); any other change still needs @root. Listed after
+# the directory rules above so these are the last match (GitLab semantics).
+# ci/automerge/test_codeowners.py checks that every such file is listed.
+/docker/anomaly-detector/Dockerfile      @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+/docker/chromium-browser/Dockerfile      @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+/docker/event-router/Dockerfile          @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+/docker/jit-approval-svc/Dockerfile      @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+/docker/novnc/Dockerfile                 @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+/docker/openclaw/Dockerfile              @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+/docker/openclaw/tools/package.json      @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+/docker/openclaw/tools/package-lock.json @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+/docker/images/amcrest2mqtt/Dockerfile   @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+/docker/images/dovi-convert/Dockerfile   @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+/docker/images/nginx/Dockerfile          @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+/docker/images/petlibro-camera/Dockerfile @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+/docker/images/snapcast/Dockerfile       @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+/docker/images/snapclient/Dockerfile     @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+/ansible/roles/configure-homelab-services/tasks/main.yml @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+/ansible/roles/configure-excel-vm/defaults/main.yml      @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+
 # === SSL CERTS ===
 # Could intercept TLS traffic
 /networking/ssl/                         @root

@@ -1,6 +1,7 @@
 # Auto-merge policy configuration. See docs/AUTOMERGE.md.
 #
-# Every image update in a deployed compose file is merged without review
+# Every image update in a deployed compose file (and every dependency update
+# of the classes below: CI images, `dependencies`) is merged without review
 # when it passes every check in ci/automerge/policy.py, EXCEPT:
 #   - major versions (and tag changes whose version scheme is ambiguous),
 #   - services and images on the `denylist` below,
@@ -64,6 +65,76 @@ ci_images:
     willhallonline/ansible: >-
       The .ansible image runs the sweep, plan-deploy and every deploy. A
       broken one takes down the jobs that would detect and revert it.
+
+# Dependency class (docs/AUTOMERGE.md, "Dependency updates"): Renovate MRs
+# that bump a version in our own build and deploy files, verified line by
+# line by ci/automerge/policy.py (`dependency_changes`):
+#   - `dockerfiles`: base images on FROM lines (same image and options, new
+#     reference pinned by digest, digest-only or a patch/minor within the same
+#     major and the same tag flavor, i.e. distro family and release), and
+#     Renovate-managed pin lines (`npm install -g <pkg>@<ver>`, or a line
+#     under a `# renovate:` annotation) whose only change is the version;
+#   - `npm`: the OpenClaw tool dependencies: package.json version strings of
+#     packages already present (exact versions), with a package-lock.json
+#     that matches, resolves only from `registry` and carries sha512
+#     integrity hashes (the image installs it with `npm ci --ignore-scripts`);
+#   - `pin_files`: ansible tasks/defaults lines under a `# renovate:`
+#     annotation whose only change is the version, plus a checksum next to it
+#     when the pin has one (a pin with a checksum that the MR leaves alone is
+#     refused, since the deploy would fail its check).
+# A changed file under an image's build context needs that image's
+# `<image>:build-check` job (from .gitlab-ci.yml) to have passed in the MR
+# pipeline. No other file may change (compose and CI files included: those
+# are the other classes). Majors never qualify; 0.x minors count as majors
+# unless the package is under `zero_minor_is_minor`. The automerge bot must
+# be a code owner of every such file (CODEOWNERS), or its approval would not
+# count; the policy refuses a file where it is not.
+# Nothing special is deployed: the merge is a normal merge (the image builds
+# and the changed-only host deploy run as for a reviewed MR). The sweep
+# watches its main pipeline like a CI image merge: a failed build or host
+# deploy job opens a revert MR and a rollback issue (job=dep) that holds the
+# dependency. Merges count against max_per_24h.
+dependencies:
+  enabled: true
+  authors:
+    # Renovate only: it takes versions and digests from the registries.
+    - project_4_bot_af78a2ea227eba9e10006515fbde375e
+  # The automerge bot (AUTOMERGE_TOKEN user), as named in CODEOWNERS.
+  codeowner: "@project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6"
+  dockerfiles:
+    - docker/*/Dockerfile
+    - docker/images/*/Dockerfile
+  npm:
+    package_json: docker/openclaw/tools/package.json
+    lockfile: docker/openclaw/tools/package-lock.json
+    registry: https://registry.npmjs.org/
+  pin_files:
+    - ansible/roles/*/tasks/*.yml
+    - ansible/roles/*/defaults/*.yml
+  # Packages whose routine releases are 0.x minors; their 0.x minors count
+  # as minors here (majors and 1.x+ rules unchanged). Empty: none yet.
+  zero_minor_is_minor: []
+  # Base images never bumped by this class, whatever the update kind.
+  # (The global denylist.images applies too.)
+  denylist:
+    ghcr.io/openclaw/openclaw: >-
+      OpenClaw is moltbot itself; its own upgrades are reviewed (its tool
+      dependencies and pinned CLIs above are not the OpenClaw release).
+  # Security-critical images and CI jobs: digest refreshes and patch releases
+  # only; a minor update waits for a human. Files are Dockerfiles; jobs are
+  # glob patterns over .gitlab-ci.yml job and template names (they apply to
+  # the CI image class too).
+  security_critical:
+    files:
+      docker/jit-approval-svc/Dockerfile: >-
+        The JIT approval service issues credentials to the agents.
+      docker/event-router/Dockerfile: >-
+        The event-router image carries the executor, which runs remediation
+        actions on the hosts.
+    ci_jobs:
+      "vault:*": Vault configuration and AppRole rotation run with Vault admin credentials.
+      "jit-approval-svc:*": The JIT approval service issues credentials to the agents.
+      "gitlab:settings": Runs with the Maintainer token that also rotates AppRole secrets.
 
 # Bot-config class (docs/AUTOMERGE.md, "Bot-config class"): moltbot's own
 # low-risk configuration MRs. moltbot reads outside input and can be
