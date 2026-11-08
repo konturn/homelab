@@ -98,7 +98,8 @@ agreement.
 - Runs only when Ollama has no other model loaded (paperless-ai) and at least
   12 GiB of VRAM is free; otherwise it retries for 25 minutes, then records
   `skipped`.
-- Model load is capped at 9 minutes, the decision loop at 5 minutes, and the
+- Model load is capped at 9 minutes (Ollama itself gives up after 5; a failed load
+  leaves the window queued for the next tick, within the 25-minute retry window), the decision loop at 5 minutes, and the
   unit at 16 minutes. The model is unloaded after every run (`keep_alive: 0`),
   so VRAM goes back to Plex and Frigate.
 - `nvidia-smi` is sampled every 2 s during the run (GPU, VRAM, NVENC/NVDEC,
