@@ -1,0 +1,413 @@
+#!/usr/bin/env python3
+"""event-router-executor: the only thing that acts (docs/design/event-routing.md 4.6).
+
+Root-owned, socket-activated (event-router-executor.socket, Accept=yes): each
+connection starts one instance with the connection on stdin/stdout. It
+accepts exactly {"action_type", "target", "incident_id"} from the event
+router's uid (SO_PEERCRED, decision A), re-checks everything at execution
+time, runs one fixed command, logs the request to the journal and replies
+with one JSON line:
+
+  {"ok": true, "detail": ...}
+  {"ok": false, "refused": "<why>", "detail": ...}
+  {"ok": false, "error": ..., "unknown": true}      (may have run)
+
+Re-checked here, independently of the router (doc 12.6):
+  - its own allowlist and the hard-deny list (this file, /etc/event-router/executor.json)
+  - kill switch: repo mode, host override file, the router's runtime override
+  - deploy lock (S7): a router deploy job running in GitLab, or a CI job
+    container on the host when GitLab cannot be asked
+  - maintenance windows (S10) and dependencies (S6): probes of everything
+    the target needs
+  - its own rate limits, and never twice for one incident (S8)
+
+Python standard library plus PyYAML (python3-yaml on the host).
+"""
+
+import fcntl
+import json
+import os
+import re
+import socket
+import struct
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from datetime import datetime
+
+CONFIG = os.environ.get("EXECUTOR_CONFIG", "/etc/event-router/executor.json")
+MODES = ("notify-only", "shadow", "active")
+
+# Hard-denied: constants, never data (doc 4.5, 8.3).
+ACTIONS = ("restart_container", "cancel_ci_job")
+HARD_DENIED_TARGETS = ("gitlab", "vault", "pihole", "event-router", "docker-socket-proxy")
+NAME = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,62}$")
+INCIDENT = re.compile(r"^inc-[0-9a-f]{12}$")
+JOB_ID = re.compile(r"^[0-9]{1,12}$")
+
+
+def log(rec):
+    rec = dict(rec, ts=datetime.now().astimezone().isoformat(timespec="seconds"))
+    print(json.dumps(rec, sort_keys=True), file=sys.stderr, flush=True)   # -> journal
+
+
+# ---- kill switch ---------------------------------------------------------------
+def lower(a, b):
+    return a if MODES.index(a) <= MODES.index(b) else b
+
+
+def effective_mode(cfg):
+    base = cfg.get("repo_mode")
+    try:
+        with open(cfg["override_file"]) as f:
+            host = f.read().strip()
+        if host:
+            base = host
+    except FileNotFoundError:
+        pass
+    except OSError:
+        return "notify-only"
+    if base not in MODES:
+        return "notify-only"
+    try:
+        with open(os.path.join(cfg["shared_dir"], "runtime_mode")) as f:
+            rt = json.load(f).get("mode")
+        if rt not in MODES:
+            return "notify-only"
+        base = lower(base, rt)
+    except FileNotFoundError:
+        pass
+    except (OSError, ValueError, AttributeError):
+        return "notify-only"
+    return base
+
+
+# ---- dependencies and windows --------------------------------------------------
+def node_for(cfg, action, target):
+    deps = cfg["dependencies"]
+    if action == "cancel_ci_job":
+        return "gitlab"
+    for name, node in deps.items():
+        if (node.get("probe") or {}).get("container") == target:
+            return name
+    return target if target in deps else f"container:{target}"
+
+
+def ancestors(cfg, node):
+    deps = cfg["dependencies"]
+    stack = list((deps.get(node) or {}).get("needs") or [])
+    is_container = node.startswith("container:") or (deps.get(node) or {}).get("kind") == "container"
+    if is_container and "persistent_data" in deps and node != "persistent_data":
+        stack.append("persistent_data")
+    seen = set()
+    while stack:
+        n = stack.pop()
+        if n in seen or n == node:
+            continue
+        seen.add(n)
+        stack.extend((deps.get(n) or {}).get("needs") or [])
+    return seen
+
+
+def in_window(cfg, node, now):
+    try:
+        with open(os.path.join(cfg["shared_dir"], "windows.json")) as f:
+            windows = json.load(f)["windows"]
+    except (OSError, ValueError, KeyError):
+        return "windows.json unreadable"       # fail closed
+    anc = ancestors(cfg, node)
+    for w in windows:
+        if w.get("expires_at", 0) <= now:
+            continue
+        scope = set(w.get("scope") or [])
+        if "site" in scope or node in scope or anc & scope:
+            return w.get("id", "?")
+    return None
+
+
+def docker(*args, timeout=30):
+    return subprocess.run(["docker", *args], capture_output=True, text=True, timeout=timeout)
+
+
+def probe(spec):
+    """True when healthy. Unknown probe kinds count as healthy (not checkable here)."""
+    if "container" in spec:
+        r = docker("inspect", "-f", "{{.State.Running}} {{if .State.Health}}{{.State.Health.Status}}{{end}}",
+                   spec["container"])
+        out = r.stdout.split()
+        return r.returncode == 0 and out[:1] == ["true"] and (len(out) == 1 or out[1] == "healthy")
+    if "systemd" in spec:
+        return subprocess.run(["systemctl", "is-active", "--quiet", spec["systemd"]], timeout=10).returncode == 0
+    if "mount" in spec:
+        return os.path.ismount(spec["mount"]) and bool(os.listdir(spec["mount"]))
+    if "tcp" in spec:
+        host, port = spec["tcp"].rsplit(":", 1)
+        try:
+            with socket.create_connection((host, int(port)), timeout=3):
+                return True
+        except OSError:
+            return False
+    if "dns" in spec:
+        return dns_ok(spec["dns"]["server"], spec["dns"]["name"])
+    return True
+
+
+def dns_ok(server, name):
+    q = struct.pack(">HHHHHH", 0x4552, 0x0100, 1, 0, 0, 0)
+    q += b"".join(bytes([len(p)]) + p.encode() for p in name.rstrip(".").split(".")) + b"\0"
+    q += struct.pack(">HH", 1, 1)
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.settimeout(3)
+            s.sendto(q, (server, 53))
+            data = s.recv(512)
+    except OSError:
+        return False
+    if len(data) < 12:
+        return False
+    _, flags, _, ancount, _, _ = struct.unpack(">HHHHHH", data[:12])
+    return flags & 0x000F == 0 and ancount > 0
+
+
+def deps_down(cfg, node):
+    deps = cfg["dependencies"]
+    down = []
+    for n in sorted(ancestors(cfg, node)):
+        spec = (deps.get(n) or {}).get("probe")
+        if isinstance(spec, dict) and spec and not probe(spec):
+            down.append(n)
+    return down
+
+
+# ---- GitLab -------------------------------------------------------------------------
+def gitlab(cfg, method, path):
+    g = cfg["gitlab"]
+    token = os.environ.get("GITLAB_TOKEN", "")
+    req = urllib.request.Request(f"{g['url']}/api/v4/projects/{g['project_id']}/{path}",
+                                 method=method, headers={"PRIVATE-TOKEN": token})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.load(r)
+
+
+def ts(value):
+    return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp() if value else None
+
+
+def deploy_running(cfg):
+    names = set(cfg["gitlab"]["deploy_jobs"])
+    try:
+        jobs = gitlab(cfg, "GET", "jobs?scope[]=running&per_page=100")
+        return [j["name"] for j in jobs if j.get("name") in names]
+    except (OSError, ValueError, urllib.error.URLError):
+        # GitLab cannot be asked: any CI job container for main counts as a
+        # deploy (fail safe; the orphan case is handled by cancel_ci_job).
+        r = docker("ps", "-q", "--filter", "label=com.gitlab.gitlab-runner.type=build",
+                   "--filter", "label=com.gitlab.gitlab-runner.job.ref=main")
+        return ["unknown CI job (GitLab unreachable)"] if r.stdout.strip() else []
+
+
+def container_started(name):
+    r = docker("inspect", "-f", "{{.State.StartedAt}}", name)
+    if r.returncode != 0:
+        return None
+    v = r.stdout.strip()
+    v = re.sub(r"\.(\d{6})\d*", r".\1", v)      # nanoseconds -> microseconds
+    return ts(v)
+
+
+# ---- rate limits and duplicates -------------------------------------------------------
+def load_state(f):
+    f.seek(0)
+    try:
+        st = json.loads(f.read() or "{}")
+    except ValueError:
+        st = {}
+    st.setdefault("incidents", {})
+    st.setdefault("history", [])
+    return st
+
+
+def save_state(f, st, now):
+    st["history"] = [h for h in st["history"] if now - h["ts"] < 7 * 86400]
+    st["incidents"] = {k: v for k, v in st["incidents"].items() if now - v < 30 * 86400}
+    f.seek(0)
+    f.truncate()
+    f.write(json.dumps(st, sort_keys=True))
+    f.flush()
+    os.fsync(f.fileno())
+
+
+# ---- the request ---------------------------------------------------------------------
+class Refused(Exception):
+    def __init__(self, why, detail=""):
+        super().__init__(detail)
+        self.why, self.detail = why, detail
+
+
+def check_request(req):
+    if not isinstance(req, dict) or set(req) != {"action_type", "target", "incident_id"}:
+        raise Refused("not_allowed", "request must be exactly {action_type, target, incident_id}")
+    action, target, inc = req["action_type"], req["target"], req["incident_id"]
+    if not all(isinstance(v, str) for v in (action, target, inc)):
+        raise Refused("not_allowed", "fields must be strings")
+    if action not in ACTIONS:
+        raise Refused("not_allowed", f"action {action!r} is not allowlisted")
+    if not INCIDENT.match(inc):
+        raise Refused("not_allowed", "bad incident id")
+    if action == "restart_container" and (not NAME.match(target) or target in HARD_DENIED_TARGETS):
+        raise Refused("not_allowed", f"target {target!r} is not allowed")
+    if action == "cancel_ci_job" and not JOB_ID.match(target):
+        raise Refused("not_allowed", "target must be a job id")
+    return action, target, inc
+
+
+def handle(cfg, req, now):
+    action, target, inc = check_request(req)
+    if action == "restart_container" and target in cfg["restart_denylist"]:
+        raise Refused("not_allowed", f"{target} is on the restart denylist")
+    mode = effective_mode(cfg)
+    if mode != "active":
+        raise Refused("kill_switch", f"mode is {mode}")
+    node = node_for(cfg, action, target)
+    w = in_window(cfg, node, now)
+    if w:
+        raise Refused("maintenance", f"{node} is in maintenance window {w}")
+    down = deps_down(cfg, node)
+    if down:
+        raise Refused("dependency", "down: " + ", ".join(down))
+    if action != "cancel_ci_job":
+        running = deploy_running(cfg)
+        if running:
+            raise Refused("deploy", "running: " + ", ".join(running))
+
+    if action == "restart_container":
+        r = docker("inspect", "-f", '{{index .Config.Labels "com.docker.compose.project"}}', target)
+        if r.returncode != 0 or r.stdout.strip() != cfg["compose_project"]:
+            raise Refused("not_allowed", f"{target} is not a {cfg['compose_project']} compose container")
+    else:
+        g = cfg["gitlab"]
+        try:
+            job = gitlab(cfg, "GET", f"jobs/{int(target)}")
+        except (OSError, ValueError, urllib.error.URLError) as e:
+            raise Refused("unavailable", f"GitLab: {e}") from None
+        timeout = g["orphan_jobs"].get(job.get("name"))
+        if job.get("status") != "running" or timeout is None:
+            raise Refused("not_allowed", f"job {target} is {job.get('status')} ({job.get('name')}), not a running router deploy job")
+        started = ts(job.get("started_at")) or now
+        gl_start = container_started("gitlab") or 0
+        if not (now - started > timeout + g["grace"] or started < gl_start):
+            raise Refused("not_allowed", f"job {target} is not orphaned (age {int(now - started)}s)")
+
+    lim = cfg["limits"]
+    with open(cfg["state_file"], "a+") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        st = load_state(f)
+        if inc in st["incidents"]:
+            raise Refused("duplicate", f"incident {inc} was already acted on")
+        same = [h for h in st["history"] if h["action"] == action and h["target"] == target
+                and now - h["ts"] < lim["per_target_window"]]
+        if len(same) >= lim["per_target_max"]:
+            raise Refused("rate_limit", f"{len(same)} {action} on {target} in the window")
+        hour = [h for h in st["history"] if now - h["ts"] < 3600]
+        if len(hour) >= lim["global_per_hour"]:
+            raise Refused("rate_limit", f"{len(hour)} actions in the last hour")
+        # Recorded before running: a crash mid-action must not allow a rerun.
+        st["incidents"][inc] = now
+        st["history"].append({"action": action, "target": target, "ts": now, "incident": inc})
+        save_state(f, st, now)
+
+    if action == "restart_container":
+        r = docker("restart", "--time", "30", target, timeout=150)
+        if r.returncode != 0:
+            raise RuntimeError(f"docker restart failed: {r.stderr.strip()[:200]}")
+        return f"restarted {target}"
+    gitlab(cfg, "POST", f"jobs/{int(target)}/cancel")
+    return f"cancelled job {target}"
+
+
+def peer_uid(sock):
+    creds = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
+    pid, uid, gid = struct.unpack("3i", creds)
+    return pid, uid, gid
+
+
+DURATION = re.compile(r"^(\d+)(s|m|h|d)$")
+
+
+def seconds(v):
+    if isinstance(v, int):
+        return v
+    m = DURATION.match(str(v))
+    if not m:
+        raise ValueError(f"bad duration {v!r}")
+    return int(m.group(1)) * {"s": 1, "m": 60, "h": 3600, "d": 86400}[m.group(2)]
+
+
+def load_config(path=CONFIG):
+    """executor.json (rendered by Ansible) plus dependencies.yml, with the
+    "{{ var }}" placeholders in probes replaced from executor.json `vars`."""
+    import yaml
+    with open(path) as f:
+        cfg = json.load(f)
+    g = cfg["gitlab"]
+    g["orphan_jobs"] = {k: seconds(v) for k, v in g["orphan_jobs"].items()}
+    g["grace"] = seconds(g["grace"])
+    with open(cfg["dependencies_file"]) as f:
+        nodes = (yaml.safe_load(f) or {}).get("nodes") or {}
+    variables = cfg.get("vars") or {}
+
+    def subst(v):
+        if isinstance(v, str):
+            return re.sub(r"\{\{\s*([a-z_0-9]+)\s*\}\}", lambda m: str(variables.get(m.group(1), m.group(0))), v)
+        if isinstance(v, dict):
+            return {k: subst(x) for k, x in v.items()}
+        return v
+    cfg["dependencies"] = {name: {"kind": (n or {}).get("kind"), "needs": list((n or {}).get("needs") or []),
+                                  "probe": subst((n or {}).get("probe") or {})}
+                           for name, n in nodes.items()}
+    return cfg
+
+
+def main():
+    cfg = load_config()
+    sock = socket.socket(fileno=0)
+    sock.settimeout(10)
+    now = time.time()
+    rec = {"event": "request"}
+    reply = {"ok": False, "refused": "not_allowed", "detail": "bad request"}
+    try:
+        pid, uid, gid = peer_uid(sock)
+        rec.update(peer_pid=pid, peer_uid=uid, peer_gid=gid)
+        if uid != cfg["router_uid"]:
+            raise Refused("peer", f"uid {uid} is not the event router")
+        buf = b""
+        while b"\n" not in buf and len(buf) < 4096:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            buf += chunk
+        req = json.loads(buf.split(b"\n", 1)[0].decode() or "null")
+        rec["request"] = req
+        sock.settimeout(None)
+        detail = handle(cfg, req, now)
+        reply = {"ok": True, "detail": detail}
+    except Refused as e:
+        reply = {"ok": False, "refused": e.why, "detail": e.detail}
+    except (ValueError, UnicodeDecodeError) as e:
+        reply = {"ok": False, "refused": "not_allowed", "detail": f"bad request: {e}"}
+    except Exception as e:     # the action itself failed
+        reply = {"ok": False, "error": f"{e.__class__.__name__}: {e}"[:300]}
+    rec["reply"] = reply
+    rec["duration_s"] = round(time.time() - now, 2)
+    log(rec)
+    try:
+        sock.sendall(json.dumps(reply).encode() + b"\n")
+    except OSError:
+        pass
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

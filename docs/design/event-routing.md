@@ -771,7 +771,7 @@ The spec is mutation-tested. Each of these deliberate design bugs must make TLC 
 6. Never release a lock when an incident resolves → L5 must fail.
 
 The suite grew beyond these six: every safety property and every liveness
-property except L2/L4/L6 has at least one mutation (17 in all, listed in
+property except L2/L4/L6 has at least one mutation (18 in all, listed in
 [tla/README.md](tla/README.md)), and `run-tlc.sh` fails if any mutation stops
 failing. The bounds actually checked are in 12.6.
 
@@ -823,6 +823,19 @@ S10, because the action record used the router's own (blinded) view of the
 window. Safety properties are now evaluated on the real state at the moment
 the executor acts.
 
+**(e) A root cause stays open for correlation while its alert still fires,
+also after the router has handed it off.** Found in phase 1 shadow testing,
+then added to the model. A root cause with no playbook (MQTT down) is escalated
+to OpenClaw within one step, and both the spec and the first implementation
+then stopped counting it as open. A Zigbee-silence alert arriving 20 minutes
+later would have run its playbook against a broken broker: the executor's
+MQTT probe would still refuse, but the result is two incidents and a page
+for one root cause. Now an ancestor incident that is escalated, paged or
+shadowed keeps its dependents attached as symptoms until its alert resolves.
+A symptom attached to a root cause that reached OpenClaw or Noah counts as
+handled (L1). Ground truth for S6 includes handed-off root causes; mutation
+`CorrelateWhileActiveOnly`.
+
 **Found by the property tests on the implementation** (Hypothesis, same
 properties):
 
@@ -842,10 +855,11 @@ properties):
 | Check | Instance | Distinct states | Time | Result |
 |---|---|---|---|---|
 | `safety.cfg` | 5 alerts (MQTT; Zigbee needing it; two playbooks on one container; a page-class alert), one of them re-delivered; 1 run per window; one of each environment event | 26,466,078 | 6m49s | S1–S11 hold |
-| `liveness.cfg` | 3 alerts (MQTT, Zigbee, one container), one delivery each | 239,688 | 2m17s | S1–S11, L1, L3, L5, L7, L8 hold |
-| `ci-safety.cfg` (CI) | as `safety.cfg`, no re-delivery | 7,302,666 | 1m46s | S1–S11 hold |
-| `ci-liveness.cfg` (CI) | 2 alerts (MQTT, one container) | 14,124 | 7s | all hold |
-| 17 mutations (CI) | the instances above, or a one-alert instance for re-delivery bugs | 159–14,982 each | ≤ 3s each | each fails on its named property |
+| `liveness.cfg` | 3 alerts (MQTT, Zigbee, one container), one delivery each | 408,564 | 3m36s | S1–S11, L1, L3, L5, L7, L8 hold |
+| `ci-safety.cfg` (CI) | the 4 playbook-side alerts, no re-delivery | 5,144,958 | 1m04s | S1–S11 hold |
+| `ci-pages.cfg` (CI) | MQTT, Zigbee and the page-class alert | 90,144 | 2s | S1–S11 hold |
+| `ci-liveness.cfg` (CI) | 2 alerts (MQTT, one container) | 21,576 | 9s | all hold |
+| 18 mutations (CI) | the instances above, or a one-alert instance for re-delivery bugs | 158–22,704 each | ≤ 3s each | each fails on its named property |
 
 Liveness is checked on smaller instances than safety: TLC's liveness check
 grows with states times fairness conditions (35 here), and a 4-alert liveness

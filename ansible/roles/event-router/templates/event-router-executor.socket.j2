@@ -1,0 +1,19 @@
+# {{ ansible_managed }}
+# Event router executor (docker/event-router/README.md): the router container
+# (uid {{ event_router_uid }}, group event-router) connects here; one root
+# process per connection checks the caller with SO_PEERCRED.
+[Unit]
+Description=Event router executor socket
+
+[Socket]
+ListenStream=/run/event-router/executor.sock
+SocketUser=root
+SocketGroup=event-router
+SocketMode=0660
+DirectoryMode=0755
+Accept=yes
+MaxConnections=4
+MaxConnectionsPerSource=4
+
+[Install]
+WantedBy=sockets.target

@@ -1,0 +1,26 @@
+{#- Executor configuration (docker/event-router/executor/event-router-executor).
+    Outside the router's reach: root-owned, rendered from the repo at deploy time. -#}
+{%- set rcfg = lookup('file', lookup('env', 'CI_PROJECT_DIR') ~ '/docker/event-router/config.yml') | from_yaml -%}
+{%- set deps_text = lookup('file', lookup('env', 'CI_PROJECT_DIR') ~ '/inventory/dependencies.yml') -%}
+{%- set names = deps_text | regex_findall('\\{\\{\\s*([a-z_0-9]+)\\s*\\}\\}') | unique -%}
+{%- set probe_vars = {} -%}
+{%- for n in names if n != 'var' -%}
+{%-   set _ = probe_vars.update({n: lookup('vars', n, default='')}) -%}
+{%- endfor -%}
+{{ {
+  'router_uid': event_router_uid | int,
+  'repo_mode': rcfg.mode,
+  'compose_project': 'docker',
+  'override_file': event_router_etc ~ '/override/mode',
+  'shared_dir': event_router_data_dir ~ '/data/shared',
+  'state_file': '/var/lib/event-router-executor/state.json',
+  'jit_socket': docker_persistent_data_path ~ '/jit-approval-svc/actions/actions.sock',
+  'dependencies_file': event_router_data_dir ~ '/config/dependencies.yml',
+  'vars': probe_vars,
+  'restart_denylist': rcfg.restart_denylist,
+  'limits': {'per_target_max': 2, 'per_target_window': 21600,
+             'global_per_hour': rcfg.limits.global_actions_per_hour | int},
+  'gitlab': {'url': 'https://gitlab.lab.nkontur.com', 'project_id': rcfg.ci_orphan.project_id | int,
+             'deploy_jobs': rcfg.deploy_jobs, 'orphan_jobs': rcfg.ci_orphan.jobs,
+             'grace': rcfg.ci_orphan.grace},
+} | to_nice_json }}

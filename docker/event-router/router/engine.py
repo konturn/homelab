@@ -132,11 +132,15 @@ class Engine:
         self._set(inc, status=status, closed_at=self.clock.now(), waiting=None, **fields)
 
     def dep_open(self, inc):
-        """DepOpen: an incident on an ancestor node is open (any active state)."""
+        """DepOpen: an incident on an ancestor node is open: active, or handed
+        off (escalated, paged, shadowed) while its alert still fires (doc
+        12.6 e). Otherwise an MQTT outage escalated to OpenClaw within one
+        step would stop suppressing Zigbee silence."""
         if not inc["node"]:
             return None
         ancestors = self.graph.ancestors(inc["node"])
-        for other in self.store.active():
+        since = self.clock.now() - DEDUPE_TERMINAL_FOR
+        for other in self.store.active() + self.store.handed_off_firing(since):
             if other["id"] != inc["id"] and other["node"] in ancestors:
                 return other
         return None
@@ -217,7 +221,8 @@ class Engine:
         if root:
             self._set(inc, status="symptom", root=root["id"])
             self._log({"decision": "suppressed", "reason": "ancestor incident",
-                       "root": root["id"], "root_node": root["node"], **extra}, inc)
+                       "root": root["id"], "root_node": root["node"],
+                       "root_status": root["status"], **extra}, inc)
             return
         if self._burst(now, inc):
             self._close(inc, "escalated", note="burst")

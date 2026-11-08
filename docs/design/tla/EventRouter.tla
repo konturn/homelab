@@ -81,7 +81,13 @@ MaintScope == {"zigbee", "mqtt", "sec"}
 \* (the IgnoreMaint mutation blinds only the latter).
 InMaintRaw(f) == maintOn /\ NodeOf[f] \in MaintScope
 InMaint(f)    == InMaintRaw(f) /\ MUT # "IgnoreMaint"
-DepOpen(f)  == \E g \in Fps : NodeOf[g] \in Needs[NodeOf[f]] /\ inc[g] \in Active
+\* A root cause stays open for correlation while its alert still fires, also
+\* after the router handed it off (escalated or paged): shadow testing found
+\* that an escalated MQTT outage stopped suppressing Zigbee silence (12.6 e).
+Handed      == {"escalated", "paged"}
+DepOpenRaw(f) == \E g \in Fps : NodeOf[g] \in Needs[NodeOf[f]] /\ inc[g] \in Active \cup Handed
+DepOpen(f)  == \E g \in Fps : NodeOf[g] \in Needs[NodeOf[f]] /\
+                  inc[g] \in Active \cup (IF MUT = "CorrelateWhileActiveOnly" THEN {} ELSE Handed)
 
 \* Hand an incident to OpenClaw, or page Noah when OpenClaw is down.
 Escalate(f) ==
@@ -213,7 +219,7 @@ Execute(f) ==
                    \/ v = "S2"  /\ a \notin Allowed
                    \/ v = "S3"  /\ mode # "active"
                    \/ v = "S5"  /\ breaker[p]
-                   \/ v = "S6"  /\ DepOpen(f)
+                   \/ v = "S6"  /\ DepOpenRaw(f)
                    \/ v = "S7"  /\ deploying
                    \/ v = "S10" /\ InMaintRaw(f) }
           /\ execN' = [execN EXCEPT ![f] = @ + 1]
@@ -312,7 +318,7 @@ WindowElapse ==
 \* The alert clears by itself (or a human fixed it) before the router acts.
 AlertResolves(f) ==
   /\ Spend("resolve")
-  /\ inc[f] \in {"open", "symptom", "maint"}
+  /\ inc[f] \in {"open", "symptom", "maint"} \cup Handed
   /\ inc' = [inc EXCEPT ![f] = "resolved"]
   /\ UNCHANGED <<deliv, execN, lock, runs, breaker, viol, mode,
                  ocUp, routerUp, deploying, maintOn, pages, agentq>>
@@ -349,7 +355,7 @@ S5_BreakerHolds       == "S5" \notin viol
 S6_OneRootCause       == "S6" \notin viol
 S7_NoActDuringDeploy  == "S7" \notin viol
 S8_NoDoubleAction     == \A f \in Fps : execN[f] <= 1
-S9_PageClassPaged     == \A f \in PageClass \cap Fps : inc[f] \in {"none", "paged"}
+S9_PageClassPaged     == \A f \in PageClass \cap Fps : inc[f] \in {"none", "paged", "resolved"}
 S10_NoActInMaint      == "S10" \notin viol
 S11_PageInMaint       == \A f \in PageClass \cap Fps : inc[f] # "maint"
 \* L4 (fallback while the router is down) is Grafana's routing, not the
@@ -363,9 +369,13 @@ Safety == S1_OneActionPerTarget /\ S2_OnlyAllowedActions /\ S3_KillSwitchStops
 \* ---- Liveness (section 12.2, 13.4) --------------------------------------
 \* L1/L2/L8: every incident ends handled, and "escalated"/"paged" really
 \* reached OpenClaw or Noah (never silently lost, never dropped by a window).
-Handled(f) == \/ inc[f] = "resolved"
-              \/ inc[f] = "escalated" /\ f \in agentq
+Reached(f) == \/ inc[f] = "escalated" /\ f \in agentq
               \/ inc[f] = "paged"     /\ f \in pages
+\* A symptom attached to a root cause that reached OpenClaw or Noah is handled
+\* with it (4.7: one root cause, one incident).
+Handled(f) == \/ inc[f] = "resolved"
+              \/ Reached(f)
+              \/ inc[f] = "symptom" /\ \E g \in Fps : NodeOf[g] \in Needs[NodeOf[f]] /\ Reached(g)
 L1_EveryIncidentHandled == \A f \in Fps : (inc[f] \in Active) ~> Handled(f)
 L3_BreakerPages  == \A p \in Playbooks :
                       breaker[p] ~> (\E f \in Fps : PbOf[f] = p /\ f \in pages)

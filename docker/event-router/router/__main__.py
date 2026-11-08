@@ -7,6 +7,7 @@
   python -m router maint close <id> | maint list
   python -m router mode show | mode set notify-only|shadow|clear
   python -m router replay payload.json [...]   (shadow decisions on a scratch database)
+  python -m router inject-ci-orphan <job_id> [--resolved]   (test event for ci-orphan-cancel)
 
 `maint` and `mode` work on the live database; on the router they run inside
 the container (`scripts/event-router`).
@@ -136,6 +137,21 @@ def cmd_replay(a):
     return 0
 
 
+def cmd_inject(a):
+    """Queue a synthetic reconciler event, as the 5-minute check would raise
+    it, to exercise ci-orphan-cancel. The executor still checks the job
+    against GitLab before cancelling anything."""
+    from .events import Event
+    eng = build_engine(_paths(), with_clients=False)
+    ev = Event(source="reconciler", kind="ci_orphan", fp=f"reconciler:ci-orphan:{int(a.job_id)}",
+               status="resolved" if a.resolved else "firing",
+               alertname="CI job holding a resource group (test)",
+               labels={"job_id": str(int(a.job_id)), "job_name": "test", "why": "injected test event"})
+    eng.store.inbox_put(time.time(), [ev.to_dict()])
+    print("queued", ev.fp, ev.status)
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="router")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -161,10 +177,14 @@ def main(argv=None):
     md.add_argument("--by", default="cli")
     r = sub.add_parser("replay")
     r.add_argument("files", nargs="+")
+    inj = sub.add_parser("inject-ci-orphan")
+    inj.add_argument("job_id")
+    inj.add_argument("--resolved", action="store_true")
     a = ap.parse_args(argv)
     try:
         return {"serve": cmd_serve, "validate": cmd_validate, "maint": cmd_maint,
-                "mode": cmd_mode, "replay": cmd_replay}[a.cmd](a) or 0
+                "mode": cmd_mode, "replay": cmd_replay,
+                "inject-ci-orphan": cmd_inject}[a.cmd](a) or 0
     except (ValueError, ConfigError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 2

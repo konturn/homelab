@@ -1,0 +1,17 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Event router executor (one request)
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/event-router-executor
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+SyslogIdentifier=event-router-executor
+EnvironmentFile=-{{ event_router_etc }}/executor.env
+User=root
+RuntimeMaxSec=300
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=read-only

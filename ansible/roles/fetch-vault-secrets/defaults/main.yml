@@ -83,6 +83,8 @@ vault_secret_paths:
       vault_event_router_grafana_token: "grafana_token"
       vault_event_router_control_token: "control_token"
       vault_event_router_gitlab_read_token: "gitlab_read_token"
+      # host executor only (cancel orphaned deploy jobs; Developer, api)
+      vault_event_router_executor_gitlab_token: "executor_gitlab_token"
 
   # Docker service secrets
   - path: "docker/audioserve"

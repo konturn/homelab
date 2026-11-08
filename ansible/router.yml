@@ -53,7 +53,8 @@
     vars:
       nvidia_container_runtime: true
   # Before configure-homelab-services: the event-router container's user,
-  # data and override directories (docker/event-router/README.md).
+  # data and override directories, the host executor's socket and the
+  # control service (docker/event-router/README.md).
   - role: event-router
     tags: [event-router]
   - role: configure-homelab-services
