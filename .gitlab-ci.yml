@@ -14,12 +14,13 @@
 #   ┌────────────────────────┬──────────────┬──────────────┬──────────────┬──────────────────┐
 #   router:val [id_tokens]  zwave:val  sat-2:val  vault:validate  jit-approval-svc:test
 #   anomaly-detector:test  revert-guard (MR only, ci/revert-guard/README.md)
+#   event-router:test
 #   event-router:tlc (TLA+ model, on docs/design/tla changes + weekly schedule)
 #
 #   BUILD (parallel, path-triggered)
 #   ┌──────────────┬──────────────┬──────────────┬──────────────────────┐
 #   openclaw:build  amcrest2mqtt:build  snapcast:build  snapclient:build  jit-approval-svc:build
-#   anomaly-detector:build  nginx:build
+#   anomaly-detector:build  nginx:build  event-router:build
 #   main: <image>:build builds and pushes :latest and :<sha> (protected runner)
 #   MRs:  <image>:build-check builds with kaniko, no push (unprotected runner)
 #
@@ -448,6 +449,38 @@ event-router:tlc:
       changes:
         - docs/design/tla/**/*
 
+# Event router (docker/event-router/README.md): unit and property tests
+# (Hypothesis, the TLA+ properties against the real code) and the playbook
+# validator, which rejects non-allowlisted actions and hard-denied targets.
+event-router:test:
+  extends: .interruptible
+  stage: validate
+  image: python:3.13-alpine3.22@sha256:e81548ac35b07a3bd4805f275107592ef458b1e893c0e04d45aedaa19416cca5
+  needs: []
+  script:
+    - apk add --no-cache tzdata
+    - cd docker/event-router
+    - pip install -q --root-user-action=ignore --disable-pip-version-check -r requirements-dev.txt
+    - python -m unittest discover -s tests -t . -v
+    - >-
+      python -m router validate --config config.yml --playbooks playbooks
+      --deps ../../inventory/dependencies.yml
+      --rules ../grafana/provisioning/alerting --compose ../docker-compose.yml
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - docker/event-router/**/*
+        - inventory/dependencies.yml
+        - docker/grafana/provisioning/alerting/*.yml
+        - docker/docker-compose.yml
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - docker/event-router/**/*
+        - inventory/dependencies.yml
+        - docker/grafana/provisioning/alerting/*.yml
+        - docker/docker-compose.yml
+
 # Stale-tree revert guard (ci/revert-guard/README.md): fails an MR whose diff
 # undoes what other MRs merged in the last 7 days, in files where it changes
 # nothing else (e.g. b0ac2497 in !1048). Deliberate reverts: add the
@@ -750,6 +783,29 @@ anomaly-detector:build-check:
       when: manual
       allow_failure: true
 
+event-router:build:
+  extends: .docker_build
+  variables:
+    IMAGE_NAME: event-router
+    BUILD_CONTEXT: docker/event-router
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - docker/event-router/**/*
+
+event-router:build-check:
+  extends: .kaniko_check
+  variables:
+    BUILD_CONTEXT: docker/event-router
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - docker/event-router/**/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
+
 chromium-browser:build:
   extends: .docker_build
   variables:
@@ -854,6 +910,8 @@ router:deploy:
     - job: amcrest2mqtt:build
       optional: true
     - job: anomaly-detector:build
+      optional: true
+    - job: event-router:build
       optional: true
     - job: chromium-browser:build
       optional: true
@@ -2262,6 +2320,8 @@ router:deploy-service:
     - job: amcrest2mqtt:build
       optional: true
     - job: anomaly-detector:build
+      optional: true
+    - job: event-router:build
       optional: true
     - job: chromium-browser:build
       optional: true

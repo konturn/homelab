@@ -59,7 +59,8 @@ shared:
     # Fact files and their tools (inventory/README.md). The files generated
     # from them (base/udev/..., base/disk/crypttab) are committed and carry
     # the deploy themselves.
-    - inventory/**
+    - inventory/hardware.yml
+    - inventory/README.md
     - ci/facts/**
     - ansible/tests/**
     - ansible/bootstrap.yml
@@ -75,6 +76,7 @@ shared:
     - scripts/gitlab-settings.sh
     - scripts/validate-nginx-config.sh
     - scripts/set-deadman-ping-url.sh
+    - scripts/event-router
     # run by hand on the router; the image is built by CI, never deployed
     - scripts/dovi-convert/**
     - docker/images/dovi-convert/**
@@ -102,6 +104,13 @@ playbooks:
       roles: []
     - match: [docker/ollama/**]
       roles: [configure-ollama-models]
+    # The executor and the repo mode in config.yml are deployed by the
+    # event-router role; the image by configure-homelab-services.
+    - match: [docker/event-router/**]
+      roles: [event-router, configure-homelab-services]
+    # Correlation graph for the event router (the facts tools only read it).
+    - match: [inventory/dependencies.yml]
+      roles: [event-router]
     - match: [docker/**]
       roles: [configure-homelab-services]
     - match: [scripts/grafana-token-cleanup.sh, base/nut/**]
@@ -147,7 +156,7 @@ playbooks:
       roles: [configure-snapclient]
     # Everything else under docker/, base/, networking/ and scripts/ is read
     # only by router roles.
-    - match: [docker/**, base/**, networking/**, scripts/**]
+    - match: [docker/**, base/**, networking/**, scripts/**, inventory/dependencies.yml]
       roles: []
 
   satellite-2:
@@ -161,9 +170,9 @@ playbooks:
       roles: [configure-docker, deploy-compose]
     - match: [base/sane/**, base/systemd/shell2http.service]
       roles: [configure-scanner]
-    - match: [docker/**, base/**, networking/**, scripts/**, snapclient/**]
+    - match: [docker/**, base/**, networking/**, scripts/**, snapclient/**, inventory/dependencies.yml]
       roles: []
 
   macmini:
-    - match: [docker/**, base/**, networking/**, scripts/**, snapclient/**]
+    - match: [docker/**, base/**, networking/**, scripts/**, snapclient/**, inventory/dependencies.yml]
       roles: []

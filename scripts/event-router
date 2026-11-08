@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Event router CLI on the router host (docker/event-router/README.md): runs
+# `python -m router ...` inside the container, against the live database.
+#
+#   scripts/event-router mode show
+#   scripts/event-router maint open --scope zwave_js --for 2h --reason "kernel update"
+#   scripts/event-router maint list | maint close <id>
+#
+# The kill switch itself is the host file, which works with the container down:
+#   echo notify-only > /etc/event-router/override/mode     # stop all actions
+#   rm /etc/event-router/override/mode                     # back to the repo mode
+set -euo pipefail
+exec docker exec -i event-router python -m router "$@"

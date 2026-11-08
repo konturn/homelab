@@ -61,7 +61,7 @@ Weights only matter under contention; idle CPU is still used by anyone. Changing
 All third-party Docker images are pinned to SHA256 digests for reproducible deploys. Format: `image:tag@sha256:xxxx`.
 
 **Exceptions (NOT pinned):**
-- `gitlab-registry.lab.nkontur.com` images (nginx, snapcast, snapclient, amcrest2mqtt, jit-approval-svc, anomaly-detector, novnc, chromium-browser, openclaw) — built in CI, pinning would break deploys
+- `gitlab-registry.lab.nkontur.com` images (nginx, snapcast, snapclient, amcrest2mqtt, jit-approval-svc, anomaly-detector, event-router, novnc, chromium-browser, openclaw) — built in CI, pinning would break deploys
 - Images using Jinja2 template variables (e.g., `{{ openclaw_image_tag }}`)
 
 Pin the **manifest-list (index) digest**, never a platform-specific one. An index

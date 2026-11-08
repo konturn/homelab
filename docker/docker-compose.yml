@@ -1324,6 +1324,54 @@ services:
       retries: 3
       start_period: 90s
 
+  # Event router (docker/event-router, docs/design/event-routing.md): Grafana
+  # alerts in, deterministic playbooks out. No Docker socket, no host access:
+  # it acts only through the root executor's Unix socket (phase 2), which
+  # checks this uid with SO_PEERCRED. Decisions are JSON on stdout (Loki).
+  event-router:
+    image: gitlab-registry.lab.nkontur.com:443/root/homelab/event-router:latest
+    container_name: event-router
+    restart: unless-stopped
+    user: "2470:2470"
+    security_opt:
+      - no-new-privileges=true
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.5"
+          pids: 64
+    volumes:
+      - "{{ docker_persistent_data_path }}/event-router/data:/data"
+      - "{{ docker_persistent_data_path }}/event-router/config:/config:ro"
+      - "/etc/event-router/override:/override:ro"
+    environment:
+      - TZ=America/New_York
+      - GRAFANA_TOKEN={{ vault_event_router_grafana_token | trim | replace("$", "$$") }}
+      - CONTROL_TOKEN={{ vault_event_router_control_token | trim | replace("$", "$$") }}
+      - GITLAB_URL=https://gitlab.lab.nkontur.com
+      - GITLAB_TOKEN={{ vault_event_router_gitlab_read_token | trim | replace("$", "$$") }}
+      # /summary without the control token: OpenClaw gateway and localhost.
+      - ALLOWED_CLIENTS={{ openclaw_gateway_ip }}/32,127.0.0.1/32
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5).status == 200 else 1)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   deluge:
     container_name: deluge
     cpu_shares: 256  # batch work, see CLAUDE.md "CPU priority"

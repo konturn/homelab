@@ -123,6 +123,8 @@ bot_config:
     - chromium-browser
   never:
     - docker/grafana/provisioning/dashboards/homelab.yml
+    # Playbooks and the router's config: Noah reviews (event-routing.md 8.3).
+    - docker/event-router/**
 
 # Never auto-merged, whatever the update kind. Each entry needs a reason; the
 # sweep prints it on the MR and labels the MR `automerge-manual`. Renovate

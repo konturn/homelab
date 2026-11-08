@@ -1,0 +1,18 @@
+# Routing table row 1 (I1): zigbee2mqtt keeps its TCP session to the SLZB
+# coordinator after a coordinator firmware update or reboot but hears nothing.
+# Restart it. The executor first probes everything zigbee2mqtt needs
+# (coordinator TCP, MQTT, DNS, /persistent_data) and refuses if any is down,
+# so a dead coordinator is escalated, not restarted around.
+id: zigbee-silence-restart
+description: Restart zigbee2mqtt when it hears no Zigbee messages
+mode: shadow
+match:
+  source: grafana
+  rule_uid: zigbee-radio-silence
+node: zigbee2mqtt
+action: {type: restart_container, target: zigbee2mqtt}
+verify:
+  alert_resolved: 10m      # the rule clears as soon as device messages return
+limits: {max_runs: 2, per: 6h, cooldown: 30m}
+on_success: {notify: digest}
+on_failure: {notify: page}

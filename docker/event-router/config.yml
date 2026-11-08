@@ -1,0 +1,98 @@
+# Event router configuration (docs/design/event-routing.md, docker/event-router/README.md).
+# Baked into the image; the executor gets `mode` from this file through
+# Ansible (roles/event-router), so a deploy changes both together.
+
+# Kill switch, section 7.3: notify-only | shadow | active. The host override
+# (/etc/event-router/override/mode, or the Telegram buttons) wins over this.
+# Each playbook also has its own mode; it acts only when both are `active`.
+mode: shadow
+
+limits:
+  global_actions_per_hour: 6       # decision 9; above it: notify-only + page ("automation storm")
+  default: {max_runs: 1, per: 6h, cooldown: 30m}
+  breaker_reset_after: 24h         # section 7.2: no triggers for 24h closes a breaker
+
+correlation:
+  burst_events: 5                  # 4.7 step 4: more than this many new incidents
+  burst_within: 2m                 # in this span go straight to the agent
+
+maintenance:
+  max_duration: 12h                # 13.1
+
+quiet_hours: {start: "23:00", end: "08:00", tz: America/New_York}   # decision 6
+
+reconcile_interval: 5m             # level-triggered checks (4.3)
+step_interval: 15s
+
+# 4.5 and decision 7: never restarted by a playbook. The first five are also
+# hard-coded (router/config.py HARD_DENIED_TARGETS) and in the executor.
+restart_denylist:
+  - gitlab
+  - vault
+  - pihole
+  - event-router
+  - docker-socket-proxy
+  # platform (decision 5) and other shared front ends: their own playbooks only
+  - nginx
+  - lab_nginx
+  - iot_nginx
+  - homeassistant
+  - mosquitto                      # its own playbook (routing table row 3, phase 3)
+  - jit-approval-svc
+  - openclaw-gateway
+
+# Always-page classes (section 6.3, decision 5), by Grafana rule uid. In
+# phases 1-2 Grafana's email and OpenClaw routes still deliver these; the
+# router records them and never runs a playbook for them (S9, S11).
+page_classes:
+  security:
+    urgent: true
+    rules:
+      - {rule_uid: failed-ssh-logins}
+      - {rule_uid: efeju4cob1ipsb}            # Vault unavailable or sealed
+  data_at_risk:
+    urgent: true
+    rules:
+      - {rule_uid: zpool-unhealthy}
+      - {rule_uid: smart-disk-vanished}
+      - {rule_uid: smart-disk-error}
+      - {rule_uid: restic-backup-stale}
+      - {rule_uid: restic-db-dumps-stale}
+      - {rule_uid: restic-db-dumps-weekly-stale}
+  ups:
+    urgent: true
+    rules:
+      - {rule_uid: ups-on-battery}
+      - {rule_uid: ups-battery-low}
+      - {rule_uid: ups-battery-critical-30}
+  platform:
+    rules:
+      - {rule_uid: container-health-failure, labels: {container_name: "gitlab"}}
+      - {rule_uid: container-health-failure, labels: {container_name: "vault"}}
+      - {rule_uid: container-health-failure, labels: {container_name: "homeassistant"}}
+      - {rule_uid: container-health-failure, labels: {container_name: "pihole"}}
+      - {rule_uid: container-restart-loop, labels: {container_name: "gitlab"}}
+      - {rule_uid: container-restart-loop, labels: {container_name: "vault"}}
+      - {rule_uid: container-restart-loop, labels: {container_name: "homeassistant"}}
+      - {rule_uid: container-restart-loop, labels: {container_name: "pihole"}}
+  host_not_reporting:
+    rules:
+      - {rule_uid: host-metrics-stale}
+
+# Router deploys (resource_group deploy-router in .gitlab-ci.yml): while one
+# runs, nothing but ci-orphan-cancel acts (S7).
+deploy_jobs: ["router:deploy", "router:deploy-service", "facts:drift", "ups-card:drift"]
+
+# Reconciler (routing table row 11): a job of these names still running past
+# its timeout (+ grace), or started before GitLab last came back, is orphaned.
+# Timeouts must match .gitlab-ci.yml (tests/test_repo.py checks). Only the
+# router's deploy group: device groups (switch/AP firmware) and Pi deploys
+# are never cancelled automatically.
+ci_orphan:
+  project_id: 4
+  grace: 5m
+  jobs:
+    "router:deploy": 45m
+    "router:deploy-service": 60m
+    "facts:drift": 30m
+    "ups-card:drift": 30m

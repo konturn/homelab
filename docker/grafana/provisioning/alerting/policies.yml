@@ -8,6 +8,20 @@ policies:
     group_interval: 5m
     repeat_interval: 24h
     routes:
+      # Event router (docs/design/event-routing.md, phases 1-2): a copy of
+      # every alert. First, so the zigbee2mqtt exception below (continue:
+      # false) cannot hide anything from it; continue: true, so every route
+      # below delivers exactly as before. group_by '...' sends one alert per
+      # notification (the router dedupes by fingerprint); resolves within ~1m
+      # are its verification signal.
+      - receiver: event-router
+        matchers:
+          - severity =~ ".*"
+        group_by: ['...']
+        group_wait: 10s
+        group_interval: 1m
+        repeat_interval: 4h
+        continue: true
       # zigbee2mqtt log floods: agent only, no email. Its log volume swings with
       # normal Zigbee activity (OTA firmware updates, interviews, re-pairing),
       # so the 10x-baseline rule fires on routine work. This route delivers it
