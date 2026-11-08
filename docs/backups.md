@@ -483,6 +483,15 @@ lower keep prunes the oldest snapshots of that label on its next run. To stop
 snapshotting a dataset, `zfs set com.sun:auto-snapshot=false <dataset>` (its
 existing snapshots are then left alone, not pruned).
 
+**Per-dataset exceptions** (`zfs_auto_snapshot_dataset_overrides`): `mpool/plex`
+keeps about one week, since its snapshots pin deleted media. It gets frequent
+and hourly as above, 7 dailies (a `--destroy-only --label=daily --keep=7` run at
+00:15 trims it after the 23:59 daily), and no weekly or monthly
+(`com.sun:auto-snapshot:weekly=false` and `:monthly=false`, set by the role).
+The script skips a dataset for any label whose property is false, even when
+the dataset is named on the command line, so a lower keep has to be a separate
+destroy-only line rather than an exclusion plus its own snapshot line.
+
 ```bash
 # List snapshots
 zfs list -t snapshot mpool/nextcloud
