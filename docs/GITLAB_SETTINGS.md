@@ -9,6 +9,7 @@ the `gitlab:settings` CI job.
 |---|---|---|
 | Resource groups `deploy-router`, `deploy-zwave`, `deploy-satellite-2`, `deploy-macmini`: `process_mode` | `newest_ready_first` | One deploy per host at a time, and the newest commit's deploy goes next instead of the oldest queued one. |
 | Project `ci_forward_deployment_enabled` ("Prevent outdated deployment jobs") | `true` | With the deploy jobs' `environment:`, an older deploy still waiting for its resource group is skipped once a newer one has run. |
+| Project `reset_approvals_on_push` ("Remove all approvals when commits are added to the source branch") | `true` | An approval covers the commit it was given for. `scripts/approve-root-mr.sh` and the automerge sweep approve one reviewed head commit; a later push drops the approval, so the new head needs a new one. Was already on; enforced here since 2026-11-07. |
 | Instance plan limit `ci_pipeline_schedules` (plan `default`) | `20` | GitLab allows 10 pipeline schedules per project by default; this project has 18 (nightly full deploy, 4 reports, 5 drift checks, NETGEAR and Aruba firmware check and rollout, renovate, automerge sweep and report, this job). Raised by hand on 2026-10-20 (Admin > plan limits, the same as `PUT /application/plan_limits`), now enforced here. |
 
 `<host>:deploy` and `<host>:deploy-service` share `deploy-<host>` (router, zwave, satellite-2). Resource
