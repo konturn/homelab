@@ -854,7 +854,7 @@ properties):
 
 | Check | Instance | Distinct states | Time | Result |
 |---|---|---|---|---|
-| `safety.cfg` | 5 alerts (MQTT; Zigbee needing it; two playbooks on one container; a page-class alert), one of them re-delivered; 1 run per window; one of each environment event | 26,466,078 | 6m49s | S1–S11 hold |
+| `safety.cfg` | 5 alerts (MQTT; Zigbee needing it; two playbooks on one container; a page-class alert), one of them re-delivered; 1 run per window; one of each environment event | 26,466,078 | 6m49s | S1–S11 hold (spec before finding e; since then checked on the CI instances, the larger instance being too heavy for the router) |
 | `liveness.cfg` | 3 alerts (MQTT, Zigbee, one container), one delivery each | 408,564 | 3m36s | S1–S11, L1, L3, L5, L7, L8 hold |
 | `ci-safety.cfg` (CI) | the 4 playbook-side alerts, no re-delivery | 5,144,958 | 1m04s | S1–S11 hold |
 | `ci-pages.cfg` (CI) | MQTT, Zigbee and the page-class alert | 90,144 | 2s | S1–S11 hold |
@@ -1024,6 +1024,24 @@ container runs as uid 2470, the only uid the executor accepts
 the probes in `dependencies.yml` (container health, systemd, mount, TCP,
 DNS); any failure refuses with `dependency`. It cannot know which playbook
 sent a request, so it treats `assist` windows like `quiet` ones (it refuses).
+
+**Shadow testing and promotion (2026-11-08).** Each playbook ran in shadow
+against Grafana contact-point test alerts (and, for `ci-orphan-cancel`, an
+injected reconciler event), plus the live alerts of the period:
+
+| Playbook | Test events | Decisions |
+|---|---|---|
+| `zigbee-silence-restart` | Zigbee silence alone; after an MQTT outage (escalated); after that outage resolved | would restart zigbee2mqtt; suppressed as a symptom of the MQTT incident; re-evaluated when MQTT resolved, then held by the 30-minute cooldown |
+| `restart-once` | unhealthy `iperf3`, `gitlab`, `mosquitto` | denied (a router deploy finished 3 minutes earlier); paged (platform class); denied (restart denylist) |
+| `ci-orphan-cancel` | injected orphan, job 999999 | would cancel the job |
+
+The executor was then tested over its real socket. It refused a hard-denied
+target, a hard-denied action, a denylisted container, a job that was not a
+running deploy job, a request with an extra field, and a caller with uid 0.
+Every refusal was logged to the journal. All three playbooks were promoted to
+`active` together. Contact-point tests never resolve, so test incidents must
+be resolved explicitly (the "resolved" Grafana would send). Otherwise a
+test alert for a root cause keeps its dependents suppressed for up to 24h.
 
 **Not in phases 1–2:** the GitLab webhook, the Grafana dashboard, `POST
 /outcome` and the routing review (phase 3), router suppressions
