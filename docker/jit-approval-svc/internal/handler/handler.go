@@ -217,7 +217,8 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Rate limit: max 5 requests per resource per requester per 15 minutes
+	// Rate limit per resource per requester (JIT_RATE_LIMIT_MAX per
+	// JIT_RATE_LIMIT_WINDOW_MIN; see internal/ratelimit and docker-compose.yml)
 	if ok, retryAfter := h.limiter.Allow(body.Resource, body.Requester); !ok {
 		logger.Warn("request_rate_limited", logger.Fields{
 			"requester":     body.Requester,
@@ -546,8 +547,10 @@ type TelegramUser struct {
 
 // --- Internal methods ---
 
-// mintCredential attempts to mint a credential via the dynamic backend first,
-// falling back to the static Vault token if the dynamic backend fails.
+// mintCredential mints a credential with the resource's backend: its dynamic
+// backend when one is registered, otherwise the static backend (a Vault token
+// limited to that resource's own secret). There is no fallback: if a dynamic
+// backend fails, its error is logged and returned.
 func (h *Handler) mintCredential(req *store.Request, ttl time.Duration) (*store.Credential, error) {
 	b := h.backends.For(req.Resource)
 	isDynamic := h.backends.IsDynamic(req.Resource)

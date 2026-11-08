@@ -253,23 +253,23 @@ func (vc *Client) Health() error {
 }
 
 // resourceTier maps each known resource to its minimum tier level.
-// This determines which Vault policy the minted token receives and
-// enforces minimum approval requirements per resource.
+// It enforces minimum approval requirements and TTLs per resource; it does
+// not choose Vault policies (see staticResourcePaths).
 var resourceTier = map[string]int{
 	// Tier 1: Auto-approve services (15 min TTL)
-	"grafana":   1,
-	"influxdb":  1,
-	"plex":      1,
-	"radarr":    1,
-	"sonarr":    1,
-	"ombi":      1,
-	"nzbget":    1,
-	"deluge":    1,
-	"paperless":  2,
-	"gmail-read": 1,
-	"gmail-send": 2,
-	"prowlarr":  1,
-	"tautulli":  1,
+	"grafana":     1,
+	"influxdb":    1,
+	"plex":        1,
+	"radarr":      1,
+	"sonarr":      1,
+	"ombi":        1,
+	"nzbget":      1,
+	"deluge":      1,
+	"paperless":   2,
+	"gmail-read":  1,
+	"gmail-send":  2,
+	"prowlarr":    1,
+	"tautulli":    1,
 	"mqtt":        1,
 	"ssh-macmini": 1,
 	// The agent's own GitLab identity, short-lived (gitlab_agent.go).
@@ -277,22 +277,22 @@ var resourceTier = map[string]int{
 	"gitlab-moltbot": 1,
 
 	// Tier 2: Infrastructure (requires approval, 30 min TTL)
-	"ssh-router":    2,
-	"ssh-satellite": 2,
-	"ssh-zwave":     2,
-	"ssh-nkontur":        2,
-	"ssh-konoahko":        2,
-	"ssh-konturn":        2,
+	"ssh-router":             2,
+	"ssh-satellite":          2,
+	"ssh-zwave":              2,
+	"ssh-nkontur":            2,
+	"ssh-konoahko":           2,
+	"ssh-konturn":            2,
 	"ssh-router-elevated":    2,
 	"ssh-zwave-elevated":     2,
 	"ssh-satellite-elevated": 2,
 	"ssh-macmini-elevated":   2,
-	"tailscale":     2,
-	"pihole":        2,
-	"gitlab":        2,
-	"homeassistant": 2,
-	"vault":         2,
-	"ipmi":          2,
+	"tailscale":              2,
+	"pihole":                 2,
+	"gitlab":                 2,
+	"homeassistant":          2,
+	"vault":                  2,
+	"ipmi":                   2,
 }
 
 // MinTierForResource returns the minimum tier required for a resource.
@@ -302,30 +302,46 @@ func MinTierForResource(resource string) int {
 	return resourceTier[resource]
 }
 
-// tierPolicy maps tier levels to the Vault policy name assigned to minted tokens.
-// These policies must exist in Vault (defined in terraform/vault/policies.tf).
-var tierPolicy = map[int]string{
-	1: "jit-tier1-services",
-	2: "jit-tier2-infra",
+// staticResourcePaths lists the resources served by the static backend and
+// the KV paths each one's token may read. Every entry has its own Vault policy,
+// StaticPolicyPrefix + resource, granting read on exactly these paths
+// (local.jit_static_resources in terraform/vault/policies.tf; a test keeps the
+// two in sync).
+//
+// Resources with a dynamic backend are deliberately absent: if their backend
+// is not configured, the static fallback refuses them instead of handing out
+// a Vault token.
+var staticResourcePaths = map[string][]string{
+	"radarr":   {"homelab/data/docker/radarr"},
+	"sonarr":   {"homelab/data/docker/sonarr"},
+	"plex":     {"homelab/data/docker/plex"},
+	"ombi":     {"homelab/data/docker/ombi"},
+	"nzbget":   {"homelab/data/docker/nzbget"},
+	"deluge":   {"homelab/data/docker/deluge"},
+	"prowlarr": {"homelab/data/docker/prowlarr"},
+	"tautulli": {"homelab/data/docker/tautulli"},
+	"mqtt":     {"homelab/data/mqtt/mosquitto"},
+	"pihole":   {"homelab/data/infrastructure/pihole"},
+	"ipmi":     {"homelab/data/infrastructure/ipmi"},
 }
 
-// policiesForResource returns the Vault policies for a minted token.
-// The resource must be in resourceTier, and the requested tier must match.
+// StaticPolicyPrefix is the prefix of the per-resource static policies.
+const StaticPolicyPrefix = "jit-static-"
+
+// policiesForResource returns the Vault policies for a static-backend token.
+// The resource must be a static resource, and the requested tier must match
+// its tier in resourceTier. Tiers decide approval and TTL only; the policy is
+// always the resource's own, so the token reads that resource's secret and
+// nothing else.
 func policiesForResource(resource string, tier int) []string {
 	expectedTier, known := resourceTier[resource]
-	if !known {
+	if !known || tier != expectedTier {
 		return nil
 	}
-	if tier != expectedTier {
+	if _, static := staticResourcePaths[resource]; !static {
 		return nil
 	}
-
-	policy, ok := tierPolicy[tier]
-	if !ok {
-		return nil
-	}
-
-	return []string{policy}
+	return []string{StaticPolicyPrefix + resource}
 }
 
 // SignSSHKey signs an SSH public key via Vault's SSH secrets engine.

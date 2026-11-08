@@ -474,11 +474,11 @@ The job:
 
 The JIT approval service authenticates to Vault using AppRole (`role_id` + `secret_id`).
 It brokers credential access for the agent by minting short-lived child tokens with
-scoped policies (`jit-tier1-services`, `jit-tier2-infra`).
+scoped policies (`jit-static-<resource>` for static secrets, one per resource).
 
 **Policies attached:**
 - `jit-approval-svc` — service's own policy (token management + read brokered secrets)
-- Child tokens minted with tier-specific policies only
+- Child tokens minted with per-resource policies only
 
 **Rotation:** the same `vault:rotate-approles` job rotates it and writes the new
 `approle_role_id` / `approle_secret_id` into Vault `homelab/docker/jit-approval-svc`;

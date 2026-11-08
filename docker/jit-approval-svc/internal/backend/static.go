@@ -13,8 +13,9 @@ type VaultTokenMinter interface {
 	MintDynamicToken(policyName string, ttl time.Duration, requestID string) (token string, accessor string, err error)
 }
 
-// StaticBackend falls back to minting a standard Vault token.
-// This is the original behavior for resources without dynamic backends.
+// StaticBackend mints a Vault token that can read one resource's static
+// secret (policy jit-static-<resource>). It serves resources without a
+// dynamic backend.
 type StaticBackend struct {
 	vault VaultTokenMinter
 }
@@ -24,7 +25,7 @@ func NewStaticBackend(vault VaultTokenMinter) *StaticBackend {
 	return &StaticBackend{vault: vault}
 }
 
-// MintCredential mints a standard scoped Vault token.
+// MintCredential mints a Vault token scoped to the resource's own secret.
 func (b *StaticBackend) MintCredential(resource string, tier int, ttl time.Duration, opts MintOptions) (*Credential, error) {
 	token, leaseID, err := b.vault.MintToken(resource, tier, ttl)
 	if err != nil {

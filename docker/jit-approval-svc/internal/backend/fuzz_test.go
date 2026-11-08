@@ -429,6 +429,13 @@ func FuzzValidateVaultPaths(f *testing.F) {
 			}
 		}
 		hcl := BuildPolicyHCL(paths)
+		// The fixed broker-only deny block is appended unchanged; the
+		// rest must grant exactly the one requested path.
+		deny := brokerOnlyDenyHCL()
+		if !strings.HasSuffix(hcl, deny) {
+			t.Fatalf("policy does not end with the broker-only deny block:\n%s", hcl)
+		}
+		hcl = strings.TrimSuffix(hcl, deny)
 		var pathLines, capLines int
 		for _, line := range strings.Split(hcl, "\n") {
 			switch {
