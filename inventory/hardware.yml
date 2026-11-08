@@ -351,17 +351,19 @@ network_devices:
     vlan: 6
     note: Dynamic DHCP lease. Camera being added to Frigate.
   miele_dishwasher:
-    desc: Miele G7566 dishwasher (Miele cloud; not in Home Assistant)
+    desc: Miele G7566 dishwasher (Home Assistant miele_lan, Miele@LAN, local; docs/HOMEASSISTANT.md "Miele")
     vlan: 6
-    note: Dynamic DHCP lease. Local integration in progress.
+    note: Dynamic DHCP lease (found by mDNS).
   thermador_hood:
-    desc: Thermador HPIN54WS hood (Home Assistant home_connect, cloud)
+    desc: Thermador HPIN54WS hood (read locally by hcpy, MQTT to Home Assistant; docs/HOMEASSISTANT.md "Thermador")
+    address_var: thermador_hood_address
+    mac_var: thermador_hood_mac
     vlan: 6
-    note: Dynamic DHCP lease. Local integration in progress.
   thermador_range:
-    desc: Thermador PRD48WISGU range (Home Assistant home_connect, cloud)
+    desc: Thermador PRD48WISGU range (read locally by hcpy, MQTT to Home Assistant; docs/HOMEASSISTANT.md "Thermador")
+    address_var: thermador_range_address
+    mac_var: thermador_range_mac
     vlan: 6
-    note: Dynamic DHCP lease. Local integration in progress.
   brother_printer:
     desc: Brother HL-L2350DW printer (Home Assistant brother and ipp, local)
     vlan: 6

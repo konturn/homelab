@@ -77,9 +77,9 @@ with this file, they win: say so.
 - Samsung The Frame 65in, QN65LS03DAFXZA (Home Assistant samsungtv_smart, local): 
 - Whisker Litter-Robot 4, two units (cloud, AWS IoT; not in Home Assistant): Dynamic DHCP leases. Local control (whiskerless) pending.
 - PETLIBRO PLAF203 camera feeder (cloud; not in Home Assistant): Dynamic DHCP lease. Camera being added to Frigate.
-- Miele G7566 dishwasher (Miele cloud; not in Home Assistant): Dynamic DHCP lease. Local integration in progress.
-- Thermador HPIN54WS hood (Home Assistant home_connect, cloud): Dynamic DHCP lease. Local integration in progress.
-- Thermador PRD48WISGU range (Home Assistant home_connect, cloud): Dynamic DHCP lease. Local integration in progress.
+- Miele G7566 dishwasher (Home Assistant miele_lan, Miele@LAN, local; docs/HOMEASSISTANT.md "Miele"): Dynamic DHCP lease (found by mDNS).
+- Thermador HPIN54WS hood (read locally by hcpy, MQTT to Home Assistant; docs/HOMEASSISTANT.md "Thermador"): 
+- Thermador PRD48WISGU range (read locally by hcpy, MQTT to Home Assistant; docs/HOMEASSISTANT.md "Thermador"): 
 - Brother HL-L2350DW printer (Home Assistant brother and ipp, local): Dynamic DHCP lease; both Home Assistant entries are configured with its current lease address.
 - NETGEAR GS308EP PoE switch, management address on the IoT VLAN (probably the upstairs PoE switch in back_camera.link): Dynamic DHCP lease.
 - Olimex ESP32 Bluetooth proxies, two units (ESPHome olimex-bluetooth-proxy): Not on the network 2026-11-08, last DHCP lease about 2025-11; Home Assistant entities unavailable.
