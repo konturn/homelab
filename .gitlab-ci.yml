@@ -94,6 +94,10 @@ workflow:
 default:
   tags:
     - $RUNNER_TAG
+  # Most jobs finish in under 5 minutes. Without this they inherit the
+  # project's 60m, so a hung job holds its runner slot (and, for deploys,
+  # the host's resource group) for an hour. Longer jobs set their own.
+  timeout: 30m
 
 variables:
   GIT_DEPTH: 5
@@ -466,6 +470,7 @@ deploy-scope:test:
 # true outside push pipelines, so every image builds before the deploy.
 .docker_build:
   stage: build
+  timeout: 45m
   image: docker:27
   variables:
     DOCKER_HOST: "tcp://lab.nkontur.com:2376"
@@ -497,6 +502,7 @@ deploy-scope:test:
 .kaniko_check:
   extends: .interruptible
   stage: build
+  timeout: 45m
   image:
     name: gcr.io/kaniko-project/executor:v1.23.2-debug
     entrypoint: [""]
@@ -750,6 +756,9 @@ dovi-convert:build-check:
 router:deploy:
   extends: .ansible
   stage: deploy
+  # Normally ~5 minutes; a full deploy that pulls large images or recreates
+  # GitLab takes longer.
+  timeout: 45m
   resource_group: deploy-router
   # environment: enables "prevent outdated deployment jobs"; with the
   # resource group in newest_ready_first mode, older queued deploys are skipped.
@@ -2020,6 +2029,9 @@ automerge:report:
 .deploy_service:
   extends: .ansible
   stage: deploy
+  # Health gate (up to 15m) plus rollback, plus pre-upgrade backups for
+  # stateful services (a full InfluxDB backup takes ~25m).
+  timeout: 60m
   id_tokens:
     VAULT_ID_TOKEN:
       aud: https://vault.lab.nkontur.com:8200
