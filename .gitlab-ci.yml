@@ -14,6 +14,7 @@
 #   ┌────────────────────────┬──────────────┬──────────────┬──────────────┬──────────────────┐
 #   router:val [id_tokens]  zwave:val  sat-2:val  vault:validate  jit-approval-svc:test
 #   anomaly-detector:test  revert-guard (MR only, ci/revert-guard/README.md)
+#   event-router:tlc (TLA+ model, on docs/design/tla changes + weekly schedule)
 #
 #   BUILD (parallel, path-triggered)
 #   ┌──────────────┬──────────────┬──────────────┬──────────────────────┐
@@ -413,6 +414,39 @@ anomaly-detector:test:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/anomaly-detector/**/*
+
+# TLA+ model of the event router (docs/design/tla/README.md): the base model
+# must pass and every mutation must fail on its named property. Small seed
+# instances only (run-tlc.sh ci), 2 workers at nice 19 / ionice idle. Runs when
+# the spec changes and weekly (schedule SCHEDULED_TASK=event-router-tlc).
+event-router:tlc:
+  extends: .interruptible
+  stage: validate
+  image: eclipse-temurin:21.0.10_7-jre-alpine@sha256:ad0cdd9782db550ca7dde6939a16fd850d04e683d37d3cff79d84a5848ba6a5a
+  needs: []
+  timeout: 20m
+  variables:
+    TLC_WORKERS: "2"
+    TLC_XMX: "1g"
+    TLA_CACHE_DIR: /cache/tla
+    TLC_LOGDIR: $CI_PROJECT_DIR/tlc-logs
+  script:
+    - apk add --no-cache bash curl util-linux-misc
+    - docs/design/tla/run-tlc.sh ci
+  artifacts:
+    when: on_failure
+    expire_in: 1 week
+    paths:
+      - tlc-logs/
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULED_TASK == "event-router-tlc"
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - docs/design/tla/**/*
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - docs/design/tla/**/*
 
 # Stale-tree revert guard (ci/revert-guard/README.md): fails an MR whose diff
 # undoes what other MRs merged in the last 7 days, in files where it changes

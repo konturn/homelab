@@ -1,6 +1,6 @@
 # Event Routing: Deterministic First Responder, Agent Behind It — Design Document
 
-> **Status:** Draft, for review
+> **Status:** Accepted (decisions in section 11); phases 1–2 being implemented
 > **Author:** Claude (on Noah's direction)
 > **Date:** 2026-11-07
 > **Stakeholder:** Noah Kontur
@@ -717,8 +717,10 @@ Noah accepted every recommendation. These are now part of the design:
 
 ## 12. Formal model: properties to check (for review)
 
-Before the router is implemented, a TLA+ (PlusCal) model of sections 4–7 is
-model-checked with TLC. It lives in `docs/design/event-routing.tla`. Noah
+Before the router is implemented, a TLA+ model of sections 4–7 and 13 is
+model-checked with TLC. It lives in [`docs/design/tla/`](tla/README.md)
+(`EventRouter.tla`, the configurations and `run-tlc.sh`); CI runs it when it
+changes and weekly. Noah
 reviews **this list**, not the TLA+: the model checker only checks what is
 listed here. Add anything you would consider a disaster; strike anything you
 do not care about. Each property names the section it comes from.
@@ -768,11 +770,91 @@ The spec is mutation-tested. Each of these deliberate design bugs must make TLC 
 5. Drop the escalation when OpenClaw is down → L2 must fail.
 6. Never release a lock when an incident resolves → L5 must fail.
 
-Bounds for checking: up to 4 concurrent events, 3 playbooks, 2 targets, 1 shared dependency, a window of 3 runs. That is small enough to check in minutes and large enough to show the interleavings above.
+The suite grew beyond these six: every safety property and every liveness
+property except L2/L4/L6 has at least one mutation (17 in all, listed in
+[tla/README.md](tla/README.md)), and `run-tlc.sh` fails if any mutation stops
+failing. The bounds actually checked are in 12.6.
 
 ### 12.5 Depends on open questions
 
 The spec is written after the open questions in section 11 are answered, so it models what will actually be built. These questions change properties: whether handled events also notify OpenClaw (affects L1's terminal states), which classes always page (S9), breaker reset rules (S5), and whether the receiver lives in OpenClaw or standalone (affects L4).
+
+### 12.6 Findings from model checking
+
+The model was checked before any router code existed; its findings changed
+the design. The router and executor implement every item below, and the
+unit and property tests check them against the real code
+(`docker/event-router/tests/`).
+
+**(a) The executor re-checks the deploy lock and the maintenance window at
+execution time, not only when the playbook starts.** With the checks only at
+playbook start, TLC found a run where a deploy (or a window) begins between
+the router taking the target lock and the executor acting, and the action
+lands in the middle of the deploy (S7) or inside the window (S10). Now:
+while a deploy runs, the executor refuses and the router waits, keeping the
+lock, and retries when the deploy ends. If a window opened, the router
+releases the lock and parks the incident in the window; the recovery check
+(13.3) picks it up when the window closes. Mutations `DeployAtStartOnly` and
+`MaintAtStartOnly` keep this covered.
+
+**(b) Correlation is continuous.** Ancestor suppression (4.7, step 3) was
+written as a check on arrival. TLC found the case where the symptom's alert
+arrives first (Zigbee silence), its playbook starts, and the root cause (MQTT
+down) arrives second: the symptom's playbook then acts against a broken
+dependency (S6). Now an open incident becomes a symptom as soon as an
+ancestor has an open incident, and both playbook start and execution
+re-check dependencies. The executor also probes everything the target needs
+on the host, independently of the router's incident state. Mutation
+`CorrelateOnArrivalOnly`.
+
+**(c) A restart that loses incident state must lose the locks with it.**
+Modelling S8 (never act twice) showed that a router which forgot an incident
+but kept its target lock would deadlock that target forever, and one that
+forgot both would act twice. Incidents, locks, rate-limit runs and breakers
+live in one SQLite database (4.6). On start, the router releases any lock
+whose holder is no longer acting or verifying. An incident whose action was
+in flight when the router stopped goes to verification, never back to the
+executor. The executor also refuses a second request for the same incident
+id. Mutation `LoseState`.
+
+**(d) The properties must be judged on ground truth, not on what the router
+believes.** In the first version of the spec, `IgnoreMaint` could not fail
+S10, because the action record used the router's own (blinded) view of the
+window. Safety properties are now evaluated on the real state at the moment
+the executor acts.
+
+**Found by the property tests on the implementation** (Hypothesis, same
+properties):
+
+- An executor reply that never arrives (timeout, lost connection) must keep
+  the target lock through verification. Releasing it let a second playbook act
+  on the same container (S1).
+- The global limit (6 actions/hour) counts actions *started*, not
+  completed. Otherwise two playbooks that start in the same pass can both
+  get past it.
+- If the executor finds a dependency down that the router has no incident
+  for, the playbook's precondition has failed: the incident escalates and
+  pages (routing table row 1). It does not park as a symptom, where it would
+  re-open, start and get refused in a loop.
+
+**Bounds and results** (TLC 1.7.4, 4 workers at `nice 19`, `ionice -c3`):
+
+| Check | Instance | Distinct states | Time | Result |
+|---|---|---|---|---|
+| `safety.cfg` | 5 alerts (MQTT; Zigbee needing it; two playbooks on one container; a page-class alert), one of them re-delivered; 1 run per window; one of each environment event | 26,466,078 | 6m49s | S1–S11 hold |
+| `liveness.cfg` | 3 alerts (MQTT, Zigbee, one container), one delivery each | 239,688 | 2m17s | S1–S11, L1, L3, L5, L7, L8 hold |
+| `ci-safety.cfg` (CI) | as `safety.cfg`, no re-delivery | 7,302,666 | 1m46s | S1–S11 hold |
+| `ci-liveness.cfg` (CI) | 2 alerts (MQTT, one container) | 14,124 | 7s | all hold |
+| 17 mutations (CI) | the instances above, or a one-alert instance for re-delivery bugs | 159–14,982 each | ≤ 3s each | each fails on its named property |
+
+Liveness is checked on smaller instances than safety: TLC's liveness check
+grows with states times fairness conditions (35 here), and a 4-alert liveness
+instance had passed 1.4M states without finishing when it was stopped.
+L2 (verification failure escalates within one cycle) is covered by L1, because
+a failed verification must end in `escalated` or `paged` with the message
+delivered. L4 (fallback while the router is down) is Grafana's routing, not
+the router's. L6 (suppressions expire) applies to the suppression files that
+arrive with phase 3, and is not modelled yet.
 
 ## 13. Planned maintenance (addendum)
 
