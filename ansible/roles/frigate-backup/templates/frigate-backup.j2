@@ -99,8 +99,10 @@ if [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; then log "FAIL restic backup rc=$rc"; exi
 log "OK backup rc=$rc"
 
 if [ "$mode" = recordings ]; then
-  restic forget --retry-lock 30m --tag "$tag" --group-by host,tags \
-    --keep-within {{ frigate_backup_keep_within }}
-  log "OK forget keep-within={{ frigate_backup_keep_within }}"
+  restic forget --retry-lock 30m --tag "$tag-events" --group-by host,tags \
+    --keep-within {{ frigate_backup_keep_within_events }}
+  restic forget --retry-lock 30m --tag "$tag-recordings" --group-by host,tags \
+    --keep-within {{ frigate_backup_keep_within_recordings }}
+  log "OK forget events={{ frigate_backup_keep_within_events }} recordings={{ frigate_backup_keep_within_recordings }}"
 fi
 log "SUMMARY ok"

@@ -9,7 +9,11 @@ frigate_backup_media_dir: /mpool/frigate
 frigate_backup_container_media_dir: /media/frigate
 frigate_backup_work_dir: /var/backups/frigate
 frigate_backup_tag: frigate
-frigate_backup_keep_within: 30d
+# Kept per mode: event clips/snapshots/db for 30 days; the full recordings
+# mirror for 7 days, which caps the cloud copy near 1 TB (66 GB/day per
+# camera x 7 days x 2 cameras = ~925 GB), matching the 1 TB local quota.
+frigate_backup_keep_within_events: 30d
+frigate_backup_keep_within_recordings: 7d
 
 # events: database, snapshots, review thumbnails, previews, exports, and the
 # recording segments around alerts and detections of the last
@@ -26,7 +30,7 @@ frigate_backup_events_timeout: 25min
 #   all      everything, continuous footage included (66 GB/day per camera)
 frigate_backup_recordings_on_calendar: "*-*-* 07:15:00"
 frigate_backup_recordings_window_hours: 26
-frigate_backup_recordings_filter: motion
+frigate_backup_recordings_filter: all
 frigate_backup_recordings_timeout: 4h
 
 # The main restic-backup.service runs `restic check` before and `restic
