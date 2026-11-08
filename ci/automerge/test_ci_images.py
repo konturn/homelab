@@ -208,6 +208,16 @@ class EligibilityTests(unittest.TestCase):
         self.assertFalse(v.manual)
 
 
+class LineBreakTests(unittest.TestCase):
+    def test_line_break_in_comment_refused(self):
+        old, new = NGINX_989
+        for brk in ("\r", "\x85", "\u2028"):
+            with self.subTest(brk=repr(brk)):
+                v = evaluate(edit(BASE, old, f"{new} # x{brk}  script: [evil]"))
+                self.assertFalse(v.eligible)
+                self.assertIn("line break", " ".join(v.reasons))
+
+
 class ImageJobsTests(unittest.TestCase):
     @unittest.skipIf(yaml is None, "PyYAML not installed")
     def test_resolution(self):

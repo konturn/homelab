@@ -87,6 +87,36 @@ class ImageRefTests(unittest.TestCase):
             policy.parse_image_ref("foo/bar:{{ tag }}")
 
 
+class ImageLineInjectionTests(unittest.TestCase):
+    """The compose files are Jinja templates rendered by Ansible: a trailing
+    comment on an image line is rendered too, and "\r" is a line break for
+    Jinja and YAML (not for the line-by-line policy)."""
+
+    RADARR = ("linuxserver/radarr:6.0.4.10291-ls292@" + D1, "linuxserver/radarr:6.0.5.10300-ls293@" + D2)
+
+    def test_plain_bump_still_eligible(self):
+        self.assertTrue(evaluate(edit(BASE, *self.RADARR)).eligible)
+        v = evaluate(edit(BASE, self.RADARR[0], self.RADARR[1] + "  # pinned"))
+        self.assertTrue(v.eligible, v.reasons)
+
+    def test_jinja_in_comment_refused(self):
+        for comment in ("# {{ lookup('pipe', 'id') }}", "# {% raw %}", "# {# x #}", "# }"):
+            with self.subTest(comment=comment):
+                v = evaluate(edit(BASE, self.RADARR[0], f"{self.RADARR[1]} {comment}"))
+                self.assertFalse(v.eligible)
+                self.assertIn("Jinja", " ".join(v.reasons))
+        v = evaluate(edit(BASE, f'"homeassistant/home-assistant:2026.6.1@{D1}"',
+                          f'"homeassistant/home-assistant:2026.6.2@{D2}" # {{{{ x }}}}'))
+        self.assertFalse(v.eligible)
+
+    def test_line_break_in_comment_refused(self):
+        for brk in ("\r", "\x85", "\u2028"):
+            with self.subTest(brk=repr(brk)):
+                v = evaluate(edit(BASE, self.RADARR[0], f"{self.RADARR[1]} # x{brk}    privileged: true"))
+                self.assertFalse(v.eligible)
+                self.assertIn("line break", " ".join(v.reasons))
+
+
 class VersionTests(unittest.TestCase):
     def test_patch_minor(self):
         self.assertEqual(policy.classify_tag_change("12.4.0-ubuntu", "12.4.13-ubuntu"), "patch")

