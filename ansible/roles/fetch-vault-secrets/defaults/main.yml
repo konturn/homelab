@@ -264,4 +264,12 @@ vault_secret_paths:
       vault_loki_iot_push_username: "iot_username"
       vault_loki_iot_push_password: "iot_password"
 
+  # Read-only (read_repository) deploy token of the private GitLab project
+  # root/ha-toyota-connected, for the pinned Home Assistant integration
+  # (configure-homelab-services, homeassistant_custom_components.yml)
+  - path: "gitlab/ha-toyota-connected"
+    fields:
+      vault_ha_toyota_deploy_user: "deploy_token_username"
+      vault_ha_toyota_deploy_token: "deploy_token"
+
   # Nominatim vault secret removed — replaced by Pelias geocoding (Headway stack)

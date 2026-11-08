@@ -1,0 +1,42 @@
+---
+# Home Assistant custom integrations installed from private GitLab forks,
+# pinned to a reviewed commit (docs/HOMEASSISTANT.md, "Custom integrations").
+# The list is homeassistant_pinned_integrations (role defaults). A changed
+# integration adds homeassistant to the containers restarted once below.
+#
+# Bumps are manual: review the fork's diff, then change `sha`. There is no
+# `# renovate:` annotation on purpose, so Renovate never proposes one.
+- name: Sync pinned Home Assistant custom integrations
+  ansible.builtin.command:
+    argv:
+      - bash
+      - -s
+      - --
+      - "{{ item.domain }}"
+      - "{{ homeassistant_pinned_integrations_gitlab_url }}/{{ item.project }}.git"
+      - "{{ item.sha }}"
+      - "{{ item.path }}"
+      - "{{ docker_persistent_data_path }}/homeassistant/custom_components/{{ item.domain }}"
+      - "{{ '--check' if ansible_check_mode else '' }}"
+    stdin: "{{ lookup('ansible.builtin.file', 'ha-custom-component-sync.sh') }}"
+  environment:
+    GL_USER: "{{ lookup('ansible.builtin.vars', item.vault_user_var) | trim }}"
+    GL_TOKEN: "{{ lookup('ansible.builtin.vars', item.vault_token_var) | trim }}"
+  check_mode: false  # the script itself writes nothing to HA with --check
+  register: _ha_pinned_integrations
+  changed_when: _ha_pinned_integrations.stdout is search('^changed')
+  failed_when: false  # reported (without the environment) by the next task
+  loop: "{{ homeassistant_pinned_integrations }}"
+  loop_control:
+    label: "{{ item.domain }} @ {{ item.sha[:12] }}"
+  no_log: true  # the environment carries the deploy token
+  timeout: 300
+  when: "'router' in inventory_hostname"
+
+- name: Report pinned Home Assistant custom integrations
+  ansible.builtin.debug:
+    msg: "{{ item.item.domain }}: rc={{ item.rc }} {{ item.stdout | default('') }} {{ item.stderr | default('') }}"
+  loop: "{{ _ha_pinned_integrations.results | default([]) | rejectattr('skipped', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.item.domain }}"
+  failed_when: item.rc != 0

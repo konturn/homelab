@@ -16,3 +16,18 @@ ups_selftest_enabled: false
 # battery age is unknown until this is set.
 ups_battery_install_date: ""
 ups_manufacture_date: "01/06/2016"
+
+# Home Assistant custom integrations installed from private GitLab forks
+# (tasks/homeassistant_custom_components.yml, docs/HOMEASSISTANT.md "Custom
+# integrations"). `sha` is a full commit id of a reviewed tag; bumps are
+# manual after reviewing the fork (no Renovate annotation on purpose). The
+# deploy token is read_repository on that project only, from Vault
+# gitlab/ha-toyota-connected (fetch-vault-secrets).
+homeassistant_pinned_integrations_gitlab_url: "https://gitlab.lab.nkontur.com"
+homeassistant_pinned_integrations:
+  - domain: toyota_connected
+    project: root/ha-toyota-connected
+    sha: eaa1eb8cada30a9ffc43e32f89f7cc1802b2798d  # v3.0.4-homelab.1
+    path: custom_components/toyota_connected
+    vault_user_var: vault_ha_toyota_deploy_user
+    vault_token_var: vault_ha_toyota_deploy_token
