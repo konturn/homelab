@@ -149,7 +149,8 @@ the same token through the credential helper). It is a short-lived moltbot
 token from JIT resource `gitlab-moltbot`: auto-approved, no Telegram prompt,
 logged, revoked after 1h, cached between sessions. There is no static GitLab
 token; never read one from `/proc` or another process's environment, and
-never use the T2 `gitlab` resource (admin) for routine work.
+never use the T2 `gitlab` resource (a Maintainer project access token) for
+routine work.
 
 ## Merging your own MRs (policy `bot_config`) *(from ci/automerge-policy.yml)*
 
