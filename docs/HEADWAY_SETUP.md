@@ -108,16 +108,17 @@ After verifying Headway is working:
 If you need to update the map data or change the area:
 
 ```bash
-# On the server
-docker compose down headway-frontend headway-frontend-init travelmux headway-travelmux-init \
+# On the router: the deployed compose file, project name "docker"
+cd /persistent_data/application/ansible_state
+docker compose -p docker down headway-frontend headway-frontend-init travelmux headway-travelmux-init \
   pelias-config-init pelias-elasticsearch-init pelias-placeholder-init
 
 # Remove init volumes to force re-initialization
-docker volume rm homelab_headway_frontend_data homelab_headway_travelmux_data \
-  homelab_headway_pelias_config homelab_headway_pelias_elasticsearch homelab_headway_pelias_placeholder
+docker volume rm docker_headway_frontend_data docker_headway_travelmux_data \
+  docker_headway_pelias_config docker_headway_pelias_elasticsearch docker_headway_pelias_placeholder
 
 # Copy new data artifacts, then bring services back up
-docker compose up -d
+docker compose -p docker up -d
 ```
 
 ## Resource Usage

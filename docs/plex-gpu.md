@@ -43,9 +43,9 @@ transcode peaks.
 
 ## Sharing the GPU
 
-Each Plex transcode uses roughly 200-500 MB of VRAM. Another container (for
-example an LLM server) can share the card with its own device reservation;
-leave a few GB of VRAM free for Plex.
+Each Plex transcode uses roughly 200-500 MB of VRAM. Ollama (docs/ollama.md)
+and Frigate (docs/frigate.md) share the card with their own device
+reservations; leave a few GB of VRAM free for Plex.
 
 ## Checking it works
 

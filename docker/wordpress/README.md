@@ -1,6 +1,7 @@
 # blog.nkontur.com
 
-The blog is a **static site**. The external nginx serves plain files from
+**WordPress is retired**: its containers are stopped and only run during an
+edit session (below). The blog is a **static site**. The external nginx serves plain files from
 `docker/nginx/sites/blog.nkontur.com/`, which Ansible syncs to
 `/persistent_data/application/nginx/webroot/blog.nkontur.com/` (the same task
 that deploys `nkontur.com`). No PHP is reachable from the internet: the vhost
@@ -105,10 +106,10 @@ changes.
 ### Changing versions
 
 - **Core:** bump `core_version` in `site.yml`. In the same MR, bump the
-  `blog` image tag and digest in `docker/docker-compose.yml` to that release.
-  The image update job opens image-only MRs for `blog`. These are not on the
-  auto-merge allowlist, so add the `core_version` bump to that MR before
-  merging. The reconcile log warns when the two differ.
+  `blog` image tag and digest in `docker/docker-compose.yml` to that release
+  by hand: Renovate ignores the `wordpress` and `mysql` images, and services
+  under a compose profile are never auto-merged (renovate.json,
+  ci/automerge-policy.yml). The reconcile log warns when the two differ.
 - **Theme or plugin:** edit the version in `site.yml`. To add one, add an
   entry. To remove one, delete its entry.
 - **Must-use plugin:** add or edit the file in `mu-plugins/` and list it under

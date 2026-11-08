@@ -106,11 +106,13 @@ credentials are stored.
 | Unit | When | What |
 |---|---|---|
 | `frigate-backup-events` | every 30 min (:05, :35) | `frigate.db` (sqlite online backup), `config.yml`, `clips/` (snapshots, thumbnails, previews), `exports/`, and the recording segments overlapping review items (alerts and detections) of the last 48 h |
-| `frigate-backup-recordings` | 07:15 nightly | recording segments of the last 26 h matching `frigate_backup_recordings_filter` (`motion` by default; `objects` or `all`), then `restic forget --tag frigate --keep-within 30d` |
+| `frigate-backup-recordings` | 07:15 nightly | recording segments of the last 26 h matching `frigate_backup_recordings_filter` (`all` by default, the full footage; `motion` or `objects`), then `restic forget` per mode tag: `frigate-events` keep-within 30d, `frigate-recordings` keep-within 7d |
 
 - Snapshots are tagged `frigate` and `frigate-events` / `frigate-recordings`.
-  The Frigate forget only selects `--tag frigate`, so the main snapshots are
-  never touched. The main forget (`--keep-within 90d`) does not shorten the
+  The Frigate forgets only select `--tag frigate-events` and
+  `--tag frigate-recordings`, so the main snapshots are never touched. Seven
+  days of the full mirror is about 925 GB for two cameras at 66 GB/day each,
+  in line with the 1T local quota. The main forget (`--keep-within 90d`) does not shorten the
   Frigate history either. The weekly `restic-prune.timer` reclaims the data.
 - **Main backup window.** `restic-backup.service` runs `restic check` before
   and `restic forget` after its backups. Both take an exclusive lock without
@@ -141,7 +143,9 @@ the recordings and clips under `/mpool/frigate/`.
 B2 bills about $6 per TB-month for storage, and uploads are free. Data that
 restic forgets or prunes stays billed as a hidden version for another 35 days
 (docs/backups.md, "Deletion resistance"). Each uploaded GB is therefore billed
-for about 30 + ~4 (until the weekly prune) + 35 = ~69 days.
+for about 30 + ~4 (until the weekly prune) + 35 = ~69 days at 30-day
+retention. The table assumes that. The current setting (`all`, kept 7 days)
+is billed for about 7 + ~4 + 35 = ~46 days: ~3 TB and ~$18/month per camera.
 
 | Recordings filter | Upload per camera per day | Stored per camera | $/month per camera |
 |---|---|---|---|
@@ -160,7 +164,8 @@ Renovate proposes image updates (renovate.json). Patch releases and digest
 refreshes go through the auto-merge sweep with the container healthcheck as
 the gate. A 0.x minor release (0.18 → 0.19) migrates `frigate.db` one way and
 usually the config format; the auto-merge policy treats it as a major and
-leaves it for review. Before merging one:
+leaves it for review (`frigate` is also listed under `stateful` in
+`ci/automerge-policy.yml`, so a major stays manual-only). Before merging one:
 
 1. Read the release notes for breaking config changes.
 2. Set `version:` in `docker/frigate/config.yml` to the new image's

@@ -15,7 +15,10 @@ The kernel is the `linux-image-rpi-v8` package. On each kernel or initramfs
 update, `raspi-firmware`'s hooks copy the newest `vmlinuz`/`initrd.img`, the
 dtbs and the overlays into `/boot/firmware`. `config.txt` has
 `auto_initramfs=1`, so the firmware loads `initramfs8` with `kernel8.img`.
-`cmdline.txt` carries `panic=10`, so a kernel panic reboots instead of hanging.
+`cmdline.txt` carries `panic=10`, so a kernel panic reboots instead of hanging,
+and `cgroup_enable=memory`: the firmware adds `cgroup_disable=memory`, and the
+later parameter wins. Without the memory controller Docker ignores container
+memory limits and reports 0 for every memory metric.
 
 `configure-pi-boot` keeps this state: it fails on a host still on the legacy
 layout (`/boot` = FAT partition, the frozen `raspberrypi-kernel` package),
@@ -37,6 +40,14 @@ fallback: the boot set in `/boot/firmware/old-6.1.21/` and its modules in
 `/lib/modules/6.1.21-v8+` (not owned by any package). To boot it, add
 `os_prefix=old-6.1.21/` and remove `auto_initramfs=1` in `config.txt`. Once the
 Debian kernel has been through an update or two, both can be deleted.
+
+## Docker image prune
+
+`configure-docker` installs `docker-image-prune.timer` on both Pis
+(`docker_image_prune_on_calendar: "Sun *-*-* 04:30:00"` in `ansible/zwave.yml`
+and `ansible/satellite-2.yml`): weekly `docker image prune --all --force
+--filter until=168h`, which removes only images no container uses. The router
+does not set the variable and has no such timer.
 
 ## Bootloader EEPROM
 
