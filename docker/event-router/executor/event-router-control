@@ -1,0 +1,253 @@
+#!/usr/bin/env python3
+"""event-router-control: the kill switch on Telegram, and the router's messages to Noah.
+
+Runs on the router host as root (event-router-control.service) and talks to
+Noah only through the JIT service's action-prompt socket (decision 3: the
+JIT bot, independent of OpenClaw; docker/jit-approval-svc/README.md, "Action
+prompts"). Decision 13:
+
+  - keeps one Telegram message "Event router: mode X" with two buttons,
+    "Stop automation" (writes notify-only to the host override file) and
+    "Resume" (removes the host override and the router's runtime override);
+  - tells Noah whenever the effective mode changes, whoever changed it
+    (button, SSH, deploy, automation storm), and again every 24h while an
+    override is set;
+  - sends the messages the router queued in its outbox (they are already
+    held back for quiet hours by the router).
+
+It works while the event-router container is down: the override file is what
+both the router and the executor read. Python standard library only.
+"""
+
+import glob
+import html
+import http.client
+import json
+import os
+import socket
+import sys
+import tempfile
+import time
+
+CONFIG = os.environ.get("EXECUTOR_CONFIG", "/etc/event-router/executor.json")
+STATE = os.environ.get("CONTROL_STATE", "/var/lib/event-router-executor/control.json")
+MODES = ("notify-only", "shadow", "active")
+RENOTIFY = 24 * 3600
+REARM = 6 * 86400          # prompts live at most 7 days in the JIT service
+
+
+def log(**rec):
+    print(json.dumps(rec, sort_keys=True), flush=True)
+
+
+class UnixHTTP(http.client.HTTPConnection):
+    def __init__(self, path, timeout=35):
+        super().__init__("localhost", timeout=timeout)
+        self.path = path
+
+    def connect(self):
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.sock.settimeout(self.timeout)
+        self.sock.connect(self.path)
+
+
+def jit(cfg, method, path, body=None):
+    c = UnixHTTP(cfg["jit_socket"])
+    try:
+        c.request(method, path, body=json.dumps(body) if body is not None else None,
+                  headers={"Content-Type": "application/json"})
+        r = c.getresponse()
+        data = r.read()
+        return r.status, (json.loads(data) if data else {})
+    finally:
+        c.close()
+
+
+def read_override(cfg):
+    try:
+        with open(cfg["override_file"]) as f:
+            v = f.read().strip()
+        return (v if v in MODES else "notify-only") if v else None, os.stat(cfg["override_file"]).st_mtime
+    except FileNotFoundError:
+        return None, None
+    except OSError:
+        return "notify-only", None
+
+
+def read_runtime(cfg):
+    try:
+        with open(os.path.join(cfg["shared_dir"], "runtime_mode")) as f:
+            v = json.load(f)
+        return v.get("mode"), v.get("at") or 0
+    except FileNotFoundError:
+        return None, None
+    except (OSError, ValueError, AttributeError):
+        return "notify-only", 0
+
+
+def effective(cfg):
+    host, _ = read_override(cfg)
+    base = host or cfg.get("repo_mode")
+    if base not in MODES:
+        return "notify-only"
+    rt, _ = read_runtime(cfg)
+    if rt:
+        if rt not in MODES:
+            return "notify-only"
+        base = base if MODES.index(base) <= MODES.index(rt) else rt
+    return base
+
+
+def write_override(cfg, value):
+    d = os.path.dirname(cfg["override_file"])
+    if value is None:
+        try:
+            os.unlink(cfg["override_file"])
+        except FileNotFoundError:
+            pass
+        return
+    fd, tmp = tempfile.mkstemp(dir=d)
+    with os.fdopen(fd, "w") as f:
+        f.write(value + "\n")
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, cfg["override_file"])
+
+
+def clear_runtime(cfg):
+    try:
+        os.unlink(os.path.join(cfg["shared_dir"], "runtime_mode"))
+    except FileNotFoundError:
+        pass
+
+
+def load_state():
+    try:
+        with open(STATE) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_state(st):
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(STATE))
+    with os.fdopen(fd, "w") as f:
+        json.dump(st, f, sort_keys=True)
+    os.replace(tmp, STATE)
+
+
+def describe(cfg):
+    mode = effective(cfg)
+    host, _ = read_override(cfg)
+    rt, _ = read_runtime(cfg)
+    lines = [f"<b>Event router</b>: mode <b>{html.escape(mode)}</b> (repo: {html.escape(str(cfg.get('repo_mode')))})"]
+    if host:
+        lines.append(f"Host override: {html.escape(host)}")
+    if rt:
+        lines.append(f"Router override: {html.escape(rt)}")
+    lines.append("Stop automation = notify-only (nothing acts). Resume = back to the repo mode.")
+    return "\n".join(lines)
+
+
+BUTTONS = [{"action": "stop", "label": "Stop automation"}, {"action": "resume", "label": "Resume"}]
+
+
+def ensure_prompt(cfg, st, now, force_text=False):
+    pid = st.get("prompt_id")
+    text = describe(cfg)
+    if pid and now - st.get("armed_at", 0) < REARM and not force_text:
+        return
+    if pid:
+        code, _ = jit(cfg, "POST", f"/v1/prompts/{pid}", {"text": text, "buttons": BUTTONS,
+                                                          "ttl_seconds": 7 * 86400})
+        if code == 200:
+            st["armed_at"] = now
+            return
+    pid = f"event-router-{int(now)}"
+    code, body = jit(cfg, "POST", "/v1/prompts", {"id": pid, "text": text, "buttons": BUTTONS,
+                                                  "ttl_seconds": 7 * 86400})
+    if code in (200, 201):
+        st.update(prompt_id=pid, armed_at=now)
+    else:
+        log(event="prompt_failed", status=code, body=body)
+
+
+def notify(cfg, text):
+    code, _ = jit(cfg, "POST", "/v1/notify", {"text": text})
+    return code in (200, 201)
+
+
+def loop_once(cfg, st, now):
+    # 1. Button presses (long poll).
+    code, body = jit(cfg, "GET", "/v1/decisions?wait=25")
+    if code == 200:
+        for d in body.get("decisions") or []:
+            if d.get("id") != st.get("prompt_id"):
+                continue
+            if d.get("action") == "stop":
+                write_override(cfg, "notify-only")
+                log(event="override", value="notify-only", by="telegram")
+            elif d.get("action") == "resume":
+                write_override(cfg, None)
+                clear_runtime(cfg)
+                log(event="override", value=None, by="telegram")
+            st["by"] = "Telegram button"
+            ensure_prompt(cfg, st, time.time(), force_text=True)
+    elif code == 404:
+        st.pop("prompt_id", None)
+    now = time.time()
+
+    # 2. Mode changes, from any source.
+    mode = effective(cfg)
+    if st.get("mode") != mode:
+        if st.get("mode") is not None:
+            by = st.pop("by", "host override file, deploy or the router")
+            if notify(cfg, f"Event router mode: {st['mode']} -> {mode} (by {by})."):
+                log(event="mode_notified", mode=mode, previous=st["mode"])
+        st["mode"] = mode
+        ensure_prompt(cfg, st, now, force_text=True)
+    ensure_prompt(cfg, st, now)
+
+    # 3. Overrides older than 24h re-notify, once per 24h.
+    for name, (value, since) in (("host", read_override(cfg)), ("router", read_runtime(cfg))):
+        key = f"renotified_{name}"
+        if value is None:
+            st.pop(key, None)
+            continue
+        if since is not None and now - since >= RENOTIFY and now - st.get(key, 0) >= RENOTIFY:
+            if notify(cfg, f"Event router: the {name} override ({value}) has been set for "
+                           f"{int((now - since) // 3600)}h. Effective mode: {mode}."):
+                st[key] = now
+
+    # 4. The router's outbox.
+    for path in sorted(glob.glob(os.path.join(cfg["shared_dir"], "outbox", "*.json"))):
+        try:
+            with open(path) as f:
+                msg = json.load(f)
+        except (OSError, ValueError):
+            os.unlink(path)
+            continue
+        if msg.get("due_at", 0) > now:
+            continue
+        if notify(cfg, html.escape(str(msg.get("text", ""))[:3000])):
+            os.unlink(path)
+            log(event="sent", urgent=msg.get("urgent"))
+
+
+def main():
+    with open(CONFIG) as f:
+        cfg = json.load(f)
+    st = load_state()
+    backoff = 5
+    while True:
+        try:
+            loop_once(cfg, st, time.time())
+            save_state(st)
+            backoff = 5
+        except (OSError, ValueError, http.client.HTTPException) as e:
+            log(event="error", error=f"{e.__class__.__name__}: {e}")
+            time.sleep(backoff)
+            backoff = min(backoff * 2, 300)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -28,9 +28,10 @@ time; the script exits non-zero if any check fails.
 
 | cfg | Profile | Instance | Checks | Must |
 |---|---|---|---|---|
-| `ci-safety.cfg` | ci | 5 alerts (`mqtt`, `zig` which needs it, `app` and `appdup` sharing one container, page-class `sec`), one delivery each | S1–S11 | pass |
+| `ci-safety.cfg` | ci | 4 alerts (`mqtt`, `zig` which needs it, `app` and `appdup` sharing one container), one delivery each | S1–S11 | pass |
+| `ci-pages.cfg` | ci | `mqtt`, `zig` and page-class `sec` | S1–S11 | pass |
 | `ci-liveness.cfg` | ci | 2 alerts (`mqtt` without a playbook, `app` with one) | S1–S11 and L1, L3, L5, L7, L8 | pass |
-| `safety.cfg` | full | as `ci-safety`, `app` delivered up to twice | S1–S11 | pass |
+| `safety.cfg` | full | 5 alerts (`ci-safety` plus `sec`), `app` delivered up to twice | S1–S11 | pass |
 | `liveness.cfg` | full | 3 alerts (`mqtt`, `zig`, `app`) | S1–S11 and L1, L3, L5, L7, L8 | pass |
 | `mutations/*.cfg` | both | a seed instance; re-delivery bugs use a one-alert instance | the one property named on the `\* expect:` line | fail |
 
@@ -53,7 +54,7 @@ events: a quiescent end state is expected, not a bug.
 | Spec | Doc |
 |---|---|
 | `Deliver` (dedupe by fingerprint, page class, maintenance, correlation on arrival) | 4.3, 4.7, 13.2 |
-| `Correlate`, `ReEvaluate` (continuous correlation) | 4.7, 12.6 (b) |
+| `Correlate`, `ReEvaluate` (continuous correlation; handed-off root causes count while firing) | 4.7, 12.6 (b, e) |
 | `Forward`, `Trip`, `StartPb` | 4.4, 7.2, 7.3 |
 | `Execute` (executor re-checks kill switch, deploy, window, dependencies) | 4.6, 12.6 (a) |
 | `VerifyOk`, `VerifyFail`, `Escalate` | 4.4, 7.4 |
@@ -79,6 +80,7 @@ before trusting a passing base run.
 | IgnoreBreaker | open breaker ignored after the window resets | S5 |
 | NoCorrelation | no dependency correlation | S6 |
 | CorrelateOnArrivalOnly | correlation only when an event arrives | S6 |
+| CorrelateWhileActiveOnly | a root cause handed to OpenClaw stops suppressing its dependents | S6 |
 | IgnoreDeploy | deploy lock ignored | S7 |
 | DeployAtStartOnly | deploy lock checked only at playbook start | S7 |
 | LoseState | incident state not persisted across restarts | S8 |

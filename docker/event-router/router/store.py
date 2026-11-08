@@ -128,6 +128,14 @@ class Store:
             ACTIVE).fetchall()
         return [self._inc(r) for r in rows]
 
+    def handed_off_firing(self, since):
+        """Incidents handed to OpenClaw or Noah (or shadowed) whose alert
+        still fires: their root cause is still open for correlation."""
+        rows = self.conn.execute(
+            "SELECT * FROM incidents WHERE status IN ('escalated', 'paged', 'shadowed') "
+            "AND alert_state = 'firing' AND opened_at >= ? ORDER BY opened_at", (since,)).fetchall()
+        return [self._inc(r) for r in rows]
+
     def update(self, inc_id, now, **fields):
         fields["updated_at"] = now
         sets = ", ".join(f"{k} = ?" for k in fields)

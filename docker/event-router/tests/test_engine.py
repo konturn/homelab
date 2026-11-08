@@ -92,9 +92,25 @@ class TestCorrelation(Base):
         self.e.ingest(event("zig"))
         self.assertEqual(status(self.w, "zig"), "symptom")
         self.run_steps()
-        # mqtt escalated (handled), so zigbee re-enters handling on its own.
+        # mqtt is escalated but still firing: zigbee stays attached to it.
         self.assertEqual(status(self.w, "mqtt"), "escalated")
-        self.assertIn(status(self.w, "zig"), ("verifying",))
+        self.assertEqual(status(self.w, "zig"), "symptom")
+        self.assertEqual(self.w.executor.calls, [])
+
+    def test_escalated_root_suppresses_while_firing(self):
+        """12.6 (e): the root cause was handed to OpenClaw; while its alert
+        fires, the symptom stays attached, and acts only after it resolves."""
+        self.e.ingest(event("mqtt"))
+        self.e.step()
+        self.assertEqual(status(self.w, "mqtt"), "escalated")
+        self.w.clock.advance(20 * 60)
+        self.e.ingest(event("zig"))
+        self.run_steps()
+        self.assertEqual(status(self.w, "zig"), "symptom")
+        self.assertEqual(self.w.executor.calls, [])
+        self.e.ingest(event("mqtt", "resolved"))
+        self.run_steps()
+        self.assertEqual(len(self.w.executor.calls), 1)
 
     def test_root_arriving_second_still_suppresses(self):
         """12.6 (b): the symptom opened first, then its dependency failed."""

@@ -1,0 +1,15 @@
+- name: Reload systemd for event-router
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Restart event-router-executor.socket
+  ansible.builtin.systemd:
+    name: event-router-executor.socket
+    state: restarted
+  when: not ansible_check_mode
+
+- name: Restart event-router-control
+  ansible.builtin.systemd:
+    name: event-router-control.service
+    state: restarted
+  when: not ansible_check_mode

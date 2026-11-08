@@ -1320,8 +1320,8 @@ services:
 
   # Event router (docker/event-router, docs/design/event-routing.md): Grafana
   # alerts in, deterministic playbooks out. No Docker socket, no host access:
-  # it acts only through the root executor's Unix socket (phase 2), which
-  # checks this uid with SO_PEERCRED. Decisions are JSON on stdout (Loki).
+  # it acts only through the root executor's Unix socket, which checks this
+  # uid with SO_PEERCRED (ansible/roles/event-router). Decisions are JSON on stdout (Loki).
   event-router:
     image: gitlab-registry.lab.nkontur.com:443/root/homelab/event-router:latest
     container_name: event-router
@@ -1346,6 +1346,8 @@ services:
       - "{{ docker_persistent_data_path }}/event-router/data:/data"
       - "{{ docker_persistent_data_path }}/event-router/config:/config:ro"
       - "/etc/event-router/override:/override:ro"
+      # The executor's socket (0660, group event-router = this gid).
+      - "/run/event-router:/run/event-router"
     environment:
       - TZ=America/New_York
       - GRAFANA_TOKEN={{ vault_event_router_grafana_token | trim | replace("$", "$$") }}

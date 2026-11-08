@@ -49,3 +49,80 @@
     owner: root
     group: root
     mode: "0644"
+
+# ---- Executor and control service (phase 2) --------------------------------
+# Root-owned, on the root filesystem like deadman-check. The executor's
+# allowlist, limits and kill-switch sources come from executor.json, which
+# the router container cannot read or change.
+
+- name: PyYAML for the executor (reads dependencies.yml)
+  ansible.builtin.apt:
+    name: python3-yaml
+    state: present
+
+- name: Executor state directory
+  ansible.builtin.file:
+    path: /var/lib/event-router-executor
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install the executor and the control service
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/event-router/executor/{{ item }}"
+    dest: "/usr/local/sbin/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - event-router-executor
+    - event-router-control
+  notify: Restart event-router-control
+
+- name: Executor configuration
+  ansible.builtin.template:
+    src: executor.json.j2
+    dest: "{{ event_router_etc }}/executor.json"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart event-router-control
+
+- name: Executor GitLab token (cancel orphaned jobs)
+  ansible.builtin.copy:
+    dest: "{{ event_router_etc }}/executor.env"
+    content: "GITLAB_TOKEN={{ vault_event_router_executor_gitlab_token | trim }}\n"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Install the executor and control units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - event-router-executor.socket
+    - event-router-executor@.service
+    - event-router-control.service
+  notify:
+    - Reload systemd for event-router
+    - Restart event-router-executor.socket
+    - Restart event-router-control
+
+- name: Flush handlers (units must be loaded before they are enabled)
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable the executor socket and the control service
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop:
+    - event-router-executor.socket
+    - event-router-control.service
+  when: not ansible_check_mode
