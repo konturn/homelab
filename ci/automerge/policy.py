@@ -419,10 +419,14 @@ def ci_image_lines(text: str) -> Dict[int, str]:
             anchor = re.match(r"^&([A-Za-z0-9_-]+)\s*(#.*)?$", pval)
             if not (pkey == "image" or (anchor and anchor.group(1) in aliases)):
                 continue
-        top = i
+        # every ancestor must be a mapping key (`job:`, `image:`, `.tpl: &a`):
+        # an `image:` line inside a block scalar (`script: - |`) is script text
+        top, inside_value = i, False
         while parent[top] is not None:
             top = parent[top]
-        if info[top] is None or top == i:
+            if info[top] is None or not re.match(r"^(&[A-Za-z0-9_-]+)?\s*(#.*)?$", info[top][2]):
+                inside_value = True
+        if inside_value or top == i:
             continue                            # a top-level `image:` is global (default) config
         out[i] = info[top][1]
     return out
