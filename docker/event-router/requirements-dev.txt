@@ -1,2 +1,2 @@
 -r requirements.txt
-hypothesis==6.140.2
+hypothesis==6.170.15
