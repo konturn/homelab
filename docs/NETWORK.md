@@ -572,7 +572,7 @@ allow a name, add a more specific `server=` line, which wins over the
 
 **Enforcement** (docs/FIREWALL.md, "IoT DNS"): DHCP for VLAN 6 hands out only
 `iot_dns_ip`; the router redirects any other DNS from VLAN 6 devices
-(`bond0.6`), whether to Pi-hole, 1.1.1.1 or a hardcoded 8.8.8.8, to iot-dns, drops
+(by source address, not interface), whether to Pi-hole, 1.1.1.1 or a hardcoded 8.8.8.8, to iot-dns, drops
 everything else from them to Pi-hole, and refuses DNS over TLS/QUIC (853).
 
 **Limits:**
