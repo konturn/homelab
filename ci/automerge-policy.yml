@@ -171,6 +171,7 @@ stateful:
     - influxdb
     - paperless-ngx
     - homeassistant
+    - frigate
   images:
     - mariadb
     - mysql
