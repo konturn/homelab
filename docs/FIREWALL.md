@@ -135,14 +135,19 @@ iot-dns on VLAN 6. The firewall makes sure devices cannot go around it:
 
 | Table / chain | Rule |
 |---|---|
-| nat `PREROUTING` → `IOT-DNS` | udp/tcp 53 arriving on `bond0.6`: the two Pis `RETURN`, traffic already for iot-dns `RETURN`, everything else DNAT to `iot_dns_ip:53` (Pi-hole, 1.1.1.1, hardcoded resolvers) |
+| nat `PREROUTING` → `IOT-DNS` | udp/tcp 53 from IoT devices (10.6.64.0–10.6.255.255): the two Pis `RETURN`, traffic already for iot-dns `RETURN`, everything else DNAT to `iot_dns_ip:53` (Pi-hole, 1.1.1.1, hardcoded resolvers) |
 | mangle `PREROUTING` → `IOT-DNS` | the same packets (except the Pis) `ACCEPT` before the VLAN 6 Mullvad mark: after the DNAT they are for iot-dns, and table `mullvad` would route a marked packet into the tunnel |
 | nat `POSTROUTING` | MASQUERADE redirected flows (`--ctstate DNAT`) to iot-dns out `vlan6-shim` |
-| filter `FORWARD` | accept the redirected flows (`--ctstate DNAT`) `bond0.6` → `vlan6-shim` to iot-dns:53; the Pis to Pi-hole:53; drop anything else from `bond0.6` to Pi-hole; reject tcp/udp 853 (DoT, DoQ) from `bond0.6` |
+| filter `FORWARD` | accept the redirected flows (`--ctstate DNAT`) to iot-dns:53; the Pis to Pi-hole:53; drop anything else from IoT devices to Pi-hole; reject tcp/udp 853 (DoT, DoQ) from IoT devices |
 
-Interfaces: IoT devices arrive on `bond0.6`, containers on the iot docker
-network on `vlan6-shim` (the router's macvlan sibling). Only `bond0.6` is
-redirected, so container DNS and iot-dns's own queries to Pi-hole are not.
+Matching: IoT devices are matched by **source address** (VLAN 6 outside the
+docker range 10.6.0.0/18, i.e. the DHCP pool and the 10.6.128.x
+reservations), not by interface. Containers on the iot docker network
+(10.6.0.0/18) arrive on `vlan6-shim` and are never redirected, so container
+DNS and iot-dns's own queries to Pi-hole are untouched. Devices mostly arrive
+on `bond0.6`, but `vlan6-shim` also answers ARP for the gateway 10.6.0.1
+(ARP flux), so some devices send through the shim; an `-i bond0.6` match
+missed them in the first version of these rules.
 Devices that ask iot-dns directly do not pass the router at all (same L2).
 
 **Why MASQUERADE here** (the [hairpin](#nat-table) needs none): the device
@@ -187,7 +192,7 @@ Apple TV.
 |--------|-------------|--------|
 | mgmt (10.4.x.x) | Any | **ALLOW ALL** (trusted) |
 | internal (10.3.x.x) | mgmt | SSH, ICMP only |
-| iot devices (`bond0.6`) | iot-dns | DNS; any other DNS is redirected there, Pi-hole is dropped, 853 refused ([IoT DNS](#iot-dns)) |
+| iot devices (10.6.64.0–10.6.255.255) | iot-dns | DNS; any other DNS is redirected there, Pi-hole is dropped, 853 refused ([IoT DNS](#iot-dns)) |
 | iot containers (`vlan6-shim`), zwave and satellite-2 Pis | Pi-hole | DNS only |
 | iot devices in `iot_no_wan` | internet | none ([IoT devices without internet](#iot-devices-without-internet)) |
 | iot Pis (zwave, satellite-2) | Vault | TCP 8200 |
