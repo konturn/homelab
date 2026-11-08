@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import fnmatch
 import json
+import posixpath
 import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
@@ -119,7 +120,11 @@ def config(allowlist: dict) -> dict:
 
 def classify(path: str, cfg: dict) -> Tuple[Optional[str], Optional[str]]:
     """(kind, None) for an allowed path, (None, reason) otherwise. The
-    never-lists win over every allowlist."""
+    never-lists win over every allowlist. A path spelled other than git
+    spells it (`./`, `//`, `..`, a leading or trailing `/`) is refused: the
+    patterns match text, and `docs/*.md` matches `docs/../ansible/x.md`."""
+    if not path or path.startswith("/") or posixpath.normpath(path) != path:
+        return None, f"{path!r} is not a normalised repository path"
     if _any(path, cfg["never"]):
         return None, f"{path} is on the bot-config never-list"
     if SCRIPT_EXT.search(path):

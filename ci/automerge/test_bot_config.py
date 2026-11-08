@@ -280,6 +280,16 @@ class ComposeTests(unittest.TestCase):
                 v = evaluate({C: (COMPOSE, edit(COMPOSE, old, new))})
                 self.assertTrue(v.eligible, v.reasons)
 
+    def test_non_normalised_paths_refused(self):
+        # found by test_properties: `docs/*.md` matched docs/../ansible/x.md.
+        # git does not produce such paths; refuse them anyway (fail closed).
+        cfg = botconfig.config(ALLOW)
+        for p in ("docs/../ansible/inventory.md", "docs/x/../../CLAUDE.md", "./docs/a.md", "docs//a.md",
+                  "/docs/a.md", "docs/a.md/", "docs/./a.md", ""):
+            with self.subTest(p=p):
+                self.assertIsNone(botconfig.classify(p, cfg)[0])
+        self.assertEqual(botconfig.classify("docs/a.md", cfg), ("docs", None))
+
     def test_denied_services(self):
         for old, new in (("memory: 512M", "memory: 600M"), ("memory: 4G", "memory: 6G")):
             with self.subTest(new=new):
