@@ -41,6 +41,15 @@ The secrets the dynamic backends mint from (upstream admin tokens, OAuth clients
 | `vault` | Dynamic (VaultDynamicBackend) | Vault token with a per-request policy for the requested `vault_paths` |
 | Plex, Radarr, Sonarr, Prowlarr, Ombi, NZBGet, Deluge, Tautulli, MQTT, Pi-hole, IPMI | Static (Vault) | Scoped Vault token |
 
+The `vault` backend writes a policy `jit-vault-<request id>` whose first line
+records the token's expiry (`# jit-expires-at: <RFC 3339>`), and deletes it
+5 minutes after the TTL. The request store and that timer are in memory, so
+the broker also sweeps Vault at startup and hourly: a `jit-vault-*` policy
+is deleted once its recorded expiry is 5 minutes past. A policy without the
+marker (written by an older version) is deleted only after the broker has run
+longer than the longest TTL it issues plus 5 minutes, since its token must
+then have expired.
+
 ## API
 
 ### `POST /request`

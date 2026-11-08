@@ -207,7 +207,8 @@ resource "vault_policy" "vault_read" {
 # - Read on the admin secrets of the dynamic backends that read Vault at mint
 #   time (the GitLab admin token and the broker's own secrets reach it as
 #   environment variables at deploy time instead)
-# - The per-request jit-vault-* policies and SSH certificate signing
+# - The per-request jit-vault-* policies (and listing policy names, for the
+#   cleanup after a restart) and SSH certificate signing
 
 resource "vault_policy" "jit_approval_svc" {
   name = "jit-approval-svc"
@@ -256,6 +257,11 @@ resource "vault_policy" "jit_approval_svc" {
     # Dynamic Vault backend: manage temporary JIT policies
     path "sys/policies/acl/jit-vault-*" {
       capabilities = ["create", "read", "update", "delete"]
+    }
+    # List policy names, to find per-request policies whose token expired
+    # while the broker was down (names only; reading needs the rule above)
+    path "sys/policies/acl" {
+      capabilities = ["list"]
     }
 
     # SSH certificate signing for JIT SSH access

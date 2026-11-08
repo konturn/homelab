@@ -143,6 +143,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go cleanupLoop(ctx, reqStore)
+	go vaultPolicyCleanupLoop(ctx, vaultClient, time.Now().Add(longestTTL(cfg)+backend.PolicyCleanupGrace))
 
 	// Graceful shutdown
 	go func() {
@@ -204,6 +205,51 @@ type responseWriter struct {
 func (rw *responseWriter) WriteHeader(code int) {
 	rw.statusCode = code
 	rw.ResponseWriter.WriteHeader(code)
+}
+
+// longestTTL is the longest credential TTL the broker can issue (tier
+// defaults and per-resource overrides).
+func longestTTL(cfg *config.Config) time.Duration {
+	var max time.Duration
+	for _, tc := range cfg.Tiers {
+		if tc.TTL > max {
+			max = tc.TTL
+		}
+	}
+	for _, ttl := range cfg.ResourceTTLOverrides {
+		if ttl > max {
+			max = ttl
+		}
+	}
+	return max
+}
+
+// vaultPolicyCleanupLoop deletes per-request Vault policies whose token has
+// expired: once at startup, for the ones a restart orphaned (their cleanup
+// goroutines died with the old process), then hourly as a backstop. Policies
+// from before the expiry marker are deleted from unmarkedDeadAfter on.
+func vaultPolicyCleanupLoop(ctx context.Context, ps backend.VaultPolicyStore, unmarkedDeadAfter time.Time) {
+	run := func() {
+		deleted, err := backend.CleanupExpiredPolicies(ps, time.Now(), backend.PolicyCleanupGrace, unmarkedDeadAfter)
+		if err != nil {
+			logger.Error("vault_policy_cleanup_error", logger.Fields{"error": err.Error()})
+			return
+		}
+		if deleted > 0 {
+			logger.Info("vault_policy_cleanup", logger.Fields{"deleted": deleted})
+		}
+	}
+	run()
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			run()
+		}
+	}
 }
 
 // cleanupLoop periodically removes old resolved requests from the store.
