@@ -115,7 +115,7 @@ re-read only when its entry count or add/delete time changes.
 | `bmc-psu-fault` | a PSU sensor reports not present or a fault, for 2 min | critical |
 | `bmc-fan-failure` | a fan is below its lower critical threshold, for 4 min | critical |
 | `bmc-temp-critical` | a temperature is at or above its upper critical threshold, for 4 min | critical |
-| `bmc-sel-full` | the SEL is more than 90 % full, for 1 h | warning, **paused** (see SEL) |
+| `bmc-sel-full` | the SEL is more than 90 % full, for 1 h | warning |
 | `bmc-metrics-stale` | no `bmc_sel` point for 15 min (or none in 24 h) | warning |
 
 The existing `high-cpu-temps` rule (Telegraf `ipmi_sensor`) stays as it is.
@@ -124,17 +124,17 @@ The existing `high-cpu-temps` rule (Telegraf `ipmi_sensor`) stays as it is.
 
 The X9 BMC keeps 512 SEL entries and does not wrap: when the log is full it
 stops recording, so new events are lost and `bmc-sel-critical` cannot see
-them. `bmc-sel-full` is shipped paused because the log is full from older
-entries. Clearing is a manual step:
+them. `bmc-sel-full` warns before that happens (it was shipped paused until
+the old entries were cleared in November 2026, MR !998). Clearing is a manual
+step:
 
 ```bash
 ipmitool sel elist > /root/sel-$(date +%F).txt   # keep a copy first
 ipmitool sel clear                               # by hand only; ipmictl never clears
 ```
 
-Then set `isPaused: false` on `bmc-sel-full`. The next metrics run sees the
-lower entry count and counts the new entries (the "log cleared" record is
-`info`).
+The next metrics run sees the lower entry count and counts the new entries
+(the "log cleared" record is `info`).
 
 The BMC clock is not synchronised (`bmc_sel.clock_set` = 0), so SEL entries
 carry "Pre-Init" relative timestamps. That does not affect the alerts, which

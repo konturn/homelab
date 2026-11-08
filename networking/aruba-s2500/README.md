@@ -123,6 +123,12 @@ firmware report reads `sysDescr` (`ArubaOS (MODEL: ArubaS2500-48P-US), Version
 7.4.1.12 (72393)`). That gives the running version only; the image partitions
 and the boot partition need the CLI. No switch configuration change is needed.
 
+## Time
+
+The clock is EST/EDT (`clock timezone`, recurring `clock summer-time`) and
+`ntp server 10.100.0.2` syncs it from the router's ntpd over the management
+link; `rules.v4` allows UDP 123 from 10.100.0.1 only.
+
 ## Usage
 
 ```sh

@@ -2,7 +2,7 @@
 
 This document describes the iptables firewall configuration for the homelab infrastructure.
 
-**Last Audit:** June 2026  
+**Last Audit:** November 2026  
 **Rules File:** `networking/iptables/rules.v4`
 
 ---
@@ -44,6 +44,7 @@ This document describes the iptables firewall configuration for the homelab infr
 | 4    | 10.4.0.0/16  | Management/infrastructure        | `mgmt`         |
 | 5    | 10.5.0.0/16  | Guest network                    | `guest`        |
 | 6    | 10.6.0.0/16  | IoT devices                      | `iot`          |
+| 7    | 10.7.0.0/16  | Reserved (DHCP only)             | —              |
 
 ### Additional Interfaces
 
@@ -94,12 +95,11 @@ Exception: excel-vm (`excel_vm_address`, VLAN 3) routes via WAN for client M365 
 | mgmt (10.4.x.x) | Any | **ALLOW ALL** (trusted) |
 | internal (10.3.x.x) | mgmt | SSH, ICMP only |
 | iot (10.6.x.x) | Pi-hole | DNS only |
-| iot (10.6.x.x) | registry | Container pulls |
-| Any | snapserver | **ALLOW ALL** |
+| iot Pis (zwave, satellite-2) | Vault | TCP 8200 |
+| Any | snapserver | Service ports only (1704, 1705, 1780, 80-87, 50000-50007) |
 | frigate (`frigate_ip`, internal) | back camera, doorbell (iot) | TCP 80, 554 |
 | frigate (`frigate_ip`, internal) | mosquitto (iot) | TCP 8883 |
-| Shield TV | Any | **ALLOW ALL** |
-| Apple TV | Any | **ALLOW ALL** |
+| Apple TV | internet, lab_nginx | Internet + TCP 32400 (Plex) |
 
 ---
 
@@ -140,7 +140,7 @@ Lab services (not internet-exposed):
 | Paperless-ngx | `paperless-ngx` | Document management |
 | iperf3 | `iperf3` | Network testing |
 | Draw.io | `diagram` | Diagramming |
-| **Moltbot** | `moltbot-gateway` | AI assistant |
+| **OpenClaw** (moltbot) | `openclaw-gateway` | AI assistant |
 
 ### IoT Network (10.6.x.x)
 
@@ -164,7 +164,8 @@ Infrastructure services:
 
 | Service | Container | Purpose |
 |---------|-----------|---------|
-| Registry | `registry` | Docker container registry |
+| noVNC | `novnc-dev1`..`novnc-dev3` | Remote desktop access |
+| BlueBubbles relay | `bluebubbles-relay` | Messaging relay |
 
 ---
 
@@ -218,7 +219,7 @@ isolation) are only relevant for bridge-mode networking, which we don't use. The
 iptables rules already handle all necessary forwarding.
 
 **In practice (Docker 29.x):** dockerd still creates its chains and bridge MASQUERADE rules
-for the few bridge networks (`docker0` for the CI dagger engine, nextcloud/wordpress internals),
+for the bridge networks (`docker0`, the CI job networks, per-stack internal bridges such as nextcloud, proxy-internal and the OpenClaw ones),
 and Tailscale (`ts-*`, CONNMARK in mangle) and libvirt (`LIBVIRT_*`) add theirs too. A plain
 `netfilter-persistent reload` wipes all of them, so the deploy loads `rules.v4` with
 `/usr/local/sbin/fw-apply` (`networking/iptables/fw-apply`) instead: it merges the live
@@ -278,9 +279,8 @@ filter rules; `ts-forward`, for example, accepts anything routed out `tailscale0
    - mgmt VLAN and Tailscale access remains unrestricted (trusted networks)
    - Future consideration: remove WAN SSH entirely if Tailscale proves reliable
 
-2. **Device-specific rules**
-   - Shield TV and Apple TV have full forward access
-   - Consider restricting to specific destination ports/IPs
+2. **~~Device-specific rules~~** ✅ Addressed
+   - The Shield TV full-access rule is gone; Apple TV is limited to the internet and lab_nginx:32400
 
 ---
 
@@ -293,11 +293,15 @@ Controls traffic TO the router itself:
 | Purpose | Interface | Ports |
 |---------|-----------|-------|
 | SSH | mgmt, tailscale | 22 |
+| SSH (to 10.4.0.1 only) | protected CI network (`br-ci-prot`) | 22 |
+| DNS | tailscale | 53 |
 | SSH (rate-limited) | WAN | 22 |
 | ICMP | any | - |
-| NFS | mgmt, iot | 2049, 111 |
+| NFS | mgmt | 2049 |
+| NFS + rpcbind | iot | 111, 2049 |
 | SMB | mgmt | 139, 445 |
-| NUT (upsd, to 10.4.0.1) | mgmt | 3493 |
+| NUT (upsd, to 10.4.0.1) | mgmt, internal (Home Assistant) | 3493 |
+| NTP (from the S2500, 10.100.0.1) | management link (`enp2s0f1`) | 123/udp |
 | TFTP | mgmt | 69 |
 | mDNS | !internet | 5353 |
 
@@ -310,13 +314,13 @@ Controls traffic THROUGH the router:
 3. **Internet-bound** — All VLANs can reach internet
 4. **Inter-VLAN** — Restricted by default
 5. **Inbound from internet** — Specific ports to external VLAN
-6. **VPN traffic** — WireGuard and Mullvad routing
+6. **VPN traffic** — Mullvad routing (and Deluge's inbound 62941)
 
 ### NAT Table
 
 1. **DNAT (port forwarding)** — Internet inbound to services
 2. **SNAT/MASQUERADE** — Outbound NAT for all networks
-3. **Hairpin NAT** — Guest/IoT accessing services via WAN IP
+3. **Hairpin NAT** — internal/mgmt/IoT (VLAN 3/4/6) reaching nginx via the WAN IP (DNAT only, no SNAT)
 
 ---
 
@@ -332,11 +336,12 @@ Controls traffic THROUGH the router:
 ### Testing Changes
 
 ```bash
-# Test before applying
-iptables-restore -t < networking/iptables/rules.v4
+# rules.v4 is a Jinja template; the deploy renders it to /etc/iptables/rules.v4.
+# On the router, compare the rendered file with the live ruleset:
+fw-apply 4 /etc/iptables/rules.v4 --diff
 
-# Apply via Ansible
-ansible-playbook -i inventory deploy.yml --tags iptables
+# Apply via Ansible (normally the router:deploy job after merge)
+ansible-playbook -i ansible/inventory.yml ansible/router.yml --tags configure-router-network
 ```
 
 ### Debugging
@@ -362,3 +367,4 @@ iptables -A FORWARD -j LOG --log-prefix "FWD-DROPPED: "
 | 2026-10 | excel-vm routes via WAN for client M365 sign-in |
 | 2026-10 | Tailscale: role installs from the pinned apt repo; tailnet → nginx:443 rule; ts-* hooks documented |
 | 2026-10 | Vaultwarden, Audioserve, Home Assistant restricted to LAN + tailnet (Ombi stays public); game-server and port 22 forwards removed |
+| 2026-11 | Docs audit: device rules (Shield TV gone, Apple TV limited), snapserver ports, NTP from the S2500, registry container retired, test/apply commands |

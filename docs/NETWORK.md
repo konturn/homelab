@@ -81,7 +81,7 @@ All VLANs use macvlan Docker networks, allowing containers to have their own IP 
 - **PiHole** (10.3.32.2) — DNS server with ad-blocking
 - **Deluge** (10.3.32.3) — Torrent client (egresses via Mullvad)
 - **GitLab** — Source control and CI/CD
-- **Moltbot Gateway** — AI assistant
+- **OpenClaw gateway** (moltbot) — AI assistant
 - **Radarr/Sonarr/Prowlarr** — Media automation
 - **InfluxDB/Grafana** — Metrics and dashboards
 - **Paperless-ngx** — Document management
@@ -93,18 +93,16 @@ All VLANs use macvlan Docker networks, allowing containers to have their own IP 
 
 ### VLAN 4 — Management (10.4.0.0/16)
 
-**Purpose:** Infrastructure management, switches, IPMI, container registry.
+**Purpose:** Infrastructure management, switches, IPMI, Wi-Fi.
 
 | IP Range | Purpose |
 |----------|---------|
 | 10.4.0.1 | Gateway (bond0.4) / DHCP server |
 | 10.4.0.0/18 | Docker container pool |
-| 10.4.32.1 | Container Registry |
 | 10.4.64.0 - 10.4.127.255 | DHCP range |
 | 10.4.128.x | Static device reservations |
 
 **Devices:**
-- **Registry** (10.4.32.1) — Docker container registry
 - **Movie Switch** (10.4.128.3) — Managed switch
 - **Office Switch** (10.4.128.4) — Managed switch
 - **IPMI** (10.4.128.7) — Server management interface
@@ -126,7 +124,7 @@ All VLANs use macvlan Docker networks, allowing containers to have their own IP 
 | 10.5.0.1 | Gateway (bond0.5) |
 | 10.5.64.0 - 10.5.127.255 | DHCP range |
 
-**Access:** Can reach external services (nginx) but isolated from internal networks.
+**Access:** Internet only; isolated from the other VLANs (no hairpin to nginx).
 
 ---
 
@@ -160,7 +158,7 @@ All VLANs use macvlan Docker networks, allowing containers to have their own IP 
 | 10.6.128.6 | Z-Wave satellite (Raspberry Pi) |
 | 10.6.128.9 | Doorbell camera |
 | 10.6.128.10 | Kitchen air quality sensor |
-| 10.6.128.11 | Satellite-2 (Zigbee coordinator) |
+| 10.6.128.11 | Satellite-2 (Raspberry Pi, document scanner) |
 | 10.6.128.14 | Back camera |
 | 10.6.128.15 | Bedroom air quality sensor |
 | 10.6.128.16 | Weather station |
@@ -208,7 +206,7 @@ Some containers need access to multiple networks:
                                      │ (homeassistant, plex, ombi)
 ┌────────────────────────────────────┴────────────────────────────────────┐
 │                           INTERNAL (VLAN 3)                              │
-│  gitlab ─── moltbot ─── radarr ─── sonarr ─── pihole ─── grafana        │
+│  gitlab ─── openclaw ─── radarr ─── sonarr ─── pihole ─── grafana       │
 │  deluge ─── influxdb ─── paperless ─── prowlarr ─── lab_nginx           │
 └────────────────────────────────────┬────────────────────────────────────┘
                                      │ (homeassistant)
@@ -292,12 +290,12 @@ In addition, the FORWARD chain REJECTs any fwmark 0x1 packet whose output interf
 
 ### LAN Device → External Service (Hairpin NAT)
 
-When IoT devices (VLAN 6) access external services via public DNS:
+When LAN clients on VLAN 3, 4 or 6 access external services via public DNS:
 
 ```
 ┌────────────────────┐
-│   IoT Device       │
-│   (10.6.x.x)       │
+│   LAN client       │
+│ (10.3/10.4/10.6)   │
 └─────────┬──────────┘
           │ (destination: public IP)
           ▼
@@ -310,11 +308,16 @@ When IoT devices (VLAN 6) access external services via public DNS:
    │         nginx (10.2.32.1)          │
    └────────────────────────────────────┘
             │
-            ▼ SNAT (source → 10.6.0.1)
+            ▼ no SNAT: nginx sees the real 10.x source
    ┌────────────────────────────────────┐
-   │    Response returns correctly      │
+   │ Reply is routed back via the router│
    └────────────────────────────────────┘
 ```
+
+Known gap: VLAN 3/6 traffic to the WAN address is marked for Mullvad in mangle
+PREROUTING before the DNAT, so it is routed into the tunnel and never reaches
+nginx; only the VLAN 4 hairpin works today. Clients using Pi-hole are not
+affected, because Pi-hole answers `*.nkontur.com` with the nginx address.
 
 ---
 
@@ -381,8 +384,8 @@ limited to Telegram's address ranges) stay public. The nginx `allow 10.0.0.0/8;
 allow 100.64.0.0/10; deny all;` restriction and the removal of unused port forwards
 were applied once client devices were confirmed working over Tailscale.
 
-Off-tailnet clients get `403` from those vhosts. Hairpinned LAN clients (VLAN 3/4/6 via
-the WAN address) keep their real 10.x source and are allowed; the guest VLAN has no
+Off-tailnet clients get `403` from those vhosts. Hairpinned LAN clients (via the WAN
+address; see the hairpin gap above) keep their real 10.x source and are allowed; the guest VLAN has no
 hairpin and no access.
 
 ---
@@ -489,7 +492,7 @@ vlan6-shim ─── Allows router to reach VLAN 6 containers
 
 ### PiHole (10.3.32.2)
 
-Primary DNS for VLAN 4 (mgmt) and VLAN 6 (iot):
+Primary DNS (via DHCP) for VLAN 3 (internal), VLAN 4 (mgmt) and VLAN 6 (iot):
 - Ad-blocking
 - Local DNS entries via `custom.list`
 - Custom DHCP/DNS overrides via `custom.conf`
@@ -505,7 +508,7 @@ All services use `*.lab.nkontur.com` for internal DNS.
 
 ### Split-horizon caveat (macOS hosts)
 
-Public DNS answers `*.lab.nkontur.com` with the WAN IP (75.89.46.11); only
+Public DNS answers `*.lab.nkontur.com` with the WAN IP; only
 PiHole returns the internal address. Linux hosts query PiHole first and stop
 there, but macOS `mDNSResponder` queries every configured resolver in parallel
 and takes the first answer, so the 1.1.1.1 fallback regularly wins and
@@ -526,9 +529,9 @@ ISC DHCP server runs on the router, serving:
 
 | VLAN | Range | DNS |
 |------|-------|-----|
-| 3 (internal) | 10.3.64.0 - 10.3.127.255 | 1.1.1.1 |
+| 3 (internal) | 10.3.64.0 - 10.3.127.255 | PiHole, 1.1.1.1 |
 | 4 (mgmt) | 10.4.64.0 - 10.4.127.255 | PiHole, 1.1.1.1 |
-| 5 (guest) | 10.5.64.0 - 10.5.127.255 | 1.1.1.1 |
+| 5 (guest) | 10.5.64.0 - 10.5.127.255 | 1.1.1.1, 8.8.8.8 |
 | 6 (iot) | 10.6.64.0 - 10.6.127.255 | PiHole, 1.1.1.1 |
 | 7 | 10.7.64.0 - 10.7.127.255 | 1.1.1.1 |
 
@@ -546,14 +549,13 @@ Static reservations are defined for critical devices (see DHCP config).
 Raspberry Pi satellites extend the network:
 
 ### zwave.lab.nkontur.com (10.6.128.6)
-- Z-Wave controller
-- Snapclient (movie room audio)
-- Local nginx for services
+- Z-Wave controller (`zwavejs2mqtt`)
+- Snapclient (movie room audio; disabled until its USB sound card is reassigned)
 
 ### satellite-2.lab.nkontur.com (10.6.128.11)
-- Zigbee coordinator
 - Document scanner
-- Local nginx
+
+Zigbee uses a network coordinator (10.6.128.20); `zigbee2mqtt` runs on the router.
 
 ---
 
@@ -586,7 +588,7 @@ Raspberry Pi satellites extend the network:
 │  ┌─────────────────────────────────────────────────────────────────┐    │
 │  │  VLAN 6 (IoT)                                                    │    │
 │  │  - Can reach PiHole for DNS                                      │    │
-│  │  - Can reach registry for image pulls                            │    │
+│  │  - Pis (zwave, satellite-2) can reach Vault (8200)               │    │
 │  │  - Egress via Mullvad VPN                                        │    │
 │  └─────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -596,7 +598,6 @@ Raspberry Pi satellites extend the network:
 │  ┌─────────────────────────────────────────────────────────────────┐    │
 │  │  VLAN 5 (Guest)                                                  │    │
 │  │  - Internet access only                                          │    │
-│  │  - Can reach external nginx (hairpin NAT)                        │    │
 │  │  - Isolated from internal networks                               │    │
 │  └─────────────────────────────────────────────────────────────────┘    │
 │                                                                          │
@@ -620,11 +621,9 @@ Raspberry Pi satellites extend the network:
 | Internal nginx | 10.3.32.1 |
 | PiHole DNS | 10.3.32.2 |
 | Deluge | 10.3.32.3 |
-| Registry | 10.4.32.1 |
 | IoT nginx | 10.6.32.5 |
 | Snapserver | 10.6.32.2 |
 | MQTT broker | 10.6.32.3 |
-| Wireguard gateway | 10.0.0.1 |
 
 ### Port Reference
 
@@ -633,6 +632,6 @@ Raspberry Pi satellites extend the network:
 | 22 | TCP | SSH |
 | 443 | TCP | HTTPS (nginx) |
 | 41641 | UDP | Tailscale |
-| 1883 | TCP | MQTT (TLS) |
+| 8883 | TCP | MQTT (TLS) |
 | 32400 | TCP | Plex |
 | 8123 | TCP | Home Assistant |
