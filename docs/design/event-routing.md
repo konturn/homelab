@@ -737,7 +737,8 @@ do not care about. Each property names the section it comes from.
 | S6 | One root cause makes one incident. When a dependency is down (e.g. MQTT), events for things that depend on it (Zigbee silence) are attached to that incident and never start their own playbooks. | 4.7 |
 | S7 | An action against a target never starts while a deploy holds that host's resource group, except the "cancel orphaned CI job" playbook, which exists to free it. | 4.5 |
 | S8 | An event is never acted on twice. Duplicates and re-deliveries of the same alert, including across a router restart, map to the same incident. | 4.3, 4.7 |
-| S9 | Always-page classes (security, data at risk, UPS) always reach Noah, even if a playbook also handles them. | 5, 6.3 |
+| S9 | Always-page classes (security, data at risk, UPS) always reach Noah, even if a playbook also handles them. A suppression never applies to them, and Grafana emails them whatever the router's state. | 5, 6.3, 8.3 |
+| S12 | An event a playbook handled (verified) never wakes OpenClaw per event; it reaches OpenClaw only through the batch decision log (decision B). | 6.1, 11 B |
 
 ### 12.2 Liveness: things that must eventually happen
 
@@ -746,7 +747,7 @@ do not care about. Each property names the section it comes from.
 | L1 | Every event ends in exactly one terminal state: handled by a playbook (verified), escalated to OpenClaw, paged to Noah, or deliberately suppressed with a recorded reason. None is silently lost. | 4.3, 4.8 |
 | L2 | A playbook whose verification fails escalates to OpenClaw within one cycle, and pages Noah if OpenClaw is unavailable. | 4.4, 7.4 |
 | L3 | An open breaker always produces an escalation and a page. It never fails silent. | 7.2 |
-| L4 | If the router is down, alerts still reach OpenClaw through the Grafana fallback route, and critical/warning alerts still reach email. | 7.4 |
+| L4 | If the router is down, alerts still reach OpenClaw through the Grafana fallback route, and page-class alerts still reach email. A delivery the router missed is never mistaken for one it handled. | 7.4 |
 | L5 | An incident whose underlying alert resolves is eventually closed, and its playbook lock released. Nothing is left holding a lock forever: the lesson of the orphaned CI job. | 4.6, 1.2 (I3) |
 | L6 | A suppression always expires. Nothing stays hidden indefinitely. | 8.3 |
 
@@ -771,7 +772,7 @@ The spec is mutation-tested. Each of these deliberate design bugs must make TLC 
 6. Never release a lock when an incident resolves → L5 must fail.
 
 The suite grew beyond these six: every safety property and every liveness
-property except L2/L4/L6 has at least one mutation (18 in all, listed in
+property except L2 has at least one mutation (26 in all, listed in
 [tla/README.md](tla/README.md)), and `run-tlc.sh` fails if any mutation stops
 failing. The bounds actually checked are in 12.6.
 
@@ -836,6 +837,31 @@ A symptom attached to a root cause that reached OpenClaw or Noah counts as
 handled (L1). Ground truth for S6 includes handed-off root causes; mutation
 `CorrelateWhileActiveOnly`.
 
+**Phase 3 (residue routing).** The model gained the router's forward queue
+to OpenClaw, the JIT-bot page while OpenClaw is down (decision 3), expiry of
+old residue into the digest (7.4), Grafana's OpenClaw route as the fallback
+(L4), assist windows with the executor checking the playbook's identity, and
+suppressions with expiry (L6). Two findings changed the design:
+
+**(f) Grafana's fallback must check this delivery, not the fingerprint.**
+Grafana keeps its OpenClaw route as the fallback: the OpenClaw transform asks
+the router's `/ack` and runs the agent unless the router has the alert. TLC
+found the run where the router handled an earlier episode of an alert, was
+down for the next delivery and back before Grafana's OpenClaw notification:
+an acknowledgement by fingerprint made the transform drop an alert nobody had
+seen. `/ack` must answer for the delivery (fingerprint, `startsAt` and status,
+received recently), and an unreachable router means "run the agent". Mutation
+`AckByFingerprint`.
+
+**(g) A queued page stays a page.** A breaker or a failed remediation is
+queued for OpenClaw with page context. The first phase-3 spec decided what
+was a page from the incident's current status; TLC found the run where the
+alert resolved while OpenClaw was down, the item became ordinary residue,
+expired into the digest, and the breaker never paged (L3). The queue now
+records the kind with the item: a page goes out through the JIT bot while
+OpenClaw is down whatever the alert does meanwhile, and only then may it
+expire.
+
 **Found by the property tests on the implementation** (Hypothesis, same
 properties):
 
@@ -850,25 +876,33 @@ properties):
   pages (routing table row 1). It does not park as a symptom, where it would
   re-open, start and get refused in a loop.
 
-**Bounds and results** (TLC 1.7.4, 4 workers at `nice 19`, `ionice -c3`):
+**Bounds and results** (TLC 1.7.4, `nice 19`, `ionice -c3`; phase-3 spec,
+2026-11-08, CI rows on 2 workers as in CI, the full rows on 4):
 
 | Check | Instance | Distinct states | Time | Result |
 |---|---|---|---|---|
-| `safety.cfg` | 5 alerts (MQTT; Zigbee needing it; two playbooks on one container; a page-class alert), one of them re-delivered; 1 run per window; one of each environment event | 26,466,078 | 6m49s | S1–S11 hold (spec before finding e; since then checked on the CI instances, the larger instance being too heavy for the router) |
-| `liveness.cfg` | 3 alerts (MQTT, Zigbee, one container), one delivery each | 408,564 | 3m36s | S1–S11, L1, L3, L5, L7, L8 hold |
-| `ci-safety.cfg` (CI) | the 4 playbook-side alerts, no re-delivery | 5,144,958 | 1m04s | S1–S11 hold |
-| `ci-pages.cfg` (CI) | MQTT, Zigbee and the page-class alert | 90,144 | 2s | S1–S11 hold |
-| `ci-liveness.cfg` (CI) | 2 alerts (MQTT, one container) | 21,576 | 9s | all hold |
-| 18 mutations (CI) | the instances above, or a one-alert instance for re-delivery bugs | 158–22,704 each | ≤ 3s each | each fails on its named property |
+| `safety.cfg` | 5 alerts (MQTT; Zigbee needing it; two playbooks on one container; a page-class alert), one of them re-delivered; a suppression over the container and the page-class alert; 1 run per window; one of each environment event | > 43,000,000 | stopped at 15 min | not completed on the router (4 workers); S1–S12 are checked on the CI instances |
+| `liveness.cfg` | 3 alerts (MQTT, Zigbee, one container), one delivery each, with the forward queue and OpenClaw outages | > 5,000,000 | stopped at 15 min | not completed on the router (4 workers); liveness is checked on the CI instances |
+| `ci-safety.cfg` (CI) | the 4 playbook-side alerts, no re-delivery | 1,926,888 | 1m07s | S1–S12 hold |
+| `ci-pages.cfg` (CI) | MQTT, Zigbee and the page-class alert, a suppression over Zigbee and the page-class alert | 125,058 | 5s | S1–S12 hold |
+| `ci-liveness.cfg` (CI) | 2 alerts (MQTT, one container); OpenClaw may stay down for good | 100,668 | 1m34s | S1–S12, L1, L3, L5, L7, L8 hold |
+| `ci-fallback.cfg` (CI) | the same 2 alerts, Grafana's fallback route modelled, OpenClaw outages end | 111,720 | 1m42s | S1–S12, L1, L3, L4, L5 hold |
+| `ci-suppress.cfg` (CI) | one container alert under a suppression | 37,800 | 27s | S1–S12, L1, L3, L5–L8 hold |
+| 26 mutations (CI) | the instances above, or a one-alert instance | 54–24,700 each | ≤ 4s each | each fails on its named property |
+
+The whole CI profile takes about 6 minutes on 2 workers.
 
 Liveness is checked on smaller instances than safety: TLC's liveness check
-grows with states times fairness conditions (35 here), and a 4-alert liveness
+grows with states times fairness conditions (up to 60 here), and a 4-alert liveness
 instance had passed 1.4M states without finishing when it was stopped.
 L2 (verification failure escalates within one cycle) is covered by L1, because
 a failed verification must end in `escalated` or `paged` with the message
-delivered. L4 (fallback while the router is down) is Grafana's routing, not
-the router's. L6 (suppressions expire) applies to the suppression files that
-arrive with phase 3, and is not modelled yet.
+delivered. L4 is modelled as Grafana's OpenClaw route gated on the router's
+per-delivery acknowledgement (`GrafanaOC`), checked where OpenClaw outages
+end (`ci-fallback.cfg`); L6 with suppressions that start and expire
+(`ci-suppress.cfg`). The forward queue, OpenClaw outages and the delivery
+history affect only liveness, so the safety instances leave them out
+(`Delivery = FALSE`), which keeps them near their phase-2 size.
 
 ## 13. Planned maintenance (addendum)
 

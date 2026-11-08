@@ -4,9 +4,9 @@
 # must fail on the property its cfg names (`\* expect: <property>`).
 #
 # Usage: run-tlc.sh [ci|full|base|mutations|<cfg name>]   (default: ci)
-#   ci     small seed instances (ci-safety, ci-pages, ci-liveness) + every mutation; what
+#   ci     small seed instances (ci-safety, ci-pages, ci-liveness, ci-fallback, ci-suppress) + every mutation; what
 #          CI runs, a few minutes on 4 threads
-#   full   the bigger instances (safety, liveness) + every mutation; by hand,
+#   full   the bigger instances (safety, liveness, plus ci-fallback and ci-suppress) + every mutation; by hand,
 #          ~10 minutes and several GB (numbers in README.md)
 #
 # Environment:
@@ -113,9 +113,13 @@ if [ "$WHAT" = ci ] || [ "$WHAT" = base ]; then
   check_base ci-safety.cfg
   check_base ci-pages.cfg
   check_base ci-liveness.cfg
+  check_base ci-fallback.cfg
+  check_base ci-suppress.cfg
 elif [ "$WHAT" = full ]; then
   check_base safety.cfg
   check_base liveness.cfg
+  check_base ci-fallback.cfg
+  check_base ci-suppress.cfg
 elif [ -f "$WHAT.cfg" ]; then
   check_base "$WHAT.cfg"
 fi
