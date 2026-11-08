@@ -61,18 +61,18 @@ ENV PLAYWRIGHT_BROWSERS_PATH="/opt/ms-playwright"
 # archive hash was recorded when the pin was set.
 
 # Install glab (GitLab CLI) from GitHub
-RUN curl -fsSL https://github.com/profclems/glab/releases/download/v1.22.0/glab_1.22.0_Linux_x86_64.deb -o /tmp/glab.deb \
+RUN curl -fsSL --retry 6 --retry-delay 15 --retry-all-errors https://github.com/profclems/glab/releases/download/v1.22.0/glab_1.22.0_Linux_x86_64.deb -o /tmp/glab.deb \
     && echo "5761f235ee5ef358dabcb8a5d86013572eb504cc43237b84c258114ab3fd7c27  /tmp/glab.deb" | sha256sum -c - \
     && dpkg -i /tmp/glab.deb \
     && rm /tmp/glab.deb
 
 # Install yq (YAML processor)
-RUN curl -fsSL https://github.com/mikefarah/yq/releases/download/v4.44.1/yq_linux_amd64 -o /usr/local/bin/yq \
+RUN curl -fsSL --retry 6 --retry-delay 15 --retry-all-errors https://github.com/mikefarah/yq/releases/download/v4.44.1/yq_linux_amd64 -o /usr/local/bin/yq \
     && echo "6dc2d0cd4e0caca5aeffd0d784a48263591080e4a0895abe69f3a76eb50d1ba3  /usr/local/bin/yq" | sha256sum -c - \
     && chmod +x /usr/local/bin/yq
 
 # Install nuclei (template-based vulnerability scanner)
-RUN curl -fsSL https://github.com/projectdiscovery/nuclei/releases/download/v3.7.1/nuclei_3.7.1_linux_amd64.zip -o /tmp/nuclei.zip \
+RUN curl -fsSL --retry 6 --retry-delay 15 --retry-all-errors https://github.com/projectdiscovery/nuclei/releases/download/v3.7.1/nuclei_3.7.1_linux_amd64.zip -o /tmp/nuclei.zip \
     && echo "72dbc77e87b3a6751adc151e514b15f51e2c94e493a561fc9e1138397c6e22c6  /tmp/nuclei.zip" | sha256sum -c - \
     && unzip /tmp/nuclei.zip -d /tmp/nuclei \
     && mv /tmp/nuclei/nuclei /usr/local/bin/nuclei \
@@ -80,21 +80,21 @@ RUN curl -fsSL https://github.com/projectdiscovery/nuclei/releases/download/v3.7
     && rm -rf /tmp/nuclei /tmp/nuclei.zip
 
 # Install ffuf (web fuzzer)
-RUN curl -fsSL https://github.com/ffuf/ffuf/releases/download/v2.1.0/ffuf_2.1.0_linux_amd64.tar.gz -o /tmp/ffuf.tar.gz \
+RUN curl -fsSL --retry 6 --retry-delay 15 --retry-all-errors https://github.com/ffuf/ffuf/releases/download/v2.1.0/ffuf_2.1.0_linux_amd64.tar.gz -o /tmp/ffuf.tar.gz \
     && echo "fc2c82736c14dcbea4daf3d3cf3878c1c4773008ba45c2bc0fceba7d17b40bb5  /tmp/ffuf.tar.gz" | sha256sum -c - \
     && tar -xzf /tmp/ffuf.tar.gz -C /usr/local/bin ffuf \
     && chmod +x /usr/local/bin/ffuf \
     && rm /tmp/ffuf.tar.gz
 
 # Install testssl.sh (TLS configuration testing)
-RUN curl -fsSL https://github.com/testssl/testssl.sh/archive/refs/tags/v3.2.3.tar.gz -o /tmp/testssl.tar.gz \
+RUN curl -fsSL --retry 6 --retry-delay 15 --retry-all-errors https://github.com/testssl/testssl.sh/archive/refs/tags/v3.2.3.tar.gz -o /tmp/testssl.tar.gz \
     && echo "1c4bb10185a67592164eb870c717b8bdd03f290c8d68f9a8c658335ff5ac8b91  /tmp/testssl.tar.gz" | sha256sum -c - \
     && tar -xzf /tmp/testssl.tar.gz -C /opt \
     && ln -s /opt/testssl.sh-3.2.3/testssl.sh /usr/local/bin/testssl \
     && rm /tmp/testssl.tar.gz
 
 # Install trivy (container image vulnerability scanner)
-RUN curl -fsSL https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.deb -o /tmp/trivy.deb \
+RUN curl -fsSL --retry 6 --retry-delay 15 --retry-all-errors https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.deb -o /tmp/trivy.deb \
     && echo "a484057aafde31089cf2558ca0f79a4bc835125a5ee6834183a5bcf0735af358  /tmp/trivy.deb" | sha256sum -c - \
     && dpkg -i /tmp/trivy.deb \
     && rm /tmp/trivy.deb

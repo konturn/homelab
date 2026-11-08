@@ -21,7 +21,7 @@ RUN apt-get update \
       jq \
       mediainfo=25.04-1 \
       mkvtoolnix=92.0-1+deb13u1 \
- && curl -fsSL -o /tmp/dovi_tool.tar.gz \
+ && curl -fsSL --retry 6 --retry-delay 15 --retry-all-errors -o /tmp/dovi_tool.tar.gz \
       "https://github.com/quietvoid/dovi_tool/releases/download/${DOVI_TOOL_VERSION}/dovi_tool-${DOVI_TOOL_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
  && echo "${DOVI_TOOL_SHA256}  /tmp/dovi_tool.tar.gz" | sha256sum -c - \
  && tar -xzf /tmp/dovi_tool.tar.gz -C /usr/local/bin ./dovi_tool \
