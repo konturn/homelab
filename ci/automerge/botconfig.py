@@ -138,7 +138,9 @@ def classify(path: str, cfg: dict) -> Tuple[Optional[str], Optional[str]]:
 
 # Jinja only acts on `{{`, `{%` and `{#`: a comment without braces is inert.
 _SAFE_COMMENT = re.compile(r"^\s*#[^{}]*$")
-_BLOCK_START = re.compile(r":\s*[|>][-+0-9]*\s*(#.*)?$")
+# `key: |`, `- |` (a sequence item, e.g. the script of `command: [sh, -c, ...]`),
+# with an optional anchor or tag before the indicator (`key: &a >-`).
+_BLOCK_START = re.compile(r"(?::\s*|^\s*-\s+)(?:[&!]\S*\s+)*[|>][-+0-9]*\s*(#.*)?$")
 _MEM_RE = re.compile(r"^(\d+(?:\.\d+)?)\s*([bkmgt]?)(?:i?b)?$", re.I)
 _LOG_KEY = re.compile(r"^[A-Z0-9_]*LOG_?LEVEL$")
 _ENV_LIST = re.compile(r"^(\s*)-\s+([A-Za-z0-9_]+)=(.*?)\s*$")
@@ -220,6 +222,12 @@ def diff_compose_config(base: str, head: str, path: str, cfg: dict, allowlist: d
     """Raise PolicyError unless every change is an allowed resource or
     log-level value edit (or a safe comment edit)."""
     b_lines, h_lines = base.split("\n"), head.split("\n")
+    # Every new or changed line, comments and trailing comments included: no
+    # Jinja braces, no line break the checks below would not see.
+    b_set = set(b_lines)
+    for i, l in enumerate(h_lines):
+        if l not in b_set:
+            policy.check_changed_line(l, f"{path} line {i + 1}", jinja=True)
     b_blocks, h_blocks = _block_lines(b_lines), _block_lines(h_lines)
     # comments: any added or changed comment must be safe and outside blocks
     b_comments = {l for i, l in enumerate(b_lines) if i not in b_blocks and l.lstrip().startswith("#")}

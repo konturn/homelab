@@ -32,6 +32,13 @@ _IMAGE_RE = re.compile(r"^(\s+)image:\s*(\S.*?)\s*$")
 _VERSION_RE = re.compile(r"^v?(\d+)\.(\d+)(?:\.(\d+))?(?:\.(\d+))?(.*)$")
 # trailing git-hash-like build id (e.g. plex "-cb3ebc72d"); ignored for flavor
 _HASH_SUFFIX_RE = re.compile(r"-[0-9a-f]{7,40}$")
+# Line breaks other than "\n" (the ones str.splitlines() knows). The policy
+# reads files line by line on "\n", but YAML also breaks lines on "\r" (and
+# YAML 1.1 parsers on NEL, LS and PS), and Jinja, which renders the compose
+# files before Docker reads them, turns a lone "\r" into "\n". A changed line
+# carrying one could hide extra YAML lines (`privileged: true`, volumes) inside
+# what the policy reads as one comment or value.
+_ODD_LINE_BREAK = re.compile("[\r\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029]")
 
 
 class PolicyError(Exception):
@@ -98,6 +105,18 @@ def parse_image_ref(value: str) -> ImageRef:
     if not name or not _NAME_RE.match(name):
         raise PolicyError(f"malformed image name in {raw!r}")
     return ImageRef(name=name, tag=tag or None, digest=digest or None)
+
+
+def check_changed_line(line: str, where: str, jinja: bool) -> None:
+    """Refuse a changed line whose meaning the line-by-line checks cannot see:
+    one with a line break other than "\n" (_ODD_LINE_BREAK), or, in a Jinja
+    template (`jinja`, the compose files), one with a brace anywhere, a trailing
+    comment included: Ansible renders `{{ lookup('pipe', ...) }}` in a YAML
+    comment like anywhere else, on the deploy runner."""
+    if _ODD_LINE_BREAK.search(line):
+        raise PolicyError(f"{where}: line contains a line break other than \\n (e.g. \\r)")
+    if jinja and ("{" in line or "}" in line):
+        raise PolicyError(f"{where}: changed line contains '{{' or '}}' (the compose files are Jinja templates)")
 
 
 # ---------------------------------------------------------------------------
@@ -314,6 +333,7 @@ def diff_compose(base: str, head: str, path: str = COMPOSE_PATH,
             old, new = parse_image_ref(b_val), parse_image_ref(h_val)
         except PolicyError as e:
             raise PolicyError(f"{where} ({service}): {e}")
+        check_changed_line(hl, f"{where} ({service})", jinja=True)
         if old.name != new.name:
             raise PolicyError(f"{where} ({service}): image name changed ({old.name} -> {new.name})")
         if not new.digest:
@@ -434,6 +454,7 @@ def diff_ci_images(base: str, head: str, path: str = CI_PATH) -> List[ImageChang
             old, new = parse_image_ref(bm.group(3)), parse_image_ref(hm.group(3))
         except PolicyError as e:
             raise PolicyError(f"{where} ({job}): {e}")
+        check_changed_line(hl, f"{where} ({job})", jinja=False)
         if old.name != new.name:
             raise PolicyError(f"{where} ({job}): image name changed ({old.name} -> {new.name})")
         if not new.digest:
