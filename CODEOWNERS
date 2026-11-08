@@ -96,6 +96,9 @@
 /docker/grafana/provisioning/alerting/infrastructure.yml @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
 /docker/grafana/provisioning/alerting/anomaly.yml        @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
 /docker/grafana/provisioning/dashboards/json/            @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+# New shadow playbooks may be merged by the auto-merge sweep (bot-config class,
+# docs/AUTOMERGE.md); its approval counts only where the bot is a code owner.
+/docker/event-router/playbooks/          @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
 
 # === MOLTBOT SELF-MODIFICATION ===
 # Prevent moltbot from expanding its own access

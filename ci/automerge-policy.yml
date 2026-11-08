@@ -125,6 +125,16 @@ bot_config:
     - docker/grafana/provisioning/dashboards/homelab.yml
     # Playbooks and the router's config: Noah reviews (event-routing.md 8.3).
     - docker/event-router/**
+  # The one exception to `docker/event-router/**` above (decision 10 of
+  # docs/design/event-routing.md): an MR that only ADDS new playbook files
+  # docker/event-router/playbooks/<id>.yml, each with `id: <id>`, an explicit
+  # `mode: shadow` and an allowlisted action type (botconfig.py). A shadow
+  # playbook only logs what it would do. Changing an existing playbook,
+  # promotion to `active` included, stays a reviewed MR. Merges count against
+  # this cap, the bot-config cap and max_per_24h.
+  shadow_playbooks:
+    enabled: true
+    max_per_24h: 3
 
 # Never auto-merged, whatever the update kind. Each entry needs a reason; the
 # sweep prints it on the MR and labels the MR `automerge-manual`. Renovate

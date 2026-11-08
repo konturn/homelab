@@ -576,8 +576,9 @@ An MR qualifies only if **all** of these hold:
 1. the author is listed under `bot_config.authors` (`moltbot`), the target is
    `main`, it is not a draft, the MR pipeline passed on the head commit, and it
    carries none of the labels `freeze`, `security`, `major`;
-2. no file is added, deleted, renamed or mode-changed, no file starts with
-   `#!`, and no path is a script (`.sh`, `.py`, `.js`, ...);
+2. no file is added, deleted, renamed or mode-changed (the one exception is
+   a new shadow playbook, below), no file starts with `#!`, and no path is a
+   script (`.sh`, `.py`, `.js`, ...);
 3. no path is on the never-list: the hard list in `botconfig.py` (`networking/**`,
    iptables/nftables, `ansible/**`, `.gitlab-ci.yml`, `ci/**`, `renovate.json`,
    `CODEOWNERS`, `CLAUDE.md`, `terraform/**`, `base/**`, `scripts/**`,
@@ -597,9 +598,46 @@ An MR qualifies only if **all** of these hold:
 | `docs` | `docs/*.md`, `README.md`, `docs/**/README*.md` | any text, except in `bot_config.docs_exclude`: this file, `DISASTER_RECOVERY.md`, `RENOVATE.md`, `DEPLOY.md`, `FIREWALL.md`, `SECRET_ROTATION.md`, `GITLAB_SETTINGS.md`, `docker-proxy-architecture.md`, `jit-*`, `*security*`. |
 
 5. fewer than `bot_config.max_per_24h` (6) bot-config merges in the last 24
-   hours, and fewer than `max_per_24h` general-class merges (bot-config merges
+   hours (and, for shadow playbooks, fewer than
+   `bot_config.shadow_playbooks.max_per_24h` (3) of those), and fewer than `max_per_24h` general-class merges (bot-config merges
    count there too); no open rollback issue holds a changed service (or
    `grafana-provisioning` for Grafana files).
+
+### Shadow playbooks
+
+Decision 10 of [the event routing design](design/event-routing.md): a new
+event-router playbook that only runs in shadow mode (it logs what it would
+have done; the router never calls the executor for it) may be merged without
+review, so the weekly routing review can propose playbooks and let them prove
+themselves in the decision log. Promotion to `active` is always a reviewed MR.
+
+`docker/event-router/**` stays on `bot_config.never`; this shape is the only
+exception, enabled by `bot_config.shadow_playbooks` in the policy file. An MR
+that touches `docker/event-router/playbooks/` qualifies only if, besides rules
+1 and 5 above:
+
+- every changed file is a **new** file `docker/event-router/playbooks/<id>.yml`
+  (`<id>`: lowercase letters, digits, `_ . -`); nothing else is in the MR;
+  no existing playbook is changed, renamed or deleted;
+- each file is at most 8 KB, is not a script, and parses as one YAML mapping
+  with `id: <id>` (the file name), an explicit `mode: shadow`, and an
+  `action.type` from `PLAYBOOK_ACTIONS` in `ci/automerge/botconfig.py` (a
+  mirror of the router's allowlist, `restart_container`, `cancel_ci_job` and `retry_ci_job`;
+  a test keeps it a subset of `ALLOWED_ACTIONS` in
+  `docker/event-router/router/config.py`).
+
+Everything else about the playbook (schema, nodes, alert rule uids, targets
+on the restart denylist, overlapping matches) is checked by the router's own
+validator in `event-router:test`, which is part of the MR pipeline the sweep
+requires to have passed on the head commit. The merge is labelled
+`automerge-bot-config` and `automerge-shadow-playbook`, carries the bot-config
+trailers with `Automerge-Deploy: [router]`, and deploys through
+`router:deploy-service`: `event-router:build` builds the new image (the
+playbooks ship in it) and the per-service deploy recreates `event-router`
+behind the health gate. The executor's allowlist is not touched (it is
+rendered by the full deploy, and a shadow playbook never reaches it).
+`docker/event-router/playbooks/` lists the automerge bot as a second code
+owner so its approval counts there.
 
 Left out on purpose: **promtail pipeline stages** (dropping or filtering log
 lines). A filter that hides the bot's own traces, or security events, is

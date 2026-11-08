@@ -844,6 +844,7 @@ class Verdict:
     ci_images: List[str] = field(default_factory=list)     # image names it changes
     bot_config: bool = False                           # bot-config class (moltbot config MRs)
     bot_changes: list = field(default_factory=list)    # botconfig.ConfigChange
+    shadow_playbook: bool = False                      # bot-config MR that adds new shadow playbooks
     config_services: List[Tuple[str, str]] = field(default_factory=list)   # (compose file, service)
     grafana_files: List[str] = field(default_factory=list)
     hold_keys: List[Tuple[str, str]] = field(default_factory=list)          # (deploy job, service)
@@ -861,7 +862,7 @@ class Verdict:
 
     def as_dict(self) -> dict:
         return {"eligible": self.eligible, "fast_track": self.fast_track, "ci_image": self.ci_image,
-                "bot_config": self.bot_config,
+                "bot_config": self.bot_config, "shadow_playbook": self.shadow_playbook,
                 "bot_changes": [c.as_dict() for c in self.bot_changes],
                 "heavy": self.heavy,
                 "major": self.major, "denied": self.denied, "manual": self.manual,
@@ -967,6 +968,7 @@ def evaluate_bot_config(*, author: str, target_branch: str, labels: List[str], f
     for reason in r.reasons:
         v.reject(reason)
     v.bot_changes = r.changes
+    v.shadow_playbook = bool(r.shadow_playbooks)
     v.config_services = r.compose_services
     v.grafana_files = r.grafana_files
     targets, problems = bot_config_targets(r, deployments)
@@ -989,7 +991,7 @@ def evaluate_bot_config(*, author: str, target_branch: str, labels: List[str], f
     if v.deploy_jobs:
         v.notes.append("deploys via " + ", ".join(f"{j}:deploy-service" for j in v.deploy_jobs))
     if v.eligible:
-        v.notes.append("class: bot-config")
+        v.notes.append("class: bot-config" + (" (shadow playbooks)" if v.shadow_playbook else ""))
     return v
 
 

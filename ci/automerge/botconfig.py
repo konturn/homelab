@@ -22,8 +22,19 @@ Allowed shapes:
              and uses no datasource the file did not already use.
   docs       Markdown under docs/ (minus the excluded files) and README*.md
              at the top level or under docs/.
+  playbook   (shadow playbooks, event-routing.md decision 10) NEW files
+             docker/event-router/playbooks/<id>.yml only, each a single
+             mapping with `id: <id>` and an explicit `mode: shadow`, whose
+             action type is in PLAYBOOK_ACTIONS; nothing else in the MR. The
+             router's own validator (event-router:test, part of the green MR
+             pipeline the sweep requires) checks the rest. Changing an existing
+             playbook, promotion to `active` included, never qualifies. This
+             shape is the only exception to `docker/event-router/**` in
+             `bot_config.never`; it is off unless `bot_config.shadow_playbooks`
+             enables it.
 Never: a path on the hard never-list or `bot_config.never`, a new, deleted,
-renamed or mode-changed file, a script, or a denied service.
+renamed or mode-changed file (except a new shadow playbook), a script, or a
+denied service.
 """
 
 from __future__ import annotations
@@ -55,6 +66,19 @@ SEVERITIES = {"critical", "warning", "info"}
 GRAFANA_BUILTIN_DS = {"grafana", "-- Grafana --", "-- Dashboard --", "-- Mixed --", "__expr__", "dashboard"}
 KINDS = ("compose", "alerts", "dashboard", "docs")
 
+# Shadow playbooks (event-routing.md decision 10). A shadow playbook only logs
+# what it would have done: the router never calls the executor for it.
+PLAYBOOK_PATH = re.compile(r"^docker/event-router/playbooks/([a-z0-9][a-z0-9_.-]{0,62})\.yml$")
+# Mirror of ALLOWED_ACTIONS in docker/event-router/router/config.py; the
+# tests check it stays a subset of the router's, so a type the router drops
+# stops qualifying here too. A type the router adds qualifies only after it
+# is added here (by a reviewed MR).
+PLAYBOOK_ACTIONS = ("restart_container", "cancel_ci_job", "retry_ci_job")
+# A new playbook ships in the event-router image: deploying it recreates
+# that service on the router (after event-router:build).
+PLAYBOOK_SERVICE = ("docker/docker-compose.yml", "event-router")
+PLAYBOOK_MAX_BYTES = 8192
+
 
 def _match(path: str, pattern: str) -> bool:
     if pattern.endswith("/**") and path.startswith(pattern[:-2]):
@@ -79,7 +103,8 @@ def config(allowlist: dict) -> dict:
     if sec is None:
         return {"enabled": False, "authors": [], "max_per_24h": 0, "never": list(HARD_NEVER),
                 "denied_services": [], "paths": {k: [] for k in KINDS}, "docs_exclude": [],
-                "min_ratio": 0.5, "max_ratio": 2.0}
+                "min_ratio": 0.5, "max_ratio": 2.0,
+                "shadow_playbooks": {"enabled": False, "max_per_24h": 0}}
     if not isinstance(sec, dict):
         raise PolicyError("`bot_config` must be a mapping")
 
@@ -111,6 +136,13 @@ def config(allowlist: dict) -> dict:
             or not 0 < ratio[0] <= 1 <= ratio[1] <= 4):
         raise PolicyError("bot_config.resource_ratio must be [low, high] with 0 < low <= 1 <= high <= 4")
     out["min_ratio"], out["max_ratio"] = float(ratio[0]), float(ratio[1])
+    spb = sec.get("shadow_playbooks") or {}
+    if not isinstance(spb, dict) or set(spb) - {"enabled", "max_per_24h"}:
+        raise PolicyError("bot_config.shadow_playbooks takes enabled and max_per_24h")
+    spb_cap = spb.get("max_per_24h", 3)
+    if not isinstance(spb_cap, int) or isinstance(spb_cap, bool) or spb_cap < 0:
+        raise PolicyError("bot_config.shadow_playbooks.max_per_24h must be an integer >= 0")
+    out["shadow_playbooks"] = {"enabled": spb.get("enabled") is True, "max_per_24h": spb_cap}
     for k in ("compose",):
         for p in out["paths"][k]:
             if not policy.COMPOSE_GLOB.match(p):
@@ -458,6 +490,32 @@ def diff_dashboard(base: str, head: str, path: str) -> List[ConfigChange]:
 # Docs
 # ---------------------------------------------------------------------------
 
+def check_shadow_playbook(head: str, path: str) -> ConfigChange:
+    """A new event-router playbook file that can only ever run in shadow mode.
+    Raise PolicyError otherwise. Read as data, never executed."""
+    import yaml
+    m = PLAYBOOK_PATH.match(path)
+    if not m:
+        raise PolicyError(f"{path} is not docker/event-router/playbooks/<id>.yml")
+    if "\x00" in head or len(head.encode()) > PLAYBOOK_MAX_BYTES:
+        raise PolicyError(f"{path}: binary or larger than {PLAYBOOK_MAX_BYTES} bytes")
+    try:
+        pb = yaml.safe_load(head)
+    except yaml.YAMLError as e:
+        raise PolicyError(f"{path}: not valid YAML ({e.__class__.__name__})")
+    if not isinstance(pb, dict):
+        raise PolicyError(f"{path}: must be a single playbook mapping")
+    if pb.get("id") != m.group(1):
+        raise PolicyError(f"{path}: id must be {m.group(1)!r} (the file name)")
+    if "mode" not in pb or pb["mode"] != "shadow":
+        raise PolicyError(f"{path}: must say `mode: shadow` explicitly (promotion to active is a reviewed MR)")
+    action = pb.get("action")
+    atype = action.get("type") if isinstance(action, dict) else None
+    if not isinstance(atype, str) or atype not in PLAYBOOK_ACTIONS:
+        raise PolicyError(f"{path}: action type {atype!r} is not one of {list(PLAYBOOK_ACTIONS)}")
+    return ConfigChange(path, PLAYBOOK_SERVICE[1], 0, f"new shadow playbook {m.group(1)} ({atype})")
+
+
 def diff_docs(base: str, head: str, path: str) -> List[ConfigChange]:
     if "\x00" in head:
         raise PolicyError(f"{path}: binary content")
@@ -476,7 +534,14 @@ class BotConfigResult:
 
     @property
     def compose_services(self) -> List[Tuple[str, str]]:
-        return sorted({(c.file, c.service) for c in self.changes if self.kinds.get(c.file) == "compose"})
+        out = {(c.file, c.service) for c in self.changes if self.kinds.get(c.file) == "compose"}
+        if self.shadow_playbooks:
+            out.add(PLAYBOOK_SERVICE)
+        return sorted(out)
+
+    @property
+    def shadow_playbooks(self) -> List[str]:
+        return sorted(p for p, k in self.kinds.items() if k == "playbook")
 
     @property
     def grafana_files(self) -> List[str]:
@@ -497,6 +562,8 @@ def evaluate_files(files: List[policy.FileChange], contents: Dict[str, policy.Co
         return r
     if not files:
         r.reasons.append("MR has no file changes")
+    if any(PLAYBOOK_PATH.match(f.path) or PLAYBOOK_PATH.match(f.old_path or "") for f in files):
+        return _evaluate_playbooks(files, contents, cfg, r)
     for f in files:
         if f.new_file or f.deleted_file or f.renamed_file or f.mode_changed:
             r.reasons.append(f"{f.path}: file added, deleted, renamed or mode-changed")
@@ -518,6 +585,41 @@ def evaluate_files(files: List[policy.FileChange], contents: Dict[str, policy.Co
                 r.changes += diff_compose_config(base, head, f.path, cfg, allowlist)
             else:
                 r.changes += DIFFERS[kind](base, head, f.path)
+        except PolicyError as e:
+            r.reasons.append(f"bot-config: {e}")
+    if not r.reasons and not r.changes:
+        r.reasons.append("no change found")
+    return r
+
+
+def _evaluate_playbooks(files: List[policy.FileChange], contents: Dict[str, policy.ComposePair],
+                        cfg: dict, r: BotConfigResult) -> BotConfigResult:
+    """An MR touching docker/event-router/playbooks/: qualifies only if it
+    adds new shadow playbooks and nothing else."""
+    if not cfg["shadow_playbooks"]["enabled"]:
+        r.reasons.append("shadow playbook additions are not enabled (bot_config.shadow_playbooks)")
+        return r
+    for f in files:
+        if not PLAYBOOK_PATH.match(f.path):
+            r.reasons.append(f"{f.path}: an MR that adds shadow playbooks may change nothing else")
+            continue
+        if not f.new_file or f.deleted_file or f.renamed_file or f.mode_changed:
+            r.reasons.append(f"{f.path}: only new playbook files qualify; changing, renaming or deleting "
+                             "a playbook (promotion to active included) needs review")
+            continue
+        if posixpath.normpath(f.path) != f.path or _any(f.path, HARD_NEVER):
+            r.reasons.append(f"{f.path} is on the bot-config never-list")
+            continue
+        base, head = contents.get(f.path, (None, None))
+        if base is not None or head is None:
+            r.reasons.append(f"could not read {f.path} as a new file")
+            continue
+        if head.startswith("#!"):
+            r.reasons.append(f"{f.path} is a script")
+            continue
+        try:
+            r.changes.append(check_shadow_playbook(head, f.path))
+            r.kinds[f.path] = "playbook"
         except PolicyError as e:
             r.reasons.append(f"bot-config: {e}")
     if not r.reasons and not r.changes:

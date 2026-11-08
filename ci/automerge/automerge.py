@@ -73,6 +73,9 @@ CI_HOLD_JOB = "ci"
 LABEL_BOT_CONFIG = "automerge-bot-config"
 BOT_TRAILER = "Automerge-Policy: bot-config"
 BOT_CLASS_TRAILER = "Automerge-Class: bot-config"
+# Bot-config merges that add new shadow event-router playbooks (decision 10 of
+# docs/design/event-routing.md): also labelled, for their own cap.
+LABEL_SHADOW_PB = "automerge-shadow-playbook"
 # Selects the per-service deploy jobs: "Automerge-Deploy: [router] [zwave]".
 # plan-deploy re-derives the hosts from main's policy and refuses a mismatch.
 DEPLOY_TRAILER = "Automerge-Deploy:"
@@ -216,6 +219,7 @@ class GitLab:
             LABEL_CI_IMAGE: ("#8fbc8f", "Merged under the CI image class (docs/AUTOMERGE.md)"),
             LABEL_CI_WATCH: ("#c0c0c0", "CI image merge whose main pipeline the sweep has not checked yet"),
             LABEL_BOT_CONFIG: ("#b07cd8", "moltbot config change merged under the bot-config class (docs/AUTOMERGE.md)"),
+            LABEL_SHADOW_PB: ("#8e6cc0", "new shadow event-router playbook merged under the bot-config class (docs/AUTOMERGE.md)"),
             LABEL_MANUAL: ("#e9be74", "Update the auto-merge policy leaves to a human: major, denylist "
                                       "(e.g. GitLab) or restricted kind. Reason in the MR notes"),
             "freeze": ("#808080", "Block auto-merge for this MR"),
@@ -329,6 +333,20 @@ def bot_config_rate_gate(recent: List[dict], allow: dict) -> Optional[str]:
     return None
 
 
+def shadow_playbook_rate_gate(recent: List[dict], allow: dict) -> Optional[str]:
+    """Shadow playbook additions have their own small cap
+    (`bot_config.shadow_playbooks.max_per_24h`), on top of the bot-config and
+    general budgets they also count against."""
+    n = len([m for m in recent if LABEL_SHADOW_PB in (m.get("labels") or [])])
+    try:
+        limit = botconfig.config(allow)["shadow_playbooks"]["max_per_24h"]
+    except policy.PolicyError as e:
+        return f"policy: {e}"
+    if n >= limit:
+        return f"rate limit: {n} shadow playbook auto-merges in the last 24h (max {limit})"
+    return None
+
+
 def rate_gate(recent: List[dict], allow: dict, fast_track: bool) -> Optional[str]:
     """Each class has its own rolling-24h budget: `fast_track.max_per_24h` for
     fast-track merges, `max_per_24h` for all others."""
@@ -377,6 +395,8 @@ def evaluate_api(gl: GitLab, mr: dict, allow: dict, merger: Optional[str] = None
     if is_bot_config_author(mr["author"]["username"], allow) and len(files) <= 30:
         # the bot-config class reads every changed file (as data)
         wanted |= {f.path for f in files if not (f.new_file or f.deleted_file or f.renamed_file)}
+        # new shadow playbooks are read too (base: none)
+        wanted |= {f.path for f in files if f.new_file and botconfig.PLAYBOOK_PATH.match(f.path)}
     if base_sha and head_sha:
         for path in sorted(wanted):
             composes[path] = (gl.file_at(path, base_sha), gl.file_at(path, head_sha))
@@ -479,6 +499,7 @@ def cmd_mr_check(args: argparse.Namespace) -> int:
     listed = set(policy.compose_files(allow)) | set(policy.ci_files(allow))
     if is_bot_config_author(args.author or "", allow):
         listed |= {f.path for f in files if not (f.new_file or f.deleted_file)}
+        listed |= {f.path for f in files if f.new_file and botconfig.PLAYBOOK_PATH.match(f.path)}
     composes = {f.path: (git_show(base, f.path), git_show(head, f.path)) for f in files if f.path in listed}
     v = policy.evaluate_mr(
         author=args.author or "", target_branch=args.target or "",
@@ -563,6 +584,7 @@ def cmd_sweep(args: argparse.Namespace) -> int:
         recent = recent_automerges(gl)
         rate = {ft: rate_gate(recent, allow, ft) for ft in (False, True)}
         bot_rate = bot_config_rate_gate(recent, allow)
+        pb_rate = shadow_playbook_rate_gate(recent, allow)
         for ft, r in rate.items():
             if r:
                 log(f"  - {'fast track' if ft else 'general class'}: {r}")
@@ -577,7 +599,8 @@ def cmd_sweep(args: argparse.Namespace) -> int:
         ci_gate = (f"CI image merge(s) still awaiting their main pipeline: "
                    + ", ".join(f"!{i}" for i in ci_pending)) if v.eligible and v.ci_image and ci_pending else None
         bot_gate = bot_rate if v.eligible and v.bot_config else None
-        mr_gates = gates + [g for g in (rate[v.fast_track], rb, ci_gate, bot_gate) if g]
+        pb_gate = pb_rate if v.eligible and v.shadow_playbook else None
+        mr_gates = gates + [g for g in (rate[v.fast_track], rb, ci_gate, bot_gate, pb_gate) if g]
         eligible = v.eligible and not mr_gates
         print_verdict(mr, v, mr_gates if v.eligible else [])
         if v.eligible:
@@ -647,8 +670,8 @@ def do_merge(gl: GitLab, mr: dict, v: policy.Verdict) -> bool:
     if v.bot_config:
         trailers = BOT_CLASS_TRAILER + "\n" + (deploy_trailer(v) + "\n" if v.deploy_jobs else "") + BOT_TRAILER
         services = ", ".join(sorted({c.file for c in v.bot_changes}))
-        what = f"moltbot config change: {mr.get('title', '')}"
-        labels = LABEL_MERGED + "," + LABEL_BOT_CONFIG
+        what = f"moltbot {'shadow playbook' if v.shadow_playbook else 'config change'}: {mr.get('title', '')}"
+        labels = LABEL_MERGED + "," + LABEL_BOT_CONFIG + ("," + LABEL_SHADOW_PB if v.shadow_playbook else "")
     elif v.ci_image:
         trailers = CI_CLASS_TRAILER + "\n" + CI_TRAILER
         what = "CI image update: " + ", ".join(v.ci_images) + f" ({services})"
@@ -886,7 +909,8 @@ def bot_config_merge_files(first_parent: str, sha: str) -> Tuple[List[policy.Fil
         files.append(policy.FileChange(path=path, new_file=status == "A", deleted_file=status == "D",
                                        mode_changed=status == "T"))
     contents = {f.path: (git_show(first_parent, f.path), git_show(sha, f.path))
-                for f in files if not (f.new_file or f.deleted_file)}
+                for f in files if not (f.new_file or f.deleted_file)
+                or (f.new_file and botconfig.PLAYBOOK_PATH.match(f.path))}
     return files, contents
 
 
@@ -926,7 +950,8 @@ def plan_bot_config(args: argparse.Namespace, allow: dict, deployments: Dict[str
     host_files = [f for f in sorted({f for f, _ in result.compose_services}) if dep in (deployments.get(f) or [])]
     services = []
     for path in host_files:
-        head = contents[path][1] or ""
+        # a shadow playbook recreates event-router; the compose file itself is unchanged
+        head = (contents[path][1] if path in contents else git_show(sha, path)) or ""
         _, images = policy.compose_line_services(head)
         lines = head.split("\n")
         for f, svc in result.compose_services:
