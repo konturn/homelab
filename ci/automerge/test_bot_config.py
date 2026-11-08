@@ -702,7 +702,8 @@ class RealRepoTests(unittest.TestCase):
 
     def test_real_alert_file(self):
         text = (REPO / ALERTS).read_text()
-        v = self.eval_real(ALERTS, text.replace("for: 10m", "for: 15m", 1))
+        # the first rule's `for:` key (not a comment that mentions it)
+        v = self.eval_real(ALERTS, re.sub(r"(?m)^(\s+for: )10m$", r"\g<1>15m", text, count=1))
         self.assertTrue(v.eligible, v.reasons)
         v = self.eval_real(ALERTS, text.replace("bucket: \"metrics\"", "bucket: \"other\"", 1))
         self.assertFalse(v.eligible)
