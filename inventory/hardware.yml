@@ -1,0 +1,272 @@
+# Physical facts about the router (router.lab.nkontur.com): which disk sits in
+# which slot, which USB sound card is plugged into which port. See
+# inventory/README.md.
+#
+# This file is the source of truth. Generated from it (ci/facts/render.py,
+# CI fails when a generated file is stale):
+#   base/udev/85-my-usb-audio.rules   audio_zones
+#   base/disk/crypttab                disks[].luks
+# Checked against the live router by the scheduled facts:drift job
+# (ci/facts/drift.py): disks in their slots with the declared model, serial
+# suffix, LUKS mapper and pool membership; sound cards on their ports.
+#
+# The repo is mirrored publicly: disks carry only the last 4 characters of
+# their serial number (enough to tell two disks of the same model apart, and
+# to match `lsblk -o SERIAL`).
+
+# ---------------------------------------------------------------------------
+# Disk controllers. `by_path` is the /dev/disk/by-path name of a slot without
+# its slot suffix: the slot `hba/phy12` is
+# /dev/disk/by-path/pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy12-lun-0.
+# ---------------------------------------------------------------------------
+disk_controllers:
+  hba:
+    desc: LSI SAS9211-8i (SAS2008), internal ports to the chassis backplane expander (24 bays)
+    by_path: "pci-0000:06:00.0-sas-exp0x5003048001134f3f-{slot}-lun-0"
+  ahci:
+    desc: Motherboard SATA (Intel C600 AHCI, X9DR3-F), shares cabling/power with the 870 EVO
+    by_path: "pci-0000:00:1f.2-{slot}"
+
+# ---------------------------------------------------------------------------
+# Disks. role: data (mpool member), boot (root fs), persistent_data (Docker
+# data-root and every container's config), retired (in a slot, out of the
+# pool), empty (slot with nothing detected).
+# luks.mapper/uuid render base/disk/crypttab; key file and options default
+# to /etc/password_file.txt and `luks`.
+# known_issue: shown next to any drift the disk causes. It does not silence
+# the drift check.
+# ---------------------------------------------------------------------------
+disks:
+  # Motherboard SATA
+  - slot: ahci/ata-1
+    model: WD260KFGX
+    serial_suffix: NA4M
+    role: data
+    luks: {mapper: dev17, uuid: f0924ba1-d8bb-440d-b5cf-904b5ae54ce7}
+    zpool: {pool: mpool, vdev: raidz2-0}
+    note: >-
+      Replacement for dev22 (zpool replace, 2026-10-18). Dropped off the bus
+      on 2026-11-05 with the 870 EVO (same controller), resilvered back in
+      2026-11-06.
+  - slot: ahci/ata-2
+    model: CT480BX500SSD1
+    serial_suffix: E56F
+    role: boot
+    holds: [/, /boot, swap]
+    luks:
+      mapper: sda5_crypt
+      uuid: 3b0b75c5-603e-47a6-bb4c-2fa1453da1b2
+      partition: 5
+      keyfile: none
+      options: luks,discard
+    note: Unlocked by passphrase at boot (key file none), docs/POWER.md.
+  - slot: ahci/ata-4
+    model: Samsung SSD 870 EVO 1TB
+    serial_suffix: 068K
+    role: persistent_data
+    holds: [/persistent_data]
+    luks: {mapper: persistent_data, uuid: 4cf4756a-0b62-4fd4-b435-81e0f1e3809f}
+    note: >-
+      Single disk, no redundancy: Docker data-root and every app config. If it
+      drops, every container (Grafana alerting included) goes with it; the
+      dead-man check (docs/DEADMAN.md) is what notices. Vanished from the bus
+      2026-11-05 03:01, back after a reseat, live mapper reopened as
+      persistent_data_r until the next reboot.
+
+  # LSI HBA -> backplane expander. Slots are expander phys (phy12-phy35).
+  - {slot: hba/phy12, model: WD240KFGX, serial_suffix: V9XN, role: data,
+     luks: {mapper: dev1, uuid: b5912d16-d82e-4c5e-a8c1-597a6b8ff02d}, zpool: {pool: mpool, vdev: raidz2-0}}
+  - slot: hba/phy13
+    model: WD201KFGX
+    serial_suffix: SGBR
+    role: data
+    luks: {mapper: dev12, uuid: c03b38b6-959e-49c8-a712-0cd0ccdfff8f}
+    zpool: {pool: mpool, vdev: raidz2-1}
+    known_issue: >-
+      FAULTED in mpool (55 read errors, SMART clean): suspect cable or slot,
+      not the disk. Replacement pending; no free bay.
+  - {slot: hba/phy14, model: WD240KFGX, serial_suffix: PVPB, role: data,
+     luks: {mapper: dev3, uuid: 9f2b9dd5-bae9-46fa-8bc9-f5a7a68dce8c}, zpool: {pool: mpool, vdev: raidz2-0}}
+  - {slot: hba/phy15, model: WD240KFGX, serial_suffix: BTBB, role: data,
+     luks: {mapper: dev4, uuid: 2cf4cf51-5504-4467-abe2-6602fcb1fdf5}, zpool: {pool: mpool, vdev: raidz2-0}}
+  - {slot: hba/phy16, model: WD240KFGX, serial_suffix: ZSXM, role: data,
+     luks: {mapper: dev5, uuid: d211aeca-2e71-4051-b292-8b8106e8d8f9}, zpool: {pool: mpool, vdev: raidz2-0}}
+  - {slot: hba/phy17, model: WD100EMAZ, serial_suffix: LTWM, role: data,
+     luks: {mapper: dev6, uuid: ffdb5527-8df5-44ca-b80d-8ecb255b7321}, zpool: {pool: mpool, vdev: raidz2-2}}
+  - {slot: hba/phy18, model: WD120EMFZ, serial_suffix: ALLU, role: data,
+     luks: {mapper: dev13, uuid: f357299b-67ae-4ef0-a9a9-f2751c9f6689}, zpool: {pool: mpool, vdev: raidz2-2}}
+  - slot: hba/phy19
+    model: WD240KFGX
+    serial_suffix: X6RK
+    role: retired
+    luks: {mapper: dev22, crypttab: false}
+    note: >-
+      Ex-dev22, replaced in mpool by dev17 (2026-10-18); pending sectors, RMA
+      candidate. Not in crypttab; still in its bay.
+  - {slot: hba/phy20, model: WD201KFGX, serial_suffix: S6SN, role: data,
+     luks: {mapper: dev11, uuid: 87da6c73-80de-4834-b316-0e94bb8203c4}, zpool: {pool: mpool, vdev: raidz2-1}}
+  - {slot: hba/phy21, model: WD120EMFZ, serial_suffix: 1J2L, role: data,
+     luks: {mapper: dev9, uuid: c571cb2a-447c-44c3-b4d9-8b2d0f2ef765}, zpool: {pool: mpool, vdev: raidz2-2}}
+  - slot: hba/phy22
+    role: empty
+    note: No disk detected on this expander phy (2026-11-07). Which front bay it is has not been traced.
+  - {slot: hba/phy23, model: WD260KFGX, serial_suffix: 26HD, role: data,
+     luks: {mapper: dev8, uuid: 79437d5c-389d-45c0-91d3-40aa6297bf23}, zpool: {pool: mpool, vdev: raidz2-0}}
+  - {slot: hba/phy24, model: WD201KFGX, serial_suffix: PV6R, role: data,
+     luks: {mapper: dev18, uuid: ce52e619-be52-443a-88b3-c10478633967}, zpool: {pool: mpool, vdev: raidz2-1}}
+  - {slot: hba/phy25, model: WD260KFGX, serial_suffix: L22M, role: data,
+     luks: {mapper: dev7, uuid: c1d8d640-7a62-401e-9c36-d9c163a2d760}, zpool: {pool: mpool, vdev: raidz2-0}}
+  - {slot: hba/phy26, model: WD140EDGZ, serial_suffix: RGVC, role: data,
+     luks: {mapper: dev10, uuid: 3f255066-9ba7-44ed-b153-3c23831b5e3e}, zpool: {pool: mpool, vdev: raidz2-2}}
+  - {slot: hba/phy27, model: WD120EDBZ, serial_suffix: 67AF, role: data,
+     luks: {mapper: dev15, uuid: e26f4b64-dfff-4d6a-ae5b-16f0676b3b61}, zpool: {pool: mpool, vdev: raidz2-2}}
+  - {slot: hba/phy28, model: WD140EDGZ, serial_suffix: URHC, role: data,
+     luks: {mapper: dev16, uuid: a7d54313-0f26-4ce8-aa8a-0f4fe0fb323d}, zpool: {pool: mpool, vdev: raidz2-2}}
+  - {slot: hba/phy29, model: WD120EMFZ, serial_suffix: 30WJ, role: data,
+     luks: {mapper: dev14, uuid: 277935f4-4284-470f-ac2b-b76e4078faae}, zpool: {pool: mpool, vdev: raidz2-2}}
+  - {slot: hba/phy30, model: WD201KFGX, serial_suffix: S4ER, role: data,
+     luks: {mapper: dev24, uuid: 48c4588e-0122-42ab-8e38-7156c89cd14a}, zpool: {pool: mpool, vdev: raidz2-1}}
+  - {slot: hba/phy31, model: WD201KFGX, serial_suffix: S22R, role: data,
+     luks: {mapper: dev23, uuid: b88a723b-0cf5-445f-ae96-607e08774819}, zpool: {pool: mpool, vdev: raidz2-1}}
+  - {slot: hba/phy32, model: WD240KFGX, serial_suffix: VKDL, role: data,
+     luks: {mapper: dev2, uuid: 5faf889c-7ec0-4f12-abe8-baa36a4a22e4}, zpool: {pool: mpool, vdev: raidz2-0}}
+  - {slot: hba/phy33, model: WD201KFGX, serial_suffix: SEHR, role: data,
+     luks: {mapper: dev21, uuid: 811a5d3a-d420-43a3-9e53-c7f6ae2abcd3}, zpool: {pool: mpool, vdev: raidz2-1}}
+  - {slot: hba/phy34, model: WD221KFGX, serial_suffix: 1J1S, role: data,
+     luks: {mapper: dev20, uuid: 8f89d266-da67-4fca-b3da-f3476616d505}, zpool: {pool: mpool, vdev: raidz2-1}}
+  - {slot: hba/phy35, model: WD201KFGX, serial_suffix: WXJR, role: data,
+     luks: {mapper: dev19, uuid: 26e02b46-c04c-4c4c-8cec-c39cf0aa0dee}, zpool: {pool: mpool, vdev: raidz2-1}}
+
+# Pools: the drift check expects every vdev and the pool ONLINE.
+zpools:
+  mpool:
+    vdevs: [raidz2-0, raidz2-1, raidz2-2]
+
+# ---------------------------------------------------------------------------
+# USB audio: one C-Media USB sound card per Snapcast zone. The cards have no
+# serial number, so the physical port is the only thing udev can name them
+# by; a card moved to another port comes up as `Device`, `Device_1`, ... and
+# its zone's snapclient cannot open plughw:CARD=<id> (issue #132).
+#
+# Port syntax is the kernel's: <bus>-<port>[.<port>...], as in
+# /sys/bus/usb/devices and `lsusb -t`. `interface` is the audio interface
+# number (the rules match <port>:1.<interface>).
+# ---------------------------------------------------------------------------
+usb_controllers:
+  pcie:
+    desc: Fresco Logic FL1100 USB 3.0 PCIe card
+    pci_path: pci0000:80/0000:80:02.0/0000:82:00.0
+    bus: 3
+  mobo_ehci1:
+    desc: motherboard USB 2.0, Intel C600 EHCI 1
+    pci_path: pci0000:00/0000:00:1d.0
+    bus: 2
+
+# Order is the rule order in 85-my-usb-audio.rules.
+audio_zones:
+  - {id: Main_Bedroom, snapclient: main_bedroom, controller: mobo_ehci1, port: 2-1.3}
+  - {id: Office, snapclient: office, controller: pcie, port: 3-2.3.2}
+  - {id: Kitchen, snapclient: kitchen, controller: pcie, port: 3-2.3}
+  - {id: Main_Bathroom, snapclient: main_bathroom, controller: pcie, port: 3-2.2}
+  - {id: Guest_Bathroom, snapclient: guest_bathroom, controller: pcie, port: 3-4}
+  - {id: Guest_Bedroom, snapclient: guest_bedroom, controller: pcie, port: 3-3}
+  - {id: Global, snapclient: global, controller: mobo_ehci1, port: 2-1.3.4}
+
+# Observed, not desired (checked 2026-11-07): only Global is where the rules
+# expect it. Two more cards sit on the motherboard hub at 2-1.3.2 and
+# 2-1.3.3 and come up unnamed (`Device`, `Device_1`); nothing is plugged into
+# the PCIe card (hub 3-2 is there, empty). 2-1.3 is itself a hub, so the
+# Main_Bedroom rule cannot match as written. Which zones the two cards belong
+# to is not known; until that is traced, the drift check reports them, and
+# the six zones stay in snapclient_disabled_zones (ansible/inventory.yml).
+
+# ---------------------------------------------------------------------------
+# Whole-house audio, end to end (issue #154 plans the replacement):
+#
+#   speaker zone (amps[].zones) -> amp input (amps[].inputs) -> stream
+#   (audio_zones[].id, one Snapcast zone / Spotify Connect target) -> output
+#   (today: the zone's USB card, audio_zones[].controller/port)
+#
+# When #154's multichannel interface arrives, a stream's output becomes an
+# output pair (`output: {interface: <card>, pair: <n>}` in place of
+# controller/port); amps, inputs and speaker zones keep this shape.
+#
+# Monoprice 10761 6-zone amps, each a standalone unit on its own Prolific
+# USB-serial adapter. Home Assistant's monoprice integration talks to them;
+# `ha_port` is the path inside the homeassistant container (its config entry
+# is named after it), `serial_by_id` the host device mapped there. facts:test
+# checks docker/docker-compose.yml maps exactly these. A zone can only play
+# its own amp's inputs; keep a room's speakers on one amp.
+# inputs: number -> {label: name in HA, stream: the audio_zones id meant to
+# feed it, judged from the label; RCA wiring not traced}.
+# zones: amp zone number -> {name: HA friendly name, entity}.
+# ---------------------------------------------------------------------------
+amps:
+  A:
+    model: Monoprice 10761
+    serial_by_id: usb-Prolific_Technology_Inc._USB-Serial_Controller_ETDRb11A920-if00-port0
+    ha_port: /dev/ttyUSB0
+    inputs:
+      1: {label: Global, stream: Global}
+      2: {label: Guest Bathroom, stream: Guest_Bathroom}
+      3: {label: Guest Bedroom, stream: Guest_Bedroom}
+      4: {label: Office, stream: Office}
+      5: {label: c}
+      6: {label: d}
+    zones:
+      11: {name: Living Room Speakers 2, entity: media_player.zone_11}
+      12: {name: Dining Room Speakers, entity: media_player.zone_12}
+      13: {name: Guest Bathroom Speakers, entity: media_player.zone_13}
+      14: {name: Deck Speakers, entity: media_player.zone_5}
+      15: {name: Kitchen Speakers, entity: media_player.zone_15}
+      16: {name: Living Room Speakers 1, entity: media_player.zone_16}
+  B:
+    model: Monoprice 10761
+    serial_by_id: usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0
+    ha_port: /dev/ttyUSB1
+    inputs:
+      1: {label: Global, stream: Global}
+      2: {label: test2}
+      3: {label: test3}
+      4: {label: test4}
+      5: {label: test5}
+      6: {label: test6}
+    zones:
+      11: {name: Main Bathroom Speakers, entity: media_player.zone_11_2}
+      12: {name: Gym Speakers, entity: media_player.zone_12_2}
+      13: {name: Front Basement Hallway Speakers, entity: media_player.zone_13_2}
+      14: {name: Ping Pong Speakers, entity: media_player.zone_14}
+      15: {name: Back Basement Hallways Speakers, entity: media_player.zone_15_2}
+      16: {name: Office Speakers, entity: media_player.zone_16_2}
+    note: >-
+      Office Speakers (zone 16) sit on B, but the Office stream is labelled on
+      A's input 4, so the Office speakers can only play Global today (#154).
+  C:
+    model: Monoprice 10761
+    connected: false
+    note: >-
+      Not connected yet. Planned (#154): Office, Main Bedroom, Guest Bedroom,
+      maybe Movie Room, on a third USB-serial adapter.
+
+# ---------------------------------------------------------------------------
+# Network-attached devices with no health signal of their own. Addresses and
+# MACs live in ansible/inventory.yml (named here by variable); probes in
+# inventory/dependencies.yml. `link` is the path from the core switch, as far
+# as it has been traced (S2500 FDB over SNMP, read-only).
+# ---------------------------------------------------------------------------
+network_devices:
+  back_camera:
+    desc: Amcrest back camera (Home Assistant camera.10_6_128_14)
+    address_var: back_camera_address
+    mac_var: back_camera_mac
+    vlan: 6
+    power: PoE
+    link: S2500 gigabitethernet0/0/47 -> upstairs PoE switch (IoT; NETGEAR, not managed in networking/), port on that switch not traced
+    note: Offline 2026-10-21 to 2026-11-08; back after its PoE cable was reseated at the switch.
+  doorbell:
+    desc: Amcrest doorbell (amcrest2mqtt)
+    address_var: doorbell_address
+    mac_var: doorbell_mac
+    vlan: 6
+    link: not traced (its MAC is not in the S2500 forwarding table while it is offline)
+    known_issue: "Unreachable since 2026-07-13 (issue #123); hardware fix pending."

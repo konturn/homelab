@@ -1,3 +1,6 @@
+# GENERATED from inventory/hardware.yml (audio_zones) by ci/facts/render.py.
+# Do not edit: change the data and run `python3 ci/facts/render.py`.
+# Names each zone's USB sound card by the USB port it is plugged into.
 SUBSYSTEM!="sound", GOTO="my_usb_audio_end"
 ACTION!="add", GOTO="my_usb_audio_end"
 

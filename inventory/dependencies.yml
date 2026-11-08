@@ -1,0 +1,140 @@
+# What depends on what, for the critical chain. See inventory/README.md.
+#
+# Read by:
+#   ci/facts/drift.py   (scheduled facts:drift job) probes every node that
+#                        has a probe and reports the ones that are down,
+#                        with what depends on them
+#
+# A node:
+#   kind:   container | systemd | mount | zpool | device | endpoint | host | process
+#   host:   inventory short name (router, zwave, ...); default router
+#   desc:   one line
+#   needs:  nodes it cannot work without
+#   probe:  how the drift check tests it, run on the router:
+#             container: <name>        `docker inspect`: running (and healthy if it has a healthcheck)
+#             systemd: <unit>          active
+#             mount: <path>            mounted and readable
+#             zpool: <pool>            ONLINE
+#             tcp: "<host>:<port>"     TCP connect within 3s
+#             dns: {server, name}      A record from that server
+#           "{{ var }}" is replaced by the variable from ansible/inventory.yml
+#           (all.vars), so addresses live in one place.
+#   rules:  operational rules learned the hard way (shown to agents)
+#   known_issue: printed next to the node's drift; does not silence it
+#
+# Every container on the router lives on /persistent_data (it is Docker's
+# data-root), so `persistent_data` is implied for every router container and
+# is listed only where it matters for the reader.
+
+nodes:
+  # --- storage -------------------------------------------------------------
+  persistent_data:
+    kind: mount
+    desc: /persistent_data, ext4 on LUKS on the 870 EVO (inventory/hardware.yml, ahci/ata-4). Docker data-root and every app config.
+    probe: {mount: /persistent_data}
+  mpool:
+    kind: zpool
+    desc: ZFS pool (23 disks, 3x raidz2) with media, Nextcloud data, backups. Checked disk by disk in the drift report's disk section.
+
+  # --- platform: every deploy needs these -----------------------------------
+  gitlab:
+    kind: container
+    desc: GitLab, its registry and the CI pipelines.
+    needs: [persistent_data]
+    probe: {container: gitlab}
+  vault:
+    kind: container
+    desc: Vault; every deploy job logs in before it changes anything.
+    needs: [persistent_data]
+    probe: {container: vault}
+  ci_runner:
+    kind: systemd
+    desc: gitlab-runner on the router (protected runner for main/deploys, unprotected for MRs, host-network firmware runner).
+    needs: [gitlab]
+    probe: {systemd: gitlab-runner.service}
+  deploy:
+    kind: process
+    desc: Every deploy (router/zwave/satellite-2/macmini:deploy, <host>:deploy-service, the auto-merge sweep).
+    needs: [gitlab, vault, ci_runner]
+
+  # --- DNS and MQTT ---------------------------------------------------------
+  pihole:
+    kind: container
+    desc: Pi-hole, DNS for every VLAN and the tailnet.
+    probe: {container: pihole}
+  dns:
+    kind: endpoint
+    desc: DNS answers from Pi-hole.
+    needs: [pihole]
+    probe: {dns: {server: "{{ pihole_ip }}", name: router.lab.nkontur.com}}
+  mosquitto:
+    kind: container
+    desc: MQTT broker.
+    probe: {container: mosquitto}
+  mqtt:
+    kind: endpoint
+    desc: MQTT over TLS on the IoT network.
+    needs: [mosquitto]
+    probe: {tcp: "{{ mosquitto_address }}:8883"}
+  influxdb:
+    kind: container
+    desc: InfluxDB 2 (bucket metrics); telegraf metrics and Home Assistant history.
+    needs: [persistent_data]
+    probe: {container: influxdb}
+
+  # --- Zigbee ---------------------------------------------------------------
+  slzb_coordinator:
+    kind: device
+    desc: SLZB-MR1 Zigbee coordinator, network (TCP serial) attached.
+    probe: {tcp: "{{ zigbee_radio_address }}:7638"}
+  zigbee2mqtt:
+    kind: container
+    desc: Zigbee to MQTT bridge (lights). Reaches the broker by name (mqtt.lab.nkontur.com), hence dns.
+    needs: [slzb_coordinator, mqtt, dns, persistent_data]
+    probe: {container: zigbee2mqtt}
+    rules:
+      - >-
+        After an SLZB coordinator firmware update (or coordinator reboot),
+        restart zigbee2mqtt. It keeps its TCP session but receives no frames;
+        on 2026-11-07 that went unnoticed for about an hour. The Zigbee
+        silence alert watches for it.
+
+  # --- cameras (inventory/hardware.yml network_devices) --------------------
+  back_camera:
+    kind: device
+    desc: Amcrest back camera, PoE behind the upstairs IoT switch.
+    probe: {tcp: "{{ back_camera_address }}:554"}
+  doorbell:
+    kind: device
+    desc: Amcrest doorbell.
+    probe: {tcp: "{{ doorbell_address }}:80"}
+    known_issue: "Offline since 2026-07-13 (issue #123); hardware fix pending."
+  amcrest2mqtt:
+    kind: container
+    desc: Doorbell events to MQTT.
+    needs: [doorbell, mqtt]
+    probe: {container: amcrest2mqtt}
+
+  # --- Z-Wave (on the zwave Pi) ---------------------------------------------
+  zwave_pi:
+    kind: host
+    host: zwave
+    desc: Raspberry Pi in the movie room.
+  zwave_stick:
+    kind: device
+    host: zwave
+    desc: Zooz ZST10 700 USB stick, /dev/serial/by-id/usb-Silicon_Labs_Zooz_ZST10_700_Z-Wave_Stick_0001-if00-port0.
+    needs: [zwave_pi]
+  zwave_js:
+    kind: container
+    host: zwave
+    desc: Z-Wave JS UI (container zwavejs2mqtt); Home Assistant connects to its websocket on port 3000.
+    needs: [zwave_pi, zwave_stick]
+    probe: {tcp: "{{ zwave_address }}:3000"}
+
+  # --- Home Assistant -------------------------------------------------------
+  homeassistant:
+    kind: container
+    desc: Home Assistant (recorder is local SQLite; history also goes to InfluxDB).
+    needs: [mqtt, zwave_js, influxdb, dns, persistent_data]
+    probe: {container: homeassistant}

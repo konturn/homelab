@@ -1,0 +1,886 @@
+{
+ "containers": {
+  "ambientweather": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "amcrest2mqtt": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "anomaly-detector": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "audioserve": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "beautiful_darwin": {
+   "exit_code": 100,
+   "health": null,
+   "state": "exited"
+  },
+  "beautiful_murdock": {
+   "exit_code": 1,
+   "health": null,
+   "state": "exited"
+  },
+  "bitwarden": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "blissful_swanson": {
+   "exit_code": 100,
+   "health": null,
+   "state": "exited"
+  },
+  "bluebubbles-relay": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "chromium-browser": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "deluge": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "diagram": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "docker-socket-proxy": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "docker-socket-proxy-ro": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "eager_kepler": {
+   "exit_code": 1,
+   "health": null,
+   "state": "exited"
+  },
+  "ecstatic_poitras": {
+   "exit_code": 100,
+   "health": null,
+   "state": "exited"
+  },
+  "elastic_chatterjee": {
+   "exit_code": 101,
+   "health": null,
+   "state": "exited"
+  },
+  "exciting_bardeen": {
+   "exit_code": 4,
+   "health": null,
+   "state": "exited"
+  },
+  "funny_lamarr": {
+   "exit_code": 100,
+   "health": null,
+   "state": "exited"
+  },
+  "gitlab": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "grafana": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "headway-frontend": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "headway-frontend-init": {
+   "exit_code": 0,
+   "health": null,
+   "state": "exited"
+  },
+  "headway-travelmux-init": {
+   "exit_code": 0,
+   "health": null,
+   "state": "exited"
+  },
+  "homeassistant": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "hopeful_shirley": {
+   "exit_code": 100,
+   "health": null,
+   "state": "exited"
+  },
+  "infallible_mclean": {
+   "exit_code": 1,
+   "health": null,
+   "state": "exited"
+  },
+  "influxdb": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "interesting_swanson": {
+   "exit_code": 100,
+   "health": null,
+   "state": "exited"
+  },
+  "iot_nginx": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "iperf3": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "jackett": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "jit-approval-svc": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "keen_keldysh": {
+   "exit_code": 100,
+   "health": null,
+   "state": "exited"
+  },
+  "lab_nginx": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "lidarr": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "loki": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "mopidy": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "mosquitto": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "navidrome": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "nextcloud": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "nextcloud_database": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "nginx": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "nostalgic_newton": {
+   "exit_code": 4,
+   "health": null,
+   "state": "exited"
+  },
+  "novnc-dev1": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "novnc-dev2": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "novnc-dev3": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "nzbget": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "ollama": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "ombi": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "openclaw-gateway": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "otel-collector": {
+   "exit_code": null,
+   "health": null,
+   "state": "running"
+  },
+  "paperless-ai": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "paperless-ngx": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "paperless-redis": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "pelias-api": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "pelias-config-init": {
+   "exit_code": 0,
+   "health": null,
+   "state": "exited"
+  },
+  "pelias-elasticsearch": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "pelias-elasticsearch-init": {
+   "exit_code": 0,
+   "health": null,
+   "state": "exited"
+  },
+  "pelias-libpostal": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "pelias-placeholder": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "pelias-placeholder-init": {
+   "exit_code": 0,
+   "health": null,
+   "state": "exited"
+  },
+  "pihole": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "plex": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "promtail": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "prowlarr": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "radarr": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "romantic_curie": {
+   "exit_code": 100,
+   "health": null,
+   "state": "exited"
+  },
+  "snapclient_global": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "snapserver": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "sonarr": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "suspicious_spence": {
+   "exit_code": 4,
+   "health": null,
+   "state": "exited"
+  },
+  "tautulli": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "tempo": {
+   "exit_code": null,
+   "health": null,
+   "state": "running"
+  },
+  "tender_mestorf": {
+   "exit_code": 101,
+   "health": null,
+   "state": "exited"
+  },
+  "thirsty_chaplygin": {
+   "exit_code": 100,
+   "health": null,
+   "state": "exited"
+  },
+  "tileserver": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "travelmux": {
+   "exit_code": null,
+   "health": null,
+   "state": "running"
+  },
+  "unruffled_ellis": {
+   "exit_code": 100,
+   "health": null,
+   "state": "exited"
+  },
+  "valhalla": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "vault": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  },
+  "wordpress": {
+   "exit_code": 0,
+   "health": null,
+   "state": "exited"
+  },
+  "wordpress_db": {
+   "exit_code": 0,
+   "health": null,
+   "state": "exited"
+  },
+  "zen_merkle": {
+   "exit_code": 100,
+   "health": null,
+   "state": "exited"
+  },
+  "zigbee2mqtt": {
+   "exit_code": null,
+   "health": "healthy",
+   "state": "running"
+  }
+ },
+ "disks": {
+  "pci-0000:00:1f.2-ata-1": {
+   "dev": "sdab",
+   "mappers": [
+    "dev17"
+   ],
+   "model": "WDC WD260KFGX-68",
+   "serial_suffix": "NA4M"
+  },
+  "pci-0000:00:1f.2-ata-2": {
+   "dev": "sdb",
+   "mappers": [
+    "sda5_crypt"
+   ],
+   "model": "CT480BX500SSD1",
+   "serial_suffix": "E56F"
+  },
+  "pci-0000:00:1f.2-ata-4": {
+   "dev": "sdaa",
+   "mappers": [
+    "persistent_data_r"
+   ],
+   "model": "Samsung SSD 870",
+   "serial_suffix": "068K"
+  },
+  "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy12-lun-0": {
+   "dev": "sdd",
+   "mappers": [
+    "dev1"
+   ],
+   "model": "WDC WD240KFGX-68",
+   "serial_suffix": "V9XN"
+  },
+  "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy13-lun-0": {
+   "dev": "sde",
+   "mappers": [
+    "dev12"
+   ],
+   "model": "WDC WD201KFGX-68",
+   "serial_suffix": "SGBR"
+  },
+  "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy14-lun-0": {
+   "dev": "sdf",
+   "mappers": [
+    "dev3"
+   ],
+   "model": "WDC WD240KFGX-68",
+   "serial_suffix": "PVPB"
+  },
+  "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy15-lun-0": {
+   "dev": "sdg",
+   "mappers": [
+    "dev4"
+   ],
+   "model": "WDC WD240KFGX-68",
+   "serial_suffix": "BTBB"
+  },
+  "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy16-lun-0": {
+   "dev": "sdh",
+   "mappers": [
+    "dev5"
+   ],
+   "model": "WDC WD240KFGX-68",
+   "serial_suffix": "ZSXM"
+  },
+  "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy17-lun-0": {
+   "dev": "sdi",
+   "mappers": [
+    "dev6"
+   ],
+   "model": "WDC WD100EMAZ-00",
+   "serial_suffix": "LTWM"
+  },
+  "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy18-lun-0": {
+   "dev": "sdj",
+   "mappers": [
+    "dev13"
+   ],
+   "model": "WDC WD120EMFZ-11",
+   "serial_suffix": "ALLU"
+  },
+  "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy19-lun-0": {
+   "dev": "sdk",
+   "mappers": [
+    "dev22"
+   ],
+   "model": "WDC WD240KFGX-68",
+   "serial_suffix": "X6RK"
+  },
+  "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy20-lun-0": {
+   "dev": "sdl",
+   "mappers": [
+    "dev11"
+   ],
+   "model": "WDC WD201KFGX-68",
+   "serial_suffix": "S6SN"
+  },
+  "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy21-lun-0": {
+   "dev": "sdm",
+   "mappers": [
+    "dev9"
+   ],
+   "model": "WDC WD120EMFZ-11",
+   "serial_suffix": "1J2L"
+  },
+  "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy23-lun-0": {
+   "dev": "sdn",
+   "mappers": [
+    "dev8"
+   ],
+   "model": "WDC WD260KFGX-68",
+   "serial_suffix": "26HD"
+  },
+  "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy24-lun-0": {
+   "dev": "sdo",
+   "mappers": [
+    "dev18"
+   ],
+   "model": "WDC WD201KFGX-68",
+   "serial_suffix": "PV6R"
+  },
+  "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy25-lun-0": {
+   "dev": "sdp",
+   "mappers": [
+    "dev7"
+   ],
+   "model": "WDC WD260KFGX-68",
+   "serial_suffix": "L22M"
+  },
+  "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy26-lun-0": {
+   "dev": "sdq",
+   "mappers": [
+    "dev10"
+   ],
+   "model": "WDC WD140EDGZ-11",
+   "serial_suffix": "RGVC"
+  },
+  "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy27-lun-0": {
+   "dev": "sdr",
+   "mappers": [
+    "dev15"
+   ],
+   "model": "WDC WD120EDBZ-11",
+   "serial_suffix": "67AF"
+  },
+  "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy28-lun-0": {
+   "dev": "sds",
+   "mappers": [
+    "dev16"
+   ],
+   "model": "WDC WD140EDGZ-11",
+   "serial_suffix": "URHC"
+  },
+  "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy29-lun-0": {
+   "dev": "sdt",
+   "mappers": [
+    "dev14"
+   ],
+   "model": "WDC WD120EMFZ-11",
+   "serial_suffix": "30WJ"
+  },
+  "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy30-lun-0": {
+   "dev": "sdu",
+   "mappers": [
+    "dev24"
+   ],
+   "model": "WDC WD201KFGX-68",
+   "serial_suffix": "S4ER"
+  },
+  "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy31-lun-0": {
+   "dev": "sdv",
+   "mappers": [
+    "dev23"
+   ],
+   "model": "WDC WD201KFGX-68",
+   "serial_suffix": "S22R"
+  },
+  "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy32-lun-0": {
+   "dev": "sdw",
+   "mappers": [
+    "dev2"
+   ],
+   "model": "WDC WD240KFGX-68",
+   "serial_suffix": "VKDL"
+  },
+  "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy33-lun-0": {
+   "dev": "sdx",
+   "mappers": [
+    "dev21"
+   ],
+   "model": "WDC WD201KFGX-68",
+   "serial_suffix": "SEHR"
+  },
+  "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy34-lun-0": {
+   "dev": "sdy",
+   "mappers": [
+    "dev20"
+   ],
+   "model": "WDC WD221KFGX-68",
+   "serial_suffix": "1J1S"
+  },
+  "pci-0000:06:00.0-sas-exp0x5003048001134f3f-phy35-lun-0": {
+   "dev": "sdz",
+   "mappers": [
+    "dev19"
+   ],
+   "model": "WDC WD201KFGX-68",
+   "serial_suffix": "WXJR"
+  }
+ },
+ "errors": [],
+ "probes": {
+  "amcrest2mqtt": {
+   "detail": "running, healthy",
+   "ok": true
+  },
+  "back_camera": {
+   "detail": "connect ok",
+   "ok": true
+  },
+  "ci_runner": {
+   "detail": "active",
+   "ok": true
+  },
+  "dns": {
+   "detail": "1 answer(s)",
+   "ok": true
+  },
+  "doorbell": {
+   "detail": "connect failed: timed out",
+   "ok": false
+  },
+  "gitlab": {
+   "detail": "running, healthy",
+   "ok": true
+  },
+  "homeassistant": {
+   "detail": "running, healthy",
+   "ok": true
+  },
+  "influxdb": {
+   "detail": "running, healthy",
+   "ok": true
+  },
+  "mosquitto": {
+   "detail": "running, healthy",
+   "ok": true
+  },
+  "mqtt": {
+   "detail": "connect ok",
+   "ok": true
+  },
+  "persistent_data": {
+   "detail": "mounted from /dev/mapper/persistent_data_r",
+   "ok": true
+  },
+  "pihole": {
+   "detail": "running, healthy",
+   "ok": true
+  },
+  "slzb_coordinator": {
+   "detail": "connect ok",
+   "ok": true
+  },
+  "vault": {
+   "detail": "running, healthy",
+   "ok": true
+  },
+  "zigbee2mqtt": {
+   "detail": "running, healthy",
+   "ok": true
+  },
+  "zwave_js": {
+   "detail": "connect ok",
+   "ok": true
+  }
+ },
+ "serial_by_id": {
+  "usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0": "ttyUSB0",
+  "usb-Prolific_Technology_Inc._USB-Serial_Controller_ETDRb11A920-if00-port0": "ttyUSB1"
+ },
+ "sound_cards": [
+  {
+   "card": "card0",
+   "devpath": "/devices/platform/snd_aloop.0/sound/card0",
+   "id": "Loopback",
+   "usb_port": null
+  },
+  {
+   "card": "card1",
+   "devpath": "/devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1.3/2-1.3.2/2-1.3.2:1.0/sound/card1",
+   "id": "Device",
+   "usb_port": "2-1.3.2"
+  },
+  {
+   "card": "card2",
+   "devpath": "/devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1.3/2-1.3.3/2-1.3.3:1.0/sound/card2",
+   "id": "Device_1",
+   "usb_port": "2-1.3.3"
+  },
+  {
+   "card": "card3",
+   "devpath": "/devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1.3/2-1.3.4/2-1.3.4:1.0/sound/card3",
+   "id": "Global",
+   "usb_port": "2-1.3.4"
+  },
+  {
+   "card": "card4",
+   "devpath": "/devices/pci0000:80/0000:80:03.0/0000:83:00.1/sound/card4",
+   "id": "NVidia",
+   "usb_port": null
+  }
+ ],
+ "usb_ports": {
+  "1-1": "hub",
+  "1-1.6": "device",
+  "2-1": "hub",
+  "2-1.1": "hub",
+  "2-1.1.1": "device",
+  "2-1.1.2": "device",
+  "2-1.2": "device",
+  "2-1.3": "hub",
+  "2-1.3.2": "device",
+  "2-1.3.3": "device",
+  "2-1.3.4": "device",
+  "2-1.4": "device",
+  "3-2": "hub",
+  "4-2": "hub",
+  "4-2.4": "device"
+ },
+ "zpools": {
+  "mpool": {
+   "leaves": {
+    "dev1": {
+     "errors": "0 0 0",
+     "state": "ONLINE",
+     "vdev": "raidz2-0"
+    },
+    "dev10": {
+     "errors": "0 0 0",
+     "state": "ONLINE",
+     "vdev": "raidz2-2"
+    },
+    "dev11": {
+     "errors": "0 0 0",
+     "state": "ONLINE",
+     "vdev": "raidz2-1"
+    },
+    "dev12": {
+     "errors": "55 0 0 too many errors",
+     "state": "FAULTED",
+     "vdev": "raidz2-1"
+    },
+    "dev13": {
+     "errors": "0 0 0",
+     "state": "ONLINE",
+     "vdev": "raidz2-2"
+    },
+    "dev14": {
+     "errors": "0 0 0",
+     "state": "ONLINE",
+     "vdev": "raidz2-2"
+    },
+    "dev15": {
+     "errors": "0 0 0",
+     "state": "ONLINE",
+     "vdev": "raidz2-2"
+    },
+    "dev16": {
+     "errors": "0 0 0",
+     "state": "ONLINE",
+     "vdev": "raidz2-2"
+    },
+    "dev17": {
+     "errors": "0 0 0",
+     "state": "ONLINE",
+     "vdev": "raidz2-0"
+    },
+    "dev18": {
+     "errors": "0 0 0",
+     "state": "ONLINE",
+     "vdev": "raidz2-1"
+    },
+    "dev19": {
+     "errors": "0 0 0",
+     "state": "ONLINE",
+     "vdev": "raidz2-1"
+    },
+    "dev2": {
+     "errors": "0 0 0",
+     "state": "ONLINE",
+     "vdev": "raidz2-0"
+    },
+    "dev20": {
+     "errors": "0 0 0",
+     "state": "ONLINE",
+     "vdev": "raidz2-1"
+    },
+    "dev21": {
+     "errors": "0 0 0",
+     "state": "ONLINE",
+     "vdev": "raidz2-1"
+    },
+    "dev23": {
+     "errors": "0 0 0",
+     "state": "ONLINE",
+     "vdev": "raidz2-1"
+    },
+    "dev24": {
+     "errors": "0 0 0",
+     "state": "ONLINE",
+     "vdev": "raidz2-1"
+    },
+    "dev3": {
+     "errors": "0 0 0",
+     "state": "ONLINE",
+     "vdev": "raidz2-0"
+    },
+    "dev4": {
+     "errors": "0 0 0",
+     "state": "ONLINE",
+     "vdev": "raidz2-0"
+    },
+    "dev5": {
+     "errors": "0 0 0",
+     "state": "ONLINE",
+     "vdev": "raidz2-0"
+    },
+    "dev6": {
+     "errors": "0 0 0",
+     "state": "ONLINE",
+     "vdev": "raidz2-2"
+    },
+    "dev7": {
+     "errors": "0 0 0",
+     "state": "ONLINE",
+     "vdev": "raidz2-0"
+    },
+    "dev8": {
+     "errors": "0 0 0",
+     "state": "ONLINE",
+     "vdev": "raidz2-0"
+    },
+    "dev9": {
+     "errors": "0 0 0",
+     "state": "ONLINE",
+     "vdev": "raidz2-2"
+    }
+   },
+   "state": "DEGRADED",
+   "vdevs": {
+    "raidz2-0": "ONLINE",
+    "raidz2-1": "DEGRADED",
+    "raidz2-2": "ONLINE"
+   }
+  }
+ }
+}

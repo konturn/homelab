@@ -1,3 +1,5 @@
+# GENERATED from inventory/hardware.yml (disks[].luks) by ci/facts/render.py.
+# Do not edit: change the data and run `python3 ci/facts/render.py`.
 sda5_crypt UUID=3b0b75c5-603e-47a6-bb4c-2fa1453da1b2 none luks,discard
 persistent_data UUID=4cf4756a-0b62-4fd4-b435-81e0f1e3809f /etc/password_file.txt luks
 dev1 UUID=b5912d16-d82e-4c5e-a8c1-597a6b8ff02d /etc/password_file.txt luks
