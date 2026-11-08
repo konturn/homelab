@@ -34,7 +34,7 @@ When a deploy changes any of a container's config files, the container is restar
 All third-party Docker images are pinned to SHA256 digests for reproducible deploys. Format: `image:tag@sha256:xxxx`.
 
 **Exceptions (NOT pinned):**
-- `gitlab-registry.lab.nkontur.com` images (snapcast, snapclient, amcrest2mqtt, openclaw) — built in CI, pinning would break deploys
+- `gitlab-registry.lab.nkontur.com` images (nginx, snapcast, snapclient, amcrest2mqtt, jit-approval-svc, anomaly-detector, novnc, chromium-browser, openclaw) — built in CI, pinning would break deploys
 - Images using Jinja2 template variables (e.g., `{{ openclaw_image_tag }}`)
 
 Pin the **manifest-list (index) digest**, never a platform-specific one. An index
@@ -67,14 +67,15 @@ on both Pis (see MR fixing it, 2026-09-01).
 **Verifying a pin is not architecture-locked:** fetch the manifest by digest and check
 `.mediaType`. It must be an `...index.v1+json` or `...manifest.list.v2+json`. A bare
 `...manifest.v2+json` / `...image.manifest.v1+json` is a single-platform pin and will
-break any non-amd64 host. `skills/image-update/scripts/check-updates.sh` already
-resolves index digests correctly; this rule is for manual pins.
+break any non-amd64 host. Renovate (docs/RENOVATE.md) already pins index
+digests; this rule is for manual pins.
 
 ## Secrets
 
 - Never commit cleartext secrets
-- Use Jinja2 env lookups: `{{ lookup('env', 'SECRET_NAME') }}`
-- GitLab CI provides secrets as environment variables
+- Secrets live in Vault: add the path and field to `vault_secret_paths` in
+  `ansible/roles/fetch-vault-secrets/defaults/main.yml`, which turns it into an
+  Ansible variable at deploy time; templates use `{{ variable_name }}`
 
 ## Common Commands
 

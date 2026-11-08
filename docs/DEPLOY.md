@@ -4,7 +4,9 @@ Every push to `main` runs `router:deploy`, `zwave:deploy`, `satellite-2:deploy`
 and `macmini:deploy`. Each one runs
 `ci/deploy-scope/deploy_scope.py run --playbook <name>`, which runs
 `ansible/<name>.yml` against its host, in full or limited to the roles whose
-inputs changed.
+inputs changed. Commits merged by the auto-merge sweep are the exception: they
+get `<host>:deploy-service` instead and the host deploys become manual
+([AUTOMERGE.md](AUTOMERGE.md)).
 
 ## Changed-only deploys
 
@@ -51,7 +53,7 @@ inputs changed.
 | `docker/ollama/**` | configure-ollama-models |
 | everything else under `docker/**` | configure-homelab-services |
 | `base/nut/**`, `scripts/grafana-token-cleanup.sh` | configure-homelab-services |
-| `base/disk/**`, `base/gitlab-runner/**`, `base/systemd/zpool-scrub.*`, `base/udev/**`, `networking/nfs/**` | configure-base |
+| `base/disk/**`, `base/gitlab-runner/**`, `base/logrotate/**`, `base/systemd/zpool-scrub.*`, `base/udev/**`, `networking/nfs/**` | configure-base |
 | `base/msmtp/**` | configure-notifications |
 | `networking/{avahi,dhcp,dns,iproute2,iptables,netplan,networkd,ssl}/**` | configure-router-network |
 

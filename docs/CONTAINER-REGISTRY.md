@@ -4,7 +4,10 @@ GitLab's built-in container registry is enabled for storing Docker images per-pr
 
 ## Endpoints
 
-- **Registry URL:** `gitlab-registry.lab.nkontur.com`
+- **Registry URL:** `gitlab-registry.lab.nkontur.com` (GitLab advertises it with
+  an explicit `:443`, so image references, `$CI_REGISTRY` and `docker login`
+  use `gitlab-registry.lab.nkontur.com:443`; Docker keeps credentials per
+  host:port, so log in with the port)
 - **GitLab URL:** `gitlab.lab.nkontur.com`
 
 ## Usage
@@ -45,7 +48,11 @@ docker pull gitlab-registry.lab.nkontur.com/<group>/<project>:<tag>
 
 ### CI/CD Integration
 
-In `.gitlab-ci.yml`:
+Generic example below. This repo's own image jobs differ: `<image>:build`
+(`.docker_build`) builds on the router's Docker daemon through the
+docker-socket-proxy and pushes `:latest` and `:<short sha>`, and MR pipelines
+only check the build with kaniko (`.kaniko_check`); see `.gitlab-ci.yml` and
+[DEPLOY.md](DEPLOY.md#image-builds-before-deploys).
 
 ```yaml
 build:
@@ -63,10 +70,10 @@ build:
 ```
 
 The CI environment automatically provides:
-- `$CI_REGISTRY` = `gitlab-registry.lab.nkontur.com`
+- `$CI_REGISTRY` = `gitlab-registry.lab.nkontur.com:443`
 - `$CI_REGISTRY_USER` = `gitlab-ci-token`
 - `$CI_REGISTRY_PASSWORD` = auto-generated token
-- `$CI_REGISTRY_IMAGE` = `gitlab-registry.lab.nkontur.com/<group>/<project>`
+- `$CI_REGISTRY_IMAGE` = `gitlab-registry.lab.nkontur.com:443/<group>/<project>`
 
 ### Viewing Images
 
@@ -96,20 +103,16 @@ The CI environment automatically provides:
 ## Configuration Files
 
 - **Registry config:** `docker/gitlab/gitlab.rb`
-- **Nginx proxy:** `docker/nginx/http-internal-drop-in.conf`
-- **Docker compose:** `docker/docker-compose.yml` (port 5050)
+- **Nginx proxy:** `docker/nginx/router.lab.nkontur.com/internal_http.conf`
+  (`server_name gitlab-registry.lab.nkontur.com`, proxies to `gitlab:5050`)
+- **Docker compose:** `docker/docker-compose.yml` (`gitlab` service; port 5050
+  is not published, lab_nginx reaches it over the internal network)
 
-## Comparison with Standalone Registry
+## Standalone registry (removed)
 
-This homelab also has a standalone Docker Distribution registry at `registry.lab.nkontur.com` on the mgmt network. The differences:
-
-| Feature | GitLab Registry | Standalone Registry |
-|---------|-----------------|---------------------|
-| URL | gitlab-registry.lab.nkontur.com | registry.lab.nkontur.com |
-| Network | internal (10.3.x.x) | mgmt (10.4.x.x) |
-| Auth | GitLab accounts/tokens | htpasswd file |
-| Project integration | Per-project namespacing | Flat namespace |
-| Use case | CI/CD, project artifacts | Infrastructure images |
+The standalone Docker Distribution registry that used to run at
+`registry.lab.nkontur.com` was removed when its images moved here (commit
+`0f82afca`, "Migrate from private registry to GitLab container registry").
 
 ## Troubleshooting
 
@@ -143,6 +146,6 @@ This homelab also has a standalone Docker Distribution registry at `registry.lab
 
 ### Push/Pull Failures
 
-1. Check image name format matches: `gitlab-registry.lab.nkontur.com/<group>/<project>/<image>:<tag>`
+1. Check image name format matches: `gitlab-registry.lab.nkontur.com:443/<group>/<project>/<image>:<tag>`
 2. Verify project visibility settings allow registry access
 3. Check disk space on the router host
