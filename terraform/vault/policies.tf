@@ -197,12 +197,17 @@ resource "vault_policy" "vault_read" {
 # The JIT approval service brokers credential access on behalf of the agent.
 # It authenticates to Vault via AppRole, then mints short-lived child tokens
 # with scoped policies (jit-static-<resource>, or a per-request jit-vault-*
-# policy) when requests are approved. The dynamic backends' admin secrets
-# below are read by this policy only, never by a token the service issues.
+# policy) when requests are approved. Creating an orphan token with sudo does
+# not require the broker to hold the policies it attaches, so the broker reads
+# none of the static services' secrets: only a token carrying
+# jit-static-<resource> can.
 #
-# This policy grants:
+# This policy grants only what the broker itself uses:
 # - Token lifecycle management (create, revoke, lookup-self)
-# - Read access to all secrets the service may broker (including dynamic backend creds)
+# - Read on the admin secrets of the dynamic backends that read Vault at mint
+#   time (the GitLab admin token and the broker's own secrets reach it as
+#   environment variables at deploy time instead)
+# - The per-request jit-vault-* policies and SSH certificate signing
 
 resource "vault_policy" "jit_approval_svc" {
   name = "jit-approval-svc"
@@ -223,75 +228,28 @@ resource "vault_policy" "jit_approval_svc" {
       capabilities = ["read"]
     }
 
-    # Read secrets that the service may broker access to
-    # Tier 1: Auto-approve services
-    path "homelab/data/docker/plex" {
+    # Dynamic backend admin credentials, read at mint time
+    # Grafana: jit_admin_token + service_account_id to create SA tokens
+    path "homelab/data/docker/grafana" {
       capabilities = ["read"]
     }
-    path "homelab/data/docker/radarr" {
+    # InfluxDB: admin_token + org_id to create auth tokens
+    path "homelab/data/docker/influxdb" {
       capabilities = ["read"]
     }
-    path "homelab/data/docker/sonarr" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/docker/ombi" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/docker/nzbget" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/docker/deluge" {
+    # Home Assistant, Paperless: API tokens
+    path "homelab/data/docker/homeassistant" {
       capabilities = ["read"]
     }
     path "homelab/data/docker/paperless" {
       capabilities = ["read"]
     }
-
-    # Tier 1: Additional services (auto-approve)
-    path "homelab/data/docker/prowlarr" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/mqtt/mosquitto" {
-      capabilities = ["read"]
-    }
-
-    # Email (Gmail OAuth2 dynamic backend reads creds at runtime)
-    path "homelab/data/email/google-oauth" {
-      capabilities = ["read"]
-    }
-
-    # Dynamic backend admin credentials
-    # Grafana: reads jit_admin_token + service_account_id to create SA tokens
-    path "homelab/data/docker/grafana" {
-      capabilities = ["read"]
-    }
-    # InfluxDB: reads admin_token + org_id to create auth tokens
-    path "homelab/data/docker/influxdb" {
-      capabilities = ["read"]
-    }
-
-    # Tier 2: Infrastructure (requires approval)
-    path "homelab/data/docker/gitlab" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/docker/homeassistant" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/infrastructure/pihole" {
-      capabilities = ["read"]
-    }
-    # Tailscale: reads OAuth client creds to mint short-lived API tokens
+    # Tailscale: OAuth client creds to mint short-lived API tokens
     path "homelab/data/infrastructure/tailscale" {
       capabilities = ["read"]
     }
-
-    # Read own service secrets
-    path "homelab/data/docker/jit-approval-svc" {
-      capabilities = ["read"]
-    }
-
-    # Shared agent secrets
-    path "homelab/data/agents/*" {
+    # Gmail: OAuth2 client and refresh token
+    path "homelab/data/email/google-oauth" {
       capabilities = ["read"]
     }
 
@@ -334,9 +292,6 @@ resource "vault_policy" "jit_approval_svc" {
     }
     path "ssh-client-signer/sign/ssh-sign-macmini-elevated" {
       capabilities = ["create", "update"]
-    }
-    path "ssh-client-signer/config/ca" {
-      capabilities = ["read"]
     }
   EOT
 }
