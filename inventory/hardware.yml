@@ -272,7 +272,7 @@ network_devices:
     vlan: 6
     power: PoE
     link: S2500 gigabitethernet0/0/47 -> upstairs PoE switch (IoT; NETGEAR, not managed in networking/), port on that switch not traced
-    note: Offline 2026-10-21 to 2026-11-08; back after its PoE cable was reseated at the switch.
+    note: Back 2026-11-08 after its PoE cable was reseated.
     known_issue: "Clock about 55 min slow (no NTP configured); recorded by Frigate since 2026-11-08."
   doorbell:
     desc: Amcrest doorbell (amcrest2mqtt)

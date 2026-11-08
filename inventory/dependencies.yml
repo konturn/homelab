@@ -69,6 +69,15 @@ nodes:
     desc: DNS answers from Pi-hole.
     needs: [pihole]
     probe: {dns: {server: "{{ pihole_ip }}", name: router.lab.nkontur.com}}
+  iot-dns:
+    kind: container
+    desc: Resolver of the IoT VLAN's devices (docs/NETWORK.md, "IoT resolver").
+    probe: {container: iot-dns}
+  iot_resolver:
+    kind: endpoint
+    desc: DNS for IoT devices (they have no other resolver).
+    needs: [iot-dns, dns]
+    probe: {dns: {server: "{{ iot_dns_ip }}", name: example.com}}
   mosquitto:
     kind: container
     desc: MQTT broker.

@@ -451,6 +451,45 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+  # Resolver for the devices on the IoT VLAN (docs/NETWORK.md, "IoT resolver").
+  # DHCP hands out only this address on VLAN 6, and the router redirects any
+  # other DNS from VLAN 6 devices here (docs/FIREWALL.md). It forwards to
+  # Pi-hole and answers the internal zones NXDOMAIN (docker/iot-dns/dnsmasq.conf).
+  iot-dns:
+    image: dockurr/dnsmasq:2.93@sha256:b40fbaa3a9c3742d5943a4bec789dabc6c5c932b2db76a4e052c84f0b8d173a2
+    container_name: iot-dns
+    restart: unless-stopped
+    # dnsmasq starts as nobody, so it has no privileges to drop and needs no
+    # SETUID/SETGID. Port 53 is bindable without privileges through the
+    # sysctl below.
+    user: "65534:65534"
+    security_opt:
+      - no-new-privileges=true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: "53"
+    read_only: true
+    tmpfs:
+      - /run:size=1m,uid=65534,gid=65534
+    networks:
+      iot:
+        ipv4_address: {{ iot_dns_ip }}
+    deploy:
+      resources:
+        limits:
+          memory: 32M
+    volumes:
+      - {{ docker_persistent_data_path }}/iot-dns/dnsmasq.conf:/etc/dnsmasq.conf:ro
+    healthcheck:
+      # Answered by dnsmasq itself, so Pi-hole being down does not mark it unhealthy
+      test: ["CMD", "nslookup", "iot-dns-health.invalid", "127.0.0.1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
   iperf3:
     container_name: iperf3
     security_opt:
