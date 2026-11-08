@@ -249,6 +249,28 @@ go build -o jit-approval-svc .
 go test ./...
 ```
 
+`go test` also runs every `Fuzz*` test over its seed corpus (the `f.Add`
+seeds plus any `testdata/fuzz/<FuzzName>/` regression inputs), which is
+what CI does. The fuzz and property tests (`*/fuzz_test.go`) cover the
+security boundaries:
+
+| Package | Fuzz/property tests | Property |
+|---|---|---|
+| handler | `FuzzHandleRequest`, `FuzzHandleRequestFields`, `TestAutoApprovalMatrix`, `TestRequestedTTLNeverExceedsMax` | no panic/500 on any body; nothing is minted without approval except tier 1 on tier-1 resources (in the GitLab family only `gitlab-<agent>`); minted TTL <= resource/tier max |
+| handler | `FuzzTelegramWebhook` | only `jit:approve:<id>` from the configured chat with the webhook secret approves |
+| backend | `FuzzRegistryFor` | the agent backend serves exactly `gitlab-<configured user>` (no case/unicode/whitespace variants) |
+| backend | `FuzzGitLabAgentScopes`, `FuzzGitLabAgentIdentity`, `FuzzGitLabAgentTTL`, `FuzzExpiryFromName`, `TestGitLabAgentSweepOnlyRevokesExpiredJITTokens` | scopes within the allowlist, never widened; impersonates only the configured username; TTL exact and recoverable by the sweeper |
+| backend | `FuzzValidateVaultPaths`, `TestInfluxDBTierPermissions` | dynamic Vault policies stay under `homelab/data/` with allowed capabilities and no HCL injection; tier 1 InfluxDB tokens are read-only |
+| vault, config | `FuzzPoliciesForResource`, `TestPrivilegedResourcesNeverTier1`, `FuzzTTLFor` | static fallback fails closed for unknown resources/tiers; infra resources never tier 1 |
+| actions | `FuzzHandleCallback`, `FuzzPromptAPI` | only exact `act:<action>:<id>` decides a prompt; socket API validates input |
+
+To fuzz for real (one target per run; a crasher is written to
+`testdata/fuzz/<FuzzName>/` and should be committed as a regression seed):
+
+```bash
+go test ./internal/handler -run '^$' -fuzz '^FuzzHandleRequest$' -fuzztime 3m
+```
+
 ## Docker
 
 ```bash
