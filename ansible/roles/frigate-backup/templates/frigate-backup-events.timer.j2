@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Frigate restic backup (events)
+
+[Timer]
+OnCalendar={{ frigate_backup_events_on_calendar }}
+Persistent=false
+
+[Install]
+WantedBy=timers.target

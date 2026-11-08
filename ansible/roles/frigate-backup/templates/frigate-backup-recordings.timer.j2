@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Frigate restic backup (recordings)
+
+[Timer]
+OnCalendar={{ frigate_backup_recordings_on_calendar }}
+Persistent=false
+
+[Install]
+WantedBy=timers.target

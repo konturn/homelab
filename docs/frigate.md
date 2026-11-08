@@ -26,6 +26,14 @@ seconds (~230 log lines a minute). `logger.logs` in config.yml lowers those
 loggers to `critical` and the go2rtc `rtsp` module to `error`; delete the
 overrides once the doorbell is back.
 
+The cameras burn a clock into the image. Its seconds change every second, so
+without a motion mask every recording segment counts as motion, and motion
+retention and the motion backup would keep everything. back_door masks it
+(`motion.mask.timestamp`). Add the same mask to front_door once it is online
+and its overlay position is known. Mask coordinates are relative: use 0.999,
+not 1.000. A value of 1.000 makes Frigate read the polygon as pixels, reject
+the config and start in safe mode.
+
 go2rtc holds one connection per camera stream. Detect, record and the live view
 read from it on loopback (`rtsp://127.0.0.1:8554/<stream>`). The go2rtc API
 (1984), its RTSP restream (8554) and WebRTC (8555) listen on loopback only:
@@ -39,7 +47,9 @@ Assistant, which shows Frigate's snapshots and clips instead.
   here as the Frigate user `homeassistant`.
 - **5000**: unauthenticated (admin rights). Bound to `127.0.0.1` in the
   container (`networking.listen.internal`). Used by the healthcheck and the
-  deploy, which manage users through `docker exec`.
+  deploy, which manage users through `docker exec`. The healthcheck requires
+  `safe_mode: false` in `/api/config`: with an invalid `config.yml`, Frigate
+  starts in safe mode (no cameras, CPU detector) and still answers its API.
 - Firewall (`networking/iptables/rules.v4`): `frigate_ip` may open TCP 80 and
   554 to the two cameras and TCP 8883 to mosquitto. Nothing else on the
   internal VLAN reaches the cameras.
@@ -85,6 +95,64 @@ Frigate also deletes the oldest recordings on its own when the filesystem has
 less than an hour of recording space left, and the 1T quota is the filesystem
 size it sees. To measure the real motion share, see *System > Storage* in the
 UI, or `zfs list mpool/frigate` after a week.
+
+## Backup
+
+Role `frigate-backup` (after `restic` in `ansible/router.yml`). It writes to the
+same B2 restic repository as the main backup and reuses its `/root/.restic_env`
+(repository, password and the append-only B2 key from Vault). No new
+credentials are stored.
+
+| Unit | When | What |
+|---|---|---|
+| `frigate-backup-events` | every 30 min (:05, :35) | `frigate.db` (sqlite online backup), `config.yml`, `clips/` (snapshots, thumbnails, previews), `exports/`, and the recording segments overlapping review items (alerts and detections) of the last 48 h |
+| `frigate-backup-recordings` | 07:15 nightly | recording segments of the last 26 h matching `frigate_backup_recordings_filter` (`motion` by default; `objects` or `all`), then `restic forget --tag frigate --keep-within 30d` |
+
+- Snapshots are tagged `frigate` and `frigate-events` / `frigate-recordings`.
+  The Frigate forget only selects `--tag frigate`, so the main snapshots are
+  never touched. The main forget (`--keep-within 90d`) does not shorten the
+  Frigate history either. The weekly `restic-prune.timer` reclaims the data.
+- **Main backup window.** `restic-backup.service` runs `restic check` before
+  and `restic forget` after its backups. Both take an exclusive lock without
+  `--retry-lock`, so a Frigate job holding a lock would fail the main backup.
+  The events job skips 02:00-03:00 and every run while `restic-backup` or
+  `restic-db-dumps` is active. Its runs are capped at 25 min, so none can
+  reach 03:00. The recordings job waits up to 3 h for a running main backup
+  (which has run until 06:08).
+- Failures go through `restic-notify-failure@` (mail and journal), as for the
+  main backup.
+
+Restore one file (snapshot list: `restic snapshots --tag frigate`):
+
+```bash
+set -a; . /root/.restic_env; set +a
+restic restore <snapshot> --target /tmp/frigate-restore \
+  --include /mpool/frigate/recordings/<date>/<hour>/<camera>/<MM.SS>.mp4
+```
+
+To rebuild Frigate from the backup, restore `frigate.db` from the newest
+`frigate-events` snapshot (it is saved as
+`/var/backups/frigate/frigate.db`). Copy it to
+`/persistent_data/application/frigate/` with Frigate stopped, then restore
+the recordings and clips under `/mpool/frigate/`.
+
+### Size and cost
+
+B2 bills about $6 per TB-month for storage, and uploads are free. Data that
+restic forgets or prunes stays billed as a hidden version for another 35 days
+(docs/backups.md, "Deletion resistance"). Each uploaded GB is therefore billed
+for about 30 + ~4 (until the weekly prune) + 35 = ~69 days.
+
+| Recordings filter | Upload per camera per day | Stored per camera | $/month per camera |
+|---|---|---|---|
+| `objects` (~5% of footage) | ~3.3 GB | ~0.23 TB | ~$1.4 |
+| `motion`, 20% motion | ~13 GB | ~0.9 TB | ~$5.5 |
+| `motion`, 40% motion | ~27 GB | ~1.8 TB | ~$11 |
+| `all` | 66 GB | ~4.6 TB | ~$27 |
+
+The events job adds well under 1 GB a day (database, snapshots, previews).
+Its recording segments are a subset of the motion set, so restic stores them
+once. Two cameras double these figures.
 
 ## Upgrades
 

@@ -256,6 +256,10 @@ the **only** snapshot retention rule. Every snapshot taken in the last 90 days i
 tier. Underneath that, B2 keeps every file restic forgets or prunes for a further 35 days as a
 hidden version (see *Deletion resistance* below).
 
+**Frigate:** its own jobs write to the same repository with tags `frigate*` and their own
+30-day forget (role `frigate-backup`, docs/frigate.md "Backup"). They never run alongside
+`restic-backup.service`, whose `check` and `forget` take an exclusive lock without `--retry-lock`.
+
 > **Corrected 2026-10-10.** This line previously read "30 daily, 12 monthly, 5 yearly". That was
 > never configured. `--keep-within` has been the sole `forget` flag since the role was written
 > (`90e1bca`, 2026-02-05) and the value went `30d` -> `90d` in `059a6be` (2026-02-07); no

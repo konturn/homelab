@@ -1618,8 +1618,10 @@ services:
       mosquitto:
         condition: service_healthy
     healthcheck:
-      # Port 5000 listens on loopback only (config.yml networking.listen)
-      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:5000/api/version"]
+      # Port 5000 listens on loopback only (config.yml networking.listen).
+      # An invalid config.yml starts Frigate in safe mode (no cameras, CPU
+      # detector) with a working API, so /api/version alone would pass.
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:5000/api/config | grep -q '\"safe_mode\": *false'"]
       interval: 30s
       timeout: 10s
       retries: 3

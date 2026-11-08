@@ -170,6 +170,14 @@ cameras:
       width: 704
       height: 480
       fps: 5
+    motion:
+      mask:
+        # The camera's burned-in clock (top right): its seconds change every
+        # second, so without this mask every recording segment counts as
+        # motion and motion retention keeps all footage.
+        timestamp:
+          friendly_name: Timestamp
+          coordinates: "0.700,0.000,0.999,0.000,0.999,0.110,0.700,0.110"
     live:
       streams:
         Main: back_door

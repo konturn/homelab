@@ -114,6 +114,11 @@
         # ~35G of TSM data, ~25 min and 15G of output per run: weekly, on
         # its own timer outside the backup window.
         - {name: influxdb, type: influxdb, container: influxdb, target: all, group: weekly}
+  # Offsite backup of Frigate into the same restic repository, own tags and
+  # forget policy (docs/frigate.md, "Backup"). After restic: needs its
+  # /root/.restic_env and restic-notify-failure@.service.
+  - role: frigate-backup
+    tags: [frigate-backup]
   # Last: pulls can take long on a fresh host, and a failed pull or create
   # must not hold up the other roles.
   - role: configure-ollama-models
