@@ -1,0 +1,10 @@
+---
+# /etc/cron.d/zfs-auto-snapshot (tasks/main.yml, docs/backups.md). Coverage:
+# 2 hours of 15-minute, 24 hours of hourly, 14 days of daily, 4 weeks of
+# weekly and 6 months of monthly snapshots.
+zfs_auto_snapshot_schedule:
+  - {label: frequent, cron: "*/15 * * * *", keep: 8}
+  - {label: hourly, cron: "0 * * * *", keep: 24}
+  - {label: daily, cron: "59 23 * * *", keep: 14}
+  - {label: weekly, cron: "59 23 * * 0", keep: 4}
+  - {label: monthly, cron: "0 0 1 * *", keep: 6}
