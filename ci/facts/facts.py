@@ -182,13 +182,17 @@ def validate_amps(hw: dict, stream_ids: set) -> list[str]:
 COMPOSE = "docker/docker-compose.yml"
 
 
-def compose_services(root: Path = ROOT) -> dict:
-    """services of the router's compose file. It is an Ansible template, so
-    {{ ... }} becomes the string JINJA and {% ... %} lines are dropped."""
-    text = (root / COMPOSE).read_text(encoding="utf-8")
+def compose_file(root: Path = ROOT, rel: str = COMPOSE) -> dict:
+    """A compose file of this repo. They are Ansible templates, so {{ ... }}
+    becomes the string JINJA and {% ... %} lines are dropped."""
+    text = (root / rel).read_text(encoding="utf-8")
     text = re.sub(r"\{\{.*?\}\}", "JINJA", text)
     text = "\n".join(l for l in text.splitlines() if not l.strip().startswith("{%"))
-    return (yaml.safe_load(text) or {}).get("services") or {}
+    return yaml.safe_load(text) or {}
+
+
+def compose_services(root: Path = ROOT, rel: str = COMPOSE) -> dict:
+    return compose_file(root, rel).get("services") or {}
 
 
 def check_amp_devices(hw: dict, services: dict) -> list[str]:

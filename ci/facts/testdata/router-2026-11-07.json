@@ -350,62 +350,12 @@
    "health": null,
    "state": "exited"
   },
-  "runner-txrnnfjnf-project-4-concurrent-0-1ec00f9fabc0a367-build": {
+  "runner-ykweqyxsv-project-4-concurrent-2-4f0785cd795a8d58-build": {
    "exit_code": null,
-   "health": "health: starting",
+   "health": "healthy",
    "state": "running"
   },
-  "runner-txrnnfjnf-project-4-concurrent-0-1ec00f9fabc0a367-predefined": {
-   "exit_code": 0,
-   "health": null,
-   "state": "exited"
-  },
-  "runner-txrnnfjnf-project-4-concurrent-1-3c83a75fc469c5d9-build": {
-   "exit_code": null,
-   "health": null,
-   "state": "running"
-  },
-  "runner-txrnnfjnf-project-4-concurrent-1-3c83a75fc469c5d9-predefined": {
-   "exit_code": 0,
-   "health": null,
-   "state": "exited"
-  },
-  "runner-txrnnfjnf-project-4-concurrent-2-eabca1968c2878ef-build": {
-   "exit_code": null,
-   "health": "health: starting",
-   "state": "running"
-  },
-  "runner-txrnnfjnf-project-4-concurrent-2-eabca1968c2878ef-predefined": {
-   "exit_code": 0,
-   "health": null,
-   "state": "exited"
-  },
-  "runner-txrnnfjnf-project-4-concurrent-3-9b982017448baa88-build": {
-   "exit_code": null,
-   "health": "health: starting",
-   "state": "running"
-  },
-  "runner-txrnnfjnf-project-4-concurrent-3-9b982017448baa88-predefined": {
-   "exit_code": 0,
-   "health": null,
-   "state": "exited"
-  },
-  "runner-txrnnfjnf-project-4-concurrent-4-b1379854adcb2e2b-build": {
-   "exit_code": null,
-   "health": "health: starting",
-   "state": "running"
-  },
-  "runner-txrnnfjnf-project-4-concurrent-4-b1379854adcb2e2b-predefined": {
-   "exit_code": 0,
-   "health": null,
-   "state": "exited"
-  },
-  "runner-txrnnfjnf-project-4-concurrent-5-f7a7f125c59f403a-build": {
-   "exit_code": null,
-   "health": "health: starting",
-   "state": "running"
-  },
-  "runner-txrnnfjnf-project-4-concurrent-5-f7a7f125c59f403a-predefined": {
+  "runner-ykweqyxsv-project-4-concurrent-2-4f0785cd795a8d58-predefined": {
    "exit_code": 0,
    "health": null,
    "state": "exited"
@@ -728,6 +678,14 @@
    "detail": "connect failed: [Errno 113] No route to host",
    "ok": false
   },
+  "frigate": {
+   "detail": "running, healthy",
+   "ok": true
+  },
+  "frigate_backup": {
+   "detail": "active",
+   "ok": true
+  },
   "gitlab": {
    "detail": "running, healthy",
    "ok": true
@@ -742,6 +700,10 @@
   },
   "mosquitto": {
    "detail": "running, healthy",
+   "ok": true
+  },
+  "mpool_frigate": {
+   "detail": "mounted from mpool/frigate",
    "ok": true
   },
   "mqtt": {

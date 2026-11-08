@@ -4,6 +4,8 @@
 #   ci/facts/drift.py   (scheduled facts:drift job) probes every node that
 #                        has a probe and reports the ones that are down,
 #                        with what depends on them
+#   ci/facts/render.py  renders the needs and rules into OpenClaw's
+#                        docker/openclaw/workspace/infra/TOOLS.md
 #
 # A node:
 #   kind:   container | systemd | mount | zpool | device | endpoint | host | process
@@ -104,6 +106,7 @@ nodes:
     kind: device
     desc: Amcrest back camera, PoE behind the upstairs IoT switch.
     probe: {tcp: "{{ back_camera_address }}:554"}
+    known_issue: "Clock about 55 min slow (no NTP): Frigate event times from its overlay are off."
   doorbell:
     kind: device
     desc: Amcrest doorbell.
@@ -114,6 +117,28 @@ nodes:
     desc: Doorbell events to MQTT.
     needs: [doorbell, mqtt]
     probe: {container: amcrest2mqtt}
+
+  # --- Frigate NVR (docs/frigate.md) --------------------------------------
+  mpool_frigate:
+    kind: mount
+    desc: /mpool/frigate, ZFS dataset mpool/frigate (quota 1T, com.sun:auto-snapshot off), Frigate recordings.
+    needs: [mpool]
+    probe: {mount: /mpool/frigate}
+  frigate:
+    kind: container
+    desc: Frigate NVR ({{ frigate_ip }}, frigate.lab.nkontur.com); records the back camera.
+    needs: [persistent_data, mpool_frigate, mqtt, back_camera]
+    probe: {container: frigate}
+    rules:
+      - >-
+        The config is repo-managed (docker/frigate/config.yml): edits in the
+        Frigate UI are overwritten on the next deploy.
+      - Recordings live on /mpool/frigate, never on /persistent_data.
+  frigate_backup:
+    kind: systemd
+    desc: frigate-backup-events.timer (every 30 min) plus nightly recordings, to restic/B2 with tag frigate.
+    needs: [frigate]
+    probe: {systemd: frigate-backup-events.timer}
 
   # --- Z-Wave (on the zwave Pi) ---------------------------------------------
   zwave_pi:

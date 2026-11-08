@@ -1853,8 +1853,9 @@ ipmi:drift:
 # Facts: inventory/hardware.yml + inventory/dependencies.yml (inventory/README.md)
 # =============================================================================
 # facts:test checks the fact files, that the files generated from them
-# (base/udev/85-my-usb-audio.rules, base/disk/crypttab) are current, and the
-# tools' unit tests. facts:drift compares the live router with the data.
+# (base/udev/85-my-usb-audio.rules, base/disk/crypttab, OpenClaw's
+# docker/openclaw/workspace/infra/TOOLS.md) are current, and the tools' unit
+# tests. facts:drift compares the live router with the data.
 
 facts:test:
   extends:
@@ -1875,7 +1876,13 @@ facts:test:
         - base/udev/**/*
         - base/disk/crypttab
         - ansible/inventory.yml
-        - docker/docker-compose.yml
+        - docker/docker-compose*.yml
+        # TOOLS.md (OpenClaw context) is rendered from these too
+        - docker/openclaw/workspace/infra/**
+        - ci/automerge-policy.yml
+        - ci/automerge/botconfig.py
+        - ci/automerge/automerge.py
+        - docs/*.md
         - .gitlab-ci.yml
 
 # Daily on the router BMC drift schedule (SCHEDULED_TASK=ipmi-drift), so it

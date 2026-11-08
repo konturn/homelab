@@ -22,6 +22,7 @@ what had no home.
 |---|---|
 | `base/udev/85-my-usb-audio.rules` | `audio_zones` + `usb_controllers` |
 | `base/disk/crypttab` | `disks[].luks` (order: boot, persistent_data, then devN by number) |
+| `docker/openclaw/workspace/infra/TOOLS.md` | OpenClaw's standing context: the prose in `TOOLS.md.in` next to it, with hosts, VLANs and services (`ansible/inventory.yml`, compose files), these fact files, the auto-merge limits and the `bot_config` rules (`ci/automerge-policy.yml`, read through `botconfig.config()`, the sweep's own parser) and the docs list filled in (`ci/facts/agent_context.py`) |
 
 The generated files are committed and deployed by the existing tasks in
 `configure-base` (a plain copy), so a data change shows the exact config diff
