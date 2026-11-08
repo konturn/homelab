@@ -20,16 +20,19 @@ What stays with a human:
   whatever its profiles.
 - **Restricted kinds**: a service whose version change runs a one-way
   migration lists only the kinds that roll back cleanly (`updates:`).
-- **Anything that is not an image line in a deployed compose file** or a job
-  image line in `.gitlab-ci.yml` ([CI images](#ci-images)): Dockerfiles,
-  Python/npm dependencies, Terraform providers, the runners' default image
-  (`base/gitlab-runner/config.toml`, deployed by `configure-base`). These have
-  no per-service deploy and health gate.
+- **Anything outside the classes below**: Python dependencies, Terraform
+  providers, the runners' default image (`base/gitlab-runner/config.toml`,
+  deployed by `configure-base`), the OpenClaw base image, and any change to
+  a Dockerfile or ansible file that is not a version bump the
+  [dependency class](#dependency-updates) can verify line by line.
+- **Minor updates of security-critical images and CI jobs** (the JIT approval
+  service, the event-router image with its executor, the Vault and GitLab
+  settings jobs): digest and patch only.
 
 The sweep labels such MRs `automerge-manual` and notes the reason on the MR
 (see [Visibility](#visibility-of-manual-updates)).
 
-Four classes share the policy:
+Five classes share the policy:
 
 - **General**: any eligible update. While the sweep schedule carries
   `AUTOMERGE_DRY_RUN=1` this class only logs what it would do.
@@ -41,6 +44,13 @@ Four classes share the policy:
   by Renovate. Nothing is deployed; the sweep watches the main pipeline of
   the merge and reverts on a failure in a job that runs the image. Counts
   against the general budget and follows its dry run. See [CI images](#ci-images).
+- **Dependency**: non-major version bumps in our own build and deploy files,
+  opened by Renovate: Dockerfile base images and pinned tool versions, the
+  OpenClaw tool npm dependencies, and annotated version pins in ansible
+  tasks/defaults. The image's `build-check` job must have passed; the merge
+  deploys like a reviewed one, and the sweep watches its main pipeline and
+  reverts on a failed build or host deploy. Counts against the general
+  budget and follows its dry run. See [Dependency updates](#dependency-updates).
 - **Bot-config**: moltbot's own low-risk configuration MRs (resource limits,
   log levels, Grafana alert thresholds and dashboards, docs), checked by
   path and by the shape of every change. Counts against the general budget
@@ -52,7 +62,7 @@ The pieces:
 |---|---|---|
 | Policy | `ci/automerge/policy.py`, `ci/automerge-policy.yml` | — |
 | Hosts per compose file | `docker_compose_file_names` in `ansible/inventory.yml` | — |
-| `automerge:eligibility` | MR pipeline | MRs touching `docker/docker-compose*.yml` or `.gitlab-ci.yml` (informational only) |
+| `automerge:eligibility` | MR pipeline | MRs touching `docker/docker-compose*.yml` or `.gitlab-ci.yml` (informational only; `automerge.py evaluate <iid>` shows any MR's verdict) |
 | `automerge:sweep` | scheduled pipeline on `main`, `AUTOMERGE_TASK=sweep` | every 15 min |
 | `<host>:deploy-service` (`router`, `zwave`, `satellite-2`) | `main` pipeline | only for commits merged by the sweep |
 | `automerge:report` | scheduled pipeline on `main`, `AUTOMERGE_TASK=report` | daily |
@@ -521,7 +531,12 @@ not a draft, no conflicts, the general daily budget):
    reference today;
 4. per line: the same image name, the new reference pinned by `@sha256:`
    digest (digest-only and digest pins included), and not a major
-   ([Major versions](#major-versions));
+   ([Major versions](#major-versions)). Renovate pins CI images itself
+   (`gitlabci.pinDigests` in `renovate.json`): an image still referenced by
+   tag only gets a one-off "pin" MR (a digest update here), and later updates
+   arrive pinned. The jobs under `dependencies.security_critical.ci_jobs`
+   (`vault:*`, `jit-approval-svc:*`, `gitlab:settings`) take digest and patch
+   updates only;
 5. the image is on neither the global denylist (`denylist.images`: GitLab,
    the runner helper `gitlab/gitlab-runner`, Vault, ...) nor
    `ci_images.denylist`. That holds `willhallonline/ansible`: the `.ansible`
@@ -566,6 +581,96 @@ are triggered by a `.gitlab-ci.yml` change in MR pipelines (the linters,
 neither (the kaniko image of the build jobs, which run when their image
 directory changes) is first exercised by a later pipeline; a failure there is
 not attributed to the update automatically.
+
+## Dependency updates
+
+The dependency class (`dependencies` in the policy) merges Renovate's
+non-major version bumps in files we build and deploy ourselves. Every
+changed line is checked by `dependency_changes` in `ci/automerge/policy.py`;
+anything it cannot read is refused. An MR qualifies only if, on top of the
+general checks (author, target, freeze and `major` labels, MR pipeline passed
+on the head commit, not a draft, no conflicts, the general daily budget):
+
+1. the author is listed under `dependencies.authors` (Renovate only);
+2. every changed file is one the class covers, edited in place (no adds,
+   deletes, renames, mode changes or line count changes), and nothing else
+   changes: a `.gitlab-ci.yml` or compose change in the same MR disqualifies
+   (Renovate puts `.gitlab-ci.yml` updates on their own `ci-` branches so
+   that a base image bump never shares an MR with a CI job image bump);
+3. per file kind:
+   - **Dockerfiles** (`docker/*/Dockerfile`, `docker/images/*/Dockerfile`):
+     a changed line is either a `FROM` line, with the same image name,
+     `--platform`-style options and stage name, the new reference pinned by
+     digest, and digest-only or a patch/minor within the same major and the
+     same tag flavor (`-alpine3.22` -> `-alpine3.23` keeps the family;
+     `-slim` -> `-slim-trixie` or `-alpine` -> `-bookworm` is treated as
+     major); or a Renovate-managed pin line (`npm install -g <pkg>@<ver>`, or
+     the line under a `# renovate:` annotation) whose only change is one
+     version. Lines inside a here-document never qualify, a continuation line
+     only as an npm pin, and a Dockerfile with an `escape` parser directive is
+     refused. The instruction structure (which lines are instructions,
+     continuations, here-documents, comments) must be identical before and
+     after;
+   - **OpenClaw tool npm dependencies** (`docker/openclaw/tools/package.json`
+     with its `package-lock.json`, always together): only the exact `x.y.z`
+     versions of packages already listed change; the lockfile's root entry
+     matches `package.json`, each direct dependency is locked at its version,
+     every entry resolves from `https://registry.npmjs.org/` with a `sha512`
+     integrity hash, and no entry is a link. Transitive packages may come
+     and go (npm decides those); the image installs them with
+     `npm ci --ignore-scripts`, which checks every hash;
+   - **ansible version pins** (`ansible/roles/*/tasks/*.yml`,
+     `ansible/roles/*/defaults/*.yml`): the line under an unchanged
+     `# renovate: datasource=... depName=...` annotation, with only the
+     version changed, plus a checksum (64 or 128 hex characters) in the pin's
+     block (the lines up to the next blank line), which must change together
+     with the version when the pin has one: a version bump that leaves the
+     checksum alone would fail the deploy, so it is refused. Changed lines
+     must not contain braces (Jinja);
+4. not a major (a 0.x minor counts as one, unless the package is listed under
+   `dependencies.zero_minor_is_minor`; none is today), and the image is on
+   neither the global `denylist.images` nor `dependencies.denylist` (the
+   OpenClaw base image `ghcr.io/openclaw/openclaw`: OpenClaw is moltbot
+   itself). The OpenClaw *tool* dependencies and the pinned CLIs in
+   `docker/openclaw/Dockerfile` (claude-code) are in the class;
+5. **security-critical images** (`dependencies.security_critical.files`:
+   `docker/jit-approval-svc/Dockerfile`, `docker/event-router/Dockerfile`)
+   take digest and patch updates only. The same holds for the CI image class
+   in the jobs under `security_critical.ci_jobs` (`vault:*`,
+   `jit-approval-svc:*`, `gitlab:settings`). Renovate gives these files their
+   own branches, with patch releases apart from minors, and labels their
+   minor updates `automerge-manual`;
+6. CODEOWNERS lists the automerge bot (`dependencies.codeowner`) as a code
+   owner of every changed file, or its approval would not count. The
+   Dockerfiles, the OpenClaw npm files and the ansible files that carry
+   annotated pins are listed (checked by `test_dependency_class.py`); the
+   bot approves only diffs that pass the checks above, as for the compose
+   and CI files;
+7. for a file under an image's build context (from `BUILD_CONTEXT` of the
+   `<image>:build-check` jobs in `main`'s `.gitlab-ci.yml`), that job ran
+   and passed in the MR pipeline for the head commit (the latest attempt; a
+   build-check that only offered a manual run does not count). A Dockerfile
+   without a build-check job is refused;
+8. no open rollback issue holds one of its dependencies (`job=dep`), and no
+   earlier CI image or dependency merge is still waiting for its main
+   pipeline.
+
+The merge commit carries `Automerge-Class: dependency` and
+`Automerge-Policy: dependency`. Neither selects a per-service deploy nor
+matches `.automerged_commit_manual`, so the main pipeline runs as for a
+reviewed merge: the image build of the changed context and the changed-only
+host deploy. The MR gets the labels `automerged`, `automerge-dependency` and
+`automerge-dep-watch`.
+
+After the merge, every sweep run checks the main pipeline of each merged MR
+still labelled `automerge-dep-watch`, like the [CI image](#ci-images) watch:
+a failed (not `allow_failure`) `<image>:build` job of a changed context or
+`<host>:deploy` job opens a revert MR (`automerge-revert/<iid>`: the
+pre-merge files, or the changed lines put back if main moved on since), an
+`automerge-rollback` issue with the scope `job=dep services=<names>`, labels
+the MR `automerge-rollback`, notes it and mails root. While the issue is open
+the next update of those dependencies waits for a human. Failures of other
+jobs only get a note.
 
 ## Bot-config class
 
@@ -737,6 +842,15 @@ All in `ci/automerge-policy.yml` (reviewed, since `ci/` is code-owned):
 - **Retire a service:** put it under a compose profile. The sweep never merges
   an update of it; disable its image in `renovate.json` so Renovate stops
   proposing updates (`test_policy_scope.py` checks this).
+
+- **Dependency class:** list a package whose routine releases are 0.x minors
+  under `dependencies.zero_minor_is_minor`; make an image security-critical
+  under `dependencies.security_critical.files` (and the two
+  "security-critical" rules in `renovate.json`); keep a base image manual
+  under `dependencies.denylist` (and the "Dependency class denylist" rule).
+  A new Dockerfile needs a `<image>:build-check` job and a CODEOWNERS line
+  listing the bot; a new annotated ansible pin file needs the CODEOWNERS line
+  too. `test_dependency_class.py` checks each of these.
 
 ## Root-authored MRs
 
