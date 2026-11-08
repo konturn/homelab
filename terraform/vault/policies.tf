@@ -191,7 +191,9 @@ resource "vault_policy" "vault_read" {
 # =============================================================================
 # The JIT approval service brokers credential access on behalf of the agent.
 # It authenticates to Vault via AppRole, then mints short-lived child tokens
-# with scoped policies (jit-tier1/2) when requests are approved.
+# with scoped policies (jit-static-<resource>, or a per-request jit-vault-*
+# policy) when requests are approved. The dynamic backends' admin secrets
+# below are read by this policy only, never by a token the service issues.
 #
 # This policy grants:
 # - Token lifecycle management (create, revoke, lookup-self)
@@ -335,24 +337,50 @@ resource "vault_policy" "jit_approval_svc" {
 }
 
 # =============================================================================
-# Policy: jit-tier1-services
+# Policies: jit-static-<resource>
 # =============================================================================
-# Lightweight scoped policy for JIT-minted child tokens.
-# Tier 1: Read access to auto-approve services (monitoring + operational).
+# One policy per resource served by the JIT static backend. A token the broker
+# mints for a static resource carries only that resource's policy, read-only
+# on its own secret. Tiers decide approval and TTL in the broker; they do not
+# widen what a token can read. Keep in sync with staticResourcePaths in
+# docker/jit-approval-svc/internal/vault/vault.go (a Go test compares them).
+
+locals {
+  jit_static_resources = {
+    radarr   = ["homelab/data/docker/radarr"]
+    sonarr   = ["homelab/data/docker/sonarr"]
+    plex     = ["homelab/data/docker/plex"]
+    ombi     = ["homelab/data/docker/ombi"]
+    nzbget   = ["homelab/data/docker/nzbget"]
+    deluge   = ["homelab/data/docker/deluge"]
+    prowlarr = ["homelab/data/docker/prowlarr"]
+    tautulli = ["homelab/data/docker/tautulli"]
+    mqtt     = ["homelab/data/mqtt/mosquitto"]
+    pihole   = ["homelab/data/infrastructure/pihole"]
+    ipmi     = ["homelab/data/infrastructure/ipmi"]
+  }
+}
+
+resource "vault_policy" "jit_static" {
+  for_each = local.jit_static_resources
+
+  name = "jit-static-${each.key}"
+
+  policy = join("\n", [
+    for path in each.value : "path \"${path}\" {\n  capabilities = [\"read\"]\n}\n"
+  ])
+}
+
+# =============================================================================
+# Policy: jit-tier1-services (being retired)
+# =============================================================================
+# Tier-wide policy used by brokers before jit-static-<resource>. Kept, limited
+# to static resources, until no token minted with it remains; then removed.
 
 resource "vault_policy" "jit_tier1_services" {
   name = "jit-tier1-services"
 
   policy = <<-EOT
-    # Monitoring
-    path "homelab/data/docker/grafana" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/docker/influxdb" {
-      capabilities = ["read"]
-    }
-
-    # Operational services
     path "homelab/data/docker/plex" {
       capabilities = ["read"]
     }
@@ -380,39 +408,22 @@ resource "vault_policy" "jit_tier1_services" {
     path "homelab/data/mqtt/mosquitto" {
       capabilities = ["read"]
     }
-
   EOT
 }
 
 # =============================================================================
-# Policy: jit-tier2-infra
+# Policy: jit-tier2-infra (being retired)
 # =============================================================================
-# Lightweight scoped policy for JIT-minted child tokens.
-# Tier 2: Read access to infrastructure services (requires human approval).
+# As jit-tier1-services, for the tier-2 static resources.
 
 resource "vault_policy" "jit_tier2_infra" {
   name = "jit-tier2-infra"
 
   policy = <<-EOT
-    path "homelab/data/docker/gitlab" {
-      capabilities = ["read"]
-    }
-    path "homelab/data/docker/homeassistant" {
-      capabilities = ["read"]
-    }
     path "homelab/data/infrastructure/pihole" {
       capabilities = ["read"]
     }
     path "homelab/data/infrastructure/ipmi" {
-      capabilities = ["read"]
-    }
-
-    path "homelab/data/docker/paperless" {
-      capabilities = ["read"]
-    }
-
-    # Email
-    path "homelab/data/email/gmail" {
       capabilities = ["read"]
     }
   EOT

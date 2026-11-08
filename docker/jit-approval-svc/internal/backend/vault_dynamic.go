@@ -25,6 +25,33 @@ const (
 	policyPrefix = "jit-vault-"
 )
 
+// BrokerOnlyPaths are the secrets the broker itself uses to mint dynamic
+// credentials (upstream admin tokens, OAuth clients) and its own service
+// secret. Only the broker's AppRole policy may read them: no token the broker
+// hands out may. Requests naming one are refused, and every generated policy
+// denies them explicitly, so a wildcard request cannot reach them either (an
+// exact-path rule takes precedence over a glob in Vault).
+var BrokerOnlyPaths = []string{
+	"homelab/data/docker/grafana",
+	"homelab/data/docker/influxdb",
+	"homelab/data/docker/homeassistant",
+	"homelab/data/docker/paperless",
+	"homelab/data/docker/gitlab",
+	"homelab/data/docker/jit-approval-svc",
+	"homelab/data/infrastructure/tailscale",
+	"homelab/data/email/google-oauth",
+}
+
+// isBrokerOnly reports whether path is one of BrokerOnlyPaths.
+func isBrokerOnly(path string) bool {
+	for _, p := range BrokerOnlyPaths {
+		if path == p {
+			return true
+		}
+	}
+	return false
+}
+
 // allowedCapabilities is the set of capabilities that may be requested.
 var allowedCapabilities = map[string]bool{
 	"read":   true,
@@ -78,6 +105,9 @@ func ValidateVaultPaths(paths []VaultPathRequest) error {
 		if !strings.HasPrefix(p.Path, vaultPathPrefix) {
 			return fmt.Errorf("vault_paths[%d]: path %q must start with %q", i, p.Path, vaultPathPrefix)
 		}
+		if isBrokerOnly(p.Path) {
+			return fmt.Errorf("vault_paths[%d]: path %q is reserved for the broker", i, p.Path)
+		}
 		if len(p.Capabilities) == 0 {
 			return fmt.Errorf("vault_paths[%d]: at least one capability is required", i)
 		}
@@ -102,6 +132,10 @@ func BuildPolicyHCL(paths []VaultPathRequest) string {
 		}
 		sb.WriteString(fmt.Sprintf("  capabilities = [%s]\n", strings.Join(caps, ", ")))
 		sb.WriteString("}\n")
+	}
+	sb.WriteString("\n# Broker-only secrets: never readable by issued tokens\n")
+	for _, p := range BrokerOnlyPaths {
+		sb.WriteString(fmt.Sprintf("path %q {\n  capabilities = [\"deny\"]\n}\n", p))
 	}
 	return sb.String()
 }
