@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -57,11 +59,47 @@ type gitlabTokenResponse struct {
 	Name  string `json:"name"`
 }
 
+// gitlabProjectRef is a numeric project ID or a "namespace/project" path.
+var gitlabProjectRef = regexp.MustCompile(`^([0-9]{1,12}|[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)+)$`)
+
+// gitlabProjectTokenScopes are the scopes GitLab accepts for project access
+// tokens. Anything else is refused here instead of being passed through.
+var gitlabProjectTokenScopes = map[string]bool{
+	"api": true, "read_api": true, "read_repository": true, "write_repository": true,
+	"read_registry": true, "write_registry": true, "create_runner": true, "manage_runner": true,
+	"ai_features": true, "k8s_proxy": true, "self_rotate": true,
+	"read_virtual_registry": true, "write_virtual_registry": true,
+	"read_observability": true, "write_observability": true,
+}
+
+// ValidateGitLabProjectID checks a per-request project override: a numeric
+// ID or a "namespace/project" path, nothing that could change the API path.
+func ValidateGitLabProjectID(id string) error {
+	if !gitlabProjectRef.MatchString(id) || strings.Contains(id, "..") {
+		return fmt.Errorf("invalid project_id %q (want a numeric ID or namespace/project path)", id)
+	}
+	return nil
+}
+
+// ValidateGitLabProjectScopes rejects scopes GitLab project access tokens
+// do not have.
+func ValidateGitLabProjectScopes(scopes []string) error {
+	for _, s := range scopes {
+		if !gitlabProjectTokenScopes[s] {
+			return fmt.Errorf("scope %q is not a GitLab project access token scope", s)
+		}
+	}
+	return nil
+}
+
 // MintCredential creates a short-lived GitLab project access token.
 func (b *GitLabBackend) MintCredential(resource string, tier int, ttl time.Duration, opts MintOptions) (*Credential, error) {
 	// Resolve project ID: per-request override or default.
 	projectID := b.projectID
 	if opts.ProjectID != "" {
+		if err := ValidateGitLabProjectID(opts.ProjectID); err != nil {
+			return nil, err
+		}
 		projectID = opts.ProjectID
 	}
 
@@ -72,6 +110,9 @@ func (b *GitLabBackend) MintCredential(resource string, tier int, ttl time.Durat
 	scopes := opts.Scopes
 	if len(scopes) == 0 {
 		scopes = []string{"api"}
+	}
+	if err := ValidateGitLabProjectScopes(scopes); err != nil {
+		return nil, err
 	}
 
 	payload := gitlabTokenRequest{
@@ -86,8 +127,8 @@ func (b *GitLabBackend) MintCredential(resource string, tier int, ttl time.Durat
 		return nil, fmt.Errorf("marshal token request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/api/v4/projects/%s/access_tokens", b.baseURL, projectID)
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	endpoint := fmt.Sprintf("%s/api/v4/projects/%s/access_tokens", b.baseURL, url.PathEscape(projectID))
+	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -141,8 +182,8 @@ func (b *GitLabBackend) RevokeCredential(tokenID, projectID string) error {
 	if projectID == "" {
 		projectID = b.projectID
 	}
-	url := fmt.Sprintf("%s/api/v4/projects/%s/access_tokens/%s", b.baseURL, projectID, tokenID)
-	req, err := http.NewRequest(http.MethodDelete, url, nil)
+	endpoint := fmt.Sprintf("%s/api/v4/projects/%s/access_tokens/%s", b.baseURL, url.PathEscape(projectID), url.PathEscape(tokenID))
+	req, err := http.NewRequest(http.MethodDelete, endpoint, nil)
 	if err != nil {
 		return fmt.Errorf("create revoke request: %w", err)
 	}
@@ -168,8 +209,7 @@ func (b *GitLabBackend) RevokeCredential(tokenID, projectID string) error {
 
 // Health checks if GitLab is reachable.
 func (b *GitLabBackend) Health() error {
-	url := fmt.Sprintf("%s/api/v4/version", b.baseURL)
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequest(http.MethodGet, b.baseURL+"/api/v4/version", nil)
 	if err != nil {
 		return fmt.Errorf("create health request: %w", err)
 	}

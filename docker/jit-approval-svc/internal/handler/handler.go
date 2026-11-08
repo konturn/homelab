@@ -3,6 +3,7 @@ package handler
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -46,6 +47,26 @@ func New(cfg *config.Config, s *store.Store, v *vault.Client, tg *telegram.Clien
 		backends: backends,
 		limiter:  ratelimit.NewFromEnv(),
 	}
+}
+
+// maxBodyBytes caps request bodies on /request and /telegram/webhook (the
+// actions socket API uses 16 KiB). Real requests are well under 4 KiB.
+const maxBodyBytes = 64 << 10
+
+// decodeBody decodes a size-limited JSON body, writing the error response
+// (413 when too large, else 400 with badMsg) and returning false on failure.
+func decodeBody(w http.ResponseWriter, r *http.Request, v interface{}, badMsg string) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return false
+		}
+		writeError(w, http.StatusBadRequest, badMsg)
+		return false
+	}
+	return true
 }
 
 // --- Request types ---
@@ -119,8 +140,7 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body CreateRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+	if !decodeBody(w, r, &body, "invalid request body") {
 		return
 	}
 
@@ -164,6 +184,37 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	if body.Reason == "" {
 		writeError(w, http.StatusBadRequest, "reason is required")
 		return
+	}
+
+	// Parse the requested TTL before anything is recorded, so a rejected
+	// request leaves no pending entry and uses no rate-limit slot.
+	var requestedTTL time.Duration
+	if body.TTL != "" {
+		parsed, err := time.ParseDuration(body.TTL)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid ttl %q: %s", body.TTL, err.Error()))
+			return
+		}
+		if parsed <= 0 {
+			writeError(w, http.StatusBadRequest, "ttl must be positive")
+			return
+		}
+		requestedTTL = parsed
+	}
+
+	// A project override becomes part of a GitLab API path: only a numeric
+	// ID or namespace/project path, and it is shown to the approver.
+	if body.ProjectID != "" {
+		if err := backend.ValidateGitLabProjectID(body.ProjectID); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	if body.Resource == "gitlab" {
+		if err := backend.ValidateGitLabProjectScopes(body.Scopes); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 	}
 
 	// Rate limit: max 5 requests per resource per requester per 15 minutes
@@ -221,19 +272,7 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		req.ProjectID = body.ProjectID
 	}
 
-	// Parse and attach requested TTL if present
-	if body.TTL != "" {
-		parsed, err := time.ParseDuration(body.TTL)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid ttl %q: %s", body.TTL, err.Error()))
-			return
-		}
-		if parsed <= 0 {
-			writeError(w, http.StatusBadRequest, "ttl must be positive")
-			return
-		}
-		req.RequestedTTL = parsed
-	}
+	req.RequestedTTL = requestedTTL
 
 	// Attach vault paths if present
 	if len(body.VaultPaths) > 0 {
@@ -457,8 +496,7 @@ func (h *Handler) HandleTelegramWebhook(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var update TelegramUpdate
-	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid update payload")
+	if !decodeBody(w, r, &update, "invalid update payload") {
 		return
 	}
 
@@ -619,11 +657,7 @@ func (h *Handler) sendApprovalMessage(req *store.Request, tierCfg config.TierCon
 		})
 	}
 
-	// Include SSH host in reason for display
-	reason := req.Reason
-	if req.SSHHost != "" {
-		reason = fmt.Sprintf("%s (host: %s)", req.Reason, req.SSHHost)
-	}
+	reason := displayReason(req)
 
 	// Show requested TTL vs max if they differ
 	ttlStr := ttl.String()
@@ -851,10 +885,7 @@ func (h *Handler) buildDisplayInfo(req *store.Request, tierCfg config.TierConfig
 		})
 	}
 
-	reason := req.Reason
-	if req.SSHHost != "" {
-		reason = fmt.Sprintf("%s (host: %s)", req.Reason, req.SSHHost)
-	}
+	reason := displayReason(req)
 
 	// Use resolved TTL (respects client-requested + per-resource overrides)
 	ttl, maxTTL, err := h.effectiveTTL(req)
@@ -878,6 +909,19 @@ func (h *Handler) buildDisplayInfo(req *store.Request, tierCfg config.TierConfig
 		Scopes:     req.Scopes,
 		VaultPaths: tgVaultPaths,
 	}
+}
+
+// displayReason is the reason shown in Telegram, with the SSH host and any
+// GitLab project override appended so the approver sees what is granted.
+func displayReason(req *store.Request) string {
+	reason := req.Reason
+	if req.SSHHost != "" {
+		reason = fmt.Sprintf("%s (host: %s)", reason, req.SSHHost)
+	}
+	if req.ProjectID != "" {
+		reason = fmt.Sprintf("%s (project: %s)", reason, req.ProjectID)
+	}
+	return reason
 }
 
 // effectiveTTL resolves the TTL for a request: starts with the resource/tier
