@@ -17,13 +17,13 @@
 set -euo pipefail
 
 HOST="${APC_HOST:-10.4.128.8}"
-SNMP_USER="${SNMP_USER:-apc1}"
-SNMP_AUTH_PROTO="${SNMP_AUTH_PROTO:-MD5}"
+SNMP_USER="${SNMP_USER:-apc2}"
+SNMP_AUTH_PROTO="${SNMP_AUTH_PROTO:-SHA}"
 SNMP_PRIV_PROTO="${SNMP_PRIV_PROTO:-AES}"
 
 if [ -n "${SNMP_VAULT_PATH:-}" ]; then
-    SNMP_AUTH_PASS="$(vault kv get -field="${SNMP_VAULT_AUTH_FIELD:-password}" "$SNMP_VAULT_PATH")"
-    SNMP_PRIV_PASS="$(vault kv get -field="${SNMP_VAULT_PRIV_FIELD:-password}" "$SNMP_VAULT_PATH")"
+    SNMP_AUTH_PASS="$(vault kv get -field="${SNMP_VAULT_AUTH_FIELD:-auth_password}" "$SNMP_VAULT_PATH")"
+    SNMP_PRIV_PASS="$(vault kv get -field="${SNMP_VAULT_PRIV_FIELD:-priv_password}" "$SNMP_VAULT_PATH")"
 fi
 : "${SNMP_AUTH_PASS:?set SNMP_AUTH_PASS or SNMP_VAULT_PATH}"
 : "${SNMP_PRIV_PASS:?set SNMP_PRIV_PASS or SNMP_VAULT_PATH}"

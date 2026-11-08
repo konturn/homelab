@@ -191,7 +191,6 @@ vault_secret_paths:
     optional: true  # not referenced by any template (CI uses ROUTER_PRIVATE_KEY_BASE64)
   - path: "infrastructure/snmp"
     fields:
-      vault_snmp_password: "password"  # apc1 (MD5), until NUT has moved too (docs/POWER.md)
       vault_snmp_v3_user: "v3_user"
       vault_snmp_auth_password: "auth_password"
       vault_snmp_priv_password: "priv_password"

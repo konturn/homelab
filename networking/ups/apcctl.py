@@ -70,8 +70,14 @@ SSH_OPTS = [
     "-o", "NumberOfPasswordPrompts=1",
     "-o", "ConnectTimeout=20",
     "-o", "ServerAliveInterval=10",
-    "-o", "LogLevel=ERROR",
+    # no connection sharing: root's ssh_config enables ControlMaster, and the
+    # card allows one session at a time
+    "-o", "ControlMaster=no",
+    "-o", "ControlPath=none",
 ]
+
+# scp -v prints "Sink: C0644 <size> <name>" for the file it receives.
+SINK_RE = re.compile(r"Sink: C[0-7]{4} (\d+) ")
 
 
 class ApcError(Exception):
@@ -213,17 +219,32 @@ def _scp(creds: Dict[str, str], src: str, dst: str, accept_new: bool = False) ->
         os.chmod(askpass, 0o700)
         env = dict(os.environ, SSH_ASKPASS=askpass, SSH_ASKPASS_REQUIRE="force", DISPLAY=":0",
                    APCCTL_PW=creds["password"])
-        cmd = ["scp", "-O", "-q", *SSH_OPTS,
+        # -v, not -q: the card closes the channel without an exit status, so
+        # scp exits 1 even after a complete download; the size it announced
+        # ("Sink: C0644 <size>") tells a complete copy from a failure.
+        cmd = ["scp", "-O", "-v", *SSH_OPTS,
                "-o", f"UserKnownHostsFile={KNOWN_HOSTS}",
                "-o", "StrictHostKeyChecking=" + ("accept-new" if accept_new else "yes"),
                src.replace("CARD:", f"{creds['username']}@{HOST}:"),
                dst.replace("CARD:", f"{creds['username']}@{HOST}:")]
         r = subprocess.run(cmd, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120)
-        if r.returncode != 0:
-            msg = (r.stderr or r.stdout).strip().replace(creds["password"], "***")
-            raise ApcError(f"scp failed (rc {r.returncode}): {msg[:300]}")
+        if r.returncode != 0 and not download_complete(r.stderr, dst):
+            lines = [ln for ln in (r.stderr or r.stdout).splitlines() if not ln.startswith("debug")]
+            msg = "\n".join(lines).strip().replace(creds["password"], "***")
+            raise ApcError(f"scp failed (rc {r.returncode}): {msg[-300:]}")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def download_complete(scp_stderr: str, dst: str) -> bool:
+    """True when scp announced a file of N bytes and dst (a local path) holds exactly N bytes."""
+    if dst.startswith("CARD:"):
+        return False  # uploads must exit 0
+    m = SINK_RE.search(scp_stderr or "")
+    try:
+        return bool(m) and os.path.getsize(dst) == int(m.group(1))
+    except OSError:
+        return False
 
 
 def download(creds: Dict[str, str], accept_new: bool = False) -> str:

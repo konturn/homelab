@@ -78,6 +78,17 @@ class CommandTests(unittest.TestCase):
                 with mock.patch.dict(os.environ, {}, clear=True):
                     self.assertEqual(apcctl.main(["apply", "--upload"]), 2)
 
+    def test_download_complete_despite_missing_exit_status(self):
+        with tempfile.TemporaryDirectory() as d:
+            dst = os.path.join(d, "config.ini")
+            Path(dst).write_text("x" * 10)
+            ok = "debug1: Sending command: scp -v -f config.ini\nSink: C0644 10 config.ini\n"
+            self.assertTrue(apcctl.download_complete(ok, dst))
+            self.assertFalse(apcctl.download_complete(ok.replace(" 10 ", " 11 "), dst))
+            self.assertFalse(apcctl.download_complete("Permission denied", dst))
+            self.assertFalse(apcctl.download_complete(ok, os.path.join(d, "missing")))
+            self.assertFalse(apcctl.download_complete(ok, "CARD:config.ini"))
+
     def test_check_committed_state(self):
         self.assertEqual(apcctl.main(["check"]), 0)
 

@@ -245,22 +245,31 @@ the result with `networking/ups/apc-config.ini`. CI runs `ups-card:drift`
 daily (schedule `SCHEDULED_TASK=ups-card-drift`) and mails root on drift.
 `ups:test` runs the offline tests on MRs.
 
-**State: inert, waiting for credentials.** Vault has no card login: only the
-SNMPv3 password is there, at `homelab/infrastructure/snmp`. Until the login
-exists, the drift job logs "credentials pending" and passes. To finish the
-setup:
+**State: live since 2026-11-07 (#93).** The card login is in Vault at
+`homelab/infrastructure/ups-card` (`username`, `password`; the `apc` super
+user, rotated to a random 24-character password). `networking/ups/known_hosts`
+pins the card's ssh-rsa host key, and `apc-config.ini` is the committed
+baseline. To change the card: make the change (web UI or SSH CLI), then
+`python3 networking/ups/apcctl.py export --write`, review the diff and merge
+it, so the daily drift check stays clean.
 
-1. Create a **read-only** card user if possible (Administration > Security >
-   Local Users; a "Read-Only User" can download `config.ini` on AOS 6.x). Store
-   it in Vault at **`homelab/infrastructure/ups-card`** with fields `username`
-   and `password`. `ci-deploy` can already read `homelab/data/*`.
-2. On the router, from the repo root, with `VAULT_ADDR`/`VAULT_TOKEN` set:
-   `python3 networking/ups/apcctl.py pin-hostkey`. This records the card's
-   ssh-rsa host key in `networking/ups/known_hosts`. The card offers only
-   ssh-rsa, which OpenSSH no longer scans by default.
-3. `python3 networking/ups/apcctl.py export --write`, review
-   `apc-config.ini` (`apcctl.py check` refuses clear-text secrets), and
-   commit it together with `known_hosts`.
+Desired state worth knowing (all in `apc-config.ini`):
+
+- SNMPv1 off. SNMPv3 only, one user profile (`apc2`, SHA-1 auth, AES priv),
+  access only from the router (10.4.0.1). Profiles 1, 3 and 4 are unused.
+- HTTPS and SSH on; HTTP, telnet and FTP off.
+- NTP enabled against the router (10.4.0.1). AOS 6.8 sends **NTPv1**
+  requests, which the router's ntpsec does not answer, so the card's clock
+  is still wrong (it reads 2018). Event log timestamps are unreliable until
+  that is fixed: a firmware update, or an NTP server that answers v1.
+
+Card CLI notes (AOS 6.8, SSH): the card allows one session at a time and keeps
+an abandoned one for a few minutes. It drops input typed faster than it reads,
+so scripts must type slowly. It does not echo password arguments. `snmpv3`
+takes one option per command (several at once give `E102`), and a profile's
+privacy must be `none` before its authentication can be. SCP downloads finish
+without an exit status, so `scp` exits 1 after a complete copy; `apcctl.py`
+checks the announced size instead.
 
 Each command makes exactly one login attempt and never retries.
 `apcctl.py apply --plan` shows what an upload would send. `apply --upload
@@ -273,42 +282,30 @@ use it only with someone present.
 The card's firmware is in the monthly firmware report (`ci/reports/firmware.py`,
 read from the local `upsc`, no credentials). AOS 6.8.2 / sumx 6.8.0 is behind:
 se.com lists NMC2 v7.2.2 (2025-09) for AP9630/31. Read the release notes
-before flashing.
+before flashing. A card firmware update reboots only the card; afterwards run
+`apcctl.py drift` and re-check SNMP (`snmpv3-check.sh`, `upsc`). Never update
+the UPS's own firmware remotely.
 
-## SNMP credentials runbook (not done yet)
+## SNMP credentials
 
-Today Telegraf and NUT use SNMPv3 user `apc1` with **MD5** authentication,
-AES privacy, and **the same password for both**. Goal: SHA plus AES with separate
-auth and priv passphrases. NMC2 on AOS 6.x offers SHA-1 as its strongest
-auth; recheck after a firmware update. Each step keeps monitoring working, by
-running a second user profile alongside `apc1` until both consumers have moved.
+Telegraf and NUT poll the card as SNMPv3 user **`apc2`**: SHA-1
+authentication (the strongest NMC2 offers; SHA-2 needs an NMC3/AP9641) and AES
+privacy, with separate passphrases in `homelab/infrastructure/snmp`
+(`v3_user`, `auth_password`, `priv_password`), rendered by
+`fetch-vault-secrets` as `vault_snmp_v3_user`, `vault_snmp_auth_password`
+and `vault_snmp_priv_password`. The old `apc1` user (MD5, one password for
+both) was removed on 2026-11-07 (#93; !1071 Telegraf, !1074 NUT).
 
-1. **Vault:** generate two passphrases (15-32 characters, no spaces or
-   quotes). Add them to `homelab/infrastructure/snmp` as fields
-   `v3_user` (`apc2`), `auth_password`, and `priv_password`. Leave `password`
-   in place.
-2. **Card** (web UI, Network > SNMPv3): user profile 2 → name `apc2`, auth
-   SHA, priv AES, the two passphrases. Access Control: enable profile 2 for
-   NMS 10.4.0.1 (Telegraf and NUT both poll from the router). Leave profile
-   1 (`apc1`) alone.
-3. **Verify** (read-only):
-   `SNMP_USER=apc2 SNMP_AUTH_PROTO=SHA SNMP_VAULT_PATH=homelab/infrastructure/snmp SNMP_VAULT_AUTH_FIELD=auth_password SNMP_VAULT_PRIV_FIELD=priv_password networking/ups/snmpv3-check.sh`
-   and the same for `apc1` (`SNMP_AUTH_PROTO=MD5`, default fields).
-4. **Repo MR 1 (Telegraf):** in `fetch-vault-secrets` add
-   `vault_snmp_v3_user`, `vault_snmp_auth_password`, and
-   `vault_snmp_priv_password`. In `telegraf.conf` set
-   `sec_name`/`auth_protocol = "SHA"`/`auth_password`/`priv_password` from them.
-   Merge, then check the UPS panels keep updating; the Grafana `snmp` series
-   must not gap.
-5. **Repo MR 2 (NUT):** the same in `base/nut/ups.conf` (`secName`,
-   `authProtocol = SHA`, `authPassword`, `privPassword`). The deploy restarts
-   the driver; check that `upsc apc@localhost ups.status` returns `OL`.
-6. **After a day of clean data:** disable profile 1 (`apc1`) on the card. Then
-   re-run step 3 for `apc2`, confirm Telegraf and `upsc` still work, remove
-   the old `password` field from Vault, and remove `vault_snmp_password` from the
-   repo.
+Check it, read-only: `networking/ups/snmpv3-check.sh` (defaults to `apc2` and
+reads the passphrases from Vault when `SNMP_VAULT_PATH` is set).
 
-Rollback at any step: re-enable `apc1` and revert the last MR.
+**Rotating the passphrases** without a monitoring gap: put the new pair in a
+spare profile (for example `apc3`) with its own access-control entry for
+10.4.0.1, check it with `SNMP_USER=apc3 ... snmpv3-check.sh`, update the Vault
+fields (`v3_user` too), deploy Telegraf and NUT, check `upsc apc@localhost
+ups.status` and the Grafana UPS panels, then reset the old profile (privacy
+`none`, then authentication `none`, access disabled) and re-export
+`apc-config.ini`. Passphrases: 15-32 characters, letters and digits.
 
 ## Adding a NUT secondary
 
