@@ -24,6 +24,8 @@
 /scripts/                                @root
 /snapclient/                             @root
 /terraform/                              @root
+# Fact files: render base/udev and base/disk/crypttab (ci/facts/render.py)
+/inventory/                              @root
 /requirements.txt                        @root
 /renovate.json                           @root
 

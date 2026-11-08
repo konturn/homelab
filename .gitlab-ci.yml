@@ -54,6 +54,10 @@
 #   ROUTER BMC (see docs/IPMI.md; CI never writes to the BMC)
 #   ipmi:test (MR + main, offline), ipmi:drift (scheduled, SCHEDULED_TASK=ipmi-drift; opens an issue)
 #
+#   FACTS (see inventory/README.md; CI never changes the router here)
+#   facts:test (MR + main, offline), facts:drift (scheduled with ipmi:drift, or
+#   SCHEDULED_TASK=facts-drift; opens an issue)
+#
 #   AUTO-MERGE (see docs/AUTOMERGE.md)
 #   automerge:test + automerge:eligibility (MR, informational)
 #   automerge:sweep / automerge:report (scheduled on main, AUTOMERGE_TASK=sweep|report)
@@ -1844,6 +1848,63 @@ ipmi:drift:
     expire_in: 30 days
   rules:
     - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "ipmi-drift" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+
+# =============================================================================
+# Facts: inventory/hardware.yml + inventory/dependencies.yml (inventory/README.md)
+# =============================================================================
+# facts:test checks the fact files, that the files generated from them
+# (base/udev/85-my-usb-audio.rules, base/disk/crypttab) are current, and the
+# tools' unit tests. facts:drift compares the live router with the data.
+
+facts:test:
+  extends:
+    - .ansible
+    - .interruptible
+  stage: validate
+  needs: []
+  before_script: []
+  script:
+    - python3 ci/facts/render.py --check
+    - python3 -m unittest discover -s ci/facts -p 'test_*.py' -v
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" || ($CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push")
+      changes:
+        - inventory/**/*
+        - ci/facts/**/*
+        - base/udev/**/*
+        - base/disk/crypttab
+        - ansible/inventory.yml
+        - .gitlab-ci.yml
+
+# Daily on the router BMC drift schedule (SCHEDULED_TASK=ipmi-drift), so it
+# needs no pipeline schedule of its own; run it by hand with Run pipeline and
+# SCHEDULED_TASK=facts-drift. Read-only: ci/facts/collect.py runs on the
+# router over SSH (sent on stdin, nothing installed) and only reads.
+# Opens, updates or closes the `facts-drift` issue; fails on drift, so the
+# pipeline-failure alerting sees it too.
+facts:drift:
+  extends: .ansible
+  stage: deploy
+  needs: []
+  script:
+    - rc=0; python3 ci/facts/drift.py --report facts-drift.md || rc=$?
+    - |
+      python3 ci/ipmi/drift_issue.py --rc "$rc" --report facts-drift.md --label facts-drift \
+        --title "Router hardware or services differ from inventory/*.yml (ci/facts/drift.py)" \
+        --check-name "ci/facts/drift.py"
+    - |
+      if [ "$rc" -ne 0 ]; then
+        echo "ci/facts/drift.py exited with $rc (2 = drift; see inventory/README.md)"
+        exit 1
+      fi
+  artifacts:
+    when: always
+    paths:
+      - facts-drift.md
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && ($SCHEDULED_TASK == "ipmi-drift" || $SCHEDULED_TASK == "facts-drift") && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
 
 # =============================================================================
 # Scheduled read-only reports for the OpenClaw Morning Digest (ci/reports/README.md)
