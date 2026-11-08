@@ -47,8 +47,10 @@ with this file, they win: say so.
 ## Hardware *(from inventory/hardware.yml)*
 
 <!-- generated: hardware -->
-- The scheduled `facts:drift` job compares all of this with the live router
-  and keeps the `facts-drift` issue open while anything differs.
+- The daily `facts:drift` job compares all of this with the live router: it
+  starts a declared container or unit that is stopped, opens a
+  `facts-record` MR for a self-explaining hardware change (review it, don't
+  rewrite it), and keeps the rest in one living `needs-hands` issue.
 
 ## Dependencies *(from inventory/dependencies.yml)*
 

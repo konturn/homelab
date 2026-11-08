@@ -39,6 +39,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -62,14 +63,17 @@ def probe_spec(deps: dict) -> dict:
     return {"probes": {name: n["probe"] for name, n in (deps.get("nodes") or {}).items() if n.get("probe")}}
 
 
-def collect_remote(spec: dict) -> dict:
+def ssh_argv(*remote: str) -> list[str]:
     root = Path(os.environ.get("CI_PROJECT_DIR") or facts.ROOT)
-    program = "_SPEC_JSON = %r\n" % json.dumps(spec) + (HERE / "collect.py").read_text()
-    ssh = ["ssh", "-i", str(root / "tmp"), "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes",
+    return ["ssh", "-i", str(root / "tmp"), "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes",
            "-o", "ConnectTimeout=15", "-o", "StrictHostKeyChecking=yes",
            "-o", f"UserKnownHostsFile={root / 'ansible' / 'known_hosts'}", "-o", "LogLevel=ERROR",
-           f"root@{HOST}", "python3", "-"]
-    p = subprocess.run(ssh, input=program, capture_output=True, text=True, timeout=300)
+           f"root@{HOST}", *remote]
+
+
+def collect_remote(spec: dict) -> dict:
+    program = "_SPEC_JSON = %r\n" % json.dumps(spec) + (HERE / "collect.py").read_text()
+    p = subprocess.run(ssh_argv("python3", "-"), input=program, capture_output=True, text=True, timeout=300)
     if p.returncode != 0:
         raise RuntimeError(f"collector on {HOST} failed (rc {p.returncode}): {p.stderr.strip()[:500]}")
     return json.loads(p.stdout)
@@ -86,12 +90,19 @@ def collect_local(spec: dict) -> dict:
 class Report:
     def __init__(self):
         self.sections: dict[str, list[tuple[str, str]]] = {}
+        # every DRIFT item with a stable key and, for software drift, the fix
+        self.items: list[dict] = []
+        self.key = None  # default key for the items being added (set by the checks)
 
-    def add(self, section: str, level: str, text: str):
+    def add(self, section: str, level: str, text: str, **meta):
         self.sections.setdefault(section, []).append((level, text))
+        if level == "DRIFT":
+            self.items.append({"section": section, "text": text,
+                               "key": meta.get("key") or self.key or f"{section}:{text}",
+                               "action": meta.get("action")})
 
-    def drift(self, section, text):
-        self.add(section, "DRIFT", text)
+    def drift(self, section, text, key=None, action=None):
+        self.add(section, "DRIFT", text, key=key, action=action)
 
     def note(self, section, text):
         self.add(section, "NOTE", text)
@@ -123,6 +134,7 @@ def suffix_note(d: dict) -> str:
 
 def check_disks(hw: dict, live: dict, rep: Report) -> str:
     S = "disks"
+    rep.key = None
     ctrls = hw["disk_controllers"]
     disks_live = live.get("disks")
     pools_live = live.get("zpools")
@@ -137,6 +149,7 @@ def check_disks(hw: dict, live: dict, rep: Report) -> str:
     for path, d in declared_paths.items():
         got = disks_live.get(path)
         slot, mapper = d["slot"], (d.get("luks") or {}).get("mapper")
+        rep.key = f"slot:{slot}"
         if d["role"] == "empty":
             if got:
                 rep.drift(S, f"{slot}: declared empty, holds {got['model']} ...{got['serial_suffix']} "
@@ -179,6 +192,7 @@ def check_disks(hw: dict, live: dict, rep: Report) -> str:
                 if mapper in pool.get("leaves", {}):
                     rep.drift(S, f"{slot} ({mapper}): declared retired but is a member of {pname}.")
     for path, got in sorted(disks_live.items()):
+        rep.key = f"path:{path}"
         if path not in declared_paths:
             rep.drift(S, f"undeclared disk {got['model']} ...{got['serial_suffix']} (/dev/{got['dev']}) at {path}.")
     if pools_live is None:
@@ -186,6 +200,7 @@ def check_disks(hw: dict, live: dict, rep: Report) -> str:
     else:
         for pname, spec in (hw.get("zpools") or {}).items():
             pool = pools_live.get(pname)
+            rep.key = f"pool:{pname}"
             if not pool:
                 rep.drift(S, f"pool {pname} not imported.")
                 continue
@@ -200,6 +215,7 @@ def check_disks(hw: dict, live: dict, rep: Report) -> str:
                     rep.drift(S, f"pool {pname}: undeclared vdev {v}.")
             for leaf in pool["leaves"]:
                 if (pname, leaf) not in leaf_seen:
+                    rep.key = f"mapper:{leaf}"
                     rep.drift(S, f"pool {pname}: member {leaf} is not declared in inventory/hardware.yml.")
     n = sum(1 for d in hw["disks"] if d["role"] != "empty")
     return f"{n} declared disks, {len(disks_live)} found"
@@ -207,6 +223,7 @@ def check_disks(hw: dict, live: dict, rep: Report) -> str:
 
 def check_audio(hw: dict, live: dict, rep: Report) -> str:
     S = "audio zones"
+    rep.key = None
     cards = live.get("sound_cards")
     ports = live.get("usb_ports") or {}
     if cards is None:
@@ -217,6 +234,7 @@ def check_audio(hw: dict, live: dict, rep: Report) -> str:
     by_id = {c["id"]: c for c in cards}
     ok = 0
     for z in hw["audio_zones"]:
+        rep.key = f"zone:{z['id']}"
         c = by_id.get(z["id"])
         where = f"port {z['port']} [{ctrls[z['controller']]['desc']}]"
         if c and c.get("usb_port") == z["port"]:
@@ -237,6 +255,7 @@ def check_audio(hw: dict, live: dict, rep: Report) -> str:
             what = "nothing is plugged in there"
         rep.drift(S, f"{z['id']}: no card named {z['id']}; expected on {where}, {what}.")
     for c in cards:
+        rep.key = f"card:{c.get('usb_port')}"
         if c.get("usb_port") and c["id"] not in zones:
             rep.drift(S, f"USB sound card `{c['id']}` on port {c['usb_port']} matches no zone (unnamed); "
                          "move it to its zone's port or record the port in audio_zones.")
@@ -245,6 +264,7 @@ def check_audio(hw: dict, live: dict, rep: Report) -> str:
 
 def check_services(deps: dict, live: dict, rep: Report) -> str:
     S = "services and endpoints"
+    rep.key = None
     nodes = deps.get("nodes") or {}
     probes = live.get("probes") or {}
     down = []
@@ -252,6 +272,7 @@ def check_services(deps: dict, live: dict, rep: Report) -> str:
         if not n.get("probe"):
             continue
         res = probes.get(name)
+        rep.key = f"node:{name}"
         if res is None:
             rep.drift(S, f"{name}: not probed")
             continue
@@ -260,20 +281,26 @@ def check_services(deps: dict, live: dict, rep: Report) -> str:
             (kind, arg), = n["probe"].items()
             target = arg if isinstance(arg, str) else f"{arg.get('name')} @ {arg.get('server')}"
             affects = facts.dependents(deps, name)
+            action = ({"type": "systemd", "unit": arg} if kind == "systemd" and n.get("host", "router") == "router"
+                      else {"type": "container", "name": arg}
+                      if kind == "container" and not res["detail"].startswith("running") else None)
             rep.drift(S, f"{name} ({kind} {target}): {res['detail']}"
-                         + (f"; affects {', '.join(affects)}" if affects else "") + "." + suffix_note(n))
+                         + (f"; affects {', '.join(affects)}" if affects else "") + "." + suffix_note(n),
+                      action=action)
     total = sum(1 for n in nodes.values() if n.get("probe"))
     return f"{total - len(down)}/{total} probes up"
 
 
 def check_amps(hw: dict, live: dict, rep: Report) -> str:
     S = "audio zones"
+    rep.key = None
     serial = live.get("serial_by_id")
     amps = {n: a for n, a in (hw.get("amps") or {}).items() if a.get("connected", True) is not False}
     if serial is None:
         return "not checked"
     ok = 0
     for name, amp in amps.items():
+        rep.key = f"amp:{name}"
         if amp["serial_by_id"] in serial:
             ok += 1
         else:
@@ -298,6 +325,7 @@ def expected_containers(root: Path = facts.ROOT) -> dict:
 
 def check_containers(expected: dict, live: dict, rep: Report) -> str:
     S = "containers"
+    rep.key = None
     have = live.get("containers")
     if have is None:
         rep.drift(S, "could not list containers (see collector errors)")
@@ -318,7 +346,10 @@ def check_containers(expected: dict, live: dict, rep: Report) -> str:
             problem = None
         if problem:
             bad += 1
-            rep.drift(S, f"{name}: {problem} (declared in docker/docker-compose.yml).")
+            rep.drift(S, f"{name}: {problem} (declared in docker/docker-compose.yml).", key=f"container:{name}",
+                      # only a stopped container is started; an unhealthy one needs a look
+                      action={"type": "container", "name": name}
+                      if want == "running" and not problem.startswith("running") else None)
     return f"{len(expected) - bad}/{len(expected)} declared containers up"
 
 
@@ -390,12 +421,106 @@ def compare(hw: dict, deps: dict, live: dict, expected: dict | None = None,
     if ifaces is not None:
         checked["interfaces"] = check_interfaces(ifaces, live, rep)
     checked["services and endpoints"] = check_services(deps, live, rep)
+    rep.key = None
     for e in live.get("errors") or []:
         section = ("disks" if e.startswith(("disks", "zpools")) else
                    "containers" if e.startswith("containers") else
                    "interfaces" if e.startswith(("interfaces", "ha_adapters")) else "audio zones")
         rep.drift(section, f"collector error: {e}")
     return rep, checked
+
+
+def run_on_router(cmd: str, local: bool) -> tuple[int, str]:
+    argv = ["sh", "-c", cmd] if local else ssh_argv(cmd)
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=600)
+    except subprocess.TimeoutExpired:
+        return 124, "timed out"
+    return p.returncode, (p.stdout + p.stderr).strip()[-400:]
+
+
+def collect(args, spec):
+    if args.snapshot:
+        return json.loads(args.snapshot.read_text())
+    return collect_local(spec) if args.local else collect_remote(spec)
+
+
+def resolve_drift(args, hw, deps, expected, spec, live, rep, checked, ifaces=None) -> tuple[str, int]:
+    """Fix, record, report (resolve.py). Returns (report text, exit code)."""
+    import render  # noqa: PLC0415
+    import resolve  # noqa: PLC0415
+
+    root, today = args.root, resolve.today()
+    lines = []
+    # 1. software drift: fix in place, then look again
+    services = resolve.container_services(root)
+    tried = {}
+    for it in rep.items:
+        if not it["action"]:
+            continue
+        cmd, why = resolve.remediation_command(it["action"], services)
+        if not cmd:
+            tried[it["key"]] = f"not fixed automatically: {why}"
+            continue
+        if args.dry_run:
+            lines.append(f"- would run `{cmd}` for {it['key']}")
+            tried[it["key"]] = f"dry run: would run `{cmd}`"
+            continue
+        rc, out = run_on_router(cmd, args.local)
+        lines.append(f"- `{cmd}` -> rc {rc}" + (f": {out[-200:]}" if rc else ""))
+        tried[it["key"]] = f"auto-fix `{cmd}` " + ("ran, still failing" if rc == 0 else f"failed (rc {rc}): {out[-200:]}")
+    if any(not v.startswith(("not fixed", "dry run")) for v in tried.values()):
+        time.sleep(args.settle)
+        live = collect(args, spec)
+        rep, checked = compare(hw, deps, live, expected, ifaces)
+    fixed = [k for k, v in tried.items() if not v.startswith(("not fixed", "dry run"))
+             and k not in {i["key"] for i in rep.items}]
+    # 2. physical changes that explain themselves: the record MR
+    new_disks, changes, covered, extra = resolve.propose_disks(hw, live, today)
+    record = {}
+    if new_disks is not None:
+        path = root / facts.HARDWARE
+        before = path.read_text(encoding="utf-8")
+        try:
+            path.write_text(resolve.rewrite_hardware(before, hw["disks"], new_disks), encoding="utf-8")
+            facts.load(root)  # the proposal must validate like any MR
+            for rel, text in render.targets(root).items():
+                if (root / rel).read_text(encoding="utf-8") != text:
+                    record[rel] = text
+            record[facts.HARDWARE] = path.read_text(encoding="utf-8")
+        except facts.FactsError as e:
+            lines.append(f"- could not build the record MR: {e}")
+            covered = set()
+        finally:
+            path.write_text(before, encoding="utf-8")
+    # 3. the rest needs hands
+    hands = [(it["section"], it["key"], it["text"] + (f" ({tried[it['key']]})" if it["key"] in tried else ""))
+             for it in rep.items if it["key"] not in covered]
+    hands += [("disks", k, t) for k, t in extra if k not in {h[1] for h in hands}]
+    job_url = os.environ.get("CI_JOB_URL")
+    out = [rep.render(checked).rstrip("\n"), "", "## What facts:drift did", ""]
+    out += [f"- fixed automatically: {k}" for k in fixed] or ["- nothing to fix automatically"]
+    out += lines
+    out += [f"- record: {c}" for c in changes]
+    rc = 0
+    if args.dry_run or args.local and not os.environ.get("AUTOMERGE_TOKEN"):
+        out.append(f"- (no GitLab writes) {len(hands)} item(s) would go to the living issue")
+    else:
+        token = os.environ.get("AUTOMERGE_TOKEN") or os.environ.get("GITLAB_TOKEN")
+        if not token:
+            out.append("- AUTOMERGE_TOKEN is not set: no record MR, no living issue")
+            rc = 1
+        else:
+            gl = resolve.GitLab(token)
+            try:
+                if record:
+                    out.append("- " + resolve.record_mr(gl, record, changes, job_url))
+                out.append("- living issue: " + resolve.update_issue(gl, hands, today, job_url))
+            except Exception as e:  # noqa: BLE001
+                out.append(f"- GitLab write failed: {e}")
+                rc = 1
+    out.append(f"- needs hands: {len(hands)} item(s)")
+    return "\n".join(out) + "\n", rc
 
 
 def main(argv=None) -> int:
@@ -406,18 +531,17 @@ def main(argv=None) -> int:
     ap.add_argument("--save-snapshot", type=Path, help="write the collector output here")
     ap.add_argument("--report", type=Path, help="also write the report here")
     ap.add_argument("--root", type=Path, default=facts.ROOT)
+    ap.add_argument("--resolve", action="store_true",
+                    help="fix software drift, open the record MR, rewrite the living issue (resolve.py)")
+    ap.add_argument("--dry-run", action="store_true", help="with --resolve: change nothing, say what would happen")
+    ap.add_argument("--settle", type=int, default=90, help="seconds to wait after a fix before looking again")
     args = ap.parse_args(argv)
     try:
         hw, deps = facts.load(args.root)
         expected = expected_containers(args.root)
         ifaces = expected_interfaces(args.root)
         spec = {**probe_spec(deps), **interface_spec(ifaces)}
-        if args.snapshot:
-            live = json.loads(args.snapshot.read_text())
-        elif args.local:
-            live = collect_local(spec)
-        else:
-            live = collect_remote(spec)
+        live = collect(args, spec)
     except Exception as e:  # noqa: BLE001 - any failure here means the check did not run
         msg = f"## Facts drift: check failed\n\n{type(e).__name__}: {e}\n"
         print(msg)
@@ -427,11 +551,14 @@ def main(argv=None) -> int:
     if args.save_snapshot:
         args.save_snapshot.write_text(json.dumps(live, indent=1, sort_keys=True) + "\n")
     rep, checked = compare(hw, deps, live, expected, ifaces)
-    text = rep.render(checked)
+    if args.resolve:
+        text, rc = resolve_drift(args, hw, deps, expected, spec, live, rep, checked, ifaces)
+    else:
+        text, rc = rep.render(checked), (2 if rep.drift_count else 0)
     print(text)
     if args.report:
         args.report.write_text(text)
-    return 2 if rep.drift_count else 0
+    return rc
 
 
 if __name__ == "__main__":

@@ -54,9 +54,9 @@
 #   ROUTER BMC (see docs/IPMI.md; CI never writes to the BMC)
 #   ipmi:test (MR + main, offline), ipmi:drift (scheduled, SCHEDULED_TASK=ipmi-drift; opens an issue)
 #
-#   FACTS (see inventory/README.md; CI never changes the router here)
+#   FACTS (see inventory/README.md; facts:drift only starts stopped declared services)
 #   facts:test (MR + main, offline), facts:drift (scheduled with ipmi:drift, or
-#   SCHEDULED_TASK=facts-drift; opens an issue)
+#   SCHEDULED_TASK=facts-drift; fixes, records or reports drift)
 #
 #   AUTO-MERGE (see docs/AUTOMERGE.md)
 #   automerge:test + automerge:eligibility (MR, informational)
@@ -1920,25 +1920,22 @@ facts:test:
 
 # Daily on the router BMC drift schedule (SCHEDULED_TASK=ipmi-drift), so it
 # needs no pipeline schedule of its own; run it by hand with Run pipeline and
-# SCHEDULED_TASK=facts-drift. Read-only: ci/facts/collect.py runs on the
-# router over SSH (sent on stdin, nothing installed) and only reads.
-# Opens, updates or closes the `facts-drift` issue; fails on drift, so the
-# pipeline-failure alerting sees it too.
+# SCHEDULED_TASK=facts-drift. ci/facts/collect.py runs on the router over SSH
+# (sent on stdin, read-only). What happens to a difference (resolve.py,
+# inventory/README.md "What happens to drift"): a stopped container or
+# inactive unit the repo declares is started and checked again; a physical
+# change that explains itself becomes a `facts-record` MR for review; the rest
+# goes to ONE living issue (labels facts-drift, needs-hands), rewritten in
+# place and closed when nothing is left. Drift does not fail the job (no
+# page per run); a check or GitLab write that could not run does.
+# deploy-router: never starts a container while a deploy is changing them.
 facts:drift:
   extends: .ansible
   stage: deploy
   needs: []
+  resource_group: deploy-router
   script:
-    - rc=0; python3 ci/facts/drift.py --report facts-drift.md || rc=$?
-    - |
-      python3 ci/ipmi/drift_issue.py --rc "$rc" --report facts-drift.md --label facts-drift \
-        --title "Router hardware or services differ from inventory/*.yml (ci/facts/drift.py)" \
-        --check-name "ci/facts/drift.py"
-    - |
-      if [ "$rc" -ne 0 ]; then
-        echo "ci/facts/drift.py exited with $rc (2 = drift; see inventory/README.md)"
-        exit 1
-      fi
+    - python3 ci/facts/drift.py --resolve --report facts-drift.md
   artifacts:
     when: always
     paths:

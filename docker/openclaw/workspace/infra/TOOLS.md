@@ -64,8 +64,10 @@ with this file, they win: say so.
 - Amp C: Not connected yet. Planned (#154): Office, Main Bedroom, Guest Bedroom, maybe Movie Room, on a third USB-serial adapter.
 - Amcrest back camera (Home Assistant camera.10_6_128_14): Offline 2026-10-21 to 2026-11-08; back after its PoE cable was reseated at the switch. Clock about 55 min slow (no NTP configured); recorded by Frigate since 2026-11-08.
 - Amcrest doorbell (amcrest2mqtt): Unreachable since 2026-07-13 (issue #123); hardware fix pending.
-- The scheduled `facts:drift` job compares all of this with the live router
-  and keeps the `facts-drift` issue open while anything differs.
+- The daily `facts:drift` job compares all of this with the live router: it
+  starts a declared container or unit that is stopped, opens a
+  `facts-record` MR for a self-explaining hardware change (review it, don't
+  rewrite it), and keeps the rest in one living `needs-hands` issue.
 
 ## Dependencies *(from inventory/dependencies.yml)*
 

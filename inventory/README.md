@@ -38,9 +38,9 @@ the connected amps' `/dev/serial/by-id` adapters to their `ha_port`.
 `facts:drift` runs daily with the BMC drift check (schedule
 `SCHEDULED_TASK=ipmi-drift`; by hand: Run pipeline on `main` with
 `SCHEDULED_TASK=facts-drift`). `ci/facts/drift.py` sends `collect.py` to the
-router over SSH (read-only: lsblk, `/dev/disk/by-path`, `zpool status`,
-`/sys/class/sound`, `docker inspect`, `systemctl is-active`, TCP/DNS probes)
-and reports:
+router over SSH (read-only: lsblk with LUKS UUIDs, `/dev/disk/by-path`, `zpool status`,
+`/sys/class/sound`, `docker ps`/`inspect`, `systemctl is-active`, TCP/DNS
+probes) and compares:
 
 - disks: each slot holds the declared model and serial suffix, its LUKS
   mapper is open, data disks are ONLINE in the declared vdev, no undeclared
@@ -52,13 +52,28 @@ and reports:
   a compose profile and `snapclient_disabled_zones`;
 - services: every node with a probe is up, listed with what depends on it.
 
-Drift fails the job (and the pipeline-failure alerting with it) and opens or
-updates the `facts-drift` issue; the issue is closed when a run is clean.
-`known_issue` on a disk is printed next to its drift but does not silence it.
-NOTE lines (for example a LUKS device opened under another mapper name) are
-shown but don't fail the job.
+### What happens to drift
 
-On the router itself: `python3 ci/facts/drift.py --local`.
+Drift is resolved, not filed (`ci/facts/resolve.py`, run with
+`drift.py --resolve`):
+
+| Kind | Example | What the job does |
+|---|---|---|
+| Software: the repo is right | a declared container stopped, a declared systemd unit inactive | Starts it the way the deploy does (`docker compose up -d --no-deps <service>` on the compose file the last deploy rendered, `systemctl start <unit>`), waits, checks again. Only a failed fix is reported. Never for `vault` (comes up sealed) or `gitlab`, nor for an unhealthy container that is still running. |
+| A physical change that explains itself | a disk replaced in a bay, a disk moved to another bay, a new disk that is already a healthy pool member or spare, a disk gone from both the bays and the pool | Opens (or refreshes) one MR on `facts/drift-record`, label `facts-record`, assigned to root: `inventory/hardware.yml` updated (untouched entries keep their text) plus every file rendered from it. It is a record, so it is reviewed and merged by hand, never auto-merged. |
+| Needs hands | faulted disk, missing pool member, card unplugged or on the wrong port, device or endpoint down, a fix that did not work | ONE living issue, labels `facts-drift` + `needs-hands` (the monthly decision queue): its description is rewritten in place on each run (no notes, so no notification per run), each item keeps the date it was first seen, and the issue is closed when nothing is left. |
+
+Drift does not fail the job, so nothing pages per run; the job fails only
+when the check or a GitLab write could not run. It runs in the
+`deploy-router` resource group, so it never starts a container while a deploy
+is changing them.
+
+`known_issue` on a disk or node is printed next to its drift but does not
+silence it. NOTE lines (for example a LUKS device opened under another mapper
+name) are shown but are not drift.
+
+On the router itself: `python3 ci/facts/drift.py --local` (report only), or
+`--local --resolve --dry-run` to see what the job would do.
 
 ## Changing a fact
 
