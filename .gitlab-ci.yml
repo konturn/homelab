@@ -60,6 +60,7 @@
 #
 #   AUTO-MERGE (see docs/AUTOMERGE.md)
 #   automerge:test + automerge:eligibility (MR, informational)
+#   automerge:properties-deep (main, on policy changes; SCHEDULED_TASK=automerge-properties)
 #   automerge:sweep / automerge:report (scheduled on main, AUTOMERGE_TASK=sweep|report)
 #   <host>:deploy-service (main, auto-merged commits only; replaces the full deploys)
 #
@@ -2060,6 +2061,8 @@ automerge:test:
   stage: validate
   needs: []
   script:
+    # Hypothesis for test_properties.py (300 examples per property here, ~1 min)
+    - pip3 install -q --break-system-packages --cache-dir /cache/pip -r ci/automerge/requirements-test.txt
     - python3 -m unittest discover -s ci/automerge -p 'test_*.py' -v
     - ansible-playbook -i ansible/inventory.yml ansible/service-update.yml -e automerge_host=router.lab.nkontur.com --syntax-check
   rules:
@@ -2073,6 +2076,31 @@ automerge:test:
         - renovate.json
         - CODEOWNERS
         - .gitlab-ci.yml
+
+# The property tests (ci/automerge/test_properties.py) with 5000 examples per
+# property instead of automerge:test's 300 (~15 min): on main after a change
+# to the policy code or file, off the deploy path (needs: [], last stage), or
+# by hand with Run pipeline and SCHEDULED_TASK=automerge-properties. No
+# credentials: the .ansible before_script (SSH key) is dropped.
+automerge:properties-deep:
+  extends: .ansible
+  stage: deploy
+  needs: []
+  timeout: 45m
+  variables:
+    HYPOTHESIS_PROFILE: deep
+  before_script: []
+  script:
+    - pip3 install -q --break-system-packages --cache-dir /cache/pip -r ci/automerge/requirements-test.txt
+    - python3 -m unittest discover -s ci/automerge -p 'test_properties.py' -v
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "automerge-properties" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - ci/automerge/*.py
+        - ci/automerge/requirements-test.txt
+        - ci/automerge-policy.yml
 
 # Informational: MR-local policy checks (no credentials). The authoritative
 # decision is made by automerge:sweep from main.

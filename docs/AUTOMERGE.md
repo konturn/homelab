@@ -756,3 +756,10 @@ above. The script refuses any MR not authored by root.
 - Tests: `python3 -m unittest discover -s ci/automerge -v`. `test_fast_track.py`
   and `test_policy_scope.py` also check the real policy file, inventory,
   compose files, `renovate.json` and `.gitlab-ci.yml` against each other.
+  `test_properties.py` states the class boundaries as properties (no
+  never-list path, Jinja or extra YAML ever gets through; accepted edits mean
+  only what the class allows, checked against PyYAML; tags never classify
+  across a major) and lets Hypothesis search for counterexamples
+  (`pip install -r ci/automerge/requirements-test.txt`; 300 examples per
+  property in automerge:test, 5000 in automerge:properties-deep;
+  `HYPOTHESIS_PROFILE=deep` locally).
