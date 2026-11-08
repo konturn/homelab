@@ -8,6 +8,9 @@
 #     queued older deploy never runs after a newer one (together with
 #     ci_forward_deployment_enabled, older pending deploys are skipped).
 #   - ci_forward_deployment_enabled=true ("Prevent outdated deployment jobs").
+#   - reset_approvals_on_push=true ("Remove all approvals when commits are
+#     added to the source branch"): scripts/approve-root-mr.sh and the
+#     automerge sweep approve one reviewed head commit and rely on it.
 #   - instance plan limit ci_pipeline_schedules=20 (default plan), so the
 #     project can hold more than GitLab's default of 10 pipeline schedules.
 #
@@ -118,6 +121,28 @@ else
       echo "FIXED  project ci_forward_deployment_enabled ${fwd} -> true"
     else
       echo "ERROR  project ci_forward_deployment_enabled: PUT returned HTTP ${code}"
+      errors=$((errors + 1))
+    fi
+  fi
+fi
+
+code=$(api GET "/approvals")
+reset=$(jq -r .reset_approvals_on_push "$body" 2>/dev/null || echo null)
+if [ "$code" != 200 ] || [ "$reset" = null ]; then
+  echo "ERROR  project reset_approvals_on_push: cannot read it (HTTP ${code}; token needs Maintainer)"
+  errors=$((errors + 1))
+elif [ "$reset" = true ]; then
+  echo "ok     project reset_approvals_on_push=true"
+else
+  drift=$((drift + 1))
+  if $check; then
+    echo "DRIFT  project reset_approvals_on_push=${reset} (want true)"
+  else
+    code=$(api POST "/approvals" --data reset_approvals_on_push=true)
+    if { [ "$code" = 201 ] || [ "$code" = 200 ]; } && [ "$(jq -r .reset_approvals_on_push "$body")" = true ]; then
+      echo "FIXED  project reset_approvals_on_push ${reset} -> true"
+    else
+      echo "ERROR  project reset_approvals_on_push: POST returned HTTP ${code}"
       errors=$((errors + 1))
     fi
   fi

@@ -714,8 +714,10 @@ scripts/approve-root-mr.sh <iid>
 
 The script approves as the bot only if the author is root, the target is `main`,
 the MR is open and not a draft, and the head pipeline for the current head commit
-succeeded. The approval is pinned to that commit, and approvals reset on push, so
-any later push needs a new run. It reads `AUTOMERGE_TOKEN` from the CI variable
+succeeded. The approval is pinned to that commit, and the project removes all
+approvals when commits are added to the source branch (`reset_approvals_on_push`,
+enforced by `gitlab:settings`, see [GITLAB_SETTINGS.md](GITLAB_SETTINGS.md)), so
+any later push, a rebase included, needs a new run. It reads `AUTOMERGE_TOKEN` from the CI variable
 and never prints it. Merge as usual afterwards.
 
 The bot approves moltbot or Renovate MRs only through the sweep, under the policy

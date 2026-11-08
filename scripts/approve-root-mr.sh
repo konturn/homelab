@@ -9,8 +9,10 @@
 #     their MRs go through human review or ci/automerge/policy.py);
 #   - target main, open, not a draft;
 #   - the head pipeline for the current head commit succeeded;
-#   - the approval is pinned to that head commit (sha guard). Approvals reset
-#     on push, so a later push needs a fresh run.
+#   - the approval is pinned to that head commit (sha guard). The project
+#     removes all approvals when commits are added (reset_approvals_on_push,
+#     enforced by scripts/gitlab-settings.sh), so a later push, a rebase
+#     included, needs a fresh run.
 #
 # Run on the router from the repo checkout (glab must be logged in as root).
 # The token is read from the AUTOMERGE_TOKEN CI variable and never printed.
