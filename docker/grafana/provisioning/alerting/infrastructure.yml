@@ -385,6 +385,69 @@ groups:
         labels:
           severity: critical
 
+      # Event router (docs/design/event-routing.md, routing table row 25). While
+      # it is down no playbook runs and the router forwards nothing to OpenClaw;
+      # Grafana's own OpenClaw route takes over, because the OpenClaw transform
+      # delivers every alert the router has not acknowledged (the fallback
+      # gate, property L4). This rule makes that state visible and pages.
+      #
+      # Staleness, as in host-metrics-stale: telegraf's docker input reports
+      # running containers only (container_state_include defaults to running),
+      # so a stopped or removed container simply stops writing and a "last
+      # value" rule would resolve to Normal. The query takes the newest
+      # health_status sample of the last 7 days and turns it into 1 when it is
+      # older than 5 minutes or not "healthy", else 0. Telegraf samples every
+      # 10s, so 5 minutes is 30 missed samples. The 7d lookback keeps the
+      # alert firing for a container that stays gone.
+      - uid: event-router-down
+        title: Event Router Down
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 604800, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -7d)
+                  |> filter(fn: (r) => r._measurement == "docker_container_health")
+                  |> filter(fn: (r) => r._field == "health_status")
+                  |> filter(fn: (r) => r.container_name == "event-router")
+                  |> group(columns: ["container_name"])
+                  |> last()
+                  |> map(fn: (r) => ({
+                      container_name: r.container_name,
+                      _time: now(),
+                      _value: if int(v: now()) - int(v: r._time) > 300000000000 or r._value != "healthy" then 1.0 else 0.0,
+                    }))
+                  |> keep(columns: ["_time", "_value", "container_name"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "Event router is down or unhealthy: no playbooks run; Grafana's OpenClaw route delivers alerts directly (fallback)"
+          description: >-
+            The event-router container has not reported healthy for 5 minutes
+            (stopped, crash-looping or failing its /healthz check). Playbooks
+            are not running and the router forwards nothing to OpenClaw; the
+            OpenClaw Grafana hook delivers every alert the router did not
+            acknowledge, and page-class email is unaffected. Check:
+            docker ps -a --filter name=event-router;
+            docker logs --tail 100 event-router; scripts/event-router mode show.
+            The host executor and the Telegram kill switch
+            (event-router-control) keep working without it.
+        labels:
+          severity: critical
+
   # =========================================================================
   # System Alerts
   # =========================================================================
@@ -1291,6 +1354,44 @@ groups:
           summary: "SSL certificate expiring within 14 days"
         labels:
           severity: warning
+
+      # Page class (decision 5, certificate <= 3 days): same query as
+      # ssl-cert-expiry, threshold 3 days, critical. Renewal lives in
+      # configure-router-network; by now it has failed for 11 days.
+      - uid: ssl-cert-expiry-3d
+        title: SSL Certificate Expiry (<3 days)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 21600, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -6h)
+                  |> filter(fn: (r) => r._measurement == "x509_cert")
+                  |> filter(fn: (r) => r._field == "expiry")
+                  |> filter(fn: (r) => r.type == "leaf")
+                  |> group(columns: ["source"])
+                  |> last()
+                  |> keep(columns: ["_time", "_value", "source"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: min, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            # 3 days = 259200 seconds
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [259200]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        annotations:
+          summary: "SSL certificate expiring within 3 days"
+        labels:
+          severity: critical
 
   # =========================================================================
   # UPS / Hardware Alerts

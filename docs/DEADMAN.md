@@ -19,7 +19,7 @@ It lives on the root filesystem and runs no container.
 |---|---|
 | `persistent_data` | `/persistent_data` is a mountpoint and a temp file can be created and removed |
 | `dockerd` | `docker info` answers |
-| `container:<name>` | `nginx`, `lab_nginx`, `grafana`, `homeassistant`, `vault`, `gitlab` are running and healthy |
+| `container:<name>` | `nginx`, `lab_nginx`, `grafana`, `homeassistant`, `vault`, `gitlab`, `event-router` are running and healthy |
 | `grafana` | `/api/health` through lab_nginx reports `database: ok` |
 | `vault` | `sys/health` reports `sealed: false` |
 | `zpool:mpool` | `zpool list mpool` works and the pool is ONLINE or DEGRADED |
