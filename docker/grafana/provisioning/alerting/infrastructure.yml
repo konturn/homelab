@@ -1084,7 +1084,8 @@ groups:
       # itself, so a device still down after that date alerts again instead of
       # being hidden forever. Re-enable early by deleting its entry once the
       # device is back; extend the date only with a reason.
-      #   10.6.128.9   doorbell (amcrest2mqtt waits for it)  offline, added 2026-10-21
+      #   10.6.128.9   doorbell (amcrest2mqtt waits for it)  offline, added 2026-10-21;
+      #                extended to 2026-12-08: physical check pending (rack day)
       #   (10.6.128.14 back camera: back online 2026-11-08, PoE cable reseated)
       - uid: iot-device-unreachable
         title: IoT Device Unreachable
@@ -1096,7 +1097,7 @@ groups:
             model:
               query: |
                 known_offline = ["10.6.128.9"]
-                known_offline_until = 2026-11-04T00:00:00Z
+                known_offline_until = 2026-12-08T00:00:00Z
                 from(bucket: "metrics")
                   |> range(start: -15m)
                   |> filter(fn: (r) => r._measurement == "ping")
