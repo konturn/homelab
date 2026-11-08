@@ -178,7 +178,12 @@ def _strip_comment(value: str) -> Tuple[str, str]:
     """(value without quotes, trailing ` # comment` or '')."""
     m = re.search(r"\s+#", value)
     v, comment = (value[:m.start()], value[m.start():]) if m else (value, "")
-    return v.strip().strip("'\""), comment
+    v = v.strip()
+    # one matching pair only: `'info` or `debug"` is not a quoted level (and
+    # an unterminated quote makes the whole file invalid YAML)
+    if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
+        v = v[1:-1]
+    return v, comment
 
 
 def _mem_bytes(value: str) -> Optional[float]:

@@ -254,6 +254,18 @@ class ComposeTests(unittest.TestCase):
                     self.assertFalse(v.eligible)
                     self.assertIn("line break", " ".join(v.reasons))
 
+    def test_unbalanced_quotes_refused(self):
+        # found by test_properties: `'192M` / `'info` passed as 192M / info,
+        # and an unterminated quote makes the compose file invalid YAML
+        for old, new in (("memory: 128M", "memory: '192M"), ("memory: 128M", 'memory: 192M"')):
+            with self.subTest(new=new):
+                self.assertFalse(evaluate({C: (COMPOSE, edit(COMPOSE, old, new))}).eligible)
+        for old, new in (("memory: 128M", "memory: '192M'"), ("memory: 128M", 'memory: "192M"'),
+                         ("ND_LOGLEVEL=info", "ND_LOGLEVEL=debug")):
+            with self.subTest(new=new):
+                v = evaluate({C: (COMPOSE, edit(COMPOSE, old, new))})
+                self.assertTrue(v.eligible, v.reasons)
+
     def test_denied_services(self):
         for old, new in (("memory: 512M", "memory: 600M"), ("memory: 4G", "memory: 6G")):
             with self.subTest(new=new):
@@ -265,7 +277,8 @@ class ComposeTests(unittest.TestCase):
         v = evaluate({C: (COMPOSE, edit(COMPOSE, "ND_LOGLEVEL=info", "ND_LOGLEVEL=debug"))})
         self.assertTrue(v.eligible, v.reasons)
         self.assertEqual(v.config_services, [(C, "navidrome")])
-        for bad in ("ND_LOGLEVEL=info; rm -rf /", "ND_LOGLEVEL=chatty", "ND_SCANSCHEDULE=2h"):
+        for bad in ("ND_LOGLEVEL=info; rm -rf /", "ND_LOGLEVEL=chatty", "ND_SCANSCHEDULE=2h",
+                    "ND_LOGLEVEL='debug", 'ND_LOGLEVEL=debug"', "ND_LOGLEVEL='\"debug\"'"):
             with self.subTest(bad=bad):
                 old = "ND_SCANSCHEDULE=1h" if bad.startswith("ND_SCAN") else "ND_LOGLEVEL=info"
                 self.assertFalse(evaluate({C: (COMPOSE, edit(COMPOSE, old, bad))}).eligible)
