@@ -115,7 +115,6 @@ To rotate a secret:
 | `ACLAWDEMY_API_KEY` | `api-keys/aclawdemy` | `api_key` | moltbot-gateway |
 | `MOLTBOT_GATEWAY_TOKEN` | `moltbot/tokens` | `gateway_token` | moltbot-gateway |
 | `MOLTBOT_TELEGRAM_TOKEN` | `moltbot/tokens` | `telegram_token` | moltbot-gateway |
-| `MOLTBOT_GITLAB_TOKEN` | `moltbot/tokens` | `gitlab_token` | moltbot-gateway |
 | `HASS_TOKEN` | `docker/homeassistant` | `token` | moltbot-gateway |
 | `PLEX_TOKEN` | `docker/plex` | `token` | moltbot-gateway |
 | `RADARR_API_KEY` | `docker/radarr` | `api_key` | moltbot-gateway |
@@ -320,13 +319,15 @@ matches, and run the nightly `restic-db-dumps` to check.
 
 ---
 
-### MOLTBOT_GATEWAY_TOKEN / MOLTBOT_TELEGRAM_TOKEN / MOLTBOT_GITLAB_TOKEN
+### MOLTBOT_GATEWAY_TOKEN / MOLTBOT_TELEGRAM_TOKEN
 
-**Description:** Tokens for Moltbot gateway API, Telegram Bot API, and GitLab access.
+**Description:** Tokens for Moltbot gateway API and Telegram Bot API. OpenClaw has
+no static GitLab token (homelab #149): it gets 1h moltbot tokens from the JIT
+broker (resource `gitlab-moltbot`), minted with the broker's own admin token
+(Vault `homelab/docker/jit-approval-svc`, field `gitlab_admin_token`, not
+readable by the `openclaw-ops` policy). Nothing to rotate on the OpenClaw side.
 
 **Vault path:** `homelab/moltbot/tokens`
-
-**Note:** `MOLTBOT_GITLAB_TOKEN` is also used by the `vault:rotate-approle` CI job. That job now fetches it from Vault via JWT auth, falling back to the CI variable.
 
 **How to rotate:**
 1. Generate new token (varies by service)
@@ -346,7 +347,7 @@ and looks the token up each time git needs it:
 | Repo | Token source |
 |------|--------------|
 | `moltbot/clawd-memory` (workspace sync) | project access token `openclaw-memory-sync` (`write_repository`): Vault `homelab/openclaw/tokens` field `clawd_memory_token`, else `/home/node/.openclaw/credentials/gitlab-clawd-memory.token` (0600, uid 1000) |
-| everything else | `$GITLAB_TOKEN`, else Vault `homelab/openclaw/tokens` field `gitlab_token` |
+| everything else | 1h moltbot token from the JIT broker (`/usr/local/bin/jit-gitlab-token`, resource `gitlab-moltbot`, auto-approved, audited); no static fallback |
 
 **How to rotate the clawd-memory token:** create a new project access token on
 `moltbot/clawd-memory` (role Maintainer, `master` is protected; scope

@@ -211,7 +211,6 @@ vault_secret_paths:
   - path: "openclaw/tokens"
     fields:
       vault_openclaw_gateway_token: "gateway_token"
-      vault_openclaw_gitlab_token: "gitlab_token"
       vault_openclaw_telegram_token: "telegram_token"
       vault_openclaw_hooks_token: "hooks_token"
       vault_openclaw_claude_oauth_token: "claude_code_oauth_token"
