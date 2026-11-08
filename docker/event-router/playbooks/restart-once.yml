@@ -5,7 +5,9 @@
 # needs a revert, not a restart (I2). The executor checks that on the host:
 # compose recreates exactly the containers a deploy changed, so a container
 # created less than 2h ago was touched by one. A second failure in 6h trips
-# the breaker and goes to OpenClaw.
+# the breaker and goes to OpenClaw. Ephemeral containers (gitlab-runner
+# builds runner-*, canary-*, e2e-*) are never targets: the router denies
+# them (router/config.py EPHEMERAL_TARGETS) and so does the executor.
 id: restart-once
 description: Restart an unhealthy non-platform container once
 mode: active

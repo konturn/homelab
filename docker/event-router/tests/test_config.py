@@ -92,6 +92,10 @@ class TestValidator(unittest.TestCase):
         self.assertTrue(any("denylist" in e for e in errs))
         self.assertTrue(any("compose service" in e for e in errs))
 
+    def test_fixed_ephemeral_target_rejected(self):
+        with self.assertRaisesRegex(ConfigError, "ephemeral"):
+            pb(action={"type": "restart_container", "target": "runner-x-build"})
+
     def test_config_requires_hard_denylist(self):
         bad = dict(CONFIG, restart_denylist=["gitlab"])
         with self.assertRaisesRegex(ConfigError, "restart_denylist"):

@@ -135,6 +135,20 @@ class TestExecutor(unittest.TestCase):
     def test_same_lists_as_router(self):
         self.assertEqual(set(X.ACTIONS), set(router_config.ALLOWED_ACTIONS))
         self.assertEqual(set(X.HARD_DENIED_TARGETS), set(router_config.HARD_DENIED_TARGETS))
+        self.assertEqual(set(X.EPHEMERAL_TARGETS), set(router_config.EPHEMERAL_TARGETS))
+
+    def test_ephemeral_containers_refused(self):
+        for name in ("runner-abcd1234-project-4-concurrent-3-0123456789abcdef-build", "canary-web", "e2e-tasky"):
+            self.refused("not_allowed", target=name)
+        self.assertEqual(self.env.ran, [])
+
+    @given(suffix=st.from_regex(r"\A[a-z0-9_.-]{0,50}\Z"),
+           prefix=st.sampled_from(["runner-", "canary-", "e2e-"]))
+    @settings(max_examples=50, deadline=None)
+    def test_no_ephemeral_name_is_ever_restarted(self, prefix, suffix):
+        with self.assertRaises(X.Refused) as cm:
+            X.check_request(self.env.req(target=prefix + suffix, playbook="restart-once"))
+        self.assertEqual(cm.exception.why, "not_allowed")
 
     def test_only_exact_requests(self):
         for bad in ({}, {"action_type": "restart_container", "target": "x"},

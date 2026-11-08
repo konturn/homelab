@@ -25,7 +25,7 @@ from hypothesis import HealthCheck, settings
 from hypothesis import strategies as st
 from hypothesis.stateful import RuleBasedStateMachine, invariant, rule
 
-from router.config import ALLOWED_ACTIONS
+from router.config import ALLOWED_ACTIONS, ephemeral
 from router.store import ACTIVE
 
 from .helpers import ALERTS, CONFIG, World, event
@@ -51,7 +51,7 @@ class RouterMachine(RuleBasedStateMachine):
                   and i["target"] == target and i["status"] in ("acting", "verifying")]
         if others:
             v.append(("S1", target))
-        if action not in ALLOWED_ACTIONS or target in e.cfg["restart_denylist"]:
+        if action not in ALLOWED_ACTIONS or target in e.cfg["restart_denylist"] or ephemeral(target):
             v.append(("S2", action, target))
         if e.mode() != "active":
             v.append(("S3", e.mode()))
@@ -301,7 +301,33 @@ class TestMatchingIsDataOnly(unittest.TestCase):
             for action, target, _ in w.executor.calls:
                 self.assertIn(action, ALLOWED_ACTIONS)
                 self.assertNotIn(target, w.cfg["restart_denylist"])
+                self.assertIsNone(ephemeral(target))
                 self.assertRegex(target, r"^[a-z0-9][a-z0-9_.-]{0,62}$")
+        finally:
+            w.close()
+
+
+class TestEphemeralNeverTargeted(unittest.TestCase):
+    """S2: no unhealthy gitlab-runner build, canary or e2e container is ever
+    restarted, whatever its name, in any mode."""
+
+    from hypothesis import given
+
+    @given(prefix=st.sampled_from(["runner-", "canary-", "e2e-"]),
+           suffix=st.from_regex(r"\A[a-z0-9_.-]{0,50}\Z"))
+    @settings(max_examples=50, deadline=None)
+    def test_ephemeral_names_are_denied(self, prefix, suffix):
+        from router.events import Event
+        w = World()
+        try:
+            name = prefix + suffix
+            w.engine.ingest(Event(source="grafana", kind="alert", fp="grafana:eph", status="firing",
+                                  rule_uid="container-health-failure", alertname="health",
+                                  labels={"container_name": name, "alertname": "health"}))
+            for _ in range(3):
+                w.engine.step()
+            self.assertEqual(w.executor.calls, [])
+            self.assertEqual(w.engine.store.latest_for_fp("grafana:eph")["status"], "escalated")
         finally:
             w.close()
 
