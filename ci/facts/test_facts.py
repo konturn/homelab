@@ -275,6 +275,34 @@ class DriftTest(unittest.TestCase):
         self.assertIn("pelias-config-init: one-shot exited, exit code 2", joined)
         self.assertIn("gitlab: running, unhealthy", joined)
 
+    def test_expected_interfaces_from_compose(self):
+        ifaces = drift.expected_interfaces()
+        self.assertEqual(ifaces["containers"]["homeassistant"],
+                         {"internal": "int0", "iot": "iot0", "external": "ext0"})
+        self.assertEqual(sorted(ifaces["ha_adapters"]), ["int0", "iot0"])
+        self.assertTrue(ifaces["ha_core_network"].endswith("/homeassistant/.storage/core.network"))
+        self.assertEqual(drift.interface_spec(ifaces)["interfaces"], sorted(ifaces["containers"]))
+
+    def test_interfaces(self):
+        ifaces = drift.expected_interfaces()
+        live = self.healthy()
+        rep, _ = drift.compare(self.hw, self.deps, live, self.expected, ifaces)
+        self.assertIn("not collected", rep.sections["interfaces"][0][1])
+        self.assertEqual(rep.drift_count, 0)
+        live["interfaces"] = {c: ["lo"] + sorted(n.values()) for c, n in ifaces["containers"].items()}
+        live["ha_adapters"] = ["iot0", "int0"]
+        rep, items = drift.compare(self.hw, self.deps, live, self.expected, ifaces)
+        self.assertEqual(rep.drift_count, 0, rep.sections)
+        live["interfaces"]["homeassistant"] = ["eth0", "eth1", "eth2", "lo"]
+        live["ha_adapters"] = ["eth1", "eth2"]
+        rep, _ = drift.compare(self.hw, self.deps, live, self.expected, ifaces)
+        joined = "\n".join(t for lvl, t in rep.sections["interfaces"] if lvl == "DRIFT")
+        self.assertIn("homeassistant: no interface int0 for network internal", joined)
+        self.assertIn("configured_adapters is ['eth1', 'eth2']", joined)
+        live["interfaces"]["homeassistant"] = None
+        rep, _ = drift.compare(self.hw, self.deps, live, self.expected, ifaces)
+        self.assertTrue(any("not running" in t for _, t in rep.sections["interfaces"]))
+
     def test_render_report(self):
         rep, checked = drift.compare(self.hw, self.deps, self.healthy(), self.expected)
         text = rep.render(checked)

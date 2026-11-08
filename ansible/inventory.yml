@@ -151,6 +151,13 @@ all:
       frigate_dataset_quota: 1T
       # Role of the Frigate user the Home Assistant integration logs in with
       frigate_ha_role: viewer
+      # Home Assistant network adapters (homeassistant_post.yml, docs/HOMEASSISTANT.md):
+      # the interface names pinned with interface_name in docker-compose.yml.
+      # HA's configured_adapters (zeroconf/mDNS, HomeKit) is set to exactly
+      # these: internal and IoT, never external.
+      homeassistant_network_adapters:
+        - int0
+        - iot0
       snapclient_disabled_zones:
         - office
         - kitchen

@@ -19,6 +19,9 @@ Checks:
             running and not unhealthy; one-shot init services (no restart
             policy) exited 0. Skipped: services behind a compose profile and
             snapclient_disabled_zones (ansible/inventory.yml)
+  interfaces every compose interface_name exists in its container, and Home
+            Assistant's configured_adapters (zeroconf/HomeKit) equals
+            homeassistant_network_adapters (ansible/inventory.yml)
   services  every node in dependencies.yml with a probe is up (container
             running and not unhealthy, unit active, mount readable, pool
             ONLINE, TCP port open, DNS answering); a down node is reported
@@ -319,7 +322,63 @@ def check_containers(expected: dict, live: dict, rep: Report) -> str:
     return f"{len(expected) - bad}/{len(expected)} declared containers up"
 
 
-def compare(hw: dict, deps: dict, live: dict, expected: dict | None = None) -> tuple[Report, dict]:
+ROUTER = "router.lab.nkontur.com"
+
+
+def expected_interfaces(root: Path = facts.ROOT) -> dict:
+    """{"containers": {container: {network: interface_name}}, "ha_adapters": [..] | None,
+    "ha_core_network": path} from the router's compose file and inventory."""
+    containers = {}
+    for svc, spec in facts.compose_services(root).items():
+        nets = spec.get("networks")
+        names = {n: (c or {}).get("interface_name") for n, c in nets.items()} if isinstance(nets, dict) else {}
+        names = {n: i for n, i in names.items() if i}
+        if names and not spec.get("profiles"):
+            containers[spec.get("container_name") or svc] = names
+    data = facts.inventory_vars(root).get("docker_persistent_data_path", "/persistent_data/application")
+    return {"containers": containers,
+            "ha_adapters": facts.host_vars(ROUTER, root).get("homeassistant_network_adapters"),
+            "ha_core_network": f"{data}/homeassistant/.storage/core.network"}
+
+
+def interface_spec(ifaces: dict) -> dict:
+    spec = {"interfaces": sorted(ifaces["containers"])}
+    if ifaces.get("ha_adapters"):
+        spec["ha_core_network"] = ifaces["ha_core_network"]
+    return spec
+
+
+def check_interfaces(ifaces: dict, live: dict, rep: Report) -> str:
+    S = "interfaces"
+    if "interfaces" not in live:
+        rep.note(S, "not collected (snapshot from before this check)")
+        return "not checked"
+    have = live.get("interfaces") or {}
+    bad = 0
+    for name, nets in sorted(ifaces["containers"].items()):
+        names = have.get(name)
+        if names is None:
+            bad += 1
+            rep.drift(S, f"{name}: not running, interface names not checked.")
+            continue
+        for net, ifname in sorted(nets.items()):
+            if ifname not in names:
+                bad += 1
+                rep.drift(S, f"{name}: no interface {ifname} for network {net} (has {', '.join(names)}); "
+                             "docker/docker-compose.yml sets interface_name.")
+    want = ifaces.get("ha_adapters")
+    if want:
+        cur = live.get("ha_adapters")
+        if sorted(cur or []) != sorted(want):
+            bad += 1
+            rep.drift(S, f"homeassistant configured_adapters is {cur}, not homeassistant_network_adapters "
+                         f"{want} (ansible/inventory.yml): zeroconf/HomeKit on the wrong networks. A deploy resets it.")
+    total = sum(len(n) for n in ifaces["containers"].values()) + (1 if want else 0)
+    return f"{total - bad}/{total} interface names and adapter selections as declared"
+
+
+def compare(hw: dict, deps: dict, live: dict, expected: dict | None = None,
+            ifaces: dict | None = None) -> tuple[Report, dict]:
     rep = Report()
     audio = check_audio(hw, live, rep)
     checked = {
@@ -328,10 +387,13 @@ def compare(hw: dict, deps: dict, live: dict, expected: dict | None = None) -> t
     }
     if expected is not None:
         checked["containers"] = check_containers(expected, live, rep)
+    if ifaces is not None:
+        checked["interfaces"] = check_interfaces(ifaces, live, rep)
     checked["services and endpoints"] = check_services(deps, live, rep)
     for e in live.get("errors") or []:
         section = ("disks" if e.startswith(("disks", "zpools")) else
-                   "containers" if e.startswith("containers") else "audio zones")
+                   "containers" if e.startswith("containers") else
+                   "interfaces" if e.startswith(("interfaces", "ha_adapters")) else "audio zones")
         rep.drift(section, f"collector error: {e}")
     return rep, checked
 
@@ -348,7 +410,8 @@ def main(argv=None) -> int:
     try:
         hw, deps = facts.load(args.root)
         expected = expected_containers(args.root)
-        spec = probe_spec(deps)
+        ifaces = expected_interfaces(args.root)
+        spec = {**probe_spec(deps), **interface_spec(ifaces)}
         if args.snapshot:
             live = json.loads(args.snapshot.read_text())
         elif args.local:
@@ -363,7 +426,7 @@ def main(argv=None) -> int:
         return 1
     if args.save_snapshot:
         args.save_snapshot.write_text(json.dumps(live, indent=1, sort_keys=True) + "\n")
-    rep, checked = compare(hw, deps, live, expected)
+    rep, checked = compare(hw, deps, live, expected, ifaces)
     text = rep.render(checked)
     print(text)
     if args.report:

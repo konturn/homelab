@@ -207,10 +207,15 @@ The speakers, TV, lock and cameras are separate accessory-mode entries.
 
 Siri reaches these entries over HomeKit, so they are advertised on the
 container's internal and IoT legs (*Settings -> System -> Network*, network
-adapters). The setting stores interface names (`eth0`, `eth2`), and Docker
-does not keep the order of HA's three networks across container recreates
-(see the comment in `docker/docker-compose.yml`), so check the selected
-adapters' addresses after a recreate.
+adapters). The setting stores interface names, and Docker attaches HA's three
+networks in no fixed order (ethN changed on recreates and plain restarts), so
+`docker/docker-compose.yml` pins the names with `interface_name`: `int0`
+(internal), `iot0` (IoT), `ext0` (external). Each deploy sets the selection
+to `homeassistant_network_adapters` (`ansible/inventory.yml`, `int0` and
+`iot0`) over the websocket API (`network/configure`) and restarts HA when it
+changed (`configure-homelab-services`, `homeassistant_post.yml`). Don't
+change the selection in the UI; change the inventory list. `facts:drift`
+reports a container interface name or the selection that differs.
 
 ## Denon receiver
 

@@ -1489,10 +1489,18 @@ services:
       start_period: 30s
   homeassistant:
     container_name: homeassistant
+    # Fixed interface names (Compose >= 2.36, Engine >= 28.1). Docker attaches
+    # the networks in no fixed order, so ethN changed on recreates and even on
+    # plain restarts, and HA's configured_adapters (by name) silently moved
+    # zeroconf/HomeKit onto the wrong networks. homeassistant_network_adapters
+    # (ansible/inventory.yml) names the internal and IoT ones.
     networks:
-      - internal
-      - iot
-      - external
+      internal:
+        interface_name: int0
+      iot:
+        interface_name: iot0
+      external:
+        interface_name: ext0
     ports:
       - "443:8123"
     devices: 

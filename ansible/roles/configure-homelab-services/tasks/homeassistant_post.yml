@@ -1,0 +1,46 @@
+---
+# Home Assistant state kept outside its config files (docs/HOMEASSISTANT.md,
+# "HomeKit bridge filter"). Runs after compose up.
+
+# configured_adapters (Settings -> System -> Network) stores interface names.
+# docker-compose.yml pins them with interface_name, and this keeps HA's
+# selection on exactly homeassistant_network_adapters (internal + IoT), so
+# zeroconf and the HomeKit bridges are never advertised on the external leg.
+# HA only picks up the adapters at startup, so a change restarts it.
+- name: Set Home Assistant's network adapters
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - -i
+      - -e
+      - HA_TOKEN
+      - homeassistant
+      - python3
+      - "-"
+      - "{{ homeassistant_network_adapters | to_json }}"
+    stdin: "{{ lookup('ansible.builtin.file', 'ha-network-adapters.py') }}"
+  environment:
+    HA_TOKEN: "{{ vault_hass_token | trim }}"
+  register: _ha_network_adapters
+  changed_when: _ha_network_adapters.stdout is search('^changed')
+  failed_when: false
+  no_log: true  # the result would show the environment on -vvv
+  timeout: 700
+  when:
+    - "'router' in inventory_hostname"
+    - homeassistant_network_adapters is defined
+    - not ansible_check_mode
+
+- name: Check Home Assistant's network adapters were set
+  ansible.builtin.assert:
+    that: _ha_network_adapters.rc == 0
+    fail_msg: "{{ _ha_network_adapters.stderr | default('') | trim }}"
+    success_msg: "{{ _ha_network_adapters.stdout | default('') | trim }}"
+  when: _ha_network_adapters is not skipped
+
+- name: Restart Home Assistant to apply the network adapters
+  ansible.builtin.command:
+    cmd: docker restart -t 60 homeassistant
+  timeout: 120
+  when: _ha_network_adapters is changed
