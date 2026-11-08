@@ -1,0 +1,9 @@
+- name: Reload systemd for canary
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Restart canary
+  ansible.builtin.systemd:
+    name: homelab-canary.service
+    state: restarted
+  when: canary_enabled | bool and not ansible_check_mode

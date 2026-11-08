@@ -284,8 +284,8 @@ network `gitlab-ci` (bridge `br-ci`, 172.28.0.0/24, created by `configure-docker
 
 | Table / chain | Rule |
 |---|---|
-| raw `PREROUTING` → `CI-EGRESS` | allow Pi-hole :53, lab_nginx :443, Vault :8200; drop the router's own addresses, broadcast/multicast, RFC1918, 100.64.0.0/10, 169.254.0.0/16 |
-| filter `INPUT` | drop everything from `br-ci` |
+| raw `PREROUTING` → `CI-EGRESS` | allow Pi-hole :53, lab_nginx :443, Vault :8200, the canary service (172.28.0.1:8743, [CANARY.md](CANARY.md)); drop the router's own addresses, broadcast/multicast, RFC1918, 100.64.0.0/10, 169.254.0.0/16 |
+| filter `INPUT` | accept tcp :8743 to 172.28.0.1 (canary service), drop the rest from `br-ci` |
 | filter `FORWARD` | same allowlist + `-o` WAN, then drop |
 | nat `POSTROUTING` | MASQUERADE 172.28.0.0/24 leaving `br-ci` |
 
@@ -298,6 +298,12 @@ The protected runner's jobs get their own network `gitlab-ci-protected` (bridge 
 | filter `INPUT` | accept tcp :22 to 10.4.0.1 from `br-ci-prot`, drop the rest |
 | filter `FORWARD` | same allowlist + `-o` WAN, then drop |
 | nat `POSTROUTING` | MASQUERADE 172.28.1.0/24 leaving `br-ci-prot` |
+
+Canary containers ([CANARY.md](CANARY.md)) run in the Docker network `canary` (bridge
+`br-canary`, 172.28.9.0/24), which `canary.py` creates `--internal` for each run and removes
+afterwards. On top of Docker's own isolation, `rules.v4` drops in raw `PREROUTING` whatever
+`br-canary` sends outside its subnet, drops all of it in `INPUT`, and drops `FORWARD` in and
+out of the bridge, so a canary reaches only the other canary containers.
 
 Devices therefore see the router's own address on the egress interface, as they did when these
 jobs used host networking. The firmware rollout jobs are the exception: their TFTP server must

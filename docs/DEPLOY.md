@@ -8,6 +8,12 @@ inputs changed. Commits merged by the auto-merge sweep are the exception: they
 get `<host>:deploy-service` instead and the host deploys become manual
 ([AUTOMERGE.md](AUTOMERGE.md)).
 
+Changes to a critical service (GitLab, Vault, Home Assistant, Pi-hole, the
+nginx instances: its config or its compose definition, image bumps included)
+are boot-tested before the merge: the MR pipeline's `canary` job starts the
+candidate in a throwaway, isolated container and fails unless it comes up
+healthy. See [CANARY.md](CANARY.md).
+
 ## Changed-only deploys
 
 1. **Base commit.** The job reads `/var/lib/homelab-deploy/<playbook>.sha` on

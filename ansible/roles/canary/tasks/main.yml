@@ -1,0 +1,57 @@
+# Canary service (docs/CANARY.md). Code and spec are deployed from main, so
+# MR pipelines are always tested by main's canary.py and services.yml.
+
+- name: Canary dependencies
+  ansible.builtin.apt:
+    name: "{{ _canary_packages }}"
+    state: present
+  vars:
+    _canary_packages: [git, openssl, python3-jinja2, python3-yaml]
+  when: _canary_packages | difference(installed_packages | default([])) | length > 0
+
+- name: Canary directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  loop:
+    - "{{ canary_install_dir }}"
+    - "{{ canary_state_dir }}"
+    - "{{ canary_state_dir }}/runs"
+    - "{{ canary_state_dir }}/logs"
+
+- name: Install the canary code and spec
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/ci/canary/{{ item }}"
+    dest: "{{ canary_install_dir }}/{{ item }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - canary.py
+    - server.py
+    - services.yml
+  notify: Restart canary
+
+- name: Install the canary unit
+  ansible.builtin.template:
+    src: homelab-canary.service.j2
+    dest: /etc/systemd/system/homelab-canary.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd for canary
+    - Restart canary
+
+- name: Flush handlers (the unit must be loaded before its state is set)
+  ansible.builtin.meta: flush_handlers
+
+- name: Set the canary service state
+  ansible.builtin.systemd:
+    name: homelab-canary.service
+    state: "{{ 'started' if canary_enabled | bool else 'stopped' }}"
+    enabled: "{{ canary_enabled | bool }}"
+  when: not ansible_check_mode  # unit files are not written in check mode

@@ -1,0 +1,11 @@
+# Canary service (docs/CANARY.md): throwaway boot tests of critical services
+# for MR pipelines.
+
+canary_enabled: true
+canary_install_dir: /usr/local/lib/homelab-canary
+canary_state_dir: /var/lib/homelab-canary
+# The br-ci gateway (docker network "gitlab-ci"): the only place CI jobs of
+# the unprotected runner can reach it (networking/iptables/rules.v4).
+canary_listen: "172.28.0.1:8743"
+canary_gitlab_url: https://gitlab.lab.nkontur.com
+canary_project_id: 4

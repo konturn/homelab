@@ -38,7 +38,8 @@
 # branch pipelines). Kept in raw PREROUTING because it is evaluated before
 # the filter hooks other daemons insert at the top of FORWARD/INPUT
 # (DOCKER-*, ts-forward, ts-input, LIBVIRT_*), which fw-apply keeps in place.
-# Allowed: Pi-hole DNS, nginx 443 (GitLab, registry), Vault 8200, internet.
+# Allowed: Pi-hole DNS, nginx 443 (GitLab, registry), Vault 8200, internet,
+# and the canary service on the router's br-ci address (docs/CANARY.md).
 # Everything else private/local (RFC1918, CGNAT/Tailscale, link-local,
 # multicast, the router's own addresses) is dropped.
 :CI-EGRESS - [0:0]
@@ -47,6 +48,9 @@
 -A CI-EGRESS -d {{ pihole_ip }}/32 -p tcp -m tcp --dport 53 -j RETURN
 -A CI-EGRESS -d {{ lab_nginx_ip }}/32 -p tcp -m tcp --dport 443 -j RETURN
 -A CI-EGRESS -d {{ vault_ip }}/32 -p tcp -m tcp --dport 8200 -j RETURN
+# Canary service on the br-ci gateway (docs/CANARY.md): the one router port
+# MR pipelines may reach. It verifies the caller's CI job token with GitLab.
+-A CI-EGRESS -d 172.28.0.1/32 -p tcp -m tcp --dport 8743 -j RETURN
 -A CI-EGRESS -m addrtype --dst-type LOCAL -j DROP
 -A CI-EGRESS -m addrtype --dst-type BROADCAST -j DROP
 -A CI-EGRESS -d 0.0.0.0/8 -j DROP
@@ -57,6 +61,14 @@
 -A CI-EGRESS -d 172.16.0.0/12 -j DROP
 -A CI-EGRESS -d 192.168.0.0/16 -j DROP
 -A CI-EGRESS -d 224.0.0.0/3 -j DROP
+
+# -----------------------------------------------------------------------------
+# Canary network (docker network "canary", bridge br-canary, 172.28.9.0/24)
+# -----------------------------------------------------------------------------
+# Throwaway canary containers (docs/CANARY.md). Docker creates the network
+# --internal, so it has no route out; this drops anything addressed outside
+# the canary subnet anyway, and INPUT drops it towards the router itself.
+-A PREROUTING -i br-canary ! -d 172.28.9.0/24 -j DROP
 
 # -----------------------------------------------------------------------------
 # Protected CI job network (docker network "gitlab-ci-protected", bridge
@@ -217,7 +229,12 @@ COMMIT
 
 # GitLab CI job network (br-ci): no access to the router itself (see raw
 # CI-EGRESS; containers use Docker's embedded DNS inside their own netns)
+# except the canary service on the br-ci gateway (docs/CANARY.md)
+-A INPUT -i br-ci -d 172.28.0.1/32 -p tcp -m tcp --dport 8743 -j ACCEPT
 -A INPUT -i br-ci -j DROP
+
+# Canary network (br-canary): nothing to the router (docs/CANARY.md)
+-A INPUT -i br-canary -j DROP
 
 # Protected CI job network (br-ci-prot): SSH to the router's mgmt address
 # only (deploys, reports, mail, ipmictl, HA config deploy); see raw
@@ -327,6 +344,10 @@ COMMIT
 -A FORWARD -i br-ci -d {{ vault_ip }} -p tcp -m tcp --dport 8200 -j ACCEPT
 -A FORWARD -i br-ci -o {{ inet_interface_name }} -j ACCEPT
 -A FORWARD -i br-ci -j DROP
+
+# Canary network (br-canary): only between canary containers (docs/CANARY.md)
+-A FORWARD -i br-canary ! -o br-canary -j DROP
+-A FORWARD -o br-canary ! -i br-canary -j DROP
 
 # Protected CI job network (br-ci-prot): allowlist, mirrors raw CI-PROT-EGRESS
 -A FORWARD -i br-ci-prot -d {{ pihole_ip }} -p udp -m udp --dport 53 -j ACCEPT

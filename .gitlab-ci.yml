@@ -15,6 +15,7 @@
 #   router:val [id_tokens]  zwave:val  sat-2:val  vault:validate  jit-approval-svc:test
 #   anomaly-detector:test  revert-guard (MR only, ci/revert-guard/README.md)
 #   event-router:test
+#   canary (MR, on critical-service changes; docs/CANARY.md)  canary:test
 #   event-router:tlc (TLA+ model, on docs/design/tla changes + weekly schedule)
 #
 #   BUILD (parallel, path-triggered)
@@ -535,6 +536,67 @@ fetch-vault-secrets:test:
       changes:
         - ansible/roles/fetch-vault-secrets/**/*
         - ansible/tests/fetch-vault-secrets/**/*
+
+# Throwaway canary (docs/CANARY.md): boots the candidate image and config of
+# a changed critical service (gitlab, vault, homeassistant, pihole, the nginx
+# instances) in an isolated container on the router and fails the MR pipeline
+# unless it comes up healthy. The job only streams the result: the canary
+# service (ansible/roles/canary) verifies the job token with GitLab, picks the
+# services from the commit's diff against main and runs them one at a time.
+# Required for these paths: not allow_failure, so a failing canary blocks the
+# merge, Renovate auto-merges included (the sweep needs a passed pipeline).
+canary:
+  image: python:3.13-alpine3.22@sha256:e81548ac35b07a3bd4805f275107592ef458b1e893c0e04d45aedaa19416cca5
+  extends: .interruptible
+  stage: validate
+  needs: []
+  # A GitLab canary boots a fresh omnibus: 10-25 min, longer when the
+  # router is busy (services.yml gitlab.timeout is 30 min to ready).
+  timeout: 60m
+  # One canary at a time across all MR pipelines (the service also queues).
+  resource_group: canary
+  script:
+    - python3 ci/canary/client.py
+  artifacts:
+    when: always
+    expire_in: 2 weeks
+    paths:
+      - canary-logs/
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - docker/docker-compose.yml
+        - docker/gitlab/**/*
+        - docker/vault/**/*
+        - docker/homeassistant/**/*
+        - docker/pihole/**/*
+        - docker/nginx/**/*
+        - docker/docker-socket-proxy-tls/**/*
+
+# Offline tests of the canary code and spec (no Docker).
+canary:test:
+  extends:
+    - .ansible
+    - .interruptible
+  stage: validate
+  needs: []
+  before_script: []
+  script:
+    - python3 -m unittest discover -s ci/canary -p 'test_*.py' -v
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == "main"
+      changes:
+        - ci/canary/**/*
+        - docker/docker-compose.yml
+        - docker/gitlab/**/*
+        - docker/vault/**/*
+        - docker/homeassistant/**/*
+        - docker/pihole/**/*
+        - docker/nginx/**/*
+        - docker/docker-socket-proxy-tls/**/*
+        - .gitlab-ci.yml
 
 # Offline: tag selection for changed-only deploys (sample diffs), and checks
 # that ci/deploy-scope/scope.yml maps every file the roles and the inventory
