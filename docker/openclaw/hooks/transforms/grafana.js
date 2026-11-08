@@ -14,10 +14,15 @@
 var ROUTER = 'http://event-router:8080';
 var ACK_WAIT_MS = 8000;      // the router's copy normally arrives ~20s earlier (group_wait 10s vs 30s)
 
-async function acked(fp, status) {
-  if (!/^[0-9a-f]{1,32}$/.test(String(fp || ''))) return false;
+// Per delivery (fingerprint, status and startsAt), not per fingerprint: the
+// router may have handled an earlier episode of this alert and missed this
+// one (docs/design/event-routing.md 12.6 f).
+async function acked(a) {
+  var fp = String(a.fingerprint || '');
+  if (!/^[0-9a-f]{1,32}$/.test(fp) || !a.startsAt) return false;
   try {
-    var r = await fetch(ROUTER + '/ack?fp=' + fp + '&status=' + (status === 'resolved' ? 'resolved' : 'firing'),
+    var r = await fetch(ROUTER + '/ack?fp=' + fp + '&status=' + (a.status === 'resolved' ? 'resolved' : 'firing') +
+                        '&starts_at=' + encodeURIComponent(String(a.startsAt).slice(0, 40)),
                         {signal: AbortSignal.timeout(2000)});
     if (!r.ok) return false;
     var body = await r.json();
@@ -35,7 +40,7 @@ async function unowned(alerts) {
   while (left.length > 0) {
     var next = [];
     for (var i = 0; i < left.length; i++) {
-      if (!(await acked(left[i].fingerprint, left[i].status))) next.push(left[i]);
+      if (!(await acked(left[i]))) next.push(left[i]);
     }
     left = next;
     if (left.length === 0 || Date.now() >= deadline) break;
