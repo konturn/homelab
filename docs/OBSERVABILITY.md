@@ -69,10 +69,12 @@ graph TB
 
 ### Logs: Promtail → Loki
 
-**Promtail** scrapes Docker container logs via the Docker logging driver and ships them to **Loki**.
+**Promtail** discovers Docker containers and tails their logs, then ships them to **Loki**.
 
 - Config: `docker/promtail/config.yml` (router), `docker/promtail/satellite-config.yml` (satellites)
-- All containers use the default `json-file` log driver (Promtail reads from `/var/lib/docker/containers`)
+- All containers use the default `json-file` log driver. On the router, Promtail's `docker` job finds
+  containers with `docker_sd_configs` and reads their logs through the read-only Docker API proxy
+  (`docker-socket-proxy-ro`), not the Docker socket
 - Loki config: `docker/loki/local-config.yaml`
 - Query via Grafana Explore with LogQL
 
@@ -104,7 +106,7 @@ denominator.
 - Satellite config: `docker/telegraf/satellite-telegraf.conf` (on zwave it also
   reads the miniDSP units, measurement `minidsp`; see `docs/minidsp.md`)
 - Org: `homelab`, Bucket: `metrics`
-- ~77 input plugin instances covering Docker, system, SNMP, services, etc.
+- ~117 input plugin instances covering Docker, system, SNMP, services, etc.
 - Query via Grafana dashboards with Flux
 
 ### Traces + OTLP Metrics: otel-collector → Tempo / InfluxDB
@@ -129,7 +131,19 @@ Config: `docker/otel-collector/config.yaml`
 
 Grafana evaluates alert rules against all three backends and routes notifications.
 
-- Alert rules: `docker/grafana/provisioning/alerting/infrastructure.yml`
+- Alert rules: `docker/grafana/provisioning/alerting/infrastructure.yml`, plus
+  `anomaly.yml` for the anomaly detector (`docker/anomaly-detector/README.md`)
+- Rule groups in `infrastructure.yml`: container, system, network, certificate,
+  hardware, backup, security, log-volume, document-pipeline, datasource-health
+  and radio-silence alerts. Among them:
+  - memory: *Container Memory Near Limit (85%+)*, *Container OOM Kill*,
+    *Kernel OOM Kill*, *High Memory Usage (90%+)*
+  - disks: *Disk Temperature High* (over 50C HDD / 65C SSD for 15 min),
+    *Disk Vanished* (a disk stops reporting SMART data while the host's other
+    disks still report), *ZFS Pool Unhealthy* (a pool not ONLINE),
+    *ZFS Pool Health Collection Failed*
+  - radios: *Zigbee Radio Silence* (zigbee2mqtt hears no device for ~20 min)
+    and *Z-Wave Radio Silence* (no Z-Wave JS value update for 15 min)
 - Contact points: `docker/grafana/provisioning/alerting/contactpoints.yml.j2`
 - Notification policies: `docker/grafana/provisioning/alerting/policies.yml`
 
