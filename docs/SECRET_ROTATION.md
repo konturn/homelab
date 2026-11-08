@@ -102,6 +102,7 @@ To rotate a secret:
 | `INFLUXDB_ADMIN_TOKEN` | `docker/influxdb` | `admin_token` | InfluxDB, Grafana |
 | `INFLUXDB_TOKEN` | `docker/influxdb` | `token` | moltbot-gateway |
 | `INFLUXDB_TELEGRAF_TOKEN` | `docker/influxdb` | `telegraf_token` | Telegraf |
+| (not deployed) | `influxdb/ha-write` | `token` | Home Assistant influxdb config entry; set by hand, see docs/HOMEASSISTANT.md ("Secrets") |
 | `GRAFANA_ADMIN_PASSWORD` | `docker/grafana` | `admin_password` | Grafana |
 | `GRAFANA_SMTP_PASSWORD` | `docker/grafana` | `smtp_password` | Grafana |
 | `WORDPRESS_DB_PASSWORD` | `docker/wordpress` | `db_password` | WordPress, MySQL |
@@ -139,8 +140,6 @@ To rotate a secret:
 | `CLOUDFLARE_API_KEY` | `networking/cloudflare` | `api_key` | DDNS cron |
 | `CLOUDFLARE_ZONE_ID` | `networking/cloudflare` | `zone_id` | DDNS cron |
 | `GRAFANA_TOKEN` | `docker/grafana` | `token` | moltbot-gateway |
-| `SPOTIFY_DC` | `infrastructure/spotify` | `sp_dc` | Home Assistant spotcast |
-| `SPOTIFY_KEY` | `infrastructure/spotify` | `sp_key` | Home Assistant spotcast |
 | `JIT_APPROLE_ROLE_ID` | `docker/jit-approval-svc` | `approle_role_id` | jit-approval-svc |
 | `JIT_APPROLE_SECRET_ID` | `docker/jit-approval-svc` | `approle_secret_id` | jit-approval-svc |
 | `JIT_TELEGRAM_BOT_TOKEN` | `docker/jit-approval-svc` | `telegram_bot_token` | jit-approval-svc |

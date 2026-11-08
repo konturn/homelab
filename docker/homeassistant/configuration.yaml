@@ -19,14 +19,11 @@ media_player:
     host: {{ mopidy_address }}
     platform: mopidy
 
+# Only the filter lives here. The connection (URL, token, org, bucket) is in
+# the influxdb config entry (.storage), which is all Home Assistant reads since
+# the integration moved to a config flow; YAML connection keys are ignored.
+# See docs/HOMEASSISTANT.md ("Secrets").
 influxdb:
-  api_version: 2
-  ssl: false
-  host: influxdb
-  port: 8086
-  token: "{{ vault_influxdb_ha_token }}"
-  organization: homelab
-  bucket: homeassistant
   include:
     domains:
       - sensor
@@ -51,9 +48,6 @@ script manual: !include_dir_merge_named scripts/
 script ui: !include scripts.yaml
 scene manual: !include_dir_merge_list scenes/
 scene ui: !include scenes.yaml
-spotcast:
-  sp_dc: "{{ vault_spotify_dc }}"
-  sp_key: "{{ vault_spotify_key }}"
 
 shell_command:
   sound_doorbell: cat /config/sounds/doorbell-1.wav | nc {{ snapserver_address }} 80

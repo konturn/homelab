@@ -81,8 +81,56 @@ commands and sensors, go in a package instead:
 - Check a change before merging: copy the live config to a scratch directory
   under `/config`, add the rendered package, and run
   `docker exec homeassistant python3 -m homeassistant --script check_config -c <dir>`
-  (`-i automation` etc. prints what was parsed). The only expected warning is
-  `spotcast` not found, which the live config has too.
+  (`-i automation` etc. prints what was parsed). It should report no errors
+  or warnings.
+
+## Secrets
+
+`configuration.yaml` and the packages contain no credentials, and the deploy
+renders nothing from Vault into `/config`. Keep it that way: this repo is
+public-mirrored, and everything in `/config` ends up in Home Assistant's own
+backups and is readable by anything that reads the config.
+
+- **InfluxDB.** Since the `influxdb` integration got a config flow, Home
+  Assistant imports the YAML connection settings into a config entry once
+  and ignores them afterwards (single config entry). The connection (URL
+  `http://influxdb:8086`, token, org `homelab`, bucket `homeassistant`) is
+  therefore only in that config entry (`.storage/core.config_entries`). The
+  `influxdb:` block in `configuration.yaml` keeps just the `include` filter,
+  which the integration still reads from YAML. The token is an InfluxDB
+  authorization with read and write on the `homeassistant` bucket only; Vault
+  `homelab/influxdb/ha-write` (field `token`) holds the current value as the
+  record. Ansible does not deploy it.
+- **Rotating the InfluxDB token.** InfluxDB stores tokens hashed, so take the
+  value when it is created:
+  1. `influx auth create --org homelab --read-bucket <id> --write-bucket <id>
+     --description "Home Assistant"` (bucket id from `influx bucket list`),
+     with the output piped straight into `vault kv patch
+     homelab/influxdb/ha-write token=-`, never printed.
+  2. Put the new token in the config entry: *Settings -> Devices & services
+     -> InfluxDB -> Reconfigure*, or the same flow over the API
+     (`POST /api/config/config_entries/flow` with `{"handler": "influxdb",
+     "entry_id": "<id>"}`, then submit `url`, `token`, `organization`,
+     `bucket`, `verify_ssl`). The flow tests the connection before saving and
+     reloads the integration; no restart is needed.
+  3. Check that points still arrive in the `homeassistant` bucket, then
+     `influx auth delete --id <old id>`.
+- **Rebuilding from scratch** (lost `.storage`): add the InfluxDB integration
+  in the UI (API v2) with the values above and the token from Vault.
+- **Other integrations** with credentials (Frigate, Spotify, Plex, the
+  Marketplace, mobile apps, ...) were set up in the UI and keep them in their
+  config entries in `.storage`, which Home Assistant manages.
+- **A YAML-only integration that needs a secret:** reference it with
+  `!env_var NAME` and add the value to the `homeassistant` container's
+  `environment:` in `docker/docker-compose.yml` from a Vault variable
+  (`fetch-vault-secrets`), as other services do. Use `!secret` with a
+  `secrets.yaml` rendered `0600` only if the integration rejects the
+  environment form. Never template a value inline into the YAML.
+- **spotcast** was removed on 2026-11-07. The custom integration was not
+  installed (it was not in `custom_components/`), so its `spotcast:` block
+  and the Vault secret `infrastructure/spotify` were deleted. The
+  `shower_wallmote` automation and the `activate_shower_sound` script in the
+  private config repo still call `spotcast.start` and fail at that step.
 
 ## miniDSP (bass boost)
 
@@ -119,11 +167,11 @@ covered by the normal `.storage` backups. Expected values:
 
 If the nginx IPs change in the inventory, update them in the UI too.
 
-## Custom integrations (Marketplace)
+## Custom integrations
 
-Custom integrations are installed and upgraded through the Marketplace (the
-core `marketplace` integration, which replaced HACS in 2026.11) on the live
-volume, not from this repo:
+Custom integrations live in `custom_components/` on the live volume, not in
+this repo. All but Frigate are installed and upgraded through the Marketplace
+(the core `marketplace` integration, which replaced HACS in 2026.11):
 
 | Integration | Source | Notes |
 |---|---|---|
@@ -132,7 +180,7 @@ volume, not from this repo:
 | mopidy | `bushvin/hass-integrations` | Replaces the `mopidy` integration removed from HA core. Still configured by the `media_player: platform: mopidy` block in `configuration.yaml`; the night-mode automation plays white noise on `media_player.mopidy_3` |
 | samsungtv_smart | `TheFab21/ha-samsungtv-smart` | Samsung Frame TV (local only). See below |
 | adaptive_lighting | `basnijholt/adaptive-lighting` | Entry *Hue Lights* |
-| frigate | `blakeblackshear/frigate-hass-integration` | See docs/frigate.md |
+| frigate | `blakeblackshear/frigate-hass-integration` | **Not from the Marketplace**: copied by hand into `custom_components/frigate/` (v5.15.6), so the Marketplace does not track or upgrade it. See docs/frigate.md |
 
 After a Home Assistant upgrade, check *Settings -> System -> Repairs* and the
 log for custom integrations that fail to import. Upgrade them in the
