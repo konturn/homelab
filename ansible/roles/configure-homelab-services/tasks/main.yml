@@ -403,6 +403,9 @@
   loop: "{{ _docker_config_all }}"
   when: item.dest in _docker_config_to_write
 
+### Home Assistant custom integrations pinned to private forks
+- ansible.builtin.import_tasks: homeassistant_custom_components.yml
+
 ### Snapserver zone layout (server.json)
 # snapserver keeps its runtime state in server.json and rewrites it while
 # running: client connected flag, host/IP, lastSeen, volume and mute. Writing
@@ -555,7 +558,8 @@
 - name: Collect containers whose config changed
   ansible.builtin.set_fact:
     _changed_config_containers: "{{ (docker_config_copy.results | selectattr('changed') | map(attribute='item.name') | list
-                                     + (['snapserver'] if _snapserver_zones_reset is changed else [])) | unique | list }}"
+                                     + (['snapserver'] if _snapserver_zones_reset is changed else [])
+                                     + (['homeassistant'] if _ha_pinned_integrations is changed else [])) | unique | list }}"
     _nginx_container_names: "{{ nginx_config | default([]) | map(attribute='name') | list }}"
 
 ### Edge quarantine + safe nginx reload (docker/nginx/edge-quarantine/README.md)

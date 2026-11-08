@@ -170,8 +170,9 @@ If the nginx IPs change in the inventory, update them in the UI too.
 ## Custom integrations
 
 Custom integrations live in `custom_components/` on the live volume, not in
-this repo. All but Frigate are installed and upgraded through the Marketplace
-(the core `marketplace` integration, which replaced HACS in 2026.11):
+this repo. All but Frigate and toyota_connected are installed and upgraded
+through the Marketplace (the core `marketplace` integration, which replaced
+HACS in 2026.11):
 
 | Integration | Source | Notes |
 |---|---|---|
@@ -181,6 +182,19 @@ this repo. All but Frigate are installed and upgraded through the Marketplace
 | samsungtv_smart | `TheFab21/ha-samsungtv-smart` | Samsung Frame TV (local only). See below |
 | adaptive_lighting | `basnijholt/adaptive-lighting` | Entry *Hue Lights* |
 | frigate | `blakeblackshear/frigate-hass-integration` | **Not from the Marketplace**: copied by hand into `custom_components/frigate/` (v5.15.6), so the Marketplace does not track or upgrade it. See docs/frigate.md |
+| toyota_connected | private fork `root/ha-toyota-connected` (GitLab) | **Not from the Marketplace**: installed by the deploy, pinned to a commit. See below |
+
+### Pinned integrations from private forks
+
+`homeassistant_pinned_integrations` (`configure-homelab-services` defaults)
+lists integrations installed from a private GitLab fork at a full commit id.
+Each deploy fetches that commit with a read-only deploy token (Vault
+`gitlab/ha-toyota-connected`), checks the id and the manifest domain, and
+syncs the integration directory into `custom_components/<domain>/` with
+`--delete`. Home Assistant is restarted (once, with any config change) only
+when files changed. Bumps are manual: review the fork, tag it, and change
+`sha`; Renovate does not track it. Don't edit these directories on the
+volume: the next deploy reverts them.
 
 After a Home Assistant upgrade, check *Settings -> System -> Repairs* and the
 log for custom integrations that fail to import. Upgrade them in the
