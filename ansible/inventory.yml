@@ -27,6 +27,11 @@ all:
     # internal, LAN camera access on iot (same L2 as the feeder, no FORWARD rule)
     petlibro_camera_ip: 10.3.32.14
     petlibro_camera_iot_ip: 10.6.32.9
+    # iot-dns: the only resolver VLAN 6 devices get from DHCP (docs/NETWORK.md,
+    # "IoT resolver"). Forwards to Pi-hole and answers the internal zones
+    # NXDOMAIN. Static: dhcpd.conf and the VLAN 6 DNS redirect in
+    # networking/iptables/rules.v4 use this address.
+    iot_dns_ip: 10.6.32.10
     chromium_browser_ip: 10.3.32.9
     chromium_cdp_ip: 172.30.1.10  # openclaw-browser bridge (CDP)
     bluebubbles_relay_ip: 172.30.2.10  # openclaw-relay bridge
@@ -251,6 +256,10 @@ all:
         - src: "docker/pihole/custom.conf"
           dest: "{{ docker_persistent_data_path }}/pihole/dnsmasq/custom.conf"
           name: "pihole"
+        - src: "docker/iot-dns/dnsmasq.conf"
+          dest: "{{ docker_persistent_data_path }}/iot-dns/dnsmasq.conf"
+          name: "iot-dns"
+          mode: "0644"  # read by dnsmasq as nobody; no secrets
         - src: "docker/homeassistant/configuration.yaml"
           dest: "{{ docker_persistent_data_path }}/homeassistant/configuration.yaml"
           name: "homeassistant"

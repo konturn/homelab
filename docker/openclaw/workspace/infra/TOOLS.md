@@ -35,7 +35,7 @@ with this file, they win: say so.
 
 ## Services *(from the compose files each host renders)*
 
-- **router**: airplay_guest_bathroom, airplay_guest_bedroom, airplay_house, airplay_kitchen, airplay_main_bathroom, airplay_main_bedroom, airplay_movie_room, airplay_office, ambientweather, amcrest2mqtt, anomaly-detector, bitwarden, bluebubbles-relay, booksonic, chromium-browser, deluge, diagram, docker-socket-proxy, docker-socket-proxy-ro, event-router, frigate, gitlab, grafana, hcpy, homeassistant, influxdb, iot_nginx, iperf3, jackett, jit-approval-svc, lab_nginx, lidarr, loki, mopidy, mosquitto, navidrome, nextcloud, nextcloud_db, nginx, novnc-dev1, novnc-dev2, novnc-dev3, nzbget, ollama, ombi, openclaw-gateway, otel-collector, paperless-ai, paperless-ngx, paperless-redis, petlibro-camera, pihole, plex, promtail, prowlarr, radarr, snapclient_global, snapserver, sonarr, tautulli, tempo, vault, zigbee2mqtt.
+- **router**: airplay_guest_bathroom, airplay_guest_bedroom, airplay_house, airplay_kitchen, airplay_main_bathroom, airplay_main_bedroom, airplay_movie_room, airplay_office, ambientweather, amcrest2mqtt, anomaly-detector, bitwarden, bluebubbles-relay, booksonic, chromium-browser, deluge, diagram, docker-socket-proxy, docker-socket-proxy-ro, event-router, frigate, gitlab, grafana, hcpy, homeassistant, influxdb, iot-dns, iot_nginx, iperf3, jackett, jit-approval-svc, lab_nginx, lidarr, loki, mopidy, mosquitto, navidrome, nextcloud, nextcloud_db, nginx, novnc-dev1, novnc-dev2, novnc-dev3, nzbget, ollama, ombi, openclaw-gateway, otel-collector, paperless-ai, paperless-ngx, paperless-redis, petlibro-camera, pihole, plex, promtail, prowlarr, radarr, snapclient_global, snapserver, sonarr, tautulli, tempo, vault, zigbee2mqtt.
   Defined, not running: snapclient_{guest_bathroom,guest_bedroom,kitchen,main_bathroom,main_bedroom,office} (no sound card, snapclient_disabled_zones); blog, wordpress_db (compose profile).
 - **zwave**: promtail, telegraf, zwavejs2mqtt.
 - **satellite-2**: promtail, telegraf.
@@ -94,6 +94,7 @@ with this file, they win: say so.
 - ci_runner needs gitlab.
 - deploy needs gitlab, vault, ci_runner.
 - dns needs pihole.
+- iot_resolver needs iot-dns, dns.
 - mqtt needs mosquitto.
 - zigbee2mqtt needs slzb_coordinator, mqtt, dns.
 - amcrest2mqtt needs doorbell, mqtt.
@@ -104,6 +105,7 @@ with this file, they win: say so.
 - zwave_js (zwave) needs zwave_pi, zwave_stick.
 - homeassistant needs mqtt, zwave_js, influxdb, dns.
 - Every router container needs `/persistent_data` (the 870 EVO, Docker's data-root).
+- **Rule (iot_resolver):** VLAN 6 devices have no other resolver: DHCP hands out only iot-dns and the router redirects their other DNS to it. If iot-dns is down, IoT devices cannot resolve anything.
 - **Rule (zigbee2mqtt):** After an SLZB coordinator firmware update (or coordinator reboot), restart zigbee2mqtt. It keeps its TCP session but receives no frames; on 2026-11-07 that went unnoticed for about an hour. The Zigbee silence alert watches for it.
 - **Rule (frigate):** The config is repo-managed (docker/frigate/config.yml): edits in the Frigate UI are overwritten on the next deploy.
 - **Rule (frigate):** Recordings live on /mpool/frigate, never on /persistent_data.
