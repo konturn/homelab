@@ -36,7 +36,7 @@ def run(argv, timeout=30):
 
 def disks():
     """{by-path name: {dev, model, serial_suffix, mappers: [..]}} for whole disks."""
-    rc, out, err = run(["lsblk", "-J", "-o", "NAME,TYPE,MODEL,SERIAL"])
+    rc, out, err = run(["lsblk", "-J", "-o", "NAME,TYPE,MODEL,SERIAL,FSTYPE,UUID"])
     if rc != 0:
         raise RuntimeError("lsblk failed: " + err)
     info = {}
@@ -53,7 +53,9 @@ def disks():
         if b.get("type") == "disk":
             info[b["name"]] = {"dev": b["name"], "model": (b.get("model") or "").strip(),
                                # last 4 only: the report can end up in a public place
-                               "serial_suffix": (b.get("serial") or "").strip()[-4:], "mappers": mappers(b)}
+                               "serial_suffix": (b.get("serial") or "").strip()[-4:], "mappers": mappers(b),
+                               # whole-disk LUKS (the data disks): its UUID, for crypttab
+                               "luks_uuid": b.get("uuid") if b.get("fstype") == "crypto_LUKS" else None}
     result = {}
     for name in sorted(os.listdir(BY_PATH)):
         # skip partitions and libata's duplicate per-link names (ata-1.0 next to ata-1)
