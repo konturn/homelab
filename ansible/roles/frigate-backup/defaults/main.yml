@@ -1,0 +1,38 @@
+---
+# Offsite backup of Frigate to the restic repository of the restic role
+# (docs/frigate.md, "Backup"). Reuses the restic role's /root/.restic_env
+# (repository, password and the append-only B2 key from Vault); nothing new
+# is stored. Own tags and forget policy: the main snapshots are untouched.
+frigate_backup_config_dir: /persistent_data/application/frigate
+frigate_backup_media_dir: /mpool/frigate
+# Inside the container, Frigate stores paths under /media/frigate
+frigate_backup_container_media_dir: /media/frigate
+frigate_backup_work_dir: /var/backups/frigate
+frigate_backup_tag: frigate
+frigate_backup_keep_within: 30d
+
+# events: database, snapshots, review thumbnails, previews, exports, and the
+# recording segments around alerts and detections of the last
+# frigate_backup_events_window_hours. Small and frequent.
+frigate_backup_events_on_calendar: "*-*-* *:05,35:00"
+frigate_backup_events_window_hours: 48
+frigate_backup_events_timeout: 25min
+
+# recordings: the segments of the last frigate_backup_recordings_window_hours
+# matching frigate_backup_recordings_filter, once a night after the main
+# backup:
+#   objects  segments with tracked objects (~5-10% of the footage)
+#   motion   segments with motion (Frigate's own long-term set; ~20-40%)
+#   all      everything, continuous footage included (66 GB/day per camera)
+frigate_backup_recordings_on_calendar: "*-*-* 07:15:00"
+frigate_backup_recordings_window_hours: 26
+frigate_backup_recordings_filter: motion
+frigate_backup_recordings_timeout: 4h
+
+# The main restic-backup.service runs `restic check` before and `restic
+# forget` after its backups, both exclusive locks without --retry-lock: any
+# Frigate job holding a lock then fails the main backup. So the Frigate jobs
+# never start while restic-backup or restic-db-dumps is active, nor after
+# this hour until the main backup has run (it starts at 03:00).
+frigate_backup_quiet_from_hour: 2
+frigate_backup_quiet_until_hour: 3

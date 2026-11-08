@@ -1,0 +1,36 @@
+---
+# Offsite backup of Frigate (docs/frigate.md, "Backup"). Needs the restic
+# role's /root/.restic_env and restic-notify-failure@.service.
+- name: Install the Frigate backup script
+  ansible.builtin.template:
+    src: frigate-backup.j2
+    dest: /usr/local/sbin/frigate-backup
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Install the Frigate backup units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - frigate-backup-events.service
+    - frigate-backup-events.timer
+    - frigate-backup-recordings.service
+    - frigate-backup-recordings.timer
+  register: _frigate_backup_units
+
+- name: Reload systemd for the Frigate backup units
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: _frigate_backup_units is changed
+
+- name: Enable and start the Frigate backup timers
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - frigate-backup-events.timer
+    - frigate-backup-recordings.timer

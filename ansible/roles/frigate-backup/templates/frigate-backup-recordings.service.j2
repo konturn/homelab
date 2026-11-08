@@ -1,0 +1,17 @@
+# {{ ansible_managed }}
+# Offsite backup of Frigate, recordings (docs/frigate.md, "Backup")
+[Unit]
+Description=Frigate restic backup (recordings)
+After=network-online.target
+Wants=network-online.target
+OnFailure=restic-notify-failure@%n.service
+
+[Service]
+Type=oneshot
+User=root
+Nice=19
+IOSchedulingClass=idle
+CPUQuota={{ 8 * ansible_processor_vcpus }}%
+TimeoutStartSec={{ frigate_backup_recordings_timeout }}
+EnvironmentFile=/root/.restic_env
+ExecStart=/usr/local/sbin/frigate-backup recordings

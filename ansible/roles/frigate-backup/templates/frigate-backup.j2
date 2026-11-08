@@ -1,0 +1,106 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Offsite backup of Frigate (docs/frigate.md, "Backup").
+#   frigate-backup events      database, clips, exports, and the recording
+#                              segments around recent alerts and detections
+#   frigate-backup recordings  recent recording segments, filtered by
+#                              {{ frigate_backup_recordings_filter }}; then forget
+# Snapshots are tagged {{ frigate_backup_tag }} and {{ frigate_backup_tag }}-<mode>.
+# Only `recordings` runs forget, filtered to those tags. Pruning is left to the
+# weekly restic-prune.timer.
+set -euo pipefail
+
+mode=${1:?usage: frigate-backup events|recordings}
+cfg={{ frigate_backup_config_dir | quote }}
+media={{ frigate_backup_media_dir | quote }}
+cmedia={{ frigate_backup_container_media_dir | quote }}
+work={{ frigate_backup_work_dir | quote }}
+tag={{ frigate_backup_tag | quote }}
+
+log() { echo "frigate-backup[$mode]: $*"; }
+
+main_backup_active() {
+  systemctl is-active --quiet restic-backup.service \
+    || systemctl is-active --quiet restic-db-dumps.service
+}
+
+# Never overlap the main backup (see defaults/main.yml).
+case "$mode" in
+  events)
+    hour=$((10#$(date +%H)))
+    if [ "$hour" -ge {{ frigate_backup_quiet_from_hour }} ] && [ "$hour" -lt {{ frigate_backup_quiet_until_hour }} ]; then
+      log "SKIP quiet window before the main backup"; exit 0
+    fi
+    if main_backup_active; then log "SKIP main backup running"; exit 0; fi
+    ;;
+  recordings)
+    waited=0
+    while main_backup_active; do
+      if [ "$waited" -ge 10800 ]; then log "FAIL main backup still running after 3h"; exit 1; fi
+      sleep 60; waited=$((waited + 60))
+    done
+    ;;
+  *) echo "unknown mode $mode" >&2; exit 2 ;;
+esac
+
+mkdir -p "$work"
+chmod 0700 "$work"
+db="$work/frigate.db"
+list="$work/files-$mode.txt"
+
+# Consistent copy of the live database (WAL mode; sqlite's online backup)
+sqlite3 "$cfg/frigate.db" ".timeout 30000" ".backup '$db.tmp'"
+mv "$db.tmp" "$db"
+
+now=$(date +%s)
+: > "$list"
+segments() {  # SQL selecting recordings.path
+  sqlite3 -readonly "$db" "$1" | sed "s#^$cmedia/#$media/#" | while IFS= read -r f; do
+    [ -f "$f" ] && printf '%s\n' "$f"
+  done >> "$list"
+}
+
+if [ "$mode" = events ]; then
+  since=$((now - {{ frigate_backup_events_window_hours }} * 3600))
+  # Segments overlapping a review item (alert or detection), with the same
+  # 5 s pre/post capture as config.yml
+  segments "SELECT DISTINCT r.path FROM recordings r JOIN reviewsegment s
+            ON r.camera = s.camera
+           AND r.end_time >= s.start_time - 5
+           AND r.start_time <= COALESCE(s.end_time, $now) + 5
+           WHERE s.start_time >= $since;"
+  for p in "$db" "$cfg/config.yml" "$media/clips" "$media/exports"; do
+    [ -e "$p" ] && printf '%s\n' "$p" >> "$list"
+  done
+else
+  since=$((now - {{ frigate_backup_recordings_window_hours }} * 3600))
+{% if frigate_backup_recordings_filter == 'objects' %}
+  where="objects > 0"
+{% elif frigate_backup_recordings_filter == 'motion' %}
+  where="(motion > 0 OR objects > 0)"
+{% else %}
+  where="1"
+{% endif %}
+  segments "SELECT path FROM recordings WHERE start_time >= $since AND $where;"
+  printf '%s\n' "$db" >> "$list"
+fi
+
+n=$(wc -l < "$list")
+bytes=$(xargs -d '\n' -r du -scb < "$list" | tail -1 | cut -f1)
+log "START files=$n bytes=${bytes:-0}"
+
+# Exit 3: snapshot written, but a file vanished between listing and reading
+# (Frigate expired a segment). Not a failure.
+rc=0
+restic backup --retry-lock 10m --tag "$tag" --tag "$tag-$mode" \
+  --files-from-verbatim "$list" --exclude "*.db-wal" --exclude "*.db-shm" \
+  --exclude "$media/clips/cache" --exclude "$media/clips/preview_restart_cache" || rc=$?
+if [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; then log "FAIL restic backup rc=$rc"; exit "$rc"; fi
+log "OK backup rc=$rc"
+
+if [ "$mode" = recordings ]; then
+  restic forget --retry-lock 30m --tag "$tag" --group-by host,tags \
+    --keep-within {{ frigate_backup_keep_within }}
+  log "OK forget keep-within={{ frigate_backup_keep_within }}"
+fi
+log "SUMMARY ok"
