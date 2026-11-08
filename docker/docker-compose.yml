@@ -1701,6 +1701,63 @@ services:
       timeout: 10s
       retries: 3
       start_period: 120s
+  # hcpy: Thermador hood and range (BSH Home Connect) to MQTT, local only
+  # (docs/HOMEASSISTANT.md, "Thermador"). Built on the router from the pinned
+  # private fork root/hcpy (hcpy.yml), never pulled. Internal VLAN only: the
+  # two appliances (TCP 80) and mosquitto (8883) are reached through narrow
+  # FORWARD rules for hcpy_ip (rules.v4), and everything else it sends through
+  # the router is refused. Until hc-login has written the devices file it
+  # waits (healthy). Only the devices in hcpy_control_devices accept commands.
+  hcpy:
+    container_name: hcpy
+    image: "local/hcpy:{{ hcpy_source.sha[:12] }}"
+    pull_policy: never
+    restart: unless-stopped
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges=true
+    cap_drop:
+      - ALL
+    networks:
+      internal:
+        ipv4_address: {{ hcpy_ip }}
+    extra_hosts:
+      - "mqtt.lab.nkontur.com:{{ mosquitto_address }}"
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+          cpus: "0.5"
+          pids: 64
+    environment:
+      HCPY_DEVICES_FILE: /config/devices.json
+      HCPY_DISCOVERY_FILE: /app/discovery.yaml
+      HCPY_MQTT_HOST: mqtt.lab.nkontur.com
+      HCPY_MQTT_PORT: "8883"
+      HCPY_MQTT_SSL: "true"
+      HCPY_MQTT_USERNAME: hcpy
+      HCPY_MQTT_PASSWORD: {{ vault_hcpy_mqtt_password | trim | replace("$", "$$") }}
+      HCPY_MQTT_CLIENTNAME: hcpy
+      HCPY_MQTT_PREFIX: "homeconnect/"
+      HCPY_HA_DISCOVERY: "true"
+      HCPY_CONTROL_DEVICES: "{{ hcpy_control_devices | join(',') }}"
+    volumes:
+      - "{{ docker_persistent_data_path }}/hcpy:/config:ro"
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    healthcheck:
+      # Healthy while connected to the broker, or while waiting for the
+      # devices file. An appliance that is off or asleep is not a failure;
+      # its own availability topic goes offline instead.
+      test: ["CMD-SHELL", "test -e /tmp/hcpy-mqtt-connected || test -e /tmp/hcpy-waiting-for-devices"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
   snapserver:
     container_name: snapserver
     security_opt:

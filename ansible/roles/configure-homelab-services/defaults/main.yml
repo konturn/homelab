@@ -31,3 +31,25 @@ homeassistant_pinned_integrations:
     path: custom_components/toyota_connected
     vault_user_var: vault_ha_toyota_deploy_user
     vault_token_var: vault_ha_toyota_deploy_token
+  # Miele@LAN, local push for the Miele appliance (docs/HOMEASSISTANT.md,
+  # "Miele"). Deploy token: Vault gitlab/ha-miele-at-lan.
+  - domain: miele_lan
+    project: root/ha-miele-at-lan
+    sha: 22d8d4a2e25322a5888298556cf2b890f1ff5a9c  # v1.17.1-homelab.1
+    path: custom_components/miele_lan
+    vault_user_var: vault_ha_miele_lan_deploy_user
+    vault_token_var: vault_ha_miele_lan_deploy_token
+
+# hcpy, the Home Connect to MQTT bridge (tasks/hcpy.yml, docs/HOMEASSISTANT.md
+# "Thermador"). The deploy builds the fork's Dockerfile at `sha` into
+# local/hcpy:<sha[:12]>; nothing is pushed or pulled. Bumps are manual after
+# reviewing the fork. Deploy token: Vault gitlab/hcpy.
+hcpy_source:
+  project: root/hcpy
+  sha: 600b15d2ea5737112a9103080b89a72da02d72f4  # v0.4.12-homelab.1
+# Devices (names from the devices file) that may receive commands. Every
+# other device is read-only in the bridge itself. Allowed devices' control
+# entities are still disabled by default in Home Assistant. The range is
+# never listed here.
+hcpy_control_devices:
+  - hood

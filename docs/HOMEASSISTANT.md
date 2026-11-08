@@ -172,8 +172,8 @@ If the nginx IPs change in the inventory, update them in the UI too.
 ## Custom integrations
 
 Custom integrations live in `custom_components/` on the live volume, not in
-this repo. All but Frigate and toyota_connected are installed and upgraded
-through the Marketplace (the core `marketplace` integration, which replaced
+this repo. All but Frigate, toyota_connected and miele_lan are installed and
+upgraded through the Marketplace (the core `marketplace` integration, which replaced
 HACS in 2026.11):
 
 | Integration | Source | Notes |
@@ -185,12 +185,13 @@ HACS in 2026.11):
 | adaptive_lighting | `basnijholt/adaptive-lighting` | Entry *Hue Lights* |
 | frigate | `blakeblackshear/frigate-hass-integration` | **Not from the Marketplace**: copied by hand into `custom_components/frigate/` (v5.15.6), so the Marketplace does not track or upgrade it. See docs/frigate.md |
 | toyota_connected | private fork `root/ha-toyota-connected` (GitLab) | **Not from the Marketplace**: installed by the deploy, pinned to a commit. See below |
+| miele_lan | private fork `root/ha-miele-at-lan` (GitLab) of `tiehfood/ha-miele-at-lan` | **Not from the Marketplace**: pinned like toyota_connected. See "Miele" |
 
 So there are three ways a custom integration gets into `custom_components/`:
 
 - **Marketplace** (default): installed and upgraded in the UI; the
   Marketplace tracks the version and shows update notices.
-- **Pinned from a private fork** (toyota_connected): listed in
+- **Pinned from a private fork** (toyota_connected, miele_lan): listed in
   `homeassistant_pinned_integrations` and synced by every deploy (below).
   Use this for an integration that needs local patches or should only change
   through a reviewed MR.
@@ -205,7 +206,8 @@ lists integrations installed from a private GitLab fork at a full commit id.
 Each deploy fetches that commit with a read-only deploy token (Vault
 `gitlab/ha-toyota-connected`), checks the id and the manifest domain, and
 syncs the integration directory into `custom_components/<domain>/` with
-`--delete`. Home Assistant is restarted (once, with any config change) only
+`--delete`. Each entry has its own deploy token (Vault
+`gitlab/<project>`). Home Assistant is restarted (once, with any config change) only
 when files changed. Bumps are manual: review the fork, tag it, and change
 `sha`; Renovate does not track it. Don't edit these directories on the
 volume: the next deploy reverts them.
@@ -264,6 +266,70 @@ restart.
   The album images are public-domain scans kept only on the live volume
   (`www/frame/halloween/`, with a `manifest.csv` of sources and licences),
   not in git.
+
+## Miele (Miele@LAN, local)
+
+The Miele appliance is read over the LAN by `miele_lan` (Miele@LAN), pinned
+from the private fork `root/ha-miele-at-lan` (see "Custom integrations").
+It signs requests with the household GroupKey and gets state changes pushed
+by the appliance (SuperVision), with slow polling as a fallback. The cloud
+`miele` integration is not used.
+
+- **Setup (once, in the UI):** *Settings -> Devices & services -> Add
+  Integration -> Miele@LAN -> Cloud pairing*, country `us`. The flow shows a
+  Miele login URL. Open it in desktop Chrome/Edge with DevTools -> Network
+  open and *Preserve log* on, log in, then copy the blocked
+  `miele://oauth2-code/?code=...` request (right-click -> Copy link address)
+  and paste it into the flow. The integration fetches the GroupKey once and
+  stores it in its config entry (`.storage`). A Miele `503 Service
+  Temporarily Unavailable` during login is an outage on Miele's side: retry
+  later.
+- **LAN-only afterwards:** the fork stores no refresh token, so nothing talks
+  to the Miele cloud after setup. Pairing adds HA as a SuperVision peer and
+  push subscriber on the appliance; it does not re-commission the appliance,
+  so the Miele app keeps working. Removing the integration deletes those
+  entries again.
+- **Network:** discovery and push need mDNS (`_mieleathome._tcp`) between HA
+  and the appliance, which HA's IoT leg (`iot0`) provides. HA listens for the
+  push on port 18082.
+- **Controls:** start/stop buttons, power switch, light and fan are disabled
+  by default (fork patch). Status, program, phase and times are enabled.
+- **Do not** use MieleRESTServer or `tools/miele_lan_provision.py`: they
+  re-commission the appliance, which breaks its cloud pairing and the app.
+
+## Thermador (Home Connect, local via hcpy)
+
+The Thermador hood and range are read locally by **hcpy** (`hc2mqtt`), a
+bridge from the Home Connect local protocol to MQTT, with Home Assistant MQTT
+discovery. It runs as the `hcpy` container, built on the router from the
+pinned private fork `root/hcpy` (`hcpy_source` in the
+`configure-homelab-services` defaults; `tasks/hcpy.yml`).
+
+- **Network:** internal VLAN at `hcpy_ip`. FORWARD rules allow only the hood
+  and range (`thermador_*_address`, fixed DHCP, TCP 80) and mosquitto
+  (8883); everything else it sends through the router is refused
+  (docs/FIREWALL.md). MQTT user `hcpy` (Vault `docker/hcpy`), TLS verified.
+- **Keys:** each appliance has a key/iv fetched once from the Home Connect
+  cloud. They are in `/persistent_data/application/hcpy/devices.json`
+  (0400, the bridge's uid 10001, mounted read-only), never in git.
+- **One-time login:** `ssh -t root@10.4.0.1 hc-login` (installed by the
+  deploy). It prints a Home Connect URL: open it in desktop Chrome with
+  DevTools -> Network open, log in, find the blocked request starting
+  `hcauth://auth/prod?code=...`, copy its URL and paste it at the prompt.
+  The login runs from the router's own network (WAN). It writes the devices
+  file, sets each appliance's address and restarts the bridge. Run it again
+  after an appliance is re-paired in the Home Connect app.
+- **Read-only:** `hcpy_control_devices` lists the devices that accept
+  commands (the hood). The range is never on it: the bridge does not
+  subscribe to its command topics, refuses commands for it, and publishes
+  its writable settings as read-only sensors. The hood's control entities
+  exist but are disabled by default.
+- **Entities:** device names come from the account (`hood`, `oven`, ...);
+  entities are `*.<name>_<feature>` (for example
+  `sensor.hood_bsh_common_status_operationstate`). Availability follows the
+  bridge and per-appliance LWT topics under `homeconnect/`.
+- The cloud `home_connect` config entry is kept but disabled; re-enable it
+  only if the local path is removed.
 
 ## Frontend cards (Marketplace)
 

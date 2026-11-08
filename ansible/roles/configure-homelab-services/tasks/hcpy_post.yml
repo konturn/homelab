@@ -1,0 +1,25 @@
+---
+# hcpy's mosquitto user (docs/HOMEASSISTANT.md, "Thermador"). Same pattern as
+# the frigate and anomaly-detector users: add when missing, never touch other
+# users. Password: Vault docker/hcpy mqtt_password. To rotate: delete the line
+# from mosquitto.passwd and redeploy.
+- name: Ensure the hcpy MQTT user exists
+  ansible.builtin.shell: |
+    set -euo pipefail
+    f={{ docker_persistent_data_path }}/mqtt/conf/mosquitto.passwd
+    if grep -q '^hcpy:' "$f"; then echo present; exit 0; fi
+    [ -n "${PW:-}" ]
+    docker exec -e PW mosquitto sh -c 'mosquitto_passwd -b /mosquitto/config/mosquitto.passwd hcpy "$PW"'
+    chown 1883:1883 "$f"
+    chmod 0700 "$f"
+    grep -q '^hcpy:' "$f"
+    docker kill -s HUP mosquitto >/dev/null
+    echo added
+  args:
+    executable: /bin/bash
+  environment:
+    PW: "{{ vault_hcpy_mqtt_password }}"
+  register: _hcpy_mqtt_user
+  changed_when: "'added' in _hcpy_mqtt_user.stdout"
+  no_log: true
+  when: "'router' in inventory_hostname and not ansible_check_mode"

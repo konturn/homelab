@@ -311,6 +311,15 @@ COMMIT
 # Allow established/related connections (stateful firewall)
 -A FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
 
+# hcpy (internal VLAN, fixed address): the two Thermador appliances on the IoT
+# VLAN (Home Connect local websocket, TCP 80) and mosquitto (MQTT over TLS,
+# 8883). Everything else hcpy sends through the router, internet included, is
+# refused. Its one-time cloud login runs separately (hc-login, host network).
+-A FORWARD -s {{ hcpy_ip }}/32 -i vlan3-shim -d {{ thermador_hood_address }}/32 -p tcp -m tcp --dport 80 -j ACCEPT
+-A FORWARD -s {{ hcpy_ip }}/32 -i vlan3-shim -d {{ thermador_range_address }}/32 -p tcp -m tcp --dport 80 -j ACCEPT
+-A FORWARD -s {{ hcpy_ip }}/32 -i vlan3-shim -d {{ mosquitto_address }}/32 -p tcp -m tcp --dport 8883 -j ACCEPT
+-A FORWARD -s {{ hcpy_ip }}/32 -j REJECT --reject-with icmp-admin-prohibited
+
 # GitLab CI job network (br-ci): allowlist, mirrors raw CI-EGRESS
 -A FORWARD -i br-ci -d {{ pihole_ip }} -p udp -m udp --dport 53 -j ACCEPT
 -A FORWARD -i br-ci -d {{ pihole_ip }} -p tcp -m tcp --dport 53 -j ACCEPT

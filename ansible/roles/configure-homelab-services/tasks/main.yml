@@ -415,6 +415,9 @@
 ### Home Assistant custom integrations pinned to private forks
 - ansible.builtin.import_tasks: homeassistant_custom_components.yml
 
+### hcpy (Home Connect bridge): local image, config directory, hc-login
+- ansible.builtin.import_tasks: hcpy.yml
+
 ### Snapserver zone layout (server.json)
 # snapserver keeps its runtime state in server.json and rewrites it while
 # running: client connected flag, host/IP, lastSeen, volume and mute. Writing
@@ -1028,6 +1031,9 @@
 
 ### Frigate: MQTT user and UI users (after compose up)
 - ansible.builtin.import_tasks: frigate_post.yml
+
+### hcpy: its MQTT user (after compose up)
+- ansible.builtin.import_tasks: hcpy_post.yml
 
 - ansible.builtin.import_tasks: homeassistant_post.yml
 

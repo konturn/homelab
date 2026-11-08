@@ -1,0 +1,94 @@
+---
+# hcpy, the Home Connect to MQTT bridge for the Thermador appliances
+# (docs/HOMEASSISTANT.md, "Thermador"). The image is built here, on the
+# router's daemon, from a pinned commit of the private fork root/hcpy
+# (hcpy_source in the role defaults) and tagged local/hcpy:<sha[:12]>. Nothing
+# is pushed or pulled: compose runs it with pull_policy: never. The fork's
+# Dockerfile pins the base image by digest and every Python dependency by hash.
+#
+# Bumps are manual: review the fork, tag it, change hcpy_source.sha.
+- name: Build the hcpy image from the pinned fork
+  ansible.builtin.shell: |
+    set -euo pipefail
+    [[ $SHA =~ ^[0-9a-f]{40}$ ]] || { echo "pin must be a full commit id" >&2; exit 1; }
+    img=local/hcpy:${SHA:0:12}
+    if docker image inspect "$img" >/dev/null 2>&1; then echo present; exit 0; fi
+    repo=/var/cache/hcpy-src
+    install -d -m 0700 "$repo"
+    [ -d "$repo/.git" ] || git init -q "$repo"
+    if ! git -C "$repo" cat-file -e "$SHA^{commit}" 2>/dev/null; then
+      auth=$(printf '%s:%s' "$GL_USER" "$GL_TOKEN" | base64 -w0)
+      GIT_CONFIG_COUNT=2 \
+        GIT_CONFIG_KEY_0=http.extraHeader GIT_CONFIG_VALUE_0="Authorization: Basic $auth" \
+        GIT_CONFIG_KEY_1=credential.helper GIT_CONFIG_VALUE_1= \
+        GIT_TERMINAL_PROMPT=0 \
+        git -C "$repo" fetch -q --depth 1 --no-tags "$URL" "$SHA" \
+        || { echo "fetch of $SHA failed" >&2; exit 1; }
+      unset auth
+    fi
+    [ "$(git -C "$repo" rev-parse "$SHA^{commit}")" = "$SHA" ] || { echo "commit id mismatch" >&2; exit 1; }
+    ctx=$(mktemp -d)
+    trap 'rm -rf "$ctx"' EXIT
+    git -C "$repo" archive --format=tar "$SHA" | tar -x -C "$ctx"
+    docker build -q --label "org.opencontainers.image.revision=$SHA" -t "$img" "$ctx" >/dev/null
+    # Drop older local/hcpy tags. The one the running container uses cannot
+    # be removed yet; it goes on the next bump.
+    docker images local/hcpy --format '{{ '{{' }}.Tag{{ '}}' }}' | grep -vx "${SHA:0:12}" \
+      | sed 's|^|local/hcpy:|' | xargs -r docker rmi >/dev/null 2>&1 || true
+    echo built
+  args:
+    executable: /bin/bash
+  environment:
+    SHA: "{{ hcpy_source.sha }}"
+    URL: "{{ homeassistant_pinned_integrations_gitlab_url }}/{{ hcpy_source.project }}.git"
+    GL_USER: "{{ vault_hcpy_deploy_user | trim }}"
+    GL_TOKEN: "{{ vault_hcpy_deploy_token | trim }}"
+  register: _hcpy_image
+  changed_when: "'built' in _hcpy_image.stdout"
+  failed_when: false  # reported (without the environment) by the next task
+  no_log: true  # the environment carries the deploy token
+  timeout: 900
+  when:
+    - "'router' in inventory_hostname"
+    - not ansible_check_mode
+
+- name: Report the hcpy image build
+  ansible.builtin.debug:
+    msg: "hcpy image: rc={{ _hcpy_image.rc }} {{ _hcpy_image.stdout | default('') }} {{ _hcpy_image.stderr | default('') }}"
+  failed_when: _hcpy_image.rc != 0
+  when: _hcpy_image is not skipped
+
+# The devices file (appliance keys and feature descriptions) is written only
+# by hc-login; the bridge mounts the directory read-only and runs as 10001.
+- name: hcpy config directory
+  ansible.builtin.file:
+    path: "{{ docker_persistent_data_path }}/hcpy"
+    state: directory
+    owner: "10001"
+    group: "10001"
+    mode: "0700"
+  when: "'router' in inventory_hostname"
+
+- name: hc-login settings
+  ansible.builtin.copy:
+    dest: /usr/local/etc/hc-login.conf
+    content: |
+      # Written by the homelab deploy (configure-homelab-services, hcpy.yml)
+      HCPY_IMAGE=local/hcpy:{{ hcpy_source.sha[:12] }}
+      HCPY_DIR={{ docker_persistent_data_path }}/hcpy
+      HCPY_UID=10001
+      HOOD_ADDR={{ thermador_hood_address }}
+      RANGE_ADDR={{ thermador_range_address }}
+    owner: root
+    group: root
+    mode: "0644"
+  when: "'router' in inventory_hostname"
+
+- name: hc-login command
+  ansible.builtin.copy:
+    src: hc-login.sh
+    dest: /usr/local/sbin/hc-login
+    owner: root
+    group: root
+    mode: "0750"
+  when: "'router' in inventory_hostname"
