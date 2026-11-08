@@ -36,8 +36,9 @@ ISO conversion, ZFS resilver/scrub). On cgroup v2 the scheduler splits CPU betwe
 sibling cgroups by `cpu.weight`, so priority is set per cgroup, not with `nice`:
 
 - Docker (cgroupfs driver) puts every container, CI job containers included,
-  under `/sys/fs/cgroup/docker/`. Compose `cpu_shares` maps to `cpu.weight`
-  (1024 -> 100, 4096 -> ~390, 256 -> ~10).
+  under `/sys/fs/cgroup/docker/`. runc maps compose `cpu_shares` to
+  `cpu.weight` non-linearly: 4096 -> 303, 1024 (default) -> 100, 512 -> 59,
+  256 -> 35.
 - Core services, `cpu_shares: 4096`: pihole, vault, nginx, lab_nginx,
   iot_nginx, homeassistant, mosquitto, zigbee2mqtt, jit-approval-svc.
 - Default (1024): everything else, including gitlab (heavy, would crowd out the
