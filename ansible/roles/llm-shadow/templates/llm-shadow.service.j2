@@ -1,0 +1,29 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Local-model shadow of the imessage-check job (ansible/roles/llm-shadow/README.md)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+Environment=SHADOW_DIR={{ llm_shadow_data_dir }}
+Environment=OC_DATA={{ llm_shadow_openclaw_dir }}/data
+Environment=OC_WS={{ llm_shadow_openclaw_dir }}/workspace
+Environment=OC_CLAUDE_PROJECT={{ llm_shadow_openclaw_dir }}/claude/projects/-home-node--openclaw-workspace
+Environment=SHADOW_SUMMARY_OUT={{ llm_shadow_openclaw_dir }}/data/llm-shadow/summary.json
+Environment=SHADOW_MODEL={{ llm_shadow_model }}
+Environment=SHADOW_NUM_CTX={{ llm_shadow_num_ctx }}
+Environment=SHADOW_NUM_CTX_MAX={{ llm_shadow_num_ctx_max }}
+Environment=SHADOW_RUN_DEADLINE_S={{ llm_shadow_run_deadline_s }}
+Environment=SHADOW_LOAD_DEADLINE_S={{ llm_shadow_load_deadline_s }}
+Environment=SHADOW_MIN_FREE_VRAM_MIB={{ llm_shadow_min_free_vram_mib }}
+Environment=SHADOW_RETRY_WINDOW_S={{ llm_shadow_retry_window_s }}
+Environment=SHADOW_TRIAL_START={{ llm_shadow_trial_start }}
+Environment=SHADOW_TRIAL_END={{ llm_shadow_trial_end }}
+ExecStart=/usr/bin/python3 -I {{ llm_shadow_install_dir }}/llm_shadow.py tick
+# Load cap + decision cap + fetch/compare overhead.
+TimeoutStartSec={{ ((llm_shadow_load_deadline_s | int) + (llm_shadow_run_deadline_s | int) + 240) }}s
+UMask=0077
+Nice=10
+# stdout reaches the journal (and Loki): the harness only ever prints counts.
+SyslogIdentifier=llm-shadow

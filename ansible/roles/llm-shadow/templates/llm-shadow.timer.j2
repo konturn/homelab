@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Local-model shadow tick (ansible/roles/llm-shadow/README.md)
+
+[Timer]
+OnCalendar={{ llm_shadow_on_calendar }}
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target

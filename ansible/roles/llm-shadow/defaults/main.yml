@@ -1,0 +1,29 @@
+# Shadow trial of a local model against the imessage-check OpenClaw job
+# (ansible/roles/llm-shadow/README.md). The shadow only records decisions; it has no tool that
+# sends, adds, deletes or writes state.
+
+llm_shadow_enabled: true
+
+# Every 2 minutes: snapshot the job's inputs, queue each new real run, and
+# replay at most one queued run. A run holds a lock, so ticks never overlap.
+llm_shadow_on_calendar: "*:0/2"
+
+llm_shadow_model: "qwen3:14b-q4_K_M"
+llm_shadow_num_ctx: 16384
+llm_shadow_num_ctx_max: 24576
+# Decision loop cap once the model is loaded, and the separate cap for loading
+# the weights from the pool.
+llm_shadow_run_deadline_s: 300
+llm_shadow_load_deadline_s: 540
+# Skip (and retry for up to llm_shadow_retry_window_s) when another model is
+# loaded in Ollama or less VRAM than this is free.
+llm_shadow_min_free_vram_mib: 12288
+llm_shadow_retry_window_s: 1500
+
+llm_shadow_trial_start: "2026-11-08"
+# After this the timer keeps ticking but no longer runs the model.
+llm_shadow_trial_end: "2026-12-08T23:59:59-05:00"
+
+llm_shadow_install_dir: /usr/local/lib/llm-shadow
+llm_shadow_data_dir: "{{ docker_persistent_data_path | default('/persistent_data/application') }}/llm-shadow"
+llm_shadow_openclaw_dir: "{{ docker_persistent_data_path | default('/persistent_data/application') }}/openclaw"
