@@ -357,8 +357,7 @@ journalctl -u restic-db-dumps.service -n 20 | grep restic-db-dumps
   raft snapshot` exists only for Raft storage). restic copies its per-key
   files; moving Vault to Raft would make a snapshot possible and is a
   separate change.
-- *Caches and rebuildable data*: Trivy DBs, Pelias/Valhalla map data,
-  Paperless' Redis.
+- *Caches and rebuildable data*: Trivy DBs, Paperless' Redis.
 
 ### Deletion resistance (offsite copy)
 

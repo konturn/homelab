@@ -1005,12 +1005,8 @@
         | rejectattr('status', 'equalto', 'Starting')
         | list | length > 0)
   vars:
-    _compose_oneshot_inits:
-      - headway-frontend-init
-      - headway-travelmux-init
-      - pelias-config-init
-      - pelias-elasticsearch-init
-      - pelias-placeholder-init
+    # container names of run-once init services (none at the moment)
+    _compose_oneshot_inits: []
   when: not ansible_check_mode
 
 - name: Force recreate containers after daemon config change

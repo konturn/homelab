@@ -237,22 +237,14 @@
     limit_item: as
     value: 40000000
 
-# Elasticsearch (Pelias/Headway) needs memlock for mlockall.
-# Fixes pam_limits warning: invalid line .hard memlock 8499200. - skipped
-# Previous manual edit was missing the domain field.
-- name: Set memlock soft limit
-  community.general.pam_limits:
-    domain: "*"
-    limit_type: soft
-    limit_item: memlock
-    value: unlimited
-
-- name: Set memlock hard limit
-  community.general.pam_limits:
-    domain: "*"
-    limit_type: hard
-    limit_item: memlock
-    value: unlimited
+# The unlimited memlock limits were only for Elasticsearch, which went with
+# the map stack (2026-11). Remove them; containers take their limits from
+# dockerd, not PAM.
+- name: Remove the unlimited memlock limits
+  ansible.builtin.lineinfile:
+    path: /etc/security/limits.conf
+    regexp: '^\*\s+(soft|hard)\s+memlock\s+unlimited\s*$'
+    state: absent
 
 ### Configure monthly zpool scrub
 - name: Zpool systemd timer

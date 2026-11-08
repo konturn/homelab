@@ -273,5 +273,3 @@ vault_secret_paths:
     fields:
       vault_ha_toyota_deploy_user: "deploy_token_username"
       vault_ha_toyota_deploy_token: "deploy_token"
-
-  # Nominatim vault secret removed — replaced by Pelias geocoding (Headway stack)

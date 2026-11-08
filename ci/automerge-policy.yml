@@ -143,13 +143,6 @@ denylist:
       deploy, the revert included.
     docker-socket-proxy: >-
       CI image builds reach the Docker daemon through it.
-    # One-shot init containers: they exit by design, which the health gate
-    # (a running container) cannot tell from a failure.
-    headway-frontend-init: one-shot init container; the health gate expects a running container.
-    headway-travelmux-init: one-shot init container; the health gate expects a running container.
-    pelias-config-init: one-shot init container; the health gate expects a running container.
-    pelias-elasticsearch-init: one-shot init container; the health gate expects a running container.
-    pelias-placeholder-init: one-shot init container; the health gate expects a running container.
   images:
     gitlab/gitlab-ee: GitLab itself (see the gitlab service).
     gitlab/gitlab-ce: GitLab itself (see the gitlab service).

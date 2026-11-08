@@ -306,14 +306,6 @@
       "allowedVersions": "<10"
     },
     {
-      "description": "Headway/Pelias images are a matched pair with separately built map data; update them together with a data rebuild",
-      "matchPackageNames": [
-        "ghcr.io/headwaymaps/**",
-        "pelias/**"
-      ],
-      "enabled": false
-    },
-    {
       "description": "virtio-win: Fedora archive directory names are <version>-<release>",
       "matchDatasources": [
         "custom.virtio-win"

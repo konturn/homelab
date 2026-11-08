@@ -74,7 +74,6 @@ class DataTest(unittest.TestCase):
     def test_expected_containers(self):
         exp = drift.expected_containers()
         self.assertEqual(exp["homeassistant"], "running")
-        self.assertEqual(exp["pelias-config-init"], "oneshot")
         self.assertNotIn("wordpress", exp)  # compose profile
         self.assertIn("snapclient_global", exp)
         self.assertNotIn("snapclient_office", exp)  # snapclient_disabled_zones
@@ -267,12 +266,14 @@ class DriftTest(unittest.TestCase):
     def test_container_down_and_oneshot_failed(self):
         live = self.healthy()
         live["containers"]["zigbee2mqtt"] = {"state": "exited", "exit_code": 1, "health": None}
-        live["containers"]["pelias-config-init"] = {"state": "exited", "exit_code": 2, "health": None}
         live["containers"]["gitlab"]["health"] = "unhealthy"
+        # no one-shot service is declared today; check the rule with a made-up one
+        self.expected = {**self.expected, "example-init": "oneshot"}
+        live["containers"]["example-init"] = {"state": "exited", "exit_code": 2, "health": None}
         _, items = self.texts(live)
         joined = "\n".join(items)
         self.assertIn("zigbee2mqtt: exited, exit code 1", joined)
-        self.assertIn("pelias-config-init: one-shot exited, exit code 2", joined)
+        self.assertIn("example-init: one-shot exited, exit code 2", joined)
         self.assertIn("gitlab: running, unhealthy", joined)
 
     def test_expected_interfaces_from_compose(self):
