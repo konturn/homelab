@@ -264,7 +264,7 @@ router:bootstrap:
 # Base ansible job with caching
 # =============================================================================
 .ansible:
-  image: willhallonline/ansible:2.21.4-alpine-3.22@sha256:6bf175ba6d000691b017a099277ac6cebe6254d99a49670a321e1c6742fd551e
+  image: willhallonline/ansible:2.21.5-alpine-3.22@sha256:cf26105d35af9e8df0a9eafaecf3c23310cace20687b9044a92e8acc0b6f46af
   before_script:
     - mkdir -p /cache/pip /cache/ansible-roles
     # willhallonline/ansible:latest now ships an externally-managed (PEP 668) python;
@@ -1479,7 +1479,7 @@ netgear:firmware:
     - .ansible
     - .netgear_vault
   image:
-    name: willhallonline/ansible:2.21.4-alpine-3.22@sha256:6bf175ba6d000691b017a099277ac6cebe6254d99a49670a321e1c6742fd551e
+    name: willhallonline/ansible:2.21.5-alpine-3.22@sha256:cf26105d35af9e8df0a9eafaecf3c23310cace20687b9044a92e8acc0b6f46af
     docker:
       user: root
   stage: deploy
@@ -1645,7 +1645,7 @@ aruba-iap:firmware-check:
   extends:
     - .ansible
     - .aruba_iap_live
-  image: willhallonline/ansible:2.21.4-alpine-3.22@sha256:6bf175ba6d000691b017a099277ac6cebe6254d99a49670a321e1c6742fd551e
+  image: willhallonline/ansible:2.21.5-alpine-3.22@sha256:cf26105d35af9e8df0a9eafaecf3c23310cace20687b9044a92e8acc0b6f46af
   stage: deploy
   needs: []
   variables:
@@ -1670,7 +1670,7 @@ aruba-iap:firmware:
     - .ansible
     - .aruba_iap_live
   image:
-    name: willhallonline/ansible:2.21.4-alpine-3.22@sha256:6bf175ba6d000691b017a099277ac6cebe6254d99a49670a321e1c6742fd551e
+    name: willhallonline/ansible:2.21.5-alpine-3.22@sha256:cf26105d35af9e8df0a9eafaecf3c23310cace20687b9044a92e8acc0b6f46af
     docker:
       user: root
   stage: deploy
@@ -1773,7 +1773,7 @@ aruba-s2500:drift:
 aruba-s2500:firmware:
   extends: .aruba_iap_live
   image:
-    name: willhallonline/ansible:2.21.4-alpine-3.22@sha256:6bf175ba6d000691b017a099277ac6cebe6254d99a49670a321e1c6742fd551e
+    name: willhallonline/ansible:2.21.5-alpine-3.22@sha256:cf26105d35af9e8df0a9eafaecf3c23310cace20687b9044a92e8acc0b6f46af
     docker:
       user: root
   stage: deploy
