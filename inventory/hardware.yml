@@ -278,3 +278,100 @@ network_devices:
     vlan: 6
     link: not traced (its MAC is not in the S2500 forwarding table while it is offline)
     known_issue: "Unreachable since 2026-07-13 (issue #123); hardware fix pending."
+  # IoT VLAN devices identified in the 2026-11-08 inventory. Entries without
+  # address_var/mac_var have no DHCP reservation (dynamic lease), so the repo
+  # holds no address for them.
+  denon:
+    desc: Denon AVR-X6700H (HA denonavr, local)
+    address_var: denon_address
+    mac_var: denon_mac
+    vlan: 6
+  projector:
+    desc: Epson projector (HA pjlink, local)
+    address_var: projector_address
+    mac_var: projector_mac
+    vlan: 6
+  shield:
+    desc: NVIDIA Shield TV
+    address_var: shield_address
+    mac_var: shield_mac
+    vlan: 6
+    note: Offline 2026-11-08.
+  apple_tv:
+    desc: Apple TV 4K (HA apple_tv, local; Thread border router)
+    address_var: apple_tv_address
+    mac_var: apple_tv_mac
+    vlan: 6
+  amp:
+    desc: Network amp `amp`, model unknown
+    address_var: amp_address
+    mac_var: amp_mac
+    vlan: 6
+    note: Offline 2026-11-08.
+  kitchen_qual:
+    desc: Awair air quality sensor, kitchen
+    address_var: kitchen_qual_address
+    mac_var: kitchen_qual_mac
+    vlan: 6
+    note: Offline 2026-11-08.
+  bedroom_qual:
+    desc: Awair air quality sensor, bedroom
+    address_var: bedroom_qual_address
+    mac_var: bedroom_qual_mac
+    vlan: 6
+    note: Offline 2026-11-08.
+  weather_station:
+    desc: Ambient Weather station (local push to ambientweather2mqtt)
+    address_var: weather_station_address
+    mac_var: weather_station_mac
+    vlan: 6
+  vac:
+    desc: Dreame Z10 Pro vacuum, Valetudo (MQTT, local)
+    address_var: vac_address
+    mac_var: vac_mac
+    vlan: 6
+    note: Offline 2026-11-08.
+  zigbee_radio:
+    desc: SLZB-MR1 Zigbee coordinator (HA smlight, Zigbee2MQTT)
+    address_var: zigbee_radio_address
+    mac_var: zigbee_radio_mac
+    vlan: 6
+  frame_tv:
+    desc: Samsung Frame TV QN65LS03DAFXZA (HA samsungtv_smart, local)
+    address_var: frame_tv_address
+    mac_var: frame_tv_mac
+    vlan: 6
+  litter_robots:
+    desc: Litter-Robot 4 x2 (cloud only)
+    vlan: 6
+    note: Dynamic leases; whiskerless pending.
+  petlibro_feeder:
+    desc: PETLIBRO PLAF203 feeder (cloud only)
+    vlan: 6
+    note: Dynamic lease; camera going to Frigate.
+  miele_dishwasher:
+    desc: Miele G7566 dishwasher (HA miele_lan, local)
+    vlan: 6
+    note: Dynamic lease.
+  thermador_hood:
+    desc: Thermador HPIN54WS hood (hcpy, local)
+    address_var: thermador_hood_address
+    mac_var: thermador_hood_mac
+    vlan: 6
+  thermador_range:
+    desc: Thermador PRD48WISGU range (hcpy, local)
+    address_var: thermador_range_address
+    mac_var: thermador_range_mac
+    vlan: 6
+  brother_printer:
+    desc: Brother HL-L2350DW (HA brother + ipp, local)
+    vlan: 6
+    note: Dynamic lease; HA entries use that address.
+  iot_poe_switch:
+    desc: NETGEAR GS308EP PoE switch (likely back_camera.link's)
+    vlan: 6
+    note: Dynamic lease.
+  olimex_bt_proxies:
+    desc: Olimex ESPHome BT proxies x2
+    vlan: 6
+    note: Offline since ~2025-11.

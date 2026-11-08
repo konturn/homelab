@@ -64,6 +64,25 @@ with this file, they win: say so.
 - Amp C: Not connected yet. Planned (#154): Office, Main Bedroom, Guest Bedroom, maybe Movie Room, on a third USB-serial adapter.
 - Amcrest back camera (Home Assistant camera.10_6_128_14): Offline 2026-10-21 to 2026-11-08; back after its PoE cable was reseated at the switch. Clock about 55 min slow (no NTP configured); recorded by Frigate since 2026-11-08.
 - Amcrest doorbell (amcrest2mqtt): Unreachable since 2026-07-13 (issue #123); hardware fix pending.
+- Denon AVR-X6700H (HA denonavr, local): 
+- Epson projector (HA pjlink, local): 
+- NVIDIA Shield TV: Offline 2026-11-08.
+- Apple TV 4K (HA apple_tv, local; Thread border router): 
+- Network amp `amp`, model unknown: Offline 2026-11-08.
+- Awair air quality sensor, kitchen: Offline 2026-11-08.
+- Awair air quality sensor, bedroom: Offline 2026-11-08.
+- Ambient Weather station (local push to ambientweather2mqtt): 
+- Dreame Z10 Pro vacuum, Valetudo (MQTT, local): Offline 2026-11-08.
+- SLZB-MR1 Zigbee coordinator (HA smlight, Zigbee2MQTT): 
+- Samsung Frame TV QN65LS03DAFXZA (HA samsungtv_smart, local): 
+- Litter-Robot 4 x2 (cloud only): Dynamic leases; whiskerless pending.
+- PETLIBRO PLAF203 feeder (cloud only): Dynamic lease; camera going to Frigate.
+- Miele G7566 dishwasher (HA miele_lan, local): Dynamic lease.
+- Thermador HPIN54WS hood (hcpy, local): 
+- Thermador PRD48WISGU range (hcpy, local): 
+- Brother HL-L2350DW (HA brother + ipp, local): Dynamic lease; HA entries use that address.
+- NETGEAR GS308EP PoE switch (likely back_camera.link's): Dynamic lease.
+- Olimex ESPHome BT proxies x2: Offline since ~2025-11.
 - The daily `facts:drift` job compares all of this with the live router: it
   starts a declared container or unit that is stopped, opens a
   `facts-record` MR for a self-explaining hardware change (review it, don't
