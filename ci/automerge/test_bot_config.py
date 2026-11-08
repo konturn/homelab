@@ -225,6 +225,26 @@ class ComposeTests(unittest.TestCase):
                  "    x: !!str |", "      # c", "    y: [a, b]", "    # d"]
         self.assertEqual(botconfig._block_lines(lines), {2, 4, 6})
 
+    def test_comment_in_multiline_quoted_scalar_refused(self):
+        # found by test_properties: inside a quoted (or plain) scalar that
+        # spans lines, a `#` line or blank line is part of the value
+        quoted = edit(COMPOSE, "    restart: unless-stopped\n",
+                      '    restart: unless-stopped\n    entrypoint: "run\n      # not a comment\n      --flag"\n')
+        self.assertTrue(botconfig._has_multiline_flow_scalar(quoted))
+        self.assertFalse(botconfig._has_multiline_flow_scalar(COMPOSE))
+        bump = edit(quoted, "memory: 128M", "memory: 192M")
+        self.assertTrue(evaluate({C: (quoted, bump)}).eligible)
+        for old, new in (("      # not a comment\n", ""), ("      --flag", "      # x\n      --flag"),
+                         ("      --flag", "\n      --flag"), ("    deploy:", "    # elsewhere\n    deploy:")):
+            with self.subTest(new=new):
+                v = evaluate({C: (quoted, edit(bump, old, new))})
+                self.assertFalse(v.eligible)
+                self.assertIn("spanning lines", " ".join(v.reasons))
+        # files without such a scalar keep their comment edits
+        v = evaluate({C: (COMPOSE, edit(edit(COMPOSE, "memory: 128M", "memory: 192M"), "    deploy:",
+                                         "    # tuned\n    deploy:", 1))})
+        self.assertTrue(v.eligible, v.reasons)
+
     def test_jinja_in_trailing_comment_refused(self):
         # Ansible renders the compose file with Jinja before Docker parses the
         # YAML, so a `{{ ... }}` in a YAML comment runs on the deploy runner.
