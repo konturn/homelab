@@ -21,6 +21,12 @@ Type=oneshot
 User={{ restic_user }}
 
 CPUQuota={{ 25 * ansible_processor_vcpus }}%
+# Batch work: yield CPU to core services (CLAUDE.md "CPU priority").
+# CPUWeight works across cgroups; Nice only orders processes inside this unit.
+CPUWeight=20
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
 
 # restic exits 3 when the snapshot was written but at least one source file
 # could not be read -- almost always a temp file that vanished between scan and

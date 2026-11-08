@@ -29,6 +29,32 @@ docker_config:
 
 When a deploy changes any of a container's config files, the container is restarted **once**, however many of its files changed. The nginx containers (`nginx_config` in inventory: `nginx`, `lab_nginx`, `iot_nginx`) are not restarted at all. They get `nginx -t` and then `nginx -s reload`, and a config that fails `nginx -t` fails the deploy while the old config keeps serving. Grafana reaches Loki through `lab_nginx`, so restarting it makes every Loki-backed alert rule's query fail.
 
+## CPU priority
+
+The router runs core services next to batch work (CI jobs, restic/B2 uploads,
+ISO conversion, ZFS resilver/scrub). On cgroup v2 the scheduler splits CPU between
+sibling cgroups by `cpu.weight`, so priority is set per cgroup, not with `nice`:
+
+- Docker (cgroupfs driver) puts every container, CI job containers included,
+  under `/sys/fs/cgroup/docker/`. Compose `cpu_shares` maps to `cpu.weight`
+  (1024 -> 100, 4096 -> ~390, 256 -> ~10).
+- Core services, `cpu_shares: 4096`: pihole, vault, nginx, lab_nginx,
+  iot_nginx, homeassistant, mosquitto, zigbee2mqtt, jit-approval-svc.
+- Default (1024): everything else, including gitlab (heavy, would crowd out the
+  others) and plex (GPU-bound).
+- Batch, `cpu_shares: 256` (paperless-ngx 512, its web UI is interactive):
+  nzbget, deluge, paperless-ai. CI jobs (`base/gitlab-runner/config.toml`):
+  256, protected/deploy runner 512.
+- Host batch units (restic-*, frigate-backup-*, ISO conversion scope):
+  `CPUWeight=20` plus `Nice`/`IOSchedulingClass`.
+
+IO weights (`blkio_config.weight`, `IOWeight=`) are not set: every disk uses
+mq-deadline, which ignores io.weight, and pool IO is issued by ZFS threads, so
+it carries no per-cgroup attribution anyway.
+
+Weights only matter under contention; idle CPU is still used by anyone. Changing
+`cpu_shares` in compose recreates that container on the next deploy.
+
 ## Docker Image Pinning
 
 All third-party Docker images are pinned to SHA256 digests for reproducible deploys. Format: `image:tag@sha256:xxxx`.

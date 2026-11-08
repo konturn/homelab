@@ -15,6 +15,9 @@ OnFailure=restic-notify-failure@%n.service
 [Service]
 Type=oneshot
 User=root
+# Batch work: yield CPU to core services (CLAUDE.md "CPU priority").
+# CPUWeight works across cgroups; Nice only orders processes inside this unit.
+CPUWeight=20
 Nice={{ item.nice }}
 IOSchedulingClass={{ item.io_class }}
 TimeoutStartSec={{ item.timeout }}

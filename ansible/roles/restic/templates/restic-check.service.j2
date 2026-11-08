@@ -9,6 +9,12 @@ Type=oneshot
 User={{ restic_user }}
 
 CPUQuota={{ 25 * ansible_processor_vcpus }}%
+# Batch work: yield CPU to core services (CLAUDE.md "CPU priority").
+# CPUWeight works across cgroups; Nice only orders processes inside this unit.
+CPUWeight=20
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
 
 EnvironmentFile=/root/.restic_env
 

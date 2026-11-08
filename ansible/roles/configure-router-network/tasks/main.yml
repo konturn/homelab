@@ -259,7 +259,10 @@
     name: "Convert ISO files to MKV"
     minute: "0"
     hour: "2"
-    job: "{{ \"bash -c 'set -o pipefail; /bin/bash /root/cron/convert_isos.sh 2>&1 | logger -t iso-convert-cron'\" }}"
+    # Own scope with a low CPU weight: as a plain cron child it shares
+    # cron.service's cgroup, where the script's own nice -n 19 does not count
+    # against other cgroups (CLAUDE.md "CPU priority").
+    job: "{{ \"bash -c 'set -o pipefail; systemd-run --scope --quiet -p CPUWeight=20 nice -n 19 ionice -c3 /bin/bash /root/cron/convert_isos.sh 2>&1 | logger -t iso-convert-cron'\" }}"
 
 
 # Compare by content, not mtime: every CI checkout gives the files new
