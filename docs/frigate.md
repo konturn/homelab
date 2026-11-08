@@ -177,8 +177,12 @@ leaves it for review (`frigate` is also listed under `stateful` in
 
 ## Home Assistant
 
-The Frigate integration (`blakeblackshear/frigate-hass-integration`) is
-installed through the Marketplace (Settings → Marketplace). It is configured
+The Frigate integration (`blakeblackshear/frigate-hass-integration`, v5.15.6)
+was installed by hand: the release's `custom_components/frigate/` was copied
+into Home Assistant's `custom_components/`. The Marketplace does not track it,
+so it gets no update notices there. Upgrade it by replacing that directory with
+a newer release (check the release's minimum Home Assistant and Frigate
+versions) and restarting Home Assistant. It is configured
 against `http://frigate:8971` with the `homeassistant` user. It creates
 `binary_sensor.<camera>_person_occupancy`, used by the floodlight and porch
 light automations in the homeassistant repo.
