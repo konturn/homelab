@@ -1799,7 +1799,10 @@ ups-card:drift:
   extends: .ansible
   stage: deploy
   needs: []
-  resource_group: ups-card
+  # deploy-router, not a group of its own: the SCP download stalls the card's
+  # SNMP agent for up to ~35 s, which must not overlap the NUT check in
+  # router:deploy (#93)
+  resource_group: deploy-router
   id_tokens:
     VAULT_ID_TOKEN:
       aud: https://vault.lab.nkontur.com:8200
