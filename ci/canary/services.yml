@@ -1,0 +1,264 @@
+# Canary specs: which services get a throwaway boot test before merge, and how.
+# Read by canary.py; see docs/CANARY.md ("Adding a service").
+#
+# The copy that runs is the one the `canary` role deployed from main, so a
+# change here takes effect for MR pipelines only after it is merged and
+# deployed. The candidate's image and the rest of its container definition
+# (caps, env, ulimits, user, entrypoint/command, tmpfs, healthcheck) come from
+# the candidate's docker/docker-compose.yml, through an allowlist (canary.py
+# COPIED_KEYS); ports, networks, volumes, devices, names and IPs never do.
+#
+# Keys per service:
+#   compose_service   service name in docker-compose.yml (default: the key)
+#   image_repos       the only image repositories the candidate may name
+#   triggers          extra paths that select this service (the `files`
+#                     sources always do, and so does any change to its
+#                     definition in docker-compose.yml)
+#   memory, timeout   memory limit; seconds from start until ready
+#   stable_for        seconds it must stay ready after the first ready
+#   command/entrypoint  override compose (null = the image default)
+#   environment       extra env for the canary only
+#   mounts            fresh, empty host directories under the run dir;
+#                     seed: image copies the image's own content at that path
+#                     first (minus seed_exclude); seed_production copies named files read-only
+#                     from production (secret_keys_from: keys, dummy values)
+#   files             candidate files rendered (Jinja2 sandbox, dummy values
+#                     for anything undefined, i.e. every Vault secret) to a
+#                     path under a mount; a src ending in / copies a directory
+#   generate          tls (self-signed key+cert), dhparam, dir
+#   stub_upstream_hosts  map nginx upstream names to 127.0.0.1
+#   sidecars          throwaway helpers on the canary network, by alias
+#   readiness         exec probes, all must pass (with Docker health, if the
+#                     compose definition has a healthcheck)
+#   checks            one-shot checks after it is stable; `when` limits one
+#                     to candidates whose rendered file matches a regex
+#   log_files         files inside the container to collect
+#   fail_patterns     regexes that fail the run when found in the logs
+
+defaults:
+  cpu_shares: 256       # batch weight (cpu.weight 35), CLAUDE.md "CPU priority"
+  pids_limit: 4096
+  memory: 1g
+  timeout: 600
+  stable_for: 60
+
+# The production TLS paths every nginx instance loads (docker/nginx/ssl_config).
+x-nginx-certs: &nginx_certs
+  - type: tls
+    dir: /data/certs/nkontur.com/live/iot.lab.nkontur.com-0003
+    copies: [chain.pem]
+  - type: dhparam
+    path: /data/certs/nkontur.com/certificates/dhparams.pem
+  - type: dir
+    path: /data/log
+
+x-nginx-mounts: &nginx_mounts
+  # The image's stock files (mime.types, ...) without its default server,
+  # as in production's conf directory.
+  - {path: /etc/nginx, seed: image, seed_exclude: [conf.d]}
+  - {path: /data/certs}
+  - {path: /data/log}
+  - {path: /data/webroot}
+  - {path: /data/docker-proxy-tls}
+
+x-nginx-readiness: &nginx_readiness
+  - name: nginx -t
+    exec: nginx -t
+  - name: answers HTTP(S)
+    exec: curl -sk -o /dev/null https://127.0.0.1/ || curl -s -o /dev/null http://127.0.0.1/
+
+services:
+  gitlab:
+    image_repos: [gitlab/gitlab-ee, gitlab/gitlab-ce]
+    triggers: [docker/gitlab/**]
+    # Omnibus: postgres, redis, gitaly, puma (4 workers), sidekiq.
+    memory: 10g
+    pids_limit: 8192
+    # A first boot (empty data dir: reconfigure, schema load, seed) takes
+    # 5-10 minutes on an idle router, more when it is busy.
+    timeout: 1800
+    stable_for: 180
+    mounts:
+      - {path: /etc/gitlab}
+      - {path: /var/opt/gitlab}
+      - {path: /var/log/gitlab}
+    files:
+      - {src: docker/gitlab/gitlab.rb, dest: /etc/gitlab/gitlab.rb}
+    sidecars:
+      # Production gitlab.rb points at otel-collector; on the canary network
+      # that name is this throwaway collector, which only logs what it gets.
+      otel-collector:
+        image_from_compose: otel-collector
+        memory: 512m
+        args: ["--config=/etc/otelcol-contrib/config.yaml"]
+        files:
+          /etc/otelcol-contrib/config.yaml: |
+            receivers:
+              otlp:
+                protocols:
+                  http: {endpoint: "0.0.0.0:4318"}
+                  grpc: {endpoint: "0.0.0.0:4317"}
+            exporters:
+              debug: {verbosity: detailed}
+            service:
+              pipelines:
+                traces: {receivers: [otlp], exporters: [debug]}
+    readiness:
+      - name: readiness endpoint (db, redis, gitaly)
+        exec: curl -fsS -o /dev/null 'http://localhost/-/readiness?all=1'
+      # Up for 180s each: a Puma or Sidekiq that crash-loops (runit restarts
+      # it inside the container, the container stays up) never gets there.
+      - name: puma and sidekiq up for 180s
+        exec: |
+          for svc in puma sidekiq; do
+            s=$(gitlab-ctl status $svc 2>&1)
+            up=$(echo "$s" | sed -n "s/^run: $svc: (pid [0-9]*) \([0-9]*\)s.*/\1/p")
+            [ -n "$up" ] && [ "$up" -ge 180 ] || { echo "$s"; exit 1; }
+          done
+    checks:
+      - name: a request is served by Rails
+        exec: curl -sS http://localhost/api/v4/version -o /dev/null -w '%{http_code}\n' | grep -qx 401
+      - name: tracing reaches the collector (gitlab.rb sets GITLAB_TRACING)
+        when: {dest: /etc/gitlab/gitlab.rb, matches: "^[^#\\n]*GITLAB_TRACING"}
+        timeout: 600
+        traffic: for i in $(seq 1 300); do curl -s -o /dev/null http://localhost/users/sign_in; done
+        sidecar_log: {sidecar: otel-collector, matches: "service\\.name: Str\\(gitlab\\)"}
+    log_files:
+      - /var/log/gitlab/puma/current
+      - /var/log/gitlab/puma/puma_stderr.log
+      - /var/log/gitlab/sidekiq/current
+      - /var/log/gitlab/reconfigure/latest.log
+    fail_patterns:
+      - "NameError"
+      - "uninitialized constant"
+
+  vault:
+    image_repos: [hashicorp/vault]
+    triggers: [docker/vault/**]
+    memory: 1g
+    timeout: 300
+    mounts:
+      - {path: /vault/file}       # throwaway file storage, never vault_data
+      - {path: /vault/config}
+      - {path: /vault/certs}
+      - {path: /vault/scripts}
+      - {path: /vault/unseal}     # empty: no unseal keys, the canary inits its own
+      - {path: /vault/logs}
+    files:
+      - {src: docker/vault/config.hcl, dest: /vault/config/config.hcl}
+      - {src: docker/vault/auto-unseal.sh, dest: /vault/scripts/auto-unseal.sh, mode: "755"}
+    generate:
+      - type: tls
+        dir: /vault/certs/nkontur.com/live/iot.lab.nkontur.com-0003
+        copies: [chain.pem]
+    checks:
+      - name: throwaway init and unseal (1 key), then status unsealed
+        exec: |
+          set -e
+          out=$(vault operator init -key-shares=1 -key-threshold=1)
+          key=$(echo "$out" | sed -n 's/^Unseal Key 1: //p')
+          vault operator unseal "$key" >/dev/null
+          vault status
+
+  homeassistant:
+    image_repos: [homeassistant/home-assistant, ghcr.io/home-assistant/home-assistant]
+    triggers: [docker/homeassistant/**]
+    memory: 2g
+    timeout: 900
+    # Production's command pins the default route on the macvlan legs; the
+    # canary has none, so it runs the image's own /init.
+    command: null
+    mounts:
+      - path: /config
+        seed_production:
+          from: /persistent_data/application/homeassistant
+          # Files configuration.yaml includes that are not in the repo, and
+          # the custom integrations it may configure. Not .storage (tokens,
+          # integration credentials) and not secrets.yaml (keys only).
+          include: [automations.yaml, automations, scripts.yaml, scripts,
+                    scenes.yaml, scenes, blueprints, custom_components,
+                    known_devices.yaml]
+          secret_keys_from: secrets.yaml
+    files:
+      - {src: docker/homeassistant/configuration.yaml, dest: /config/configuration.yaml}
+      - {src: docker/homeassistant/packages/, dest: /config/packages/}
+    readiness:
+      - name: frontend served
+        exec: curl -fsS -o /dev/null http://localhost:8123/manifest.json
+    checks:
+      - name: check_config
+        timeout: 300
+        exec: python3 -m homeassistant --script check_config -c /config
+    log_files: [/config/home-assistant.log]
+
+  pihole:
+    image_repos: [pihole/pihole]
+    triggers: [docker/pihole/**]
+    memory: 256m
+    timeout: 300
+    environment:
+      # Set in production's pihole.toml (state, not in the repo); without it
+      # dnsmasq.d/custom.conf would not be loaded and not be tested.
+      FTLCONF_misc_etc_dnsmasq_d: "true"
+    mounts:
+      - {path: /etc/pihole}
+      - {path: /etc/dnsmasq.d}
+    files:
+      - {src: docker/pihole/custom.conf, dest: /etc/dnsmasq.d/custom.conf}
+    checks:
+      - name: custom.conf answers (*.lab.nkontur.com)
+        exec: dig +short +norecurse +retry=0 @127.0.0.1 canary.lab.nkontur.com | grep .
+
+  lab_nginx:
+    image_repos: [gitlab-registry.lab.nkontur.com:443/root/homelab/nginx]
+    memory: 256m
+    timeout: 180
+    mounts: *nginx_mounts
+    files:
+      - {src: docker/nginx/nginx.conf, dest: /etc/nginx/nginx.conf}
+      - {src: docker/nginx/router.lab.nkontur.com/internal_http.conf, dest: /etc/nginx/conf.d/http.conf}
+      - {src: docker/nginx/router.lab.nkontur.com/internal_stream.conf, dest: /etc/nginx/conf.d/stream.conf}
+      - {src: docker/nginx/ssl_config, dest: /etc/nginx/ssl_config}
+      - {src: docker/nginx/edge_quarantine, dest: /etc/nginx/edge_quarantine}
+      - {src: docker/docker-socket-proxy-tls/docker-proxy-tls.stream.conf, dest: /etc/nginx/stream.d/docker-proxy-tls.conf}
+    generate:
+      - *nginx_certs
+      - type: tls
+        dir: /data/docker-proxy-tls
+        key: server-key.pem
+        cert: server-cert.pem
+        copies: [ca.pem]
+    stub_upstream_hosts: true
+    readiness: *nginx_readiness
+
+  nginx:
+    image_repos: [gitlab-registry.lab.nkontur.com:443/root/homelab/nginx]
+    memory: 256m
+    timeout: 180
+    mounts: *nginx_mounts
+    files:
+      - {src: docker/nginx/nginx.conf, dest: /etc/nginx/nginx.conf}
+      - {src: docker/nginx/router.lab.nkontur.com/external_http.conf, dest: /etc/nginx/conf.d/http.conf}
+      - {src: docker/nginx/router.lab.nkontur.com/external_stream.conf, dest: /etc/nginx/conf.d/stream.conf}
+      - {src: docker/nginx/ssl_config, dest: /etc/nginx/ssl_config}
+      - {src: docker/nginx/edge_quarantine, dest: /etc/nginx/edge_quarantine}
+    generate:
+      - *nginx_certs
+      - {type: dir, path: /etc/nginx/edge-quarantine}
+    stub_upstream_hosts: true
+    readiness: *nginx_readiness
+
+  iot_nginx:
+    image_repos: [gitlab-registry.lab.nkontur.com:443/root/homelab/nginx]
+    memory: 256m
+    timeout: 180
+    mounts: *nginx_mounts
+    files:
+      - {src: docker/nginx/nginx.conf, dest: /etc/nginx/nginx.conf}
+      - {src: docker/nginx/router.lab.nkontur.com/iot_http.conf, dest: /etc/nginx/conf.d/http.conf}
+      - {src: docker/nginx/router.lab.nkontur.com/iot_stream.conf, dest: /etc/nginx/conf.d/stream.conf}
+      - {src: docker/nginx/ssl_config, dest: /etc/nginx/ssl_config}
+      - {src: docker/nginx/edge_quarantine, dest: /etc/nginx/edge_quarantine}
+    generate: *nginx_certs
+    stub_upstream_hosts: true
+    readiness: *nginx_readiness

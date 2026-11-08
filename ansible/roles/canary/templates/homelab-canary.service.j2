@@ -1,0 +1,28 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Homelab canary service: throwaway boot tests for MR pipelines (docs/CANARY.md)
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Environment=CANARY_LISTEN={{ canary_listen }}
+Environment=CANARY_GITLAB_URL={{ canary_gitlab_url }}
+Environment=CANARY_PROJECT_ID={{ canary_project_id }}
+Environment=CANARY_STATE_DIR={{ canary_state_dir }}
+Environment=CANARY_RUN_ROOT={{ canary_state_dir }}/runs
+ExecStart=/usr/bin/python3 -I {{ canary_install_dir }}/server.py
+# br-ci exists only once Docker has created the gitlab-ci network.
+Restart=always
+RestartSec=10
+# Stopping SIGTERMs every canary.py in the cgroup; each tears its containers
+# down before exiting.
+TimeoutStopSec=300
+UMask=0077
+# The orchestration is batch work; the canary containers themselves run at
+# cpu_shares 256 (services.yml defaults).
+CPUWeight=20
+Nice=10
+SyslogIdentifier=homelab-canary
+
+[Install]
+WantedBy=multi-user.target

@@ -137,6 +137,9 @@ playbooks:
         - networking/networkd/**
         - networking/ssl/**
       roles: [configure-router-network]
+    # Canary service code and spec (docs/CANARY.md).
+    - match: [ci/canary/**]
+      roles: [canary]
     - match: [base/minidsp/**, base/sane/**, base/systemd/shell2http.service, snapclient/**]
       roles: []
 
@@ -156,7 +159,7 @@ playbooks:
       roles: [configure-snapclient]
     # Everything else under docker/, base/, networking/ and scripts/ is read
     # only by router roles.
-    - match: [docker/**, base/**, networking/**, scripts/**, inventory/dependencies.yml]
+    - match: [docker/**, base/**, networking/**, scripts/**, inventory/dependencies.yml, ci/canary/**]
       roles: []
 
   satellite-2:
@@ -170,9 +173,9 @@ playbooks:
       roles: [configure-docker, deploy-compose]
     - match: [base/sane/**, base/systemd/shell2http.service]
       roles: [configure-scanner]
-    - match: [docker/**, base/**, networking/**, scripts/**, snapclient/**, inventory/dependencies.yml]
+    - match: [docker/**, base/**, networking/**, scripts/**, snapclient/**, inventory/dependencies.yml, ci/canary/**]
       roles: []
 
   macmini:
-    - match: [docker/**, base/**, networking/**, scripts/**, snapclient/**, inventory/dependencies.yml]
+    - match: [docker/**, base/**, networking/**, scripts/**, snapclient/**, inventory/dependencies.yml, ci/canary/**]
       roles: []

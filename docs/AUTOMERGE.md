@@ -103,7 +103,11 @@ A malformed `denylist` or `fast_track` section refuses every MR (fails closed).
 
 Before merging, the sweep also requires:
 
-- the MR pipeline for the current head commit succeeded;
+- the MR pipeline for the current head commit succeeded. For an update of a
+  service with a canary spec (Home Assistant, Pi-hole, ... see
+  [CANARY.md](CANARY.md)) that pipeline includes the `canary` job, which boots
+  the new image in a throwaway container first, so an image that does not
+  start never merges;
 - the MR is not a draft and has no conflicts;
 - no per-service deploy job is still created, pending or running, so a failing
   deploy opens its rollback issue before the next update lands;

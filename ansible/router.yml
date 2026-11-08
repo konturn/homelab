@@ -140,6 +140,9 @@
   # Records decisions only; it has no tool with a side effect.
   - role: llm-shadow
     tags: [llm-shadow]
+  # Throwaway canary containers for MR pipelines (docs/CANARY.md).
+  - role: canary
+    tags: [canary]
   # Last: pulls can take long on a fresh host, and a failed pull or create
   # must not hold up the other roles.
   - role: configure-ollama-models
