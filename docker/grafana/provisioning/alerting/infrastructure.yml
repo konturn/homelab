@@ -727,6 +727,48 @@ groups:
         labels:
           severity: warning
 
+      # Drive temperature from telegraf's smart input (smart_device.temp_c).
+      # Limits: hard drives 50C (WD rates operation to 60C; under ~45C is the
+      # long-life zone), SSDs 65C (rated to 70C). Baseline 2026-09-02 to
+      # 2026-11-08: hard drives peaked 38-47C (scrubs/resilvers), the BX500
+      # boot SSD 58C, the 870 EVO 54C. The 15-minute mean keeps a short burst
+      # from firing; a failed chassis fan or blocked airflow does not go away
+      # in 15 minutes. SSDs are matched by model name.
+      - uid: disk-temperature-high
+        title: Disk Temperature High
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 1800, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -15m)
+                  |> filter(fn: (r) => r._measurement == "smart_device")
+                  |> filter(fn: (r) => r._field == "temp_c")
+                  |> group(columns: ["host", "serial_no", "device", "model"])
+                  |> mean()
+                  |> map(fn: (r) => ({r with limit: if r.model =~ /(?i)ssd|samsung|crucial|^ct[0-9]|bx500|mx500|nvme/ then 65.0 else 50.0}))
+                  |> map(fn: (r) => ({r with _value: float(v: r._value) - r.limit, _time: now()}))
+                  |> keep(columns: ["_time", "_value", "host", "serial_no", "device", "model"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 15m
+        annotations:
+          summary: "Disk {{ $labels.device }} ({{ $labels.model }}, s/n {{ $labels.serial_no }}) on {{ $labels.host }} is {{ $values.B }}C over its limit (50C HDD / 65C SSD) — check fans and airflow"
+        labels:
+          severity: warning
+
       - uid: smart-collection-failed
         title: SMART Collection Failed
         condition: C
