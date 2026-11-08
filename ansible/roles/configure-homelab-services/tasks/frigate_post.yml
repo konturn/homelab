@@ -1,0 +1,67 @@
+---
+# Frigate state kept outside its config file (docs/frigate.md): its MQTT user
+# and its own UI users. Passwords come from Vault (docker/frigate) through the
+# environment and are never put on a command line.
+
+# Same pattern as the anomaly-detector user: add when missing, never touch
+# other users. To rotate: delete the line from mosquitto.passwd and redeploy.
+- name: Ensure the frigate MQTT user exists
+  ansible.builtin.shell: |
+    set -euo pipefail
+    f={{ docker_persistent_data_path }}/mqtt/conf/mosquitto.passwd
+    if grep -q '^frigate:' "$f"; then echo present; exit 0; fi
+    [ -n "${PW:-}" ]
+    docker exec -e PW mosquitto sh -c 'mosquitto_passwd -b /mosquitto/config/mosquitto.passwd frigate "$PW"'
+    chown 1883:1883 "$f"
+    chmod 0700 "$f"
+    grep -q '^frigate:' "$f"
+    docker kill -s HUP mosquitto >/dev/null
+    echo added
+  args:
+    executable: /bin/bash
+  environment:
+    PW: "{{ vault_frigate_mqtt_password }}"
+  register: _frigate_mqtt_user
+  changed_when: "'added' in _frigate_mqtt_user.stdout"
+  no_log: true
+  when: "'router' in inventory_hostname and not ansible_check_mode"
+
+# Frigate users live in its database. Through the loopback-only port 5000
+# (admin rights, reachable only inside the container): set the admin password
+# when the Vault one does not log in, and create or fix the user Home
+# Assistant connects with. On a fresh database Frigate starts with a random
+# admin password, which this replaces.
+- name: Ensure Frigate's admin and Home Assistant users
+  ansible.builtin.shell: |
+    set -euo pipefail
+    api() { docker exec -i frigate curl -sS -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' "$@"; }
+    for i in $(seq 1 30); do
+      [ "$(docker inspect -f '{{ '{{' }}.State.Health.Status{{ '}}' }}' frigate)" = healthy ] && break
+      sleep 10
+    done
+    out=""
+    ensure() {  # user role password
+      if [ "$(printf '{"user":"%s","password":"%s"}' "$1" "$3" | api -X POST --data @- http://127.0.0.1:5000/api/login)" = 200 ]; then
+        return 0
+      fi
+      if docker exec frigate curl -sS http://127.0.0.1:5000/api/users | grep -q "\"username\": *\"$1\""; then
+        code=$(printf '{"password":"%s"}' "$3" | api -X PUT --data @- "http://127.0.0.1:5000/api/users/$1/password")
+        out="$out password:$1"
+      else
+        code=$(printf '{"username":"%s","password":"%s","role":"%s"}' "$1" "$3" "$2" | api -X POST --data @- http://127.0.0.1:5000/api/users)
+        out="$out created:$1"
+      fi
+      [ "$code" = 200 ] || { echo "frigate user $1: HTTP $code" >&2; exit 1; }
+    }
+    ensure admin admin "$ADMIN_PW"
+    ensure homeassistant {{ frigate_ha_role }} "$HA_PW"
+    echo "$out"
+  args:
+    executable: /bin/bash
+  environment:
+    ADMIN_PW: "{{ vault_frigate_admin_password }}"
+    HA_PW: "{{ vault_frigate_ha_password }}"
+  register: _frigate_users
+  changed_when: _frigate_users.stdout | trim | length > 0
+  no_log: true
+  when: "'router' in inventory_hostname and not ansible_check_mode"

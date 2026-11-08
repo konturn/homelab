@@ -83,6 +83,13 @@ vault_secret_paths:
   - path: "docker/deluge"
     fields:
       vault_deluge_password: "password"
+  # Frigate (docs/frigate.md): its MQTT user, and the passwords of its admin
+  # UI user and of the user Home Assistant logs in with
+  - path: "docker/frigate"
+    fields:
+      vault_frigate_mqtt_password: "mqtt_password"
+      vault_frigate_admin_password: "admin_password"
+      vault_frigate_ha_password: "ha_password"
   - path: "docker/grafana"
     fields:
       vault_grafana_admin_password: "admin_password"
@@ -144,6 +151,9 @@ vault_secret_paths:
   - path: "cameras/doorbell"
     fields:
       vault_doorbell_pass: "password"
+  - path: "cameras/rear"
+    fields:
+      vault_rear_camera_pass: "password"
 
   # Email secrets
   - path: "email/gmail"

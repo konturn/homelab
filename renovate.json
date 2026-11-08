@@ -346,6 +346,18 @@
       ]
     },
     {
+      "description": "Frigate: a 0.x minor release migrates frigate.db one way and bumps the config file version; the auto-merge policy treats 0.x minors as majors, so they wait for review. Patches and digest refreshes go through the sweep. See docs/frigate.md (Upgrades)",
+      "matchPackageNames": [
+        "ghcr.io/blakeblackshear/frigate"
+      ],
+      "addLabels": [
+        "gpu"
+      ],
+      "prBodyNotes": [
+        "**Frigate** (docs/frigate.md, Upgrades): for a minor (0.x) release, set `version:` in `docker/frigate/config.yml` to the new `CURRENT_CONFIG_VERSION`, check the release notes for config changes, copy `frigate.db` first, and check that the `-tensorrt` image still ships CUDA 12 (the P5000 is Pascal, compute 6.1)."
+      ]
+    },
+    {
       "description": "Fast track (docs/AUTOMERGE.md): patch releases of these images get their own MR even when a minor release is also available, so the patch does not wait for the minor's review",
       "matchFileNames": [
         "docker/docker-compose.yml"

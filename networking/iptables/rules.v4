@@ -404,6 +404,13 @@ COMMIT
 -A FORWARD -s {{ apple_tv_address }} -o {{ inet_interface_name }} -j ACCEPT
 -A FORWARD -s {{ apple_tv_address }} -d {{ lab_nginx_ip }} -p tcp -m tcp --dport 32400 -j ACCEPT
 
+# Frigate (internal VLAN, fixed address) to its two cameras on the IoT VLAN,
+# RTSP (554) and HTTP (80) only, and to mosquitto (MQTT over TLS, 8883).
+# Nothing else on the internal VLAN reaches the cameras.
+-A FORWARD -s {{ frigate_ip }}/32 -i vlan3-shim -d {{ back_camera_address }}/32 -p tcp -m multiport --dports 80,554 -j ACCEPT
+-A FORWARD -s {{ frigate_ip }}/32 -i vlan3-shim -d {{ doorbell_address }}/32 -p tcp -m multiport --dports 80,554 -j ACCEPT
+-A FORWARD -s {{ frigate_ip }}/32 -i vlan3-shim -d {{ mosquitto_address }}/32 -p tcp -m tcp --dport 8883 -j ACCEPT
+
 # Snapserver - inbound from other VLANs, service ports only
 #   1704 snapclient audio, 1705 control (JSON-RPC/TCP), 1780 HTTP/websocket/snapweb
 #   80-87  tcp:// stream sources (Network, Network_<room>)

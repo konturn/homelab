@@ -12,6 +12,9 @@ all:
     promtail_ip: 10.3.32.7
     jit_approval_svc_ip: 10.3.32.8
     anomaly_detector_ip: 10.3.32.11
+    # Frigate NVR (docs/frigate.md). Static: the FORWARD rules to the cameras
+    # and mosquitto in networking/iptables/rules.v4 match this address.
+    frigate_ip: 10.3.32.12
     chromium_browser_ip: 10.3.32.9
     chromium_cdp_ip: 172.30.1.10  # openclaw-browser bridge (CDP)
     bluebubbles_relay_ip: 172.30.2.10  # openclaw-relay bridge
@@ -142,6 +145,12 @@ all:
           modelfile: paperless-qwen3.Modelfile
       # Remove any other installed model (e.g. one pulled by hand to test).
       ollama_prune_undeclared: true
+      # Frigate recordings dataset (configure-homelab-services, docs/frigate.md)
+      frigate_dataset: mpool/frigate
+      frigate_media_path: /mpool/frigate
+      frigate_dataset_quota: 1T
+      # Role of the Frigate user the Home Assistant integration logs in with
+      frigate_ha_role: viewer
       snapclient_disabled_zones:
         - office
         - kitchen
@@ -186,6 +195,7 @@ all:
         - "{{ lab_nginx_ip }} otel.lab.nkontur.com"
         - "{{ lab_nginx_ip }} music.lab.nkontur.com"
         - "{{ lab_nginx_ip }} lidarr.lab.nkontur.com"
+        - "{{ lab_nginx_ip }} frigate.lab.nkontur.com"
         - "{{ lab_nginx_ip }} novnc-dev1.lab.nkontur.com"
         - "{{ lab_nginx_ip }} novnc-dev2.lab.nkontur.com"
         - "{{ lab_nginx_ip }} novnc-dev3.lab.nkontur.com"
@@ -224,6 +234,9 @@ all:
           dest: "{{ docker_persistent_data_path }}/nextcloud/mpm_prefork.conf"
           name: "nextcloud"
           mode: "0644"
+        - src: "docker/frigate/config.yml"
+          dest: "{{ docker_persistent_data_path }}/frigate/config.yml"
+          name: "frigate"
         - src: "docker/mqtt/mosquitto.conf"
           dest: "{{ docker_persistent_data_path }}/mqtt/conf/mosquitto.conf"
           name: "mosquitto"

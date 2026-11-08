@@ -1,0 +1,198 @@
+# Frigate NVR config (docs/frigate.md). Deployed to
+# /persistent_data/application/frigate/config.yml by configure-homelab-services
+# (rendered by Jinja). The repo copy is the source of truth: changes made in
+# the Frigate UI (masks, zones, settings) are overwritten by the next deploy
+# unless they are copied here.
+#
+# No secrets in this file. {FRIGATE_*} values are substituted by Frigate from
+# the container environment (docker-compose.yml), which ansible renders from
+# Vault: cameras/rear, cameras/doorbell and docker/frigate.
+#
+# Must match CURRENT_CONFIG_VERSION of the image (frigate/util/config.py).
+# If it is older, Frigate migrates the file on start and rewrites it, so every
+# deploy would overwrite the migration and restart Frigate. Update it with the
+# image on every Frigate minor release.
+version: 0.18-0
+
+# The authenticated UI/API (8971) is the only port reachable from outside the
+# container. TLS is terminated by lab_nginx (frigate.lab.nkontur.com); Home
+# Assistant talks to 8971 directly with its own Frigate user.
+tls:
+  enabled: false
+auth:
+  enabled: true
+networking:
+  listen:
+    # Unauthenticated port (admin rights for anyone who reaches it): loopback
+    # only, for the healthcheck and Frigate itself.
+    internal: 127.0.0.1:5000
+    external: 8971
+
+# The doorbell (front_door) is offline: its record and detect ffmpeg are
+# restarted every few seconds, ~230 log lines a minute. Only critical lines
+# until it is back; then delete these three overrides. Its state stays
+# visible: camera_fps 0 in /api/stats and HA, and the IoT Device Unreachable
+# alert.
+logger:
+  default: info
+  logs:
+    watchdog.front_door: critical
+    ffmpeg.front_door.record: critical
+    ffmpeg.front_door.detect: critical
+
+mqtt:
+  enabled: true
+  host: mqtt.lab.nkontur.com
+  port: 8883
+  tls_ca_certs: /etc/ssl/certs/ca-certificates.crt
+  user: frigate
+  password: "{FRIGATE_MQTT_PASSWORD}"
+
+database:
+  path: /config/frigate.db
+
+# Object detection: YOLOv9-s 320x320 (ONNX) on the Quadro P5000 through the
+# -tensorrt image's ONNX Runtime. Pascal (compute 6.1) is supported by the
+# image's CUDA 12 libraries (Frigate needs compute >= 5.0 and driver >= 545;
+# the host runs 580). The model is built by docker/frigate/build-yolov9-model.sh,
+# which the deploy runs when the file is missing.
+detectors:
+  onnx:
+    type: onnx
+model:
+  model_type: yolo-generic
+  width: 320
+  height: 320
+  input_tensor: nchw
+  input_dtype: float
+  path: /config/model_cache/yolov9-s-320.onnx
+  labelmap_path: /labelmap/coco-80.txt
+
+# NVDEC decode for every camera input (preset-nvidia picks the codec).
+ffmpeg:
+  hwaccel_args: preset-nvidia
+
+# go2rtc: one camera connection per stream, shared by detect, record and the
+# live view. Its API (1984) and RTSP restream (8554) are unauthenticated, so
+# they listen on loopback only; Frigate's nginx (8971) proxies the live view.
+go2rtc:
+  # The offline doorbell would log a dial error every 4 s
+  log:
+    rtsp: error
+  api:
+    listen: "127.0.0.1:1984"
+  rtsp:
+    listen: "127.0.0.1:8554"
+  webrtc:
+    listen: "127.0.0.1:8555"
+  streams:
+    back_door:
+      - "rtsp://admin:{FRIGATE_BACK_CAMERA_PASSWORD}@10.6.128.14:554/cam/realmonitor?channel=1&subtype=0"
+    back_door_sub:
+      - "rtsp://admin:{FRIGATE_BACK_CAMERA_PASSWORD}@10.6.128.14:554/cam/realmonitor?channel=1&subtype=1"
+    front_door:
+      - "rtsp://admin:{FRIGATE_DOORBELL_PASSWORD}@10.6.128.9:554/cam/realmonitor?channel=1&subtype=0&authbasic=64"
+    front_door_sub:
+      - "rtsp://admin:{FRIGATE_DOORBELL_PASSWORD}@10.6.128.9:554/cam/realmonitor?channel=1&subtype=1&authbasic=64"
+
+# Recording retention, sized to stay under ~800 GB on mpool/frigate
+# (ZFS quota 1T; Frigate also deletes the oldest recordings on its own when
+# the filesystem has less than an hour of recording space left).
+#
+# Measured 2026-11-07 (60 s stream copy, docs/frigate.md):
+#   back_door main 2592x1944 H.264 20 fps: 6.15 Mbit/s (constant, ~CBR 6144)
+#   back_door sub   704x480  H.264 20 fps: 0.52 Mbit/s (detect only, not recorded)
+#   front_door (doorbell, offline at setup): assumed the same 6.15 Mbit/s
+# 6.15 Mbit/s = 0.77 MB/s = 66.4 GB/day per camera, 133 GB/day for both.
+#
+# Steady state, both cameras, worst-case assumptions (motion in 40% of the
+# day for an outdoor camera with night IR noise, tracked objects in 8%):
+#   continuous  days  0-2   2 d x 133 GB          = 266 GB
+#   motion      days  2-7   5 d x 133 GB x 0.40   = 266 GB
+#   alerts      days 7-30  23 d x 133 GB x 0.08   = 245 GB  (detections: 14 d)
+#   snapshots, previews, thumbnails                 ~ 10 GB
+#   total                                          ~ 787 GB  (one camera: ~395 GB)
+# Check the real motion share after a week (System > Storage) and adjust.
+record:
+  enabled: true
+  expire_interval: 60
+  continuous:
+    days: 2
+  motion:
+    days: 7
+  alerts:
+    pre_capture: 5
+    post_capture: 5
+    retain:
+      days: 30
+      mode: motion
+  detections:
+    pre_capture: 5
+    post_capture: 5
+    retain:
+      days: 14
+      mode: motion
+
+snapshots:
+  enabled: true
+  retain:
+    default: 30
+
+objects:
+  track:
+    - person
+    - car
+    - dog
+    - cat
+  filters:
+    person:
+      # Kept from the previous setup (fewer false positives)
+      threshold: 0.75
+
+review:
+  alerts:
+    labels:
+      - person
+
+cameras:
+  back_door:
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/back_door
+          input_args: preset-rtsp-restream
+          roles:
+            - record
+        - path: rtsp://127.0.0.1:8554/back_door_sub
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+    detect:
+      width: 704
+      height: 480
+      fps: 5
+    live:
+      streams:
+        Main: back_door
+        Sub: back_door_sub
+  # Amcrest AD410 doorbell. Offline when this was set up: Frigate keeps
+  # retrying and reports the camera offline (camera_fps 0) until it is back.
+  # Frigate scales the sub stream to this detect size.
+  front_door:
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/front_door
+          input_args: preset-rtsp-restream
+          roles:
+            - record
+        - path: rtsp://127.0.0.1:8554/front_door_sub
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+    detect:
+      width: 640
+      height: 480
+      fps: 5
+    live:
+      streams:
+        Main: front_door
+        Sub: front_door_sub
