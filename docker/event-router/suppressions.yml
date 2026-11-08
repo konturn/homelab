@@ -1,0 +1,14 @@
+# Router suppressions (docs/design/event-routing.md 8.3, property L6;
+# router/suppressions.py). An event matching an active entry is recorded
+# (decision `suppressed`) and never reaches OpenClaw. Every entry needs a
+# reason and an expiry at most a year out; CI rejects either missing, and
+# page classes (security, data at risk, UPS, ...) cannot be suppressed.
+# Expired entries stop applying on their own; the weekly routing review lists
+# every entry, active or expired. Noah reviews additions (CODEOWNERS /docker/).
+#
+#   - id: nas-shelf-move
+#     match: {source: grafana, rule_uid: smart-collection-failed, labels: {host: nas}}
+#     reason: SMART polling fails while the disks move to the new shelf
+#     until: 2026-12-01
+#     added_by: noah
+suppressions: []

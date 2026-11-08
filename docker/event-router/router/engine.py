@@ -14,11 +14,18 @@ action, so a reviewer can hold the two side by side:
   _verify       VerifyOk/Fail     release the lock; resolve or escalate
   _close_windows MaintClose        recovery check after a window
 
-Phases 1-2: OpenClaw and email still receive every alert straight from
-Grafana, so "escalated" and "paged" for Grafana alerts are recorded, not sent
-(the existing routes deliver them). Facts only the router knows (a breaker
-tripped, a remediation failed) are queued for Noah; event-router-control on
-the host sends them over Telegram through the JIT bot (decision 3).
+Hand-off (phase 3, `openclaw.forward: true`): "escalated" and "paged"
+incidents are queued for OpenClaw's /hooks/event-router with what the router
+already did (forward.py semantics below, _handoff and _pump_forwards). Events
+a playbook handled reach OpenClaw only through the batch decision log, never
+one by one (decision B). While OpenClaw is unreachable, residue stays queued
+for up to `openclaw.max_age` (6h) and page items also go to Noah through the
+JIT bot (decision 3). Non-urgent pages wait out quiet hours (decision 6).
+
+With `openclaw.forward: false` (phases 1-2) OpenClaw and email receive every
+alert straight from Grafana: "escalated" and "paged" are recorded, not sent,
+and only facts the router alone knows (a breaker tripped, a remediation
+failed) go to Noah through the JIT bot.
 """
 
 import hashlib
@@ -28,15 +35,19 @@ import sys
 import zoneinfo
 from datetime import datetime, timedelta
 
-from . import modes
-from .config import match_playbook, page_class
+from . import maint_text, modes, outcomes
+from . import suppressions as supp
+from .config import CI_ACTIONS, digest_only, match_playbook, page_class
 from .events import Event
 from .shared import SharedState
 from .store import ACTIVE, TERMINAL
 
 DEDUPE_TERMINAL_FOR = 24 * 3600   # a still-firing alert stays one incident this long
 OVERRIDE_RENOTIFY = 24 * 3600     # decision 13
-DEPLOY_EXEMPT = ("cancel_ci_job",)  # S7: the playbook that frees the lock
+DEPLOY_EXEMPT = CI_ACTIONS         # S7: CI actions free the lock or queue behind it
+FORWARD_BACKOFF_MAX = 300
+PAGE_REFUSALS = ("rate_limit", "dependency")   # the rest of the refusals are residue
+DECISIONS_IN_PAYLOAD = 12
 
 
 def _pb_version(pb):
@@ -45,7 +56,8 @@ def _pb_version(pb):
 
 class Engine:
     def __init__(self, cfg, playbooks, graph, store, clock, executor=None,
-                 gitlab=None, host_override_path=None, shared=None, out=None):
+                 gitlab=None, host_override_path=None, shared=None, out=None,
+                 openclaw=None, suppressions=()):
         self.cfg = cfg
         self.playbooks = {p.id: p for p in playbooks}
         self.pb_list = playbooks
@@ -57,6 +69,8 @@ class Engine:
         self.host_override_path = host_override_path
         self.shared = shared or SharedState(None)
         self.out = out or sys.stdout
+        self.openclaw = openclaw
+        self.suppressions = list(suppressions)
         self._last_reconcile = 0.0
         self._recover_after_restart()
 
@@ -72,6 +86,11 @@ class Engine:
 
     def mode(self):
         return modes.effective_mode(self.cfg["mode"], self.host_override(), self.runtime_override())
+
+    @property
+    def forwarding(self):
+        """Phase 3: the router hands residue to OpenClaw itself."""
+        return bool(self.cfg["openclaw"]["forward"] and self.openclaw is not None)
 
     def set_runtime_mode(self, mode, by):
         """Lower the mode at runtime (automation storm), or clear it. Clearing
@@ -141,6 +160,10 @@ class Engine:
         ancestors = self.graph.ancestors(inc["node"])
         since = self.clock.now() - DEDUPE_TERMINAL_FOR
         for other in self.store.active() + self.store.handed_off_firing(since):
+            # Only alerts describe a node's health; a failed pipeline or job
+            # mapped to `gitlab` must not suppress what depends on GitLab.
+            if other["source"] != "grafana":
+                continue
             if other["id"] != inc["id"] and other["node"] in ancestors:
                 return other
         return None
@@ -193,14 +216,14 @@ class Engine:
             self._log({"decision": "deduped", "deliveries": inc["deliveries"]}, inc)
             return
 
-        pb = match_playbook(self.pb_list, ev) if ev.kind in ("alert", "ci_orphan") else None
+        pb = match_playbook(self.pb_list, ev) if ev.kind != "datasource_error" else None
         node = pb.node_for(ev, self.graph) if pb else self._node_from_labels(ev)
         target = pb.target_for(ev) if pb else None
         pcls, urgent = page_class(self.cfg, ev) if ev.kind == "alert" else (None, False)
         fields = dict(fp=ev.fp, source=ev.source, kind=ev.kind, rule_uid=ev.rule_uid,
                       alertname=ev.alertname, node=node, labels=ev.labels,
                       playbook=pb.id if pb else None, target=target,
-                      alert_state="firing", page_class=pcls, status="open")
+                      alert_state="firing", page_class=pcls, status="open", summary=ev.summary or None)
         inc_id = self.store.new_incident(now, **fields)
         inc = self.store.get(inc_id)
         extra = {"summary": ev.summary} if ev.summary else {}
@@ -208,7 +231,19 @@ class Engine:
         if pcls and not self.in_maint(inc, pb, page_cls=pcls):           # S9, S11
             self._close(inc, "paged")
             self._log({"decision": "paged", "page_class": pcls, "urgent": urgent,
-                       "delivery": "grafana-direct", **extra}, inc)
+                       "delivery": self._delivery(inc), **extra}, inc)
+            self._handoff(inc, "page", f"page class {pcls}", urgent=urgent)
+            return
+        sel = digest_only(self.cfg, ev)
+        if sel:
+            self._close(inc, "digest")
+            self._log({"decision": "digest", "reason": sel["reason"], **extra}, inc)
+            return
+        s = supp.match(self.suppressions, ev, self._today()) if not pcls else None
+        if s:                                                            # 8.3, L6
+            self._close(inc, "suppressed", note=f"suppression {s['id']}")
+            self._log({"decision": "suppressed", "reason": "suppression", "suppression": s["id"],
+                       "until": s["until"].isoformat(), **extra}, inc)
             return
         w = self.in_maint(inc, pb)
         if pcls and not w:
@@ -225,9 +260,7 @@ class Engine:
                        "root_status": root["status"], **extra}, inc)
             return
         if self._burst(now, inc):
-            self._close(inc, "escalated", note="burst")
-            self._log({"decision": "escalated", "reason": "burst: many failures without a common ancestor",
-                       "delivery": "grafana-direct", **extra}, inc)
+            self._forward(inc, "escalated", reason="burst: many failures without a common ancestor")
             return
         self._log({"decision": "opened", **extra}, inc)
 
@@ -294,21 +327,44 @@ class Engine:
             return self._forward(inc, "escalated", reason="kill switch: notify-only")
         self._start(inc, pb, pmode)
 
-    def _forward(self, inc, decision, reason=None):
+    def _forward(self, inc, decision, reason=None, **extra):
+        """Hand the incident to OpenClaw as residue (no playbook, kill switch,
+        a refused or impossible action)."""
         self._close(inc, "escalated")
-        rec = {"decision": decision, "delivery": "grafana-direct"}
+        rec = {"decision": decision, "delivery": self._delivery(inc), **extra}
         if reason:
             rec["reason"] = reason
         self._log(rec, inc)
+        self._handoff(inc, "residue", reason or decision)
+
+    def _page(self, inc, decision, reason, notify_text, **extra):
+        """A failed remediation (breaker, verification, action error): Noah is
+        paged through OpenClaw, which also gets the incident to diagnose.
+        Without forwarding, the router tells Noah itself (JIT bot)."""
+        self._close(inc, "paged")
+        self._log({"decision": decision, "reason": reason, "page_class": "failed_remediation",
+                   "delivery": self._delivery(inc), **extra}, inc)
+        if self.forwarding:
+            self._handoff(inc, "page", reason, urgent=False, page_cls="failed_remediation")
+        else:
+            self._notify(notify_text, urgent=False)
+
+    def _delivery(self, inc):
+        if self.forwarding:
+            return "openclaw"
+        return "grafana-direct" if inc["source"] == "grafana" else "log"
 
     def _trip(self, inc, pb, pmode, decision, reason):
         now = self.clock.now()
         self.store.open_breaker(pb.id, pmode, now)
-        self._close(inc, "paged")
-        self._log({"decision": decision, "reason": reason, "breaker": "open", "mode": pmode}, inc)
-        if pmode == "active":
-            self._notify(f"Event router: playbook {pb.id} stopped ({reason}) for {inc['target']}; "
-                         f"incident {inc['id']} goes to OpenClaw.", urgent=False)
+        if pmode != "active":
+            # A shadow playbook's breaker: nothing failed for real. The event
+            # is unhandled, so it is residue (L3 is about active playbooks).
+            return self._forward(inc, decision, reason=f"shadow playbook {pb.id}: {reason}",
+                                 breaker="open", mode=pmode)
+        self._page(inc, decision, reason,
+                   f"Event router: playbook {pb.id} stopped ({reason}) for {inc['target']}; "
+                   f"incident {inc['id']} goes to OpenClaw.", breaker="open", mode=pmode)
 
     def _wait(self, inc, why):
         if inc.get("waiting") != why:
@@ -338,14 +394,8 @@ class Engine:
             return self._forward(inc, "rate_limited", reason="global action limit: automation storm")
         if pb.action not in DEPLOY_EXEMPT and self._deploy_running():
             return self._wait(inc, "deploy in progress")
-        for kind, within in pb.preconditions:
-            if kind == "no_recent_deploy":
-                last = self.gitlab.last_deploy_finished(self.cfg["deploy_jobs"]) if self.gitlab else None
-                if last is None:
-                    return self._forward(inc, "denied", reason="precondition: cannot check recent deploys")
-                if now - last < within:
-                    return self._forward(inc, "denied", reason=f"precondition: a deploy finished "
-                                                               f"{int((now - last) // 60)}m ago")
+        # Preconditions (no_deploy_touching) are checked by the executor, on
+        # the host, where the container's creation time is (doc 14).
         holder = self.store.lock_holder(target)
         if holder and holder != inc["id"]:
             return self._wait(inc, f"lock on {target} held by {holder}")
@@ -355,7 +405,9 @@ class Engine:
                 self.store.add_run(pb.id, target, "shadow", now, inc["id"])
             self._close(inc, "shadowed")
             self._log({"decision": "shadow", "action": action, "mode": "shadow",
-                       "would": "run", "delivery": "grafana-direct"}, inc)
+                       "would": "run", "delivery": self._delivery(inc)}, inc)
+            # Nothing acted: the event is still unhandled, so OpenClaw gets it.
+            self._handoff(inc, "residue", f"shadow: playbook {pb.id} would have run {action}")
             return
         with self.store.tx():
             if not self.store.take_lock(target, inc["id"], now):
@@ -406,15 +458,17 @@ class Engine:
             self._release(inc)
             return self._forward(inc, "escalated", reason="no executor installed")
         self._set(inc, exec_started_at=now)
-        res = self.executor.execute(pb.action, inc["target"], inc["id"])
+        res = self.executor.execute(pb.action, inc["target"], inc["id"], pb.id)
         now = self.clock.now()
         action = f"{pb.action}:{inc['target']}"
         if res.get("ok"):
             self.store.add_action(inc["id"], pb.id, pb.action, inc["target"], now, "ok")
+            new_job = str(res.get("new_job_id") or "")
             self._set(inc, status="verifying", exec_count=inc["exec_count"] + 1,
-                      verify_deadline=now + pb.verify_within, waiting=None)
+                      verify_deadline=now + pb.verify_within, waiting=None,
+                      verify_ref=new_job if new_job.isdigit() else None)
             return self._log({"decision": "executed", "action": action, "result": "ok",
-                              "detail": res.get("detail")}, inc)
+                              "detail": res.get("detail"), **({"new_job_id": new_job} if new_job else {})}, inc)
         if res.get("unknown"):
             # Timeout or lost reply: the action may have run. Count it, keep
             # the lock and let verification decide; never retry it.
@@ -436,19 +490,37 @@ class Engine:
         if refused == "dependency" and self._correlate(inc):
             return
         reason = f"executor {('refused: ' + refused) if refused else 'error'}: {res.get('detail') or res.get('error', '')}".strip()
-        self._close(inc, "paged")
-        self._log({"decision": "denied" if refused else "failed", "action": action, "reason": reason}, inc)
-        self._notify(f"Event router: {action} for {inc['alertname'] or inc['fp']} was not done ({reason}). "
-                     f"OpenClaw has the alert.", urgent=False)
+        text = (f"Event router: {action} for {inc['alertname'] or inc['fp']} was not done ({reason}). "
+                f"OpenClaw has the alert.")
+        if refused and refused not in PAGE_REFUSALS:
+            # A precondition that did not hold (a deploy touched the
+            # container, the job is not orphaned or was superseded): nothing
+            # was attempted and nothing is known to be broken beyond the
+            # alert, so it is residue for OpenClaw (I2: a revert, not a
+            # restart). Without forwarding the router tells Noah, as in phase 2.
+            self._forward(inc, "denied", reason=reason, action=action, refused=refused)
+            if not self.forwarding:
+                self._notify(text, urgent=False)
+            return
+        # The action failed, the executor's own limit stopped it, or a
+        # dependency the router had no incident for is down (12.6, routing
+        # table row 1): a failed remediation, which pages.
+        self._page(inc, "denied" if refused else "failed", reason, text, action=action, refused=refused)
 
     def _verify(self, inc, pb):
         now = self.clock.now()
-        ok = False
+        ok, failed_now = False, False
         if pb.verify_kind == "alert_resolved":
             ok = inc["alert_state"] == "resolved"
         elif pb.verify_kind == "ci_job_finished":
             status = self.gitlab.job_status(inc["target"]) if self.gitlab else None
             ok = status is not None and status not in ("running", "pending", "created")
+        elif pb.verify_kind == "ci_job_succeeded":
+            # The retried job (the executor's reply named it).
+            ref = inc.get("verify_ref")
+            status = self.gitlab.job_status(ref) if (self.gitlab and ref) else None
+            ok = status == "success"
+            failed_now = status in ("failed", "canceled", "skipped") or (not ref and inc["exec_count"])
         if ok:
             self._release(inc)
             self._close(inc, "resolved")
@@ -456,12 +528,33 @@ class Engine:
                        "duration_s": int(now - inc["opened_at"])}, inc)
             if pb.on_success == "page":
                 self._notify(f"Event router: {pb.id} fixed {inc['target']}.", urgent=False)
-        elif now >= (inc["verify_deadline"] or now):
+            if pb.action == "cancel_ci_job":
+                self._after_orphan_cancel(inc)
+        elif failed_now or now >= (inc["verify_deadline"] or now):
             self._release(inc)
-            self._close(inc, "paged")
-            self._log({"decision": "verify_failed", "verify": "failed", "notify": pb.on_failure}, inc)
-            self._notify(f"Event router: {pb.id} acted on {inc['target']} but verification failed "
-                         f"({inc['alertname'] or inc['fp']}). OpenClaw has the alert.", urgent=False)
+            text = (f"Event router: {pb.id} acted on {inc['target']} but verification failed "
+                    f"({inc['alertname'] or inc['fp']}). OpenClaw has the alert.")
+            rec = {"verify": "failed", "notify": pb.on_failure}
+            if pb.on_failure == "page":
+                self._page(inc, "verify_failed", f"{pb.id} acted, verification failed", text, **rec)
+            elif pb.on_failure == "agent":
+                self._forward(inc, "verify_failed", reason=f"{pb.id} acted, verification failed", **rec)
+            else:
+                self._close(inc, "digest")
+                self._log({"decision": "verify_failed", **rec}, inc)
+
+    def _after_orphan_cancel(self, inc):
+        """Routing table row 11: after cancelling an orphaned deploy job, the
+        newest deploy may never have run (it was the orphan). Raise the
+        follow-up event; the ci-orphan-retry playbook retries the job, and
+        the executor retries only a job it cancelled itself that nothing
+        newer superseded."""
+        job = inc["labels"].get("job_id") or inc["target"]
+        self.ingest(Event(source="reconciler", kind="ci_orphan_cancelled",
+                          fp=f"reconciler:ci-orphan-cancelled:{job}", status="firing",
+                          alertname="Orphaned deploy job cancelled: retry the newest deploy",
+                          labels={"job_id": str(job), "job_name": inc["labels"].get("job_name", ""),
+                                  "cancelled_by": inc["id"]}))
 
     # ---- maintenance windows ---------------------------------------------------
     def open_window(self, scope, duration, reason, opened_by, mode="quiet", playbooks=(), page_classes=()):
@@ -518,7 +611,9 @@ class Engine:
         elif inc["page_class"]:
             self._close(inc, "paged")
             self._log({"decision": "paged", "page_class": inc["page_class"],
-                       "reason": "still failing after maintenance", "delivery": "grafana-direct"}, inc)
+                       "reason": "still failing after maintenance", "delivery": self._delivery(inc)}, inc)
+            self._handoff(inc, "page", "page class still failing after maintenance",
+                          urgent=self._urgent(inc["page_class"]))
         else:
             self._set(inc, status="open", root=None)
             self._log({"decision": "recovered", "result": "still failing: normal handling"}, inc)
@@ -540,6 +635,7 @@ class Engine:
                     self.store.inbox_done(row_id)
         self.check_mode_change()
         self.step()
+        self._pump_forwards()
         now = self.clock.now()
         if now - self._last_reconcile >= self.cfg["reconcile_interval"]:
             self._last_reconcile = now
@@ -547,6 +643,7 @@ class Engine:
 
     def reconcile(self):
         now = self.clock.now()
+        self.store.prune_seen(now - 2 * self.cfg["openclaw"]["ack_window"])
         for b in self.store.breakers():
             if now - b["last_trigger"] >= self.cfg["breaker_reset_after"]:
                 self.store.reset_breaker(b["playbook"], b["mode"])
@@ -606,28 +703,230 @@ class Engine:
             until = until + timedelta(days=1)
         return until.timestamp()
 
+    # ---- hand-off to OpenClaw (phase 3) -------------------------------------------
+    def _today(self):
+        tz = zoneinfo.ZoneInfo((self.cfg["quiet_hours"] or {}).get("tz", "UTC"))
+        return datetime.fromtimestamp(self.clock.now(), tz).date()
+
+    def _urgent(self, pcls):
+        return bool((self.cfg["page_classes"].get(pcls) or {}).get("urgent"))
+
+    def _handoff(self, inc, kind, reason, urgent=False, page_cls=None):
+        """Queue the incident for OpenClaw (residue or page). A no-op without
+        forwarding (phases 1-2: Grafana delivers to OpenClaw itself)."""
+        if not self.forwarding:
+            return
+        now = self.clock.now()
+        due = now
+        held = False
+        if kind == "page" and not urgent:
+            due = self.quiet_until(now)                  # decision 6
+            held = due > now
+        payload = self._payload(inc, kind, reason, urgent, page_cls or inc.get("page_class"), held)
+        fid = self.store.add_forward(inc["id"], kind, urgent, now, due, payload)
+        self._log({"decision": "queued", "forward": fid, "kind": kind, "urgent": urgent,
+                   "due_in_s": int(due - now)}, inc)
+
+    def _payload(self, inc, kind, reason, urgent, pcls, held):
+        pb = self.playbooks.get(inc["playbook"]) if inc.get("playbook") else None
+        decisions = [{k: d[k] for k in ("ts", "decision", "reason", "action", "result", "detail",
+                                        "root", "root_node", "mode", "refused") if k in d}
+                     for d in self.store.decisions_for(inc["id"])][-DECISIONS_IN_PAYLOAD:]
+        quiet = self.quiet_until(self.clock.now()) > self.clock.now()
+        return {
+            "version": 1, "kind": kind, "reason": reason,
+            "incident": {
+                "id": inc["id"], "source": inc["source"], "kind": inc["kind"],
+                "rule_uid": inc["rule_uid"], "alertname": inc["alertname"], "node": inc["node"],
+                "labels": inc["labels"], "summary": inc.get("summary") or "",
+                "opened_at": datetime.fromtimestamp(inc["opened_at"]).astimezone().isoformat(timespec="seconds"),
+                "deliveries": inc["deliveries"], "fp": inc["fp"],
+            },
+            "playbook": ({"id": pb.id, "mode": pb.mode, "action": pb.action, "target": inc["target"]}
+                         if pb else None),
+            "decisions": decisions,
+            "dependencies": sorted(self.graph.ancestors(inc["node"]))[:20] if inc["node"] else [],
+            "page": ({"class": pcls, "urgent": urgent, "held_for_quiet_hours": held,
+                      "email": inc["source"] == "grafana" and pcls not in (None, "failed_remediation")}
+                     if kind == "page" else None),
+            "quiet_hours": quiet,
+            "outcome": {"url": "http://event-router:8080/outcome", "incident": inc["id"]},
+        }
+
+    def _pump_forwards(self):
+        """Deliver queued items to OpenClaw, oldest first. While OpenClaw is
+        unreachable, try only the oldest item each pass; page items also go
+        to Noah through the JIT bot once they have waited `jit_after`; items
+        older than `max_age` expire into the digest (7.4)."""
+        if not self.forwarding:
+            return
+        oc = self.cfg["openclaw"]
+        tried_and_failed = False
+        for f in self.store.pending_forwards():
+            now = self.clock.now()
+            inc = self.store.get(f["incident"])
+            expired = now - f["created"] > oc["max_age"]
+            if f["due_at"] > now and not expired:
+                continue
+            if f["kind"] == "page" and f["due_at"] > f["created"] and inc["alert_state"] == "resolved":
+                # Held for quiet hours and cleared before morning: digest only.
+                self.store.update_forward(f["id"], state="skipped")
+                self._log({"decision": "forward_skipped", "forward": f["id"],
+                           "reason": "resolved during quiet hours"}, inc)
+                continue
+            # A page OpenClaw has not taken goes to Noah through the JIT bot:
+            # after a failed try and `jit_after`, and always before it would
+            # expire (the router may have been stopped the whole time).
+            if (f["kind"] == "page" and f["jit_at"] is None
+                    and (expired or (f["attempts"] > 0
+                                     and now - max(f["created"], f["due_at"]) >= oc["jit_after"]))):
+                p = f["payload"]
+                cls = (p.get("page") or {}).get("class")
+                self.shared.queue_notification(
+                    now, f"Page ({cls}), OpenClaw unreachable: {inc['alertname'] or inc['fp']}"
+                         f"{(' on ' + inc['node']) if inc['node'] else ''}"
+                         f"{(': ' + inc['summary']) if inc.get('summary') else ''}. {p.get('reason', '')}. "
+                         f"Incident {inc['id']}; queued for OpenClaw.", f["urgent"], now)
+                self.store.update_forward(f["id"], jit_at=now)
+                f["jit_at"] = now
+                self._log({"decision": "jit_paged", "forward": f["id"], "page_class": cls,
+                           "urgent": f["urgent"], "last_error": f["last_error"]}, inc)
+            if expired:
+                self.store.update_forward(f["id"], state="expired")
+                self._log({"decision": "forward_expired", "forward": f["id"], "kind": f["kind"],
+                           "attempts": f["attempts"], "last_error": f["last_error"]}, inc)
+                continue
+            if f["next_try"] > now or tried_and_failed:
+                continue
+            payload = dict(f["payload"], queued_s=int(now - f["created"]), attempt=f["attempts"] + 1,
+                           jit_paged=bool(f["jit_at"]))
+            result, detail = self.openclaw.deliver(payload)
+            now = self.clock.now()
+            if result == "ok":
+                self.store.update_forward(f["id"], state="delivered", delivered_at=now,
+                                          attempts=f["attempts"] + 1, last_error=None)
+                self.store.set_setting("forward_rejected_since", None)
+                self._log({"decision": "forwarded", "forward": f["id"], "kind": f["kind"],
+                           "delivery": "openclaw", "attempts": f["attempts"] + 1,
+                           "queued_s": int(now - f["created"])}, inc)
+                continue
+            tried_and_failed = True
+            n = f["attempts"] + 1
+            self.store.update_forward(f["id"], attempts=n, last_error=f"{result}: {detail}",
+                                      next_try=now + min(FORWARD_BACKOFF_MAX, 15 * 2 ** min(n, 5)))
+            if result == "rejected" and not self.store.setting("forward_rejected_since"):
+                self.store.set_setting("forward_rejected_since", now)
+            if f["attempts"] == 0 or result == "rejected":
+                self._log({"decision": "forward_failed", "forward": f["id"], "result": result,
+                           "detail": detail}, inc)
+
+    def ack(self, fp, status):
+        """Does the router own this alert (doc 7.4, L4)? OpenClaw's Grafana
+        transform asks before it stays out of the way. No while the router
+        does not forward, or while OpenClaw rejects its deliveries (a token
+        or mapping problem): then Grafana's direct route is the path."""
+        if not self.forwarding or self.store.setting("forward_rejected_since"):
+            return False
+        if status not in ("firing", "resolved"):
+            return False
+        return self.store.seen_since(fp, status, self.clock.now() - self.cfg["openclaw"]["ack_window"])
+
+    # ---- outcome records, /maint from Telegram, incident view ------------------------
+    def record_outcome(self, body):
+        rec = outcomes.validate(body, self.graph, self.playbooks,
+                                lambda i: self.store.get(i) is not None)
+        self.store.add_outcome(self.clock.now(), rec)
+        inc = self.store.get(rec["incident"]) if rec["incident"] else None
+        self._log({"decision": "outcome", **{k: v for k, v in rec.items() if k != "incident"}}, inc)
+        return rec
+
+    def maint_command(self, text, by="telegram"):
+        cmd = maint_text.parse(text, self.graph, self.cfg["max_window"])
+        if cmd[0] == "list":
+            ws = self.store.windows()
+            if not ws:
+                return "No maintenance windows open."
+            return "\n".join(f"{w['id']}: {', '.join(w['scope'])} until "
+                             f"{datetime.fromtimestamp(w['expires_at']).astimezone():%H:%M} ({w['reason']})"
+                             for w in ws)
+        if cmd[0] == "close":
+            if cmd[1] not in {w["id"] for w in self.store.windows()}:
+                raise maint_text.BadCommand(f"No open window {cmd[1]}.")
+            self.close_window(cmd[1], by)
+            return f"Closed {cmd[1]}. Anything still failing in its scope is handled normally now."
+        _, scope, seconds, reason = cmd
+        wid = self.open_window(scope, seconds, reason, by)
+        until = datetime.fromtimestamp(self.clock.now() + seconds).astimezone()
+        return (f"Window {wid} open until {until:%H:%M}: {', '.join(scope)} and what depends on them. "
+                f"Playbooks there are held and their alerts are only logged; security, data-at-risk and "
+                f"UPS alerts still page. When it closes, anything still failing is handled normally. "
+                f"Close early: /maint close {wid}")
+
+    def incident_view(self, inc_id):
+        inc = self.store.get(inc_id)
+        if inc is None:
+            return None
+        return {"incident": inc, "decisions": self.store.decisions_for(inc_id),
+                "forward": {k: v for k, v in (self.store.forward_for(inc_id) or {}).items() if k != "payload"},
+                "outcome": self.store.outcome_for(inc_id)}
+
     # ---- summary -----------------------------------------------------------------
     def summary(self, days):
-        since = self.clock.now() - days * 86400
+        """The weekly numbers for the routing review and the Monday digest
+        (8.2, 8.4): decisions, playbook results, residue and pages, MTTR,
+        outcomes, suppressions."""
+        now = self.clock.now()
+        since = now - days * 86400
         decisions = self.store.decisions_since(since)
         incidents = self.store.recent_incidents(since)
-        by_decision, unmatched, would_run = {}, {}, {}
+        by_decision, unmatched, would_run, residue, pages = {}, {}, {}, {}, {}
+        per_pb = {}
+        mttr = []
         for d in decisions:
-            by_decision[d["decision"]] = by_decision.get(d["decision"], 0) + 1
-            if d["decision"] == "no_match":
-                key = d.get("event", "?")
+            dec = d["decision"]
+            by_decision[dec] = by_decision.get(dec, 0) + 1
+            key = d.get("event", "?")
+            if dec == "no_match":
                 unmatched[key] = unmatched.get(key, 0) + 1
-            if d["decision"] == "shadow":
-                key = d.get("playbook", "?")
-                would_run[key] = would_run.get(key, 0) + 1
+            if dec == "shadow":
+                would_run[d.get("playbook", "?")] = would_run.get(d.get("playbook", "?"), 0) + 1
+            if dec == "queued":
+                bucket = pages if d.get("kind") == "page" else residue
+                bucket[key] = bucket.get(key, 0) + 1
+            if d.get("playbook") and dec in ("executed", "verified", "verify_failed", "failed", "denied",
+                                              "rate_limited", "breaker_open"):
+                c = per_pb.setdefault(d["playbook"], {})
+                c[dec] = c.get(dec, 0) + 1
+            if dec == "verified" and "duration_s" in d:
+                mttr.append(d["duration_s"])
         verified = by_decision.get("verified", 0)
         acted = by_decision.get("executed", 0)
+        fwd = self.store.forwards_since(since)
+        outs = self.store.outcomes_since(since)
+        today = self._today()
         return {
-            "days": days, "mode": self.mode(), "incidents": len(incidents),
-            "decisions": by_decision, "auto_resolved": verified,
+            "days": days, "mode": self.mode(), "forwarding": self.forwarding,
+            "incidents": len(incidents), "decisions": by_decision, "auto_resolved": verified,
             "playbook_success_rate": (verified / acted) if acted else None,
+            "playbooks": per_pb,
+            "mttr_playbook_s": {"count": len(mttr), "avg": int(sum(mttr) / len(mttr)) if mttr else None,
+                                "max": max(mttr) if mttr else None},
             "shadow_would_run": would_run,
             "top_unmatched": sorted(unmatched.items(), key=lambda kv: -kv[1])[:10],
+            "residue": sorted(residue.items(), key=lambda kv: -kv[1])[:20],
+            "pages": sorted(pages.items(), key=lambda kv: -kv[1])[:20],
+            "forwards": {st: sum(1 for f in fwd if f["state"] == st)
+                         for st in ("pending", "delivered", "expired", "skipped")}
+                        | {"jit_paged": sum(1 for f in fwd if f["jit_at"])},
+            "outcomes": {"count": len(outs),
+                         "playbook_able": [o for o in outs if o.get("playbook_able")][:20],
+                         "noise": sum(1 for o in outs if o.get("noise")),
+                         "missed": [o for o in outs if o.get("found_by")][:20],
+                         "by_fix_kind": {k: sum(1 for o in outs if o.get("fix_kind") == k)
+                                         for k in outcomes.FIX_KINDS}},
+            "escalations_without_outcome": sum(
+                1 for f in fwd if f["state"] == "delivered" and not self.store.outcome_for(f["incident"])),
+            "suppressions": supp.describe(self.suppressions, today),
             "breakers": self.store.breakers(),
             "open_windows": self.store.windows(),
         }

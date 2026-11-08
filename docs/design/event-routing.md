@@ -1,6 +1,6 @@
 # Event Routing: Deterministic First Responder, Agent Behind It — Design Document
 
-> **Status:** Accepted (decisions in section 11); phases 1–2 being implemented
+> **Status:** Accepted (decisions in section 11); phases 1–3 implemented (notes in sections 14 and 15)
 > **Author:** Claude (on Noah's direction)
 > **Date:** 2026-11-07
 > **Stakeholder:** Noah Kontur
@@ -1046,3 +1046,111 @@ test alert for a root cause keeps its dependents suppressed for up to 24h.
 **Not in phases 1–2:** the GitLab webhook, the Grafana dashboard, `POST
 /outcome` and the routing review (phase 3), router suppressions
 (`suppressions.yml`, phase 3), and a Grafana mute timing for site windows.
+
+## 15. Implementation notes (phase 3)
+
+Phase 3 went live on 2026-11-08 without the 1–2 week burn-in of phase 2
+(Noah's call). Choices made where the sections above are silent:
+
+**Routing switch and the fallback (L4).** Grafana cannot route on another
+alert's state, so "send to OpenClaw only while the router is down" is not
+expressible as a notification policy. Instead Grafana keeps a route to
+OpenClaw's `/hooks/grafana` for every alert, and that hook's transform
+(`grafana.js`) asks the router `GET /ack?fp=<fingerprint>&status=...` first.
+It drops the alert (no agent session) only when the router has accepted that
+fingerprint and is forwarding; otherwise (router down, an alert the router
+never received, or OpenClaw rejecting the router's deliveries) the agent gets
+it as before, marked as a fallback. The router's route has a shorter
+`group_wait` (10s against 30s), so its copy is normally already in the inbox
+when OpenClaw asks. The router is the catch-all that decides; Grafana's
+OpenClaw route is the fallback path, idle while the router works.
+
+**What OpenClaw receives** (`/hooks/event-router`, transform
+`event-router.js`): one item per incident, kind `residue` or `page`, with the
+playbook, the router's decisions so far, the dependency chain, page class and
+urgency, and where to file the outcome. Handled incidents are never sent
+(decision B). A shadow playbook's event is residue: nothing acted on it.
+Executor refusals that mean "a precondition did not hold" (a deploy recreated
+the container, the job is not orphaned, superseded) are residue; refusals
+that mean something is broken (a dependency the router had no incident for,
+the executor's own rate limit) and action errors are failed remediations and
+page (6.3).
+
+**Queueing (7.4).** A SQLite `forwards` table, delivered oldest first. While
+OpenClaw is unreachable the router tries only the oldest item each pass,
+backing off to 5 minutes. A page item OpenClaw has not taken within 2 minutes
+goes to Noah through the JIT bot (decision 3), once, and always before it
+would expire. Items expire into the digest after 6h. A 4xx from OpenClaw
+(token or mapping broken) also stops `/ack` from claiming alerts, so the
+Grafana route takes over.
+
+**Quiet hours (decision 6).** Non-urgent page items are held until 08:00 and
+dropped to the digest if the alert cleared overnight; Grafana's email routes
+use a mute timing for the same span. Urgent classes (security, data at risk,
+UPS) are never held. Residue is delivered at once, flagged `quiet_hours`, and
+OpenClaw does not message Noah about it until morning.
+
+**Email (decision 4).** Grafana emails only page classes, by rule uid in
+`policies.yml`; a router test keeps that list equal to `page_classes` in
+`config.yml`. Failed remediations are router facts Grafana does not know, so
+they page on Telegram only (OpenClaw, or the JIT bot when OpenClaw is down).
+
+**GitLab events.** A project webhook (pipeline and job events) on projects 4
+and 14. A failed pipeline on `main` is one incident per project, pipeline
+source and scheduled task while it stays red; the next green pipeline of the
+same kind resolves it. Failures of only `<host>:deploy-service` jobs are
+digest-only (the auto-merge sweep already rolled back). Job events matter only
+for runner/system failures: `ci-system-retry` retries such a job once
+(executor: never a script failure, once per pipeline and job name, not when a
+newer job of that name exists). After `ci-orphan-cancel` is verified, the
+router raises `ci_orphan_cancelled`; `ci-orphan-retry` retries the cancelled
+job, which the executor allows only for a job it cancelled itself. Both
+retry playbooks start in shadow (decision 10). CI incidents never act as root
+causes for correlation: a red pipeline mapped to `gitlab` must not suppress
+alerts for what depends on GitLab.
+
+**Playbook identity in the executor.** Requests are now
+`{action_type, target, incident_id, playbook}`. The executor's
+`executor.json` carries its own playbook list, rendered by Ansible from
+`docker/event-router/playbooks/` at deploy time: mode, action, fixed target
+and host-side preconditions. It refuses unknown, shadow or disabled
+playbooks, a different action, or a different fixed target. With that, an
+`assist` window lets its listed playbooks through at the executor too.
+
+**"A deploy that touched this service."** `restart-once`'s precondition is now
+`no_deploy_touching: 2h`, checked by the executor against the container's
+creation time. Compose recreates exactly the containers whose image or
+configuration a deploy changed, so a container created less than 2h ago was
+touched by one (or by a hand-run `compose up`, which counts the same). It
+replaces "any router deploy in the last 2h", which held back restarts of every
+container after every deploy.
+
+**Outcome records (8.2).** `POST /outcome` with the closed schema of
+`router/outcomes.py`, from OpenClaw's address. `fix` must name an allowlist
+entry (the full 4.5 list, so "this would have been a `restart_systemd_unit`"
+can be recorded before the executor supports it). An outcome may have no
+incident when a safety-net cron found something no event reported
+(`found_by: cron:<name>`, 8.4). `/summary` counts escalations without an
+outcome.
+
+**Suppressions (8.3, L6).** `docker/event-router/suppressions.yml`, the same
+idea as the anomaly detector's: mandatory reason and `until` (at most a year
+out, checked in CI), never a page class; matching events are recorded as
+`suppressed` and not forwarded. An entry stops applying the day after its
+`until`, whether or not anyone removes it; `/summary` lists every entry with
+its state, and the routing review reports them all weekly.
+
+**`/maint` from Telegram.** Free text goes through OpenClaw's Telegram channel:
+OpenClaw passes Noah's `/maint ...` message verbatim to `POST /maint/text` and
+relays the reply. The router parses it (`router/maint_text.py`): nodes from
+`dependencies.yml` only (not `site`), at most 12h, a reason, quiet mode. The
+agent cannot widen what the parser accepts.
+
+**Learning loop.** The `routing-review` OpenClaw cron (Mondays 05:00) reads
+`/summary?days=7` and `/decisions?days=7`, opens bot-config MRs for
+threshold/`for`/wording tuning (they auto-merge through that class), shadow
+playbook MRs (decision 10), and normal MRs for anything else, and leaves a
+one-line summary that the Monday Morning Digest includes. `main-pipeline-fix`
+runs every 6h as the safety net and `schedule-failures` daily in dry-run;
+anything they find that the webhook path missed is filed as an outcome record
+with `found_by`.

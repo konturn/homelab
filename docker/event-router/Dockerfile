@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY router ./router
 COPY config.yml ./config.yml
 COPY playbooks ./playbooks
+COPY suppressions.yml ./suppressions.yml
 
 # The uid the executor accepts (SO_PEERCRED); compose sets the same user and
 # the executor socket's group. See ansible/roles/event-router.

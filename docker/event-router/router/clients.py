@@ -1,4 +1,5 @@
-"""Outbound clients: the host executor (Unix socket) and GitLab (read-only)."""
+"""Outbound clients: the host executor (Unix socket), GitLab (read-only) and
+OpenClaw's event-router hook (residue, phase 3)."""
 
 import json
 import socket
@@ -10,15 +11,17 @@ from datetime import datetime
 
 
 class ExecutorClient:
-    """Sends exactly {action_type, target, incident_id} (section 4.6)."""
+    """Sends exactly {action_type, target, incident_id, playbook} (section 4.6).
+    The executor checks the playbook id against its own allowlist, rendered
+    from the playbooks at deploy time; the router's word is not enough."""
 
     def __init__(self, path, timeout=180):
         self.path = path
         self.timeout = timeout
 
-    def execute(self, action_type, target, incident_id):
+    def execute(self, action_type, target, incident_id, playbook):
         req = json.dumps({"action_type": action_type, "target": target,
-                          "incident_id": incident_id}).encode() + b"\n"
+                          "incident_id": incident_id, "playbook": playbook}).encode() + b"\n"
         sent = False
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
@@ -95,3 +98,29 @@ class GitLab:
             return self._get(f"jobs/{int(job_id)}").get("status")
         except (OSError, ValueError, urllib.error.URLError):
             return None
+
+
+class OpenClaw:
+    """POSTs one residue item to OpenClaw's /hooks/event-router mapping
+    (docker/openclaw/hooks/transforms/event-router.js). Returns
+    (result, detail): result is "ok", "down" (no connection, timeout, 5xx:
+    try again, page through the JIT bot if it lasts) or "rejected" (4xx: a
+    configuration error; /ack stops claiming alerts so Grafana's own route
+    to OpenClaw takes over)."""
+
+    def __init__(self, url, token, timeout=20):
+        self.url = url
+        self.token = token
+        self.timeout = timeout
+
+    def deliver(self, payload):
+        data = json.dumps(payload, sort_keys=True, default=str).encode()
+        req = urllib.request.Request(self.url, data=data, method="POST", headers={
+            "Content-Type": "application/json", "Authorization": f"Bearer {self.token}"})
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                return "ok", f"HTTP {r.status}"
+        except urllib.error.HTTPError as e:
+            return ("down" if e.code >= 500 or e.code == 429 else "rejected"), f"HTTP {e.code}"
+        except (OSError, ValueError) as e:
+            return "down", f"{e.__class__.__name__}: {e}"[:200]

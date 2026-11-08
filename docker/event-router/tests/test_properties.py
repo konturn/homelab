@@ -28,7 +28,7 @@ from hypothesis.stateful import RuleBasedStateMachine, invariant, rule
 from router.config import ALLOWED_ACTIONS
 from router.store import ACTIVE
 
-from .helpers import ALERTS, World, event
+from .helpers import ALERTS, CONFIG, World, event
 
 NAMES = sorted(ALERTS)
 PLAYBOOK_FOR = {"zig": "zigbee-silence-restart", "app": "restart-once", "appdup": "app-log-restart"}
@@ -192,6 +192,91 @@ RouterMachine.TestCase.settings = settings(
     max_examples=200, stateful_step_count=40, deadline=None,
     suppress_health_check=[HealthCheck.too_slow])
 TestRouterProperties = RouterMachine.TestCase
+
+
+FWD_CONFIG = dict(CONFIG, openclaw={"forward": True})
+
+
+class ForwardingMachine(RouterMachine):
+    """Phase 3: the same environment plus OpenClaw going up and down, with
+    the router forwarding residue itself. Adds:
+
+      B   an incident a playbook handled (verified) is never forwarded
+      L1  every escalated or paged incident is eventually delivered to
+          OpenClaw, or (OpenClaw down for longer than max_age) expires into
+          the digest; a page never expires without having gone out through
+          the JIT bot
+      one forward per incident (no duplicate wake-ups)
+    """
+
+    def __init__(self):
+        RuleBasedStateMachine.__init__(self)
+        self.w = World(cfg=FWD_CONFIG)
+        self.violations = []
+        self.acted_incidents = set()
+        self.w.executor.check = self.check_action
+
+    @rule(up=st.booleans())
+    def openclaw(self, up):
+        self.w.openclaw.result = "ok" if up else "down"
+
+    @rule()
+    def pump(self):
+        self.w.engine._pump_forwards()
+
+    @invariant()
+    def handled_never_forwarded(self):
+        e = self.w.engine
+        verified = {r["incident"] for r in e.store.conn.execute(
+            "SELECT incident FROM decisions WHERE decision = 'verified'")}
+        forwarded = {r["incident"] for r in e.store.conn.execute("SELECT incident FROM forwards")}
+        assert not verified & forwarded, ("B", verified & forwarded)
+
+    @invariant()
+    def one_forward_per_incident(self):
+        dup = self.w.engine.store.conn.execute(
+            "SELECT incident, COUNT(*) c FROM forwards GROUP BY incident HAVING c > 1").fetchall()
+        assert not dup, ("one forward per incident", [tuple(r) for r in dup])
+
+    def teardown(self):
+        try:
+            if self.violations:
+                return
+            w = self.w
+            w.gitlab.deploying = False
+            w.set_override(None)
+            w.executor.reply = {"ok": True}
+            for _ in range(3):
+                w.clock.advance(13 * 3600)
+                w.engine.step()
+                w.engine._pump_forwards()
+            for name in NAMES:
+                w.engine.ingest(event(name, "resolved"))
+            w.openclaw.result = "ok"
+            for _ in range(8):
+                w.clock.advance(15 * 60)
+                w.engine.step()
+                w.engine._pump_forwards()
+            e = w.engine
+            left = [(i["fp"], i["status"]) for i in e.store.active()]
+            assert not left, f"L1: incidents never handled: {left}"
+            pending = e.store.pending_forwards()
+            assert not pending, f"L1: forwards never delivered: {[(f['incident'], f['kind']) for f in pending]}"
+            handed = e.store.conn.execute(
+                "SELECT id FROM incidents WHERE status IN ('escalated', 'paged', 'shadowed')").fetchall()
+            for (inc_id,) in handed:
+                f = e.store.forward_for(inc_id)
+                assert f is not None, f"L1: {inc_id} handed off but never queued for OpenClaw"
+                if f["state"] == "expired":
+                    assert f["kind"] != "page" or f["jit_at"], f"L1: page {inc_id} expired unseen"
+        finally:
+            self.w.close()
+
+
+ForwardingMachine.TestCase.settings = settings(
+    max_examples=150, stateful_step_count=40, deadline=None,
+    suppress_health_check=[HealthCheck.too_slow])
+TestForwardingProperties = ForwardingMachine.TestCase
 
 
 class TestMatchingIsDataOnly(unittest.TestCase):

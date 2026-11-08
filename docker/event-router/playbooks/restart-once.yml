@@ -1,8 +1,11 @@
 # Routing table row 4: an unhealthy container is restarted once (Docker
 # restarts crashed processes but never unhealthy ones). Not for the restart
 # denylist in config.yml (platform services, decision 7), and not when a
-# deploy finished in the last 2h (a deploy-correlated failure needs a revert,
-# I2). A second failure in 6h trips the breaker and goes to OpenClaw.
+# deploy touched this service in the last 2h: a deploy-correlated failure
+# needs a revert, not a restart (I2). The executor checks that on the host:
+# compose recreates exactly the containers a deploy changed, so a container
+# created less than 2h ago was touched by one. A second failure in 6h trips
+# the breaker and goes to OpenClaw.
 id: restart-once
 description: Restart an unhealthy non-platform container once
 mode: active
@@ -11,7 +14,7 @@ match:
   rule_uid: container-health-failure
 node: {from_label: container_name}
 preconditions:
-  - no_recent_deploy: 2h
+  - no_deploy_touching: 2h
 action: {type: restart_container, target_from_label: container_name}
 verify:
   alert_resolved: 10m

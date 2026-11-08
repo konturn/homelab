@@ -3,17 +3,21 @@
 
 Root-owned, socket-activated (event-router-executor.socket, Accept=yes): each
 connection starts one instance with the connection on stdin/stdout. It
-accepts exactly {"action_type", "target", "incident_id"} from the event
-router's uid (SO_PEERCRED, decision A), re-checks everything at execution
-time, runs one fixed command, logs the request to the journal and replies
-with one JSON line:
+accepts exactly {"action_type", "target", "incident_id", "playbook"} from
+the event router's uid (SO_PEERCRED, decision A), re-checks everything at
+execution time, runs one fixed command, logs the request to the journal and
+replies with one JSON line:
 
-  {"ok": true, "detail": ...}
+  {"ok": true, "detail": ..., ["new_job_id": N]}
   {"ok": false, "refused": "<why>", "detail": ...}
   {"ok": false, "error": ..., "unknown": true}      (may have run)
 
 Re-checked here, independently of the router (doc 12.6):
   - its own allowlist and the hard-deny list (this file, /etc/event-router/executor.json)
+  - the playbook: listed in executor.json (rendered from the repo's playbooks
+    at deploy time), active, and allowed this action and target. Only then
+    can an `assist` maintenance window let it through (13.1), and only then
+    its host-side preconditions apply (no_deploy_touching)
   - kill switch: repo mode, host override file, the router's runtime override
   - deploy lock (S7): a router deploy job running in GitLab, or a CI job
     container on the host when GitLab cannot be asked
@@ -41,10 +45,16 @@ CONFIG = os.environ.get("EXECUTOR_CONFIG", "/etc/event-router/executor.json")
 MODES = ("notify-only", "shadow", "active")
 
 # Hard-denied: constants, never data (doc 4.5, 8.3).
-ACTIONS = ("restart_container", "cancel_ci_job")
+ACTIONS = ("restart_container", "cancel_ci_job", "retry_ci_job")
+CI_ACTIONS = ("cancel_ci_job", "retry_ci_job")
+# retry_ci_job: runner/system failures only, never a script failure or the
+# job's own timeout (doc 4.5). Must match router/events.py SYSTEM_FAILURES.
+SYSTEM_FAILURES = ("runner_system_failure", "stuck_or_timeout_failure", "api_failure",
+                   "scheduler_failure", "data_integrity_failure")
 HARD_DENIED_TARGETS = ("gitlab", "vault", "pihole", "event-router", "docker-socket-proxy")
 NAME = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,62}$")
 INCIDENT = re.compile(r"^inc-[0-9a-f]{12}$")
+PLAYBOOK = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,62}$")
 JOB_ID = re.compile(r"^[0-9]{1,12}$")
 
 
@@ -87,7 +97,7 @@ def effective_mode(cfg):
 # ---- dependencies and windows --------------------------------------------------
 def node_for(cfg, action, target):
     deps = cfg["dependencies"]
-    if action == "cancel_ci_job":
+    if action in CI_ACTIONS:
         return "gitlab"
     for name, node in deps.items():
         if (node.get("probe") or {}).get("container") == target:
@@ -111,7 +121,10 @@ def ancestors(cfg, node):
     return seen
 
 
-def in_window(cfg, node, now):
+def in_window(cfg, node, now, playbook):
+    """The id of an open window covering the node, or None. An `assist`
+    window lets the playbooks it lists through: the playbook id here is
+    one this executor has already checked against its own allowlist."""
     try:
         with open(os.path.join(cfg["shared_dir"], "windows.json")) as f:
             windows = json.load(f)["windows"]
@@ -123,6 +136,8 @@ def in_window(cfg, node, now):
             continue
         scope = set(w.get("scope") or [])
         if "site" in scope or node in scope or anc & scope:
+            if w.get("mode") == "assist" and playbook in (w.get("playbooks") or []):
+                continue
             return w.get("id", "?")
     return None
 
@@ -226,12 +241,14 @@ def load_state(f):
         st = {}
     st.setdefault("incidents", {})
     st.setdefault("history", [])
+    st.setdefault("retried", {})
     return st
 
 
 def save_state(f, st, now):
     st["history"] = [h for h in st["history"] if now - h["ts"] < 7 * 86400]
     st["incidents"] = {k: v for k, v in st["incidents"].items() if now - v < 30 * 86400}
+    st["retried"] = {k: v for k, v in st["retried"].items() if now - v < 30 * 86400}
     f.seek(0)
     f.truncate()
     f.write(json.dumps(st, sort_keys=True))
@@ -246,46 +263,91 @@ class Refused(Exception):
         self.why, self.detail = why, detail
 
 
+REQUEST_KEYS = {"action_type", "target", "incident_id", "playbook"}
+
+
 def check_request(req):
-    if not isinstance(req, dict) or set(req) != {"action_type", "target", "incident_id"}:
-        raise Refused("not_allowed", "request must be exactly {action_type, target, incident_id}")
-    action, target, inc = req["action_type"], req["target"], req["incident_id"]
-    if not all(isinstance(v, str) for v in (action, target, inc)):
+    if not isinstance(req, dict) or set(req) != REQUEST_KEYS:
+        raise Refused("not_allowed", "request must be exactly {action_type, target, incident_id, playbook}")
+    action, target, inc, pb = req["action_type"], req["target"], req["incident_id"], req["playbook"]
+    if not all(isinstance(v, str) for v in (action, target, inc, pb)):
         raise Refused("not_allowed", "fields must be strings")
     if action not in ACTIONS:
         raise Refused("not_allowed", f"action {action!r} is not allowlisted")
     if not INCIDENT.match(inc):
         raise Refused("not_allowed", "bad incident id")
+    if not PLAYBOOK.match(pb):
+        raise Refused("not_allowed", "bad playbook id")
     if action == "restart_container" and (not NAME.match(target) or target in HARD_DENIED_TARGETS):
         raise Refused("not_allowed", f"target {target!r} is not allowed")
-    if action == "cancel_ci_job" and not JOB_ID.match(target):
+    if action in CI_ACTIONS and not JOB_ID.match(target):
         raise Refused("not_allowed", "target must be a job id")
-    return action, target, inc
+    return action, target, inc, pb
+
+
+def check_playbook(cfg, pb_id, action, target):
+    """The playbook must be in this executor's own list (executor.json,
+    rendered from the repo at deploy time), active, and allowed exactly this
+    action, and this target if it names one. The router's word is never
+    enough: a compromised router can name only what the repo allows."""
+    pb = (cfg.get("playbooks") or {}).get(pb_id)
+    if pb is None:
+        raise Refused("not_allowed", f"playbook {pb_id!r} is not in the executor's list")
+    if pb.get("mode") != "active":
+        raise Refused("not_allowed", f"playbook {pb_id} is {pb.get('mode')}, not active")
+    if pb.get("action") != action:
+        raise Refused("not_allowed", f"playbook {pb_id} does {pb.get('action')}, not {action}")
+    if pb.get("target") and pb["target"] != target:
+        raise Refused("not_allowed", f"playbook {pb_id} acts on {pb['target']} only")
+    return pb
+
+
+def container_created(name):
+    r = docker("inspect", "-f", "{{.Created}}", name)
+    if r.returncode != 0:
+        return None
+    v = re.sub(r"\.(\d{6})\d*", r".\1", r.stdout.strip())
+    try:
+        return ts(v)
+    except ValueError:
+        return None
 
 
 def handle(cfg, req, now):
-    action, target, inc = check_request(req)
+    action, target, inc, pb_id = check_request(req)
     if action == "restart_container" and target in cfg["restart_denylist"]:
         raise Refused("not_allowed", f"{target} is on the restart denylist")
+    pb = check_playbook(cfg, pb_id, action, target)
     mode = effective_mode(cfg)
     if mode != "active":
         raise Refused("kill_switch", f"mode is {mode}")
     node = node_for(cfg, action, target)
-    w = in_window(cfg, node, now)
+    w = in_window(cfg, node, now, pb_id)
     if w:
         raise Refused("maintenance", f"{node} is in maintenance window {w}")
     down = deps_down(cfg, node)
     if down:
         raise Refused("dependency", "down: " + ", ".join(down))
-    if action != "cancel_ci_job":
+    if action not in CI_ACTIONS:
         running = deploy_running(cfg)
         if running:
             raise Refused("deploy", "running: " + ", ".join(running))
 
+    reply = {}
     if action == "restart_container":
         r = docker("inspect", "-f", '{{index .Config.Labels "com.docker.compose.project"}}', target)
         if r.returncode != 0 or r.stdout.strip() != cfg["compose_project"]:
             raise Refused("not_allowed", f"{target} is not a {cfg['compose_project']} compose container")
+        within = pb.get("no_deploy_touching")
+        if within:
+            created = container_created(target)
+            if created is None:
+                raise Refused("recent_deploy", f"cannot read {target}'s creation time")
+            if now - created < within:
+                raise Refused("recent_deploy", f"{target} was (re)created {int((now - created) // 60)}m ago "
+                                               f"by a deploy: a revert, not a restart")
+    elif action == "retry_ci_job":
+        job = check_retry(cfg, target)
     else:
         g = cfg["gitlab"]
         try:
@@ -306,6 +368,15 @@ def handle(cfg, req, now):
         st = load_state(f)
         if inc in st["incidents"]:
             raise Refused("duplicate", f"incident {inc} was already acted on")
+        if action == "retry_ci_job":
+            key = f"{job.get('pipeline', {}).get('id')}:{job.get('name')}"
+            if key in st["retried"]:
+                raise Refused("duplicate", f"job {job.get('name')} of pipeline "
+                                           f"{job.get('pipeline', {}).get('id')} was already retried once")
+            if job.get("status") == "canceled" and not any(
+                    h["action"] == "cancel_ci_job" and h["target"] == target for h in st["history"]):
+                raise Refused("not_allowed", f"job {target} was cancelled, but not by this executor")
+            st["retried"][key] = now
         same = [h for h in st["history"] if h["action"] == action and h["target"] == target
                 and now - h["ts"] < lim["per_target_window"]]
         if len(same) >= lim["per_target_max"]:
@@ -322,9 +393,41 @@ def handle(cfg, req, now):
         r = docker("restart", "--time", "30", target, timeout=150)
         if r.returncode != 0:
             raise RuntimeError(f"docker restart failed: {r.stderr.strip()[:200]}")
-        return f"restarted {target}"
+        return dict(reply, detail=f"restarted {target}")
+    if action == "retry_ci_job":
+        new = gitlab(cfg, "POST", f"jobs/{int(target)}/retry")
+        return dict(reply, detail=f"retried job {target} as {new.get('id')}", new_job_id=new.get("id"))
     gitlab(cfg, "POST", f"jobs/{int(target)}/cancel")
-    return f"cancelled job {target}"
+    return dict(reply, detail=f"cancelled job {target}")
+
+
+def check_retry(cfg, target):
+    """retry_ci_job: a job on main that failed for a runner/system reason,
+    or a deploy job this executor cancelled as orphaned (checked against its
+    own history in handle()). Either way, only while no newer job of the
+    same name on main exists: a queued newer one supersedes it."""
+    g = cfg["gitlab"]
+    try:
+        job = gitlab(cfg, "GET", f"jobs/{int(target)}")
+    except (OSError, ValueError, urllib.error.URLError) as e:
+        raise Refused("unavailable", f"GitLab: {e}") from None
+    if job.get("ref") != g.get("branch", "main"):
+        raise Refused("not_allowed", f"job {target} is not on {g.get('branch', 'main')}")
+    status, reason = job.get("status"), job.get("failure_reason")
+    if status == "failed":
+        if reason not in SYSTEM_FAILURES:
+            raise Refused("not_allowed", f"job {target} failed with {reason!r}, not a runner/system failure")
+    elif not (status == "canceled" and job.get("name") in g["orphan_jobs"]):
+        raise Refused("not_allowed", f"job {target} is {status}, not a failed or cancelled-orphan job")
+    try:
+        newer = gitlab(cfg, "GET", "jobs?scope[]=created&scope[]=pending&scope[]=running"
+                                   "&scope[]=waiting_for_resource&scope[]=success&per_page=100")
+    except (OSError, ValueError, urllib.error.URLError) as e:
+        raise Refused("unavailable", f"GitLab: {e}") from None
+    for j in newer:
+        if j.get("name") == job.get("name") and j.get("ref") == job.get("ref") and j.get("id", 0) > int(target):
+            raise Refused("superseded", f"job {j.get('id')} ({j.get('status')}) is newer")
+    return job
 
 
 def peer_uid(sock):
@@ -354,6 +457,9 @@ def load_config(path=CONFIG):
     g = cfg["gitlab"]
     g["orphan_jobs"] = {k: seconds(v) for k, v in g["orphan_jobs"].items()}
     g["grace"] = seconds(g["grace"])
+    cfg["playbooks"] = {pid: dict(pb, no_deploy_touching=seconds(pb["no_deploy_touching"])
+                                  if pb.get("no_deploy_touching") else None)
+                        for pid, pb in (cfg.get("playbooks") or {}).items()}
     with open(cfg["dependencies_file"]) as f:
         nodes = (yaml.safe_load(f) or {}).get("nodes") or {}
     variables = cfg.get("vars") or {}
@@ -391,8 +497,7 @@ def main():
         req = json.loads(buf.split(b"\n", 1)[0].decode() or "null")
         rec["request"] = req
         sock.settimeout(None)
-        detail = handle(cfg, req, now)
-        reply = {"ok": True, "detail": detail}
+        reply = dict(handle(cfg, req, now), ok=True)
     except Refused as e:
         reply = {"ok": False, "refused": e.why, "detail": e.detail}
     except (ValueError, UnicodeDecodeError) as e:

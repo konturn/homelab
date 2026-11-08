@@ -99,18 +99,36 @@ class FakeExecutor:
 
     def __init__(self):
         self.calls = []
+        self.playbooks = []     # the playbook id sent with each call
         self.reply = {"ok": True, "detail": "done"}
         self.check = None
 
-    def execute(self, action, target, incident_id):
+    def execute(self, action, target, incident_id, playbook):
         if self.check:
             self.check(action, target, incident_id)
         self.calls.append((action, target, incident_id))
+        self.playbooks.append(playbook)
         return dict(self.reply)
 
 
+class FakeOpenClaw:
+    """OpenClaw's /hooks/event-router: `result` is what the next delivery
+    returns ("ok", "down" or "rejected")."""
+
+    def __init__(self):
+        self.result = "ok"
+        self.delivered = []
+        self.attempts = 0
+
+    def deliver(self, payload):
+        self.attempts += 1
+        if self.result == "ok":
+            self.delivered.append(payload)
+        return self.result, "fake"
+
+
 class World:
-    def __init__(self, cfg=None, playbooks=None):
+    def __init__(self, cfg=None, playbooks=None, suppressions=()):
         self.tmp = tempfile.TemporaryDirectory()
         self.db = os.path.join(self.tmp.name, "router.db")
         self.override = os.path.join(self.tmp.name, "mode")
@@ -118,6 +136,8 @@ class World:
         self.clock = FakeClock()
         self.gitlab = FakeGitLab()
         self.executor = FakeExecutor()
+        self.openclaw = FakeOpenClaw()
+        self.suppressions = list(suppressions)
         self.cfg = parse_config(cfg or CONFIG)
         self.pbs = [Playbook(p, "test") for p in (playbooks or PLAYBOOKS)]
         self.graph = Graph.from_dict(GRAPH)
@@ -131,7 +151,7 @@ class World:
         self.engine = Engine(self.cfg, self.pbs, self.graph, Store(self.db, durable=False), self.clock,
                              executor=self.executor, gitlab=self.gitlab,
                              host_override_path=self.override, shared=SharedState(self.shared_dir),
-                             out=self.out)
+                             out=self.out, openclaw=self.openclaw, suppressions=self.suppressions)
         return self.engine
 
     def set_override(self, mode):
@@ -141,6 +161,11 @@ class World:
         else:
             with open(self.override, "w") as f:
                 f.write(mode)
+
+    def outbox(self):
+        import json
+        d = os.path.join(self.shared_dir, "outbox")
+        return [json.load(open(os.path.join(d, n))) for n in sorted(os.listdir(d))]
 
     def decisions(self):
         import json

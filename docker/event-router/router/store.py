@@ -11,7 +11,10 @@ import threading
 import uuid
 
 ACTIVE = ("open", "symptom", "acting", "verifying", "maint")
-TERMINAL = ("resolved", "escalated", "paged", "shadowed")
+TERMINAL = ("resolved", "escalated", "paged", "shadowed", "suppressed", "digest")
+# Terminal states whose alert may still be firing: the root cause is still
+# open for correlation (doc 12.6 e). Everything terminal except "resolved".
+HANDED_OFF = ("escalated", "paged", "shadowed", "suppressed", "digest")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS inbox (
@@ -22,7 +25,8 @@ CREATE TABLE IF NOT EXISTS incidents (
   target TEXT, alert_state TEXT NOT NULL, page_class TEXT,
   opened_at REAL NOT NULL, updated_at REAL NOT NULL, closed_at REAL,
   deliveries INTEGER NOT NULL DEFAULT 1, exec_count INTEGER NOT NULL DEFAULT 0,
-  exec_started_at REAL, verify_deadline REAL, root TEXT, waiting TEXT, note TEXT);
+  exec_started_at REAL, verify_deadline REAL, root TEXT, waiting TEXT, note TEXT,
+  summary TEXT, verify_ref TEXT);
 CREATE INDEX IF NOT EXISTS incidents_fp ON incidents(fp, opened_at);
 CREATE INDEX IF NOT EXISTS incidents_status ON incidents(status);
 CREATE TABLE IF NOT EXISTS locks (
@@ -46,6 +50,16 @@ CREATE TABLE IF NOT EXISTS decisions (
   id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL, incident TEXT,
   decision TEXT NOT NULL, playbook TEXT, record TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS decisions_ts ON decisions(ts);
+CREATE TABLE IF NOT EXISTS forwards (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, incident TEXT NOT NULL, kind TEXT NOT NULL,
+  urgent INTEGER NOT NULL DEFAULT 0, created REAL NOT NULL, due_at REAL NOT NULL,
+  next_try REAL NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT,
+  state TEXT NOT NULL DEFAULT 'pending', delivered_at REAL, jit_at REAL, payload TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS forwards_state ON forwards(state, due_at);
+CREATE TABLE IF NOT EXISTS outcomes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL, incident TEXT, record TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS seen (
+  fp TEXT NOT NULL, status TEXT NOT NULL, ts REAL NOT NULL, PRIMARY KEY (fp, status));
 """
 
 _INC_JSON = ("labels",)
@@ -57,6 +71,18 @@ class Store:
         self.durable = durable     # tests turn fsync off
         self._local = threading.local()
         self.conn.executescript(SCHEMA)
+        self._migrate()
+
+    # Columns added after a database was created (phase 3). SQLite has no
+    # ADD COLUMN IF NOT EXISTS.
+    MIGRATIONS = {"incidents": {"summary": "TEXT", "verify_ref": "TEXT"}}
+
+    def _migrate(self):
+        for table, cols in self.MIGRATIONS.items():
+            have = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
+            for col, typ in cols.items():
+                if col not in have:
+                    self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
 
     @property
     def conn(self):
@@ -81,10 +107,24 @@ class Store:
 
     # ---- inbox ---------------------------------------------------------
     def inbox_put(self, now, event_dicts):
+        """Accept events (written before the HTTP reply), and remember the
+        fingerprints for /ack: OpenClaw's Grafana route asks whether the
+        router has an alert before it stays out of the way (doc 7.4, L4)."""
         with self.tx() as c:
             for e in event_dicts:
                 c.execute("INSERT INTO inbox (received_at, event) VALUES (?, ?)",
                           (now, json.dumps(e, sort_keys=True)))
+                c.execute("INSERT INTO seen (fp, status, ts) VALUES (?, ?, ?) "
+                          "ON CONFLICT (fp, status) DO UPDATE SET ts = excluded.ts",
+                          (e["fp"], e["status"], now))
+
+    def seen_since(self, fp, status, since):
+        r = self.conn.execute("SELECT ts FROM seen WHERE fp = ? AND status = ? AND ts >= ?",
+                              (fp, status, since)).fetchone()
+        return r is not None
+
+    def prune_seen(self, before):
+        self.conn.execute("DELETE FROM seen WHERE ts < ?", (before,))
 
     def inbox_take(self, limit=100):
         rows = self.conn.execute(
@@ -131,9 +171,10 @@ class Store:
     def handed_off_firing(self, since):
         """Incidents handed to OpenClaw or Noah (or shadowed) whose alert
         still fires: their root cause is still open for correlation."""
+        marks = ",".join("?" for _ in HANDED_OFF)
         rows = self.conn.execute(
-            "SELECT * FROM incidents WHERE status IN ('escalated', 'paged', 'shadowed') "
-            "AND alert_state = 'firing' AND opened_at >= ? ORDER BY opened_at", (since,)).fetchall()
+            f"SELECT * FROM incidents WHERE status IN ({marks}) "
+            "AND alert_state = 'firing' AND opened_at >= ? ORDER BY opened_at", (*HANDED_OFF, since)).fetchall()
         return [self._inc(r) for r in rows]
 
     def update(self, inc_id, now, **fields):
@@ -251,6 +292,64 @@ class Store:
     def decisions_since(self, since):
         return [json.loads(r["record"]) for r in self.conn.execute(
             "SELECT record FROM decisions WHERE ts >= ? ORDER BY id", (since,))]
+
+
+    # ---- forwards to OpenClaw (phase 3) --------------------------------------
+    def add_forward(self, inc_id, kind, urgent, now, due_at, payload):
+        cur = self.conn.execute(
+            "INSERT INTO forwards (incident, kind, urgent, created, due_at, next_try, payload) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (inc_id, kind, int(bool(urgent)), now, due_at, due_at, json.dumps(payload, sort_keys=True)))
+        return cur.lastrowid
+
+    @staticmethod
+    def _fwd(row):
+        d = dict(row)
+        d["payload"] = json.loads(d["payload"])
+        d["urgent"] = bool(d["urgent"])
+        return d
+
+    def pending_forwards(self):
+        return [self._fwd(r) for r in self.conn.execute(
+            "SELECT * FROM forwards WHERE state = 'pending' ORDER BY id")]
+
+    def forward_for(self, inc_id):
+        r = self.conn.execute("SELECT * FROM forwards WHERE incident = ? ORDER BY id DESC LIMIT 1",
+                              (inc_id,)).fetchone()
+        return self._fwd(r) if r else None
+
+    def update_forward(self, fid, **fields):
+        sets = ", ".join(f"{k} = ?" for k in fields)
+        self.conn.execute(f"UPDATE forwards SET {sets} WHERE id = ?", (*fields.values(), fid))
+
+    def forwards_since(self, since):
+        return [self._fwd(r) for r in self.conn.execute(
+            "SELECT * FROM forwards WHERE created >= ? ORDER BY id", (since,))]
+
+    # ---- outcome records (8.2) ---------------------------------------------
+    def add_outcome(self, now, rec):
+        self.conn.execute("INSERT INTO outcomes (ts, incident, record) VALUES (?, ?, ?)",
+                          (now, rec.get("incident"), json.dumps(rec, sort_keys=True)))
+
+    def outcomes_since(self, since):
+        return [dict(json.loads(r["record"]), ts=r["ts"]) for r in self.conn.execute(
+            "SELECT ts, record FROM outcomes WHERE ts >= ? ORDER BY id", (since,))]
+
+    def outcome_for(self, inc_id):
+        r = self.conn.execute("SELECT ts, record FROM outcomes WHERE incident = ? ORDER BY id DESC LIMIT 1",
+                              (inc_id,)).fetchone()
+        return dict(json.loads(r["record"]), ts=r["ts"]) if r else None
+
+    def decisions_for(self, inc_id, limit=50):
+        return [json.loads(r["record"]) for r in self.conn.execute(
+            "SELECT record FROM decisions WHERE incident = ? ORDER BY id DESC LIMIT ?", (inc_id, limit))][::-1]
+
+    def active_by_label(self, kind, label, value):
+        """Incidents of a kind with label == value whose alert still fires."""
+        rows = self.conn.execute(
+            "SELECT * FROM incidents WHERE kind = ? AND alert_state = 'firing' ORDER BY opened_at",
+            (kind,)).fetchall()
+        return [i for i in (self._inc(r) for r in rows) if i["labels"].get(label) == value]
 
 
 class _Tx:
