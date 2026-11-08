@@ -153,11 +153,12 @@ func ttlFrom(seconds int) time.Duration {
 	if seconds <= 0 {
 		return defaultTTL
 	}
-	d := time.Duration(seconds) * time.Second
-	if d > maxTTL {
+	// Compare in seconds: time.Duration(seconds)*time.Second overflows for
+	// seconds > ~9.2e9 and would yield a negative (already expired) TTL.
+	if seconds > int(maxTTL/time.Second) {
 		return maxTTL
 	}
-	return d
+	return time.Duration(seconds) * time.Second
 }
 
 func keyboard(id string, buttons []Button) [][]telegram.InlineButton {

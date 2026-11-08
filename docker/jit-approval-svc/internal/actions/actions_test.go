@@ -319,3 +319,19 @@ func TestListenReplacesStaleSocketWithPrivateMode(t *testing.T) {
 		t.Fatalf("socket mode: %v %v", st.Mode(), err)
 	}
 }
+
+// Regression (found by FuzzPromptAPI): a huge ttl_seconds overflowed
+// time.Duration and created a prompt that had already expired.
+func TestTTLFromCapsWithoutOverflow(t *testing.T) {
+	for _, sec := range []int{int(maxTTL/time.Second) + 1, 10_000_000_000, 1 << 62, int(^uint(0) >> 1)} {
+		if got := ttlFrom(sec); got != maxTTL {
+			t.Errorf("ttlFrom(%d) = %v, want %v", sec, got, maxTTL)
+		}
+	}
+	if got := ttlFrom(60); got != time.Minute {
+		t.Errorf("ttlFrom(60) = %v", got)
+	}
+	if got := ttlFrom(0); got != defaultTTL {
+		t.Errorf("ttlFrom(0) = %v", got)
+	}
+}
