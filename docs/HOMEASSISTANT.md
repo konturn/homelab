@@ -7,7 +7,9 @@ things are templated from this repo: `configuration.yaml`
 scripts, scenes and blueprints live in a separate private repo (below).
 Everything else under `/persistent_data/application/homeassistant/`
 (`.storage`, `custom_components/`, `www/`) lives only on the live volume and
-is covered by the normal backups, not by git.
+is covered by the normal backups, not by git. The exception is the custom
+integrations pinned from private forks, which the deploy syncs into
+`custom_components/` (see "Custom integrations").
 
 ## Automations, scripts and scenes (separate private repo)
 
@@ -184,6 +186,18 @@ HACS in 2026.11):
 | frigate | `blakeblackshear/frigate-hass-integration` | **Not from the Marketplace**: copied by hand into `custom_components/frigate/` (v5.15.6), so the Marketplace does not track or upgrade it. See docs/frigate.md |
 | toyota_connected | private fork `root/ha-toyota-connected` (GitLab) | **Not from the Marketplace**: installed by the deploy, pinned to a commit. See below |
 
+So there are three ways a custom integration gets into `custom_components/`:
+
+- **Marketplace** (default): installed and upgraded in the UI; the
+  Marketplace tracks the version and shows update notices.
+- **Pinned from a private fork** (toyota_connected): listed in
+  `homeassistant_pinned_integrations` and synced by every deploy (below).
+  Use this for an integration that needs local patches or should only change
+  through a reviewed MR.
+- **By hand** (frigate): a release's directory copied onto the volume. Nothing
+  tracks or upgrades it, and nothing restores it except the volume backups.
+  Prefer one of the two above for anything new.
+
 ### Pinned integrations from private forks
 
 `homeassistant_pinned_integrations` (`configure-homelab-services` defaults)
@@ -197,8 +211,10 @@ when files changed. Bumps are manual: review the fork, tag it, and change
 volume: the next deploy reverts them.
 
 After a Home Assistant upgrade, check *Settings -> System -> Repairs* and the
-log for custom integrations that fail to import. Upgrade them in the
-Marketplace (respecting each release's minimum HA version in `hacs.json`) and restart.
+log for custom integrations that fail to import. Upgrade Marketplace ones in
+the Marketplace (respecting each release's minimum HA version in `hacs.json`),
+pinned ones by bumping `sha`, and Frigate by hand (docs/frigate.md), then
+restart.
 
 ### keymaster
 

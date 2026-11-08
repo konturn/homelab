@@ -182,7 +182,9 @@ was installed by hand: the release's `custom_components/frigate/` was copied
 into Home Assistant's `custom_components/`. The Marketplace does not track it,
 so it gets no update notices there. Upgrade it by replacing that directory with
 a newer release (check the release's minimum Home Assistant and Frigate
-versions) and restarting Home Assistant. It is configured
+versions) and restarting Home Assistant. To have the repo manage it instead,
+use the pinned-fork pattern (docs/HOMEASSISTANT.md, "Pinned integrations from
+private forks"). It is configured
 against `http://frigate:8971` with the `homeassistant` user. It creates
 `binary_sensor.<camera>_person_occupancy`, used by the floodlight and porch
 light automations in the homeassistant repo.
