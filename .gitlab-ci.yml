@@ -13,7 +13,7 @@
 #   VALIDATE (parallel)
 #   ┌────────────────────────┬──────────────┬──────────────┬──────────────┬──────────────────┐
 #   router:val [id_tokens]  zwave:val  sat-2:val  vault:validate  jit-approval-svc:test
-#   anomaly-detector:test
+#   anomaly-detector:test  revert-guard (MR only, ci/revert-guard/README.md)
 #
 #   BUILD (parallel, path-triggered)
 #   ┌──────────────┬──────────────┬──────────────┬──────────────────────┐
@@ -412,6 +412,39 @@ anomaly-detector:test:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/anomaly-detector/**/*
+
+# Stale-tree revert guard (ci/revert-guard/README.md): fails an MR whose diff
+# undoes what other MRs merged in the last 7 days, in files where it changes
+# nothing else (e.g. b0ac2497 in !1048). Deliberate reverts: add the
+# `revert-intended` label and run a new pipeline. Needs full history to blame.
+revert-guard:
+  extends: .interruptible
+  stage: validate
+  image: python:3.13-alpine3.22@sha256:e81548ac35b07a3bd4805f275107592ef458b1e893c0e04d45aedaa19416cca5
+  needs: []
+  variables:
+    GIT_DEPTH: "0"
+  script:
+    - apk add --no-cache git
+    - git config --global --add safe.directory "$CI_PROJECT_DIR"
+    - if [ -f "$(git rev-parse --git-dir)/shallow" ]; then git fetch -q --unshallow origin; fi
+    - git fetch -q origin "+refs/heads/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}:refs/remotes/origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"
+    - python3 ci/revert-guard/revert_guard.py --target "origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}" --head "$CI_COMMIT_SHA"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+revert-guard:test:
+  extends: .interruptible
+  stage: validate
+  image: python:3.13-alpine3.22@sha256:e81548ac35b07a3bd4805f275107592ef458b1e893c0e04d45aedaa19416cca5
+  needs: []
+  script:
+    - apk add --no-cache git
+    - python3 -m unittest discover -s ci/revert-guard -p "test_*.py" -v
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - ci/revert-guard/**/*
 
 # Offline: runs fetch-vault-secrets against a fake Vault and checks that every
 # failure (timeout, 403, missing path/field, empty field, bad auth) stops the

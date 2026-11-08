@@ -55,6 +55,7 @@ shared:
     - networking/denon/**
     - networking/ups/**
     - ci/ipmi/**
+    - ci/revert-guard/**
     # Fact files and their tools (inventory/README.md). The files generated
     # from them (base/udev/..., base/disk/crypttab) are committed and carry
     # the deploy themselves.
