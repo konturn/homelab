@@ -27,7 +27,7 @@ homeassistant_pinned_integrations_gitlab_url: "https://gitlab.lab.nkontur.com"
 homeassistant_pinned_integrations:
   - domain: toyota_connected
     project: root/ha-toyota-connected
-    sha: eaa1eb8cada30a9ffc43e32f89f7cc1802b2798d  # v3.0.4-homelab.1
+    sha: 438cb0449826dddc0b9b7ae210c4d56149fb6750  # v3.0.4-homelab.2
     path: custom_components/toyota_connected
     vault_user_var: vault_ha_toyota_deploy_user
     vault_token_var: vault_ha_toyota_deploy_token
