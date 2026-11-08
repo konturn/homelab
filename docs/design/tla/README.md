@@ -9,8 +9,8 @@ connect and how to run the checker.
 ## Run it
 
 ```bash
-docs/design/tla/run-tlc.sh             # CI profile: seed instances + every mutation (~2-4 min)
-docs/design/tla/run-tlc.sh full        # bigger instances + every mutation (~10 min, by hand)
+docs/design/tla/run-tlc.sh             # CI profile: seed instances + every mutation (~10 min on 2 threads)
+docs/design/tla/run-tlc.sh full        # bigger instances + every mutation (by hand; did not finish in 15 min on the router since phase 3, see 12.6)
 docs/design/tla/run-tlc.sh NoLock      # one cfg
 ```
 
@@ -28,21 +28,32 @@ time; the script exits non-zero if any check fails.
 
 | cfg | Profile | Instance | Checks | Must |
 |---|---|---|---|---|
-| `ci-safety.cfg` | ci | 4 alerts (`mqtt`, `zig` which needs it, `app` and `appdup` sharing one container), one delivery each | S1–S11 | pass |
-| `ci-pages.cfg` | ci | `mqtt`, `zig` and page-class `sec` | S1–S11 | pass |
-| `ci-liveness.cfg` | ci | 2 alerts (`mqtt` without a playbook, `app` with one) | S1–S11 and L1, L3, L5, L7, L8 | pass |
-| `safety.cfg` | full | 5 alerts (`ci-safety` plus `sec`), `app` delivered up to twice | S1–S11 | pass |
-| `liveness.cfg` | full | 3 alerts (`mqtt`, `zig`, `app`) | S1–S11 and L1, L3, L5, L7, L8 | pass |
+| `ci-safety.cfg` | ci | 4 alerts (`mqtt`, `zig` which needs it, `app` and `appdup` sharing one container), one delivery each | S1–S12 | pass |
+| `ci-pages.cfg` | ci | `mqtt`, `zig` and page-class `sec`, a suppression matching `zig` and `sec` | S1–S12 | pass |
+| `ci-liveness.cfg` | ci | 2 alerts (`mqtt` without a playbook, `app` with one); OpenClaw may stay down for good | S1–S12 and L1, L3, L5, L7, L8 | pass |
+| `ci-fallback.cfg` | ci | the same 2 alerts with Grafana's fallback route modelled; OpenClaw outages end | S1–S12 and L1, L3, L4, L5 | pass |
+| `ci-suppress.cfg` | ci | `app` under a suppression | S1–S12 and L1, L3, L5, L6, L7, L8 | pass |
+| `safety.cfg` | full | 5 alerts (`ci-safety` plus `sec`), `app` delivered up to twice, suppression on `app` and `sec`, fallback on both | S1–S12 | pass |
+| `liveness.cfg` | full | 3 alerts (`mqtt`, `zig`, `app`) | S1–S12 and L1, L3, L5, L7, L8 | pass |
 | `mutations/*.cfg` | both | a seed instance; re-delivery bugs use a one-alert instance | the one property named on the `\* expect:` line | fail |
 
-Both instances share: 1 run per playbook per rate-limit window, and an
+All instances share: 1 run per playbook per rate-limit window, and an
 environment budget of one each of: kill-switch flip, OpenClaw outage, router
-restart, deploy, maintenance window, rate-window reset and spontaneous alert
-resolution. Router and executor steps are weakly fair; deploys end, the router
-comes back after a restart and windows expire.
+restart, deploy, maintenance window (quiet or assist), rate-window reset,
+suppression and spontaneous alert resolution. Router, executor, forward-queue,
+JIT-bot and Grafana steps are weakly fair; deploys end, the router comes back
+after a restart, windows and suppressions expire. Three constants select the
+phase-3 parts per instance, to keep the state space small:
+
+- `OcRecovers`: OpenClaw outages end (needed for L4). With `FALSE` OpenClaw
+  may stay down for good, which is what forces the JIT-bot page and the
+  digest expiry (L1).
+- `SuppFps`: the alerts a suppression matches (`{}`: no suppressions).
+- `FallbackFps`: the alerts whose Grafana fallback route to OpenClaw (the
+  OpenClaw transform asking the router's `/ack`) is modelled.
 
 Liveness is checked on smaller instances because TLC's liveness checking
-grows with states times fairness conditions (35 here). Safety on the larger
+grows with states times fairness conditions (11 per alert plus 5 here). Safety on the larger
 ones covers lock contention and re-delivery. Numbers from the last run are
 in section 12.6 of the doc.
 
@@ -56,13 +67,16 @@ events: a quiescent end state is expected, not a bug.
 | `Deliver` (dedupe by fingerprint, page class, maintenance, correlation on arrival) | 4.3, 4.7, 13.2 |
 | `Correlate`, `ReEvaluate` (continuous correlation; handed-off root causes count while firing) | 4.7, 12.6 (b, e) |
 | `Forward`, `Trip`, `StartPb` | 4.4, 7.2, 7.3 |
-| `Execute` (executor re-checks kill switch, deploy, window, dependencies) | 4.6, 12.6 (a) |
+| `Escalate`, `Queue`, `DeliverFwd`, `JitPage`, `Expire` (forward queue to OpenClaw, JIT-bot page while it is down, digest after 6h) | 7.4, decisions 3 and B |
+| `GrafanaOC` (Grafana's OpenClaw route, gated on the router's per-delivery ack) | 7.4, L4 |
+| `SuppAdd`, `SuppExpire` | 8.3, L6 |
+| `Execute` (executor re-checks kill switch, deploy, window with the playbook's identity, dependencies) | 4.6, 12.6 (a), 13.1 |
 | `VerifyOk`, `VerifyFail`, `Escalate` | 4.4, 7.4 |
 | `RouterUp` (state persisted) | 4.6 |
 | `MaintClose` (recovery check) | 13.3 |
 
-Safety properties over actions (S1–S3, S5–S7, S10) are evaluated when the
-executor runs an action and recorded in `viol`; in a correct design `viol`
+Safety properties over actions (S1–S3, S5–S7, S10, S12) are evaluated when
+the action happens and recorded in `viol`; in a correct design `viol`
 stays empty, so the check costs no extra states.
 
 ## Mutations
@@ -88,6 +102,14 @@ before trusting a passing base run.
 | MaintAtStartOnly | window checked only at playbook start | S10 |
 | MaintSilencesPage | a window silences a page-class alert | S11 |
 | DropEscalation | escalation dropped while OpenClaw is down | L1 |
+| DropQueue | queued residue discarded while OpenClaw is down, no JIT page | L1 |
+| NoJitPage | pages wait for OpenClaw instead of going out through the JIT bot | L1 |
+| NoFallback | Grafana's OpenClaw route skipped although the router never saw the alert | L4 |
+| AckByFingerprint | the router acknowledges a fingerprint, not this delivery | L4 |
+| ForwardHandled | a playbook-verified incident is also forwarded to OpenClaw | S12 |
+| ExecutorIgnoresPlaybook | the executor lets any playbook act in an assist window | S10 |
+| NoSuppressionExpiry | suppressions never expire | L6 |
+| SuppressPage | a suppression silences a page-class alert | S9 |
 | NoLockRelease | lock never released | L5 |
 | NoRecovery | no recovery check when a window closes | L8 (and L1) |
 | NoExpiry | windows never expire | L7 |
