@@ -28,9 +28,10 @@ disk_controllers:
     by_path: "pci-0000:00:1f.2-{slot}"
 
 # ---------------------------------------------------------------------------
-# Disks. role: data (mpool member), boot (root fs), persistent_data (Docker
-# data-root and every container's config), retired (in a slot, out of the
-# pool), empty (slot with nothing detected).
+# Disks. role: data (mpool member), spare (hot spare: in the pool's
+# `spares`, AVAIL or INUSE; zpool.vdev: spares), boot (root fs),
+# persistent_data (Docker data-root and every container's config), retired
+# (in a slot, out of the pool), empty (slot with nothing detected).
 # luks.mapper/uuid render base/disk/crypttab; key file and options default
 # to /etc/password_file.txt and `luks`.
 # known_issue: shown next to any drift the disk causes. It does not silence
@@ -77,14 +78,15 @@ disks:
   - {slot: hba/phy12, model: WD240KFGX, serial_suffix: V9XN, role: data,
      luks: {mapper: dev1, uuid: b5912d16-d82e-4c5e-a8c1-597a6b8ff02d}, zpool: {pool: mpool, vdev: raidz2-0}}
   - slot: hba/phy13
-    model: WD201KFGX
-    serial_suffix: SGBR
-    role: data
-    luks: {mapper: dev12, uuid: c03b38b6-959e-49c8-a712-0cd0ccdfff8f}
-    zpool: {pool: mpool, vdev: raidz2-1}
-    known_issue: >-
-      FAULTED in mpool (55 read errors, SMART clean): suspect cable or slot,
-      not the disk. Replacement pending; no free bay.
+    model: WD241KFGX
+    serial_suffix: R9WY
+    role: spare
+    luks: {mapper: dev25, uuid: ac4c5e3c-1c83-48ea-823c-0d1cbf45276d}
+    zpool: {pool: mpool, vdev: spares}
+    note: >-
+      New 24 TB disk, hot spare since 2026-11-08. This slot is where dev12
+      logged 55 read errors with clean SMART: suspect slot or cable until
+      dev12 stays clean in phy19 through a resilver and scrub.
   - {slot: hba/phy14, model: WD240KFGX, serial_suffix: PVPB, role: data,
      luks: {mapper: dev3, uuid: 9f2b9dd5-bae9-46fa-8bc9-f5a7a68dce8c}, zpool: {pool: mpool, vdev: raidz2-0}}
   - {slot: hba/phy15, model: WD240KFGX, serial_suffix: BTBB, role: data,
@@ -96,13 +98,18 @@ disks:
   - {slot: hba/phy18, model: WD120EMFZ, serial_suffix: ALLU, role: data,
      luks: {mapper: dev13, uuid: f357299b-67ae-4ef0-a9a9-f2751c9f6689}, zpool: {pool: mpool, vdev: raidz2-2}}
   - slot: hba/phy19
-    model: WD240KFGX
-    serial_suffix: X6RK
-    role: retired
-    luks: {mapper: dev22, crypttab: false}
+    model: WD201KFGX
+    serial_suffix: SGBR
+    role: data
+    luks: {mapper: dev12, uuid: c03b38b6-959e-49c8-a712-0cd0ccdfff8f}
+    zpool: {pool: mpool, vdev: raidz2-1}
+    known_issue: >-
+      Moved here 2026-11-08 from phy13 after 55 read errors there with clean
+      SMART; resilvering. If it stays clean through a scrub, phy13's slot or
+      cable was the cause (then record that on phy13).
     note: >-
-      Ex-dev22, replaced in mpool by dev17 (2026-10-18); pending sectors, RMA
-      candidate. Not in crypttab; still in its bay.
+      This slot held the retired dev22 (WD240KFGX ...X6RK), pulled for RMA
+      2026-11-08.
   - {slot: hba/phy20, model: WD201KFGX, serial_suffix: S6SN, role: data,
      luks: {mapper: dev11, uuid: 87da6c73-80de-4834-b316-0e94bb8203c4}, zpool: {pool: mpool, vdev: raidz2-1}}
   - {slot: hba/phy21, model: WD120EMFZ, serial_suffix: 1J2L, role: data,

@@ -29,6 +29,8 @@ config:
 \t      dev12   FAULTED     55     0     0  too many errors
 \t      dev25   ONLINE       0     0     0
 \t    dev11   ONLINE       0     0     0
+\tspares
+\t  dev25     AVAIL
 
 errors: No known data errors
 """
@@ -107,10 +109,16 @@ class ParseTest(unittest.TestCase):
     def test_zpool_status(self):
         p = collect.parse_zpool_status(ZPOOL_STATUS)["mpool"]
         self.assertEqual(p["state"], "DEGRADED")
-        self.assertEqual(p["vdevs"], {"raidz2-0": "ONLINE", "raidz2-1": "DEGRADED"})
+        self.assertEqual(p["vdevs"], {"raidz2-0": "ONLINE", "raidz2-1": "DEGRADED", "spares": ""})
         self.assertEqual(p["leaves"]["dev12"]["vdev"], "raidz2-1")
         self.assertEqual(p["leaves"]["dev12"]["state"], "FAULTED")
         self.assertEqual(p["leaves"]["dev11"]["vdev"], "raidz2-1")
+        self.assertEqual(p["state"], "DEGRADED")  # the spares line does not reset it
+        self.assertEqual(p["leaves"]["dev25"], {"vdev": "spares", "state": "AVAIL", "errors": ""})
+
+    def test_crypttab_has_spare(self):
+        names = [l.split()[0] for l in render.targets()["base/disk/crypttab"].splitlines() if not l.startswith("#")]
+        self.assertEqual(names[-1], "dev25")
 
     def test_model_match(self):
         self.assertTrue(drift.model_matches("WD240KFGX", "WDC WD240KFGX-68"))
@@ -131,9 +139,8 @@ class DriftTest(unittest.TestCase):
     def test_snapshot_reports_known_drift(self):
         rep, items = self.texts(self.live)
         joined = "\n".join(items)
-        self.assertIn("hba/phy13 (dev12", joined)
-        self.assertIn("FAULTED", joined)
-        self.assertIn("pool mpool is DEGRADED", joined)
+        # 2026-11-08: dev12 moved to phy19 and resilvered, dev25 a spare: no disk drift
+        self.assertFalse([t for lvl, t in rep.sections["disks"] if lvl == "DRIFT"], rep.sections["disks"])
         self.assertIn("`Device` on port 2-1.3.2", joined)
         self.assertIn("`Device_1` on port 2-1.3.3", joined)
         self.assertIn("Office: no card named Office", joined)
@@ -151,7 +158,7 @@ class DriftTest(unittest.TestCase):
         pool["state"] = "ONLINE"
         pool["vdevs"] = {v: "ONLINE" for v in pool["vdevs"]}
         for leaf in pool["leaves"].values():
-            leaf["state"] = "ONLINE"
+            leaf["state"] = "AVAIL" if leaf["vdev"] == "spares" else "ONLINE"
         ctrls = self.hw["usb_controllers"]
         cards = [c for c in live["sound_cards"] if not c.get("usb_port")]
         for i, z in enumerate(self.hw["audio_zones"]):
@@ -171,6 +178,15 @@ class DriftTest(unittest.TestCase):
         rep, items = self.texts(self.healthy())
         self.assertEqual(items, [])
         self.assertEqual(rep.drift_count, 0)
+
+    def test_spare_faulted_or_misplaced(self):
+        live = self.healthy()
+        live["zpools"]["mpool"]["leaves"]["dev25"]["state"] = "FAULTED"
+        _, items = self.texts(live)
+        self.assertTrue(any("dev25, spare): FAULTED" in t for t in items), items)
+        live["zpools"]["mpool"]["leaves"]["dev25"] = {"vdev": "raidz2-1", "state": "ONLINE", "errors": ""}
+        _, items = self.texts(live)
+        self.assertTrue(any("declared a spare, is in raidz2-1" in t for t in items), items)
 
     def test_disk_swapped(self):
         live = self.healthy()

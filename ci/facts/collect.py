@@ -21,6 +21,7 @@ import subprocess
 import sys
 
 BY_PATH = "/dev/disk/by-path"
+SECTIONS = ("logs", "cache", "spares", "special", "dedup")
 VDEV_RE = re.compile(r"^(raidz\d?|mirror|draid\d?|replacing|spare)(-\d+)?$")
 
 
@@ -93,16 +94,23 @@ def parse_zpool_status(out):
         depth = (len(body) - len(body.lstrip(" "))) // 2
         f = body.split()
         name, state, errs = f[0], (f[1] if len(f) > 1 else ""), " ".join(f[2:])
-        if depth == 0:
+        if depth == 0 and name in SECTIONS:
+            # spares / logs / cache: a section at the pool's level; its
+            # members (depth 1) are leaves of that section
+            vdev = name
+            pool["vdevs"][name] = state
+        elif depth == 0:
             pool["state"] = state
             vdev = None
-        elif VDEV_RE.match(name) or name in ("logs", "cache", "spares", "special", "dedup"):
+        elif VDEV_RE.match(name) or name in SECTIONS:
             if depth == 1:
                 vdev = name
                 pool["vdevs"][name] = state
             # nested replacing-N / spare-N: keep the top-level vdev
         else:
-            pool["leaves"][name] = {"vdev": vdev if depth > 1 else name, "state": state, "errors": errs}
+            in_section = vdev in SECTIONS
+            pool["leaves"][name] = {"vdev": vdev if depth > 1 or in_section else name, "state": state,
+                                    "errors": errs}
     return pools
 
 
