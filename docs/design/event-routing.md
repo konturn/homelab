@@ -540,7 +540,7 @@ graph LR
     rt -- "residue" --> oc["OpenClaw escalation"]
     pb --> dl["Decision log<br/>(Loki)"]
     oc -- "outcome record" --> dl
-    fb["Noah's feedback<br/>(reply on page/digest)"] --> dl
+    fb["Observed outcomes<br/>(recurrence, human fixes, self-clears)"] --> dl
     poll["Safety-net crons,<br/>Noah: 'you missed X'"] --> dl
     dl --> rev["Weekly routing-review cron"]
     oc -- "playbook-able fix" --> mr["MRs: playbooks, alert tuning,<br/>new rules, deps edges"]
