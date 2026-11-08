@@ -208,6 +208,23 @@ class EligibilityTests(unittest.TestCase):
         self.assertFalse(v.manual)
 
 
+class BlockScalarTests(unittest.TestCase):
+    def test_image_line_inside_a_script_is_not_a_job_image(self):
+        # found by test_properties: `image: ...` inside `script: - |` (or
+        # `script: |`) was taken for the job's image
+        for script in ("  script:\n    - |\n", "  script: |\n", "  script: >-\n"):
+            with self.subTest(script=script):
+                base = BASE + f"\nbuild:\n{script}      image: nginx:1.31.1-alpine3.23-perl@{D1}\n      run\n"
+                self.assertNotIn(len(BASE.split("\n")) + 2, policy.ci_image_lines(base))
+                head = base.replace(f"      image: nginx:1.31.1-alpine3.23-perl@{D1}",
+                                    f"      image: nginx:1.31.2-alpine3.23-perl@{D2}")
+                v = evaluate(head, base=base)
+                self.assertFalse(v.eligible)
+        # the job image lines of BASE are all still found
+        self.assertEqual(sorted(set(policy.ci_image_lines(BASE).values())),
+                         [".ansible", ".renovate_image", "kaniko:build", "nginx:validate", "runner:check"])
+
+
 class LineBreakTests(unittest.TestCase):
     def test_line_break_in_comment_refused(self):
         old, new = NGINX_989

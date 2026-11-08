@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import fnmatch
 import json
+import posixpath
 import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
@@ -119,7 +120,11 @@ def config(allowlist: dict) -> dict:
 
 def classify(path: str, cfg: dict) -> Tuple[Optional[str], Optional[str]]:
     """(kind, None) for an allowed path, (None, reason) otherwise. The
-    never-lists win over every allowlist."""
+    never-lists win over every allowlist. A path spelled other than git
+    spells it (`./`, `//`, `..`, a leading or trailing `/`) is refused: the
+    patterns match text, and `docs/*.md` matches `docs/../ansible/x.md`."""
+    if not path or path.startswith("/") or posixpath.normpath(path) != path:
+        return None, f"{path!r} is not a normalised repository path"
     if _any(path, cfg["never"]):
         return None, f"{path} is on the bot-config never-list"
     if SCRIPT_EXT.search(path):
@@ -141,7 +146,10 @@ _SAFE_COMMENT = re.compile(r"^\s*#[^{}]*$")
 # `key: |`, `- |` (a sequence item, e.g. the script of `command: [sh, -c, ...]`),
 # with an optional anchor or tag before the indicator (`key: &a >-`).
 _BLOCK_START = re.compile(r"(?::\s*|^\s*-\s+)(?:[&!]\S*\s+)*[|>][-+0-9]*\s*(#.*)?$")
-_MEM_RE = re.compile(r"^(\d+(?:\.\d+)?)\s*([bkmgt]?)(?:i?b)?$", re.I)
+# as Docker reads sizes (go-units RAMInBytes): ASCII digits, at most one
+# space before the unit
+_MEM_RE = re.compile(r"^(\d+(?:\.\d+)?) ?([bkmgt]?)(?:i?b)?$", re.I | re.A)
+_CPUS_RE = re.compile(r"^(\d+(?:\.\d*)?|\.\d+)$", re.A)
 _LOG_KEY = re.compile(r"^[A-Z0-9_]*LOG_?LEVEL$")
 _ENV_LIST = re.compile(r"^(\s*)-\s+([A-Za-z0-9_]+)=(.*?)\s*$")
 _ENV_MAP = re.compile(r"^(\s*)([A-Za-z0-9_]+):\s+(.*?)\s*$")
@@ -178,7 +186,12 @@ def _strip_comment(value: str) -> Tuple[str, str]:
     """(value without quotes, trailing ` # comment` or '')."""
     m = re.search(r"\s+#", value)
     v, comment = (value[:m.start()], value[m.start():]) if m else (value, "")
-    return v.strip().strip("'\""), comment
+    v = v.strip()
+    # one matching pair only: `'info` or `debug"` is not a quoted level (and
+    # an unterminated quote makes the whole file invalid YAML)
+    if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
+        v = v[1:-1]
+    return v, comment
 
 
 def _mem_bytes(value: str) -> Optional[float]:
@@ -190,10 +203,9 @@ def _mem_bytes(value: str) -> Optional[float]:
 
 
 def _cpus(value: str) -> Optional[float]:
-    try:
-        f = float(value)
-    except ValueError:
+    if not _CPUS_RE.match(value):      # float() also takes "1_0", "inf", non-ASCII digits
         return None
+    f = float(value)
     return f if f > 0 else None
 
 
