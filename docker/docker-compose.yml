@@ -363,6 +363,7 @@ services:
     restart: unless-stopped
   pihole:
     container_name: pihole
+    cpu_shares: 4096  # core service, see CLAUDE.md "CPU priority"
     security_opt:
       - no-new-privileges=true
     cap_drop:
@@ -437,6 +438,7 @@ services:
   nginx: 
     image: gitlab-registry.lab.nkontur.com:443/root/homelab/nginx:latest  # docker/images/nginx
     container_name: nginx
+    cpu_shares: 4096  # core service, see CLAUDE.md "CPU priority"
     security_opt:
       - no-new-privileges=true
     cap_drop:
@@ -478,6 +480,7 @@ services:
   lab_nginx: 
     image: gitlab-registry.lab.nkontur.com:443/root/homelab/nginx:latest  # docker/images/nginx
     container_name: lab_nginx
+    cpu_shares: 4096  # core service, see CLAUDE.md "CPU priority"
     security_opt:
       - no-new-privileges=true
     cap_drop:
@@ -522,6 +525,7 @@ services:
   iot_nginx: 
     image: gitlab-registry.lab.nkontur.com:443/root/homelab/nginx:latest  # docker/images/nginx
     container_name: iot_nginx
+    cpu_shares: 4096  # core service, see CLAUDE.md "CPU priority"
     security_opt:
       - no-new-privileges=true
     cap_drop:
@@ -603,6 +607,7 @@ services:
   nzbget:
     image: linuxserver/nzbget:26.3.20261106@sha256:6f86d5cb17fa12c214e0c699addde8ee5b9622fbafd2f4dc2eb8f89e7251dc49
     container_name: nzbget
+    cpu_shares: 256  # batch work, see CLAUDE.md "CPU priority"
     security_opt:
       - no-new-privileges=true
     cap_drop:
@@ -1132,6 +1137,7 @@ services:
   # Initial setup uses file storage; will be configured for GitLab JWT auth in future MR
   vault:
     container_name: vault
+    cpu_shares: 4096  # core service, see CLAUDE.md "CPU priority"
     # Vault 2.x images default to the unprivileged `vault` user (uid 100). This
     # service overrides the entrypoint with auto-unseal.sh, so the image's
     # docker-entrypoint.sh (which used to handle ownership and the IPC_LOCK file
@@ -1201,6 +1207,7 @@ services:
   jit-approval-svc:
     image: gitlab-registry.lab.nkontur.com:443/root/homelab/jit-approval-svc:latest
     container_name: jit-approval-svc
+    cpu_shares: 4096  # core service, see CLAUDE.md "CPU priority"
     restart: unless-stopped
     security_opt:
       - no-new-privileges=true
@@ -1313,6 +1320,7 @@ services:
 
   deluge:
     container_name: deluge
+    cpu_shares: 256  # batch work, see CLAUDE.md "CPU priority"
     security_opt:
       - no-new-privileges=true
     cap_drop:
@@ -1492,6 +1500,7 @@ services:
       start_period: 30s
   homeassistant:
     container_name: homeassistant
+    cpu_shares: 4096  # core service, see CLAUDE.md "CPU priority"
     # Fixed interface names (Compose >= 2.36, Engine >= 28.1). Docker attaches
     # the networks in no fixed order, so ethN changed on recreates and even on
     # plain restarts, and HA's configured_adapters (by name) silently moved
@@ -1918,6 +1927,7 @@ services:
   # Images now pulled from: gitlab-registry.lab.nkontur.com:443/root/homelab/<image>
   mosquitto:
     container_name: mosquitto
+    cpu_shares: 4096  # core service, see CLAUDE.md "CPU priority"
     security_opt:
       - no-new-privileges=true
     cap_drop:
@@ -2022,6 +2032,7 @@ services:
       start_period: 30s
   zigbee2mqtt:
     container_name: zigbee2mqtt
+    cpu_shares: 4096  # core service, see CLAUDE.md "CPU priority"
     security_opt:
       - no-new-privileges=true
     cap_drop:
@@ -2081,6 +2092,7 @@ services:
   paperless-ngx:
     image: ghcr.io/paperless-ngx/paperless-ngx:3.4.2@sha256:d704e84f88300eb6ab001ab15720a2330ff99169cf9f94d6b8fcc44b63a84c84
     container_name: paperless-ngx
+    cpu_shares: 512  # batch work, see CLAUDE.md "CPU priority"
     security_opt:
       - no-new-privileges=true
     cap_drop:
@@ -2137,6 +2149,7 @@ services:
   paperless-ai:
     image: clusterzx/paperless-ai:3.0.9@sha256:2b65888163fd59716f1c8285b31c5bd0b30c9c3c192c42b516688e3887d4ba60
     container_name: paperless-ai
+    cpu_shares: 256  # batch work, see CLAUDE.md "CPU priority"
     security_opt:
       - no-new-privileges=true
     cap_drop:
