@@ -6,6 +6,30 @@
 > **Stakeholder:** Noah Kontur  
 > **Target:** Homelab infrastructure at `*.lab.nkontur.com`
 
+> **Implementation status (as of 2026-11-08).** This is the 2026-02 design; the
+> running service differs in places. Source of truth for current behavior:
+> `docker/jit-approval-svc/README.md` and the code (`internal/vault/vault.go`
+> for the resource-to-tier map). In short:
+> - Built: the external Go service `jit-approval-svc` with Telegram approval,
+>   `X-JIT-API-Key` auth, per-requester rate limits, poll-based delivery
+>   (`POST /request`, `GET /status/:id`), dynamic backends (Grafana, InfluxDB,
+>   Home Assistant, GitLab, Paperless, Tailscale, Gmail, Vault, SSH
+>   certificates) and scoped Vault tokens for static secrets.
+> - Tiers in use are 1 (auto-approved) and 2 (Telegram approval); tier 3 is
+>   reserved. Tier 1 includes the media/monitoring services and
+>   `gitlab-moltbot`, a 1-hour impersonation token for the agent's own GitLab
+>   user. OpenClaw has no static GitLab token; it gets this one through JIT.
+> - The agent's service API keys and GitLab token are no longer container
+>   env vars (Phase 4); the gateway keeps only its own runtime secrets and a
+>   Vault AppRole. SSH access uses Vault-signed certificates (Phase 2).
+> - Not built: mTLS (§8.1), Ed25519 grant attestation (§7.1), canary requests
+>   (§7.3), the SQLite store (§10.3; the store is in memory), the database
+>   secrets engine (Phase 3), the sidecar (Phase 5) and a JIT dashboard
+>   (Phase 6).
+>
+> Sections describing "current state" (e.g. §2) reflect 2026-02 and are kept
+> for history.
+
 ---
 
 ## Table of Contents
@@ -58,7 +82,7 @@ The system is built on **HashiCorp Vault** (already running at `vault.lab.nkontu
 ---
 ## 2. Problem Statement
 
-### Current State
+### Current State (historical, 2026-02)
 
 As of MR !126, all secrets are managed in **HashiCorp Vault** and fetched during Ansible deployment. The compose template uses Vault-first with env var fallback:
 
@@ -3403,3 +3427,4 @@ Our system is simpler because it's purpose-built for a single AI agent in a home
 | 2026-02-06 | Prometheus | Initial design document |
 | 2026-02-06 | Prometheus | Added external approval service architecture (§11), service-specific token lifecycle (§12), community-sourced hardening from GhostNode, Pi_for_Jese, Alice_rdg on Moltbook (§13), failure modes (§14), request lifecycle and crash recovery (§15), credential isolation (§16) |
 | 2026-02-06 | Prometheus | **Major restructure:** Promoted external approval service from appendix (old §11) to primary architecture (new §4). Collapsed old agent-side gating design (old §4-10) into Appendix A (rejected approaches). Added formalized security requirements from adversarial review (§8). Added monitoring/alerting section (§14). Added operator availability / "Noah is asleep" section (§15). Renumbered all sections. Updated TOC. |
+| 2026-11-08 | Docs audit | Added implementation status note; marked §2 current state as historical. |

@@ -2,74 +2,87 @@
 
 This document lists the external services that Moltbot can access via their APIs.
 
-## Adding New Secrets
+## How Moltbot gets credentials
 
-Secrets are managed via **GitLab CI/CD Variables** (not on the router directly). During deployment, Ansible reads these variables and renders them into `docker-compose.yml` using Jinja2 templating.
+Service API keys are **not** in the `openclaw-gateway` environment. They live in
+Vault and Moltbot obtains them on demand through the JIT approval service
+(`docker/jit-approval-svc`), using the helpers in the workspace's
+`tools/jit-lib.sh`:
 
-### To add a new API key:
+- `jit_service_key <service>`: tier 1 (auto-approved) scoped Vault token, then
+  reads the key from `homelab/data/docker/<service>`.
+- `jit_grafana_token`, `jit_influxdb_token`: tier 1 dynamic tokens.
+- `gitlab_token`: tier 1 short-lived GitLab token for the moltbot user
+  (resource `gitlab-moltbot`); there is no static GitLab token.
 
-1. **Get the API key** from the service (see tables below)
-2. **Add to GitLab CI/CD**: Project > Settings > CI/CD > Variables
-   - Variable name: e.g., `RADARR_API_KEY`
-   - Value: the actual API key
-   - Protected: Yes (only available on protected branches)
-   - Masked: Yes (hidden in job logs)
-3. **Reference in docker-compose.yml**: `{{ lookup('env', 'RADARR_API_KEY') }}`
-4. **Deploy**: Push to main branch (or merge MR) to trigger CI/CD
+The only secrets in the container environment are the gateway's own (OpenAI,
+Telegram, Brave, Claude OAuth, gateway token) and the Vault AppRole used to log
+in for JIT. Ansible's `fetch-vault-secrets` role reads those from Vault and
+renders them into `docker-compose.yml`.
 
-The `lookup('env', '...')` pattern reads the variable during the Ansible deployment job, not at container runtime.
+### To add a new service key
 
-## Required GitLab CI/CD Variables
+1. Store the key in Vault under `homelab/data/docker/<service>` (field `api_key`).
+2. Add the resource to `resourceTier` in
+   `docker/jit-approval-svc/internal/vault/vault.go` and make sure the tier's
+   Vault policy (`terraform/vault/policies.tf`) covers the path.
+
+## Services
 
 ### Media Management (arr stack)
 
-| Service | Container URL | GitLab Variable | How to Get |
-|---------|---------------|-----------------|------------|
-| **Radarr** | http://radarr:7878 | `RADARR_API_KEY` | Settings > General > API Key |
-| **Sonarr** | http://sonarr:8989 | `SONARR_API_KEY` | Settings > General > API Key |
-| **Prowlarr** | http://prowlarr:9696 | `PROWLARR_API_KEY` | Settings > General > API Key |
-| **Plex** | http://plex:32400 | `PLEX_TOKEN` | [Get X-Plex-Token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/) |
-| **Ombi** | http://ombi:3579 | `OMBI_API_KEY` | Settings > Ombi > API Key |
+| Service | Container URL | JIT resource (tier) | How to Get |
+|---------|---------------|---------------------|------------|
+| **Radarr** | http://radarr:7878 | `radarr` (1) | Settings > General > API Key |
+| **Sonarr** | http://sonarr:8989 | `sonarr` (1) | Settings > General > API Key |
+| **Prowlarr** | http://prowlarr:9696 | `prowlarr` (1) | Settings > General > API Key |
+| **Plex** | http://plex:32400 | `plex` (1) | [Get X-Plex-Token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/) |
+| **Ombi** | http://ombi:3579 | `ombi` (1) | Settings > Ombi > API Key |
 
 ### Download Clients
 
-| Service | Container URL | GitLab Variables | How to Get |
-|---------|---------------|------------------|------------|
-| **NZBGet** | http://nzbget:6789 | `NZBGET_USERNAME`, `NZBGET_PASSWORD` | Settings > Security |
-| **Deluge** | http://deluge:8112 | `DELUGE_PASSWORD` | WebUI password |
+| Service | Container URL | JIT resource (tier) | How to Get |
+|---------|---------------|---------------------|------------|
+| **NZBGet** | http://nzbget:6789 | `nzbget` (1) | Settings > Security |
+| **Deluge** | http://deluge:8112 | `deluge` (1) | WebUI password |
 
 ### Document Management
 
-| Service | Container URL | GitLab Variable | How to Get |
-|---------|---------------|-----------------|------------|
-| **Paperless-NGX** | http://paperless-ngx:8000 | `PAPERLESS_TOKEN` | Admin > Auth Tokens |
+| Service | Container URL | JIT resource (tier) | How to Get |
+|---------|---------------|---------------------|------------|
+| **Paperless-NGX** | http://paperless-ngx:8000 | `paperless` (2, Telegram approval) | Minted by the JIT service's Paperless backend |
 
 ### Monitoring
 
-| Service | Container URL | GitLab Variable | How to Get |
-|---------|---------------|-----------------|------------|
-| **InfluxDB** | http://influxdb:8086 | `INFLUXDB_TOKEN` | Data > Tokens |
+| Service | Container URL | JIT resource (tier) | How to Get |
+|---------|---------------|---------------------|------------|
+| **InfluxDB** | http://influxdb:8086 | `influxdb` (1) | Read-only token minted by the JIT service |
 
 ## Example API Usage
 
+```bash
+source ~/.openclaw/workspace/tools/jit-lib.sh
+```
+
 ### Radarr — Search for Movies
 ```bash
-curl -H "X-Api-Key: $RADARR_API_KEY" "$RADARR_URL/api/v3/movie"
+curl -H "X-Api-Key: $(jit_service_key radarr)" "http://radarr:7878/api/v3/movie"
 ```
 
 ### Sonarr — Search for TV Shows
 ```bash
-curl -H "X-Api-Key: $SONARR_API_KEY" "$SONARR_URL/api/v3/series"
+curl -H "X-Api-Key: $(jit_service_key sonarr)" "http://sonarr:8989/api/v3/series"
 ```
 
 ### Plex — Get Libraries
 ```bash
-curl "$PLEX_URL/library/sections?X-Plex-Token=$PLEX_TOKEN"
+curl "http://plex:32400/library/sections?X-Plex-Token=$(jit_service_key plex)"
 ```
 
 ### Paperless — List Documents
 ```bash
-curl -H "Authorization: Token $PAPERLESS_TOKEN" "$PAPERLESS_URL/api/documents/"
+TOKEN=$(jit_get paperless 2 "List documents")   # waits for Noah's approval
+curl -H "Authorization: Token $TOKEN" "http://paperless-ngx:8000/api/documents/"
 ```
 
 ## Network Notes

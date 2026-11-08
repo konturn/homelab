@@ -1,6 +1,6 @@
 # JIT Approval Webhook Notifications — Design Document
 
-> **Status:** Draft  
+> **Status:** Draft, not implemented (as of 2026-11-08). The service has no OpenClaw webhook callback; agents still poll `GET /status/:id` (see `docker/jit-approval-svc/README.md`). Endpoint paths and storage below describe the 2026-02 proposal, not the running service.  
 > **Author:** Prometheus (moltbot)  
 > **Date:** 2026-02-12  
 > **Depends on:** [JIT Access Design Doc](./jit-access-design.md)  
