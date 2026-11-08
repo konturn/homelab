@@ -1956,7 +1956,7 @@ groups:
                   |> range(start: -15m)
                   |> filter(fn: (r) => r._measurement == "systemd_units")
                   |> filter(fn: (r) => r._field == "active_code")
-                  |> filter(fn: (r) => r.name =~ /^restic-(backup|check|prune|db-dumps|db-dumps-weekly)\.service$/)
+                  |> filter(fn: (r) => r.name =~ /^restic-(backup|check|prune|db-dumps|db-dumps-weekly|macmini-pull)\.service$/)
                   |> group(columns: ["name"])
                   |> last()
                   |> keep(columns: ["_time", "_value", "name"])

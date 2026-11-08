@@ -1,0 +1,54 @@
+---
+# Offsite backup of the Mac mini (docs/backups.md, "Mac mini"). The router
+# pulls the Mac over its existing root SSH access into macmini_backup_dir,
+# which the restic role backs up (tag macmini). The Mac holds no B2 or restic
+# credentials.
+macmini_backup_ssh_target: "root@{{ mac_mini_address }}"
+
+# Staging copy. Must be on the LUKS-encrypted ZFS pool (the script refuses
+# any other filesystem), never /persistent_data. Root-only (0700).
+macmini_backup_dir: /mpool/backups/macmini
+
+# Where the APFS snapshot of the Mac's Data volume is mounted, on the Mac.
+macmini_backup_snapshot_mount: /private/var/tmp/restic-macmini-snap
+
+# Paths relative to the Data volume root, copied from the snapshot.
+# Missing ones are skipped. Users/ is every home directory (and Shared).
+macmini_backup_sources:
+  - Users
+  - private/etc
+  - private/var/root
+  - private/var/at
+  - Library/LaunchDaemons
+  - Library/LaunchAgents
+  - Library/Preferences
+  - opt/homebrew/etc
+  - usr/local/etc
+
+# rsync exclude patterns, applied to every source. Unanchored patterns with a
+# slash match at any depth, so Library/Caches/ also covers
+# Library/Containers/*/Data/Library/Caches and Group Containers/*/Library/Caches.
+# iCloud files evicted to the cloud (dataless) are excluded per run as well.
+macmini_backup_excludes:
+  # Regenerable
+  - "Library/Caches/"
+  # App-group caches; some are SIP-protected (EPERM even for root)
+  - "Library/Group Containers/*/Caches/"
+  - ".Trash/"
+  - "Library/Metadata/CoreSpotlight/"
+  - "Library/Developer/Xcode/DerivedData/"
+  - "Library/Developer/Xcode/iOS DeviceSupport/"
+  - "Library/Developer/CoreSimulator/"
+  # VM and container disk images
+  - "Library/Containers/com.docker.docker/"
+  - "Library/Containers/com.utmapp.UTM/"
+  - ".orbstack/"
+  - "VirtualBox VMs/"
+  - "Parallels/"
+  - "*.vmwarevm/"
+  - "*.pvm/"
+  - "*.qcow2"
+  - "*.vmdk"
+  - "*.vdi"
+
+macmini_backup_timeout: 90min

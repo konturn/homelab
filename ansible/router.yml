@@ -93,6 +93,13 @@
         - {path: "/mpool/plex/Family"}
         - {path: "/var/log"}
         - {path: "/root"}
+        # Staging copy of the Mac mini, pulled just before this backup by
+        # restic-macmini-pull.service (role macmini-backup). No global
+        # excludes: it comes from one APFS snapshot, so its SQLite *-wal files
+        # match their databases and are needed to restore them.
+        - {path: "/mpool/backups/macmini", tag: macmini, global_excludes: false}
+      restic_backup_pre_units:
+        - restic-macmini-pull.service
       restic_password: "{{ vault_restic_password | trim }}"
       # Logical dumps before every backup (docs/backups.md, "Logical database
       # dumps"), next to the raw data files restic already copies. Credentials
@@ -119,6 +126,11 @@
   # /root/.restic_env and restic-notify-failure@.service.
   - role: frigate-backup
     tags: [frigate-backup]
+  # Pull of the Mac mini into /mpool/backups/macmini for the nightly restic
+  # run (docs/backups.md, "Mac mini"). After restic: uses its
+  # restic-notify-failure@.service.
+  - role: macmini-backup
+    tags: [macmini-backup]
   # Last: pulls can take long on a fresh host, and a failed pull or create
   # must not hold up the other roles.
   - role: configure-ollama-models

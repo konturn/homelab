@@ -41,7 +41,15 @@ restic_global_excludes:
   - "/persistent_data/docker/volumes/docker_tempo-storage/_data/live-store"
   - "/persistent_data/docker/volumes/docker_tempo-storage/_data/wal"
 
+# Each entry: path; optional exclude (one restic --exclude value); optional
+# tag (adds --tag to that folder's snapshots); optional global_excludes: false
+# to skip restic_global_excludes for a folder that is a static staging copy
+# (e.g. the Mac mini pull, whose SQLite *-wal files come from the same APFS
+# snapshot as their databases and are needed to restore them).
 restic_folders: []
+# Units restic-backup.service pulls in and waits for before backing up
+# (Wants= + After=), e.g. a job that stages data into a restic folder.
+restic_backup_pre_units: []
 restic_databases: []
 restic_dump_compression_enabled: false
 # Logical database dumps, written to restic_db_dumps_dir by

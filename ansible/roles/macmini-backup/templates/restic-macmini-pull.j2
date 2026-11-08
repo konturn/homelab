@@ -1,0 +1,103 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Pull the Mac mini into {{ macmini_backup_dir }}, which restic-backup.service
+# then backs up with tag macmini (docs/backups.md, "Mac mini").
+#
+#  1. tmutil localsnapshot on the Mac, mounted read-only: every file is copied
+#     as of one instant, so a running Photos or Messages (SQLite + WAL) is
+#     captured crash-consistent, like after a power cut, never torn.
+#  2. rsync each source from the snapshot. iCloud files evicted to the cloud
+#     (dataless) are excluded: reading them would fail or download them.
+#  3. Inventories from the live system into meta/ (Brewfile, apps, packages).
+#  4. Unmount and delete the snapshot this run created.
+# Root over SSH has Full Disk Access on the Mac, which the TCC-protected
+# paths (Messages, Photos, Mail, ...) need.
+set -euo pipefail
+
+host={{ macmini_backup_ssh_target | quote }}
+dest={{ macmini_backup_dir | quote }}
+snapmnt={{ macmini_backup_snapshot_mount | quote }}
+sources=({% for s in macmini_backup_sources %}{{ s | quote }} {% endfor %})
+excludes=({% for e in macmini_backup_excludes %}--exclude={{ e | quote }} {% endfor %})
+
+ssh_cmd=(ssh -o BatchMode=yes -o ConnectTimeout=30 -o ServerAliveInterval=30 -o ServerAliveCountMax=6)
+log() { echo "restic-macmini-pull: $*"; }
+mac() { "${ssh_cmd[@]}" "$host" "$@"; }
+
+exec 9>/run/restic-macmini-pull.lock
+if ! flock -n 9; then log "SKIP another pull is running"; exit 0; fi
+
+# The staging copy must sit on the encrypted ZFS pool. If the pool is not
+# mounted, the path would fall through to the root filesystem.
+parent=$(dirname "$dest")
+fstype=$(findmnt -n -o FSTYPE --target "$parent" || true)
+if [ "$fstype" != zfs ]; then
+  log "FAIL $parent is on '${fstype:-nothing}', not the ZFS pool"; exit 1
+fi
+umask 077
+install -d -m 0700 "$dest" "$dest/data" "$dest/meta" "$dest/.state"
+
+# A run killed before its cleanup can leave the mount behind.
+mac "umount '$snapmnt' 2>/dev/null; true"
+
+out=$(mac tmutil localsnapshot)
+snap=$(sed -n 's/^Created local snapshot with date: //p' <<<"$out")
+if [ -z "$snap" ]; then log "FAIL tmutil localsnapshot: $out"; exit 1; fi
+
+cleanup() {
+  mac "umount '$snapmnt'; tmutil deletelocalsnapshots '$snap' >/dev/null" \
+    || log "WARN could not unmount/delete snapshot $snap (purgeable; macOS expires it)"
+}
+trap cleanup EXIT
+trap 'exit 143' TERM INT
+
+mac "mkdir -p '$snapmnt' && mount_apfs -o rdonly,nobrowse -s 'com.apple.TimeMachine.$snap.local' /System/Volumes/Data '$snapmnt'"
+log "START snapshot=$snap"
+
+# Dataless (evicted iCloud) files, as anchored rsync patterns, NUL-separated.
+# Wildcard characters in names are escaped so they match literally.
+dataless="$dest/.state/dataless.exclude"
+mac "cd '$snapmnt/Users' && find . -xdev -flags +dataless -print0" \
+  | sed -z -e 's/^\.//' -e 's/[[*?\\]/\\&/g' > "$dataless"
+log "dataless (iCloud-only) entries excluded: $(tr -cd '\0' < "$dataless" | wc -c)"
+
+failed=0
+for src in "${sources[@]}"; do
+  if ! mac "test -e '$snapmnt/$src'"; then log "skip $src (absent)"; continue; fi
+  extra=()
+  if [ "$src" = Users ]; then extra=(--from0 "--exclude-from=$dataless"); fi
+  mkdir -p "$dest/data/$src"
+  rc=0
+  rsync -a --numeric-ids --delete --delete-excluded --stats -e "${ssh_cmd[*]}" \
+    "${excludes[@]}" "${extra[@]}" \
+    "$host:$snapmnt/$src/" "$dest/data/$src/" > "$dest/.state/rsync.out" 2>&1 || rc=$?
+  sent=$(sed -n 's/^Total transferred file size: //p' "$dest/.state/rsync.out")
+  total=$(sed -n 's/^Total file size: //p' "$dest/.state/rsync.out")
+  if [ "$rc" -ne 0 ]; then
+    log "FAIL rsync $src rc=$rc"; tail -n 20 "$dest/.state/rsync.out"; failed=$((failed + 1))
+  else
+    log "OK $src total=${total:-?} transferred=${sent:-?}"
+  fi
+done
+
+# Inventories of the live system; small, and a failure is reported.
+meta() {
+  local name=$1; shift
+  if mac "$@" > "$dest/meta/$name.tmp" 2>/dev/null; then
+    mv "$dest/meta/$name.tmp" "$dest/meta/$name"
+  else
+    rm -f "$dest/meta/$name.tmp"; log "FAIL meta $name"; failed=$((failed + 1))
+  fi
+}
+brew='cd /tmp && sudo -u "$(stat -f %Su /opt/homebrew)" -H env HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ANALYTICS=1 /opt/homebrew/bin/brew'
+meta sw_vers.txt sw_vers
+meta Brewfile "$brew bundle dump --file=- --force"
+meta brew-versions.txt "$brew list --versions; $brew list --cask --versions"
+meta applications.txt 'ls -1 /Applications /Applications/Utilities /Users/*/Applications 2>/dev/null; true'
+meta pkgutil-pkgs.txt pkgutil --pkgs
+meta system_profiler.txt system_profiler -detailLevel mini SPHardwareDataType SPSoftwareDataType SPApplicationsDataType
+
+date -u +%Y-%m-%dT%H:%M:%SZ > "$dest/.state/last_run"
+if [ "$failed" -ne 0 ]; then log "SUMMARY failed=$failed"; exit 1; fi
+date -u +%Y-%m-%dT%H:%M:%SZ > "$dest/.state/last_ok"
+log "SUMMARY ok"
