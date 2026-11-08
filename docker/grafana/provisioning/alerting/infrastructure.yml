@@ -1125,6 +1125,51 @@ groups:
         labels:
           severity: warning
 
+      # Pi-hole answering slowly, from the 10s pi.hole probe (telegraf.conf,
+      # probe=pihole_latency). A failed or timed-out probe counts as 5000 ms,
+      # so "not answering" fires this too. p99 over a 1m window (six probes)
+      # held for 5m: one slow probe leaves the window after a minute, so only
+      # sustained slowness fires. Seen when batch work starved the host
+      # (CLAUDE.md "CPU priority").
+      - uid: pihole-dns-latency-high
+        title: Pi-hole DNS Latency High
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 60, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -1m)
+                  |> filter(fn: (r) => r._measurement == "dns_query" and r.probe == "pihole_latency")
+                  |> filter(fn: (r) => r._field == "query_time_ms" or r._field == "result_code")
+                  |> toFloat()
+                  |> group(columns: ["server"])
+                  |> pivot(rowKey: ["_time", "domain"], columnKey: ["_field"], valueColumn: "_value")
+                  |> map(fn: (r) => ({r with _value: if exists r.result_code and r.result_code != 0.0 then 5000.0 else if exists r.query_time_ms then r.query_time_ms else 5000.0}))
+                  |> quantile(q: 0.99, method: "exact_selector")
+                  |> map(fn: (r) => ({r with _time: now()}))
+                  |> keep(columns: ["_time", "_value", "server"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [500]}}]}
+        # No data means telegraf stopped (Host Metrics Stale covers it), not
+        # that Pi-hole is down: failed probes still write a row (5000 ms).
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "Pi-hole ({{ $labels.server }}) DNS p99 {{ printf \"%.0f\" $values.B.Value }} ms over 1m for 5m (500 ms threshold); clients see slow or failing name lookups"
+        labels:
+          severity: critical
+
       - uid: dns-resolution-failure
         title: DNS Resolution Failure
         condition: C

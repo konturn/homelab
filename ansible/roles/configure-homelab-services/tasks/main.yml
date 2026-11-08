@@ -1102,13 +1102,38 @@
   no_log: true
   when: "'router' in inventory_hostname and not ansible_check_mode"
 
-- name: Restart Grafana if alerting config changed
+# Alert rules and contact points reload through the provisioning API, with no
+# restart (a restart drops every rule's state and pending timers). The dashboard
+# provider file is only read at startup, so a change to anything under
+# dashboards/ still restarts Grafana, as does a failed reload. The admin
+# credentials stay inside the container.
+- name: Work out which Grafana provisioning changed
+  ansible.builtin.set_fact:
+    _grafana_alerting_changed: >-
+      {{ (grafana_alerting_copy is defined and grafana_alerting_copy.changed) or
+         (grafana_contactpoints is defined and grafana_contactpoints.changed) }}
+    _grafana_dashboards_changed: >-
+      {{ grafana_alerting_copy is defined and
+         (grafana_alerting_copy.results | default([]) | selectattr('changed')
+          | selectattr('item.dest', 'search', '/dashboards/') | list | length > 0) }}
+
+- name: Reload Grafana alerting provisioning via the API
+  ansible.builtin.shell: >-
+    docker exec grafana sh -c 'curl -fsS -m 30
+    -u "$GF_SECURITY_ADMIN_USER:$GF_SECURITY_ADMIN_PASSWORD"
+    -X POST http://localhost:3000/api/admin/provisioning/alerting/reload'
+  register: _grafana_alerting_reload
+  failed_when: false
+  timeout: 60
+  when: _grafana_alerting_changed | bool and not (_grafana_dashboards_changed | bool) and not ansible_check_mode
+
+- name: Restart Grafana if dashboard provisioning changed or the reload failed
   ansible.builtin.command:
     cmd: "docker restart -t 30 grafana"
   timeout: 60
   when: >-
-    ((grafana_alerting_copy is defined and grafana_alerting_copy.changed) or
-     (grafana_contactpoints is defined and grafana_contactpoints.changed))
+    (_grafana_dashboards_changed | bool or
+     (_grafana_alerting_changed | bool and (_grafana_alerting_reload.rc | default(1)) != 0))
     and not ansible_check_mode
 
 - name: Restart pihole if pihole.toml was modified
