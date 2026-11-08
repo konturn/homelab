@@ -162,6 +162,11 @@ resource "vault_policy" "vault_read" {
     path "sys/mounts/*" {
       capabilities = ["read"]
     }
+    # Auth mount tuning (vault_jwt_auth_backend refresh); Vault 2.2 requires
+    # sudo to read it. Read only.
+    path "sys/mounts/auth/*" {
+      capabilities = ["read", "sudo"]
+    }
 
     # Health check
     path "sys/health" {
