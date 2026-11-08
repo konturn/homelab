@@ -652,7 +652,7 @@ Any one of these stops auto-merge:
 
 These apply to every class. `AUTOMERGE_DRY_RUN=all` on the schedule also
 stops them all, but logs every decision; `AUTOMERGE_DRY_RUN=1` dry-runs the
-general and CI image classes. `fast_track.enabled: false` stops only
+general, CI image and bot-config classes. `fast_track.enabled: false` stops only
 the fast track.
 
 Removing the freeze needs no other action. The next sweep re-evaluates.
@@ -665,8 +665,10 @@ All in `ci/automerge-policy.yml` (reviewed, since `ci/` is code-owned):
   and its image under `denylist.images` (and in the "Auto-merge denylist" and
   "Auto-merge class" rules of `renovate.json`).
 - **Restrict its kinds:** set `updates:` under `services`, and exclude the image
-  from the "Auto-merge class" rule in `renovate.json` (an "Auto-merge class,
-  restricted kinds" rule gives it the allowed kinds). Use this for services
+  from the "Auto-merge class" rule in `renovate.json` (no "restricted kinds"
+  rule exists today: Nextcloud and Vaultwarden get their digest refreshes from
+  the fast-track rule; any other restricted image needs its own rule giving it
+  the allowed kinds). Use this for services
   whose version change runs a one-way migration that no pre-upgrade backup
   type covers.
 - **Back up before a version update:** set `pre_upgrade_backup:
@@ -736,11 +738,11 @@ above. The script refuses any MR not authored by root.
   compose MR from it carries a single image change (possibly on several
   services that share that image).
 - Pipeline schedules on `main` (owner `root`, timezone America/New_York):
-  - `automerge sweep`: `*/15 * * * *`, variable `AUTOMERGE_TASK=sweep` (both
-    classes live; `AUTOMERGE_DRY_RUN` removed 2026-11-04).
+  - `automerge sweep`: `*/15 * * * *`, variable `AUTOMERGE_TASK=sweep` (every
+    class live; `AUTOMERGE_DRY_RUN` removed 2026-11-04).
   - `automerge report`: `30 8 * * *`, variable `AUTOMERGE_TASK=report`.
-- **Dry run**: while the sweep schedule has `AUTOMERGE_DRY_RUN=1`, the general
-  class logs every decision (`ELIGIBLE` / `not eligible` with reasons, "would
+- **Dry run**: while the sweep schedule has `AUTOMERGE_DRY_RUN=1`, every class
+  except the fast track (general, CI image, bot-config) logs every decision (`ELIGIBLE` / `not eligible` with reasons, "would
   merge ...") and writes nothing. **The fast-track class stays live.**
   `AUTOMERGE_DRY_RUN=all` dry-runs every class, and so does `sweep --dry-run`.
   To take the general class live, delete the variable from the schedule (Build >
