@@ -95,6 +95,40 @@
     msg: "ZFS REBOOT REQUIRED — {{ zfs_version_check.stdout_lines | default(['version check skipped']) }}"
   when: zfs_packages.changed and zfs_version_check.stdout is defined and 'match=no' in zfs_version_check.stdout
 
+### ZFS auto-snapshots (docs/backups.md, "ZFS Snapshots")
+# One schedule: /etc/cron.d/zfs-auto-snapshot, from zfs_auto_snapshot_schedule.
+# The package also ships /etc/cron.{hourly,daily,weekly,monthly} scripts with
+# their own --keep values; with both, every label ran twice and the smaller
+# --keep pruned the other's snapshots. Those scripts are removed (deleted
+# conffiles stay deleted on package upgrades). Which datasets are snapshotted
+# is the com.sun:auto-snapshot property on each ("//" = all where it is true);
+# mpool/frigate is set false in frigate_pre.yml. Lowering a keep prunes the
+# oldest snapshots of that label on its next run.
+- name: Install zfs-auto-snapshot
+  apt:
+    name: zfs-auto-snapshot
+    state: present
+  when: "'zfs-auto-snapshot' not in (installed_packages | default([]))"
+
+- name: Install the ZFS auto-snapshot schedule
+  ansible.builtin.copy:
+    dest: /etc/cron.d/zfs-auto-snapshot
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by Ansible (configure-base, zfs_auto_snapshot_schedule). Do not edit.
+      PATH="/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
+      {% for s in zfs_auto_snapshot_schedule %}
+      {{ s.cron }} root /sbin/zfs-auto-snapshot -q -g --label={{ s.label }} --keep={{ s.keep }} //
+      {% endfor %}
+
+- name: Remove the package's duplicate periodic ZFS snapshot scripts
+  ansible.builtin.file:
+    path: "/etc/cron.{{ item }}/zfs-auto-snapshot"
+    state: absent
+  loop: [hourly, daily, weekly, monthly]
+
 ### Configure mounts and cryptodisks
 - name: fstab
   ansible.builtin.copy:

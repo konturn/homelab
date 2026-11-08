@@ -469,14 +469,19 @@ main 90-day `forget`. Restore: `restic restore latest --tag macmini --target /tm
 ### ZFS Snapshots
 
 **Strategy:** Local ZFS snapshots for quick recovery, from the `zfs-auto-snapshot`
-package (installed by hand, not managed by Ansible). Only datasets with
+package (role `configure-base`). Only datasets with
 `com.sun:auto-snapshot=true` are snapshotted: `mpool/nextcloud`, `mpool/plex`,
 `mpool/backups` (not `mpool/frigate`, `mpool/dv-scratch` or `mpool` itself, and
 `/persistent_data` is not ZFS).
-**Schedule** (`/etc/cron.d/zfs-auto-snapshot`): every 5 min (keep 24), hourly
-(keep 24), daily (keep 14), weekly (keep 4), monthly (keep 4). The package's
-`/etc/cron.{hourly,daily,weekly,monthly}/zfs-auto-snapshot` scripts also run,
-with their own `--keep` values, so actual counts can differ.
+**Schedule** (`/etc/cron.d/zfs-auto-snapshot`, from `zfs_auto_snapshot_schedule`
+in `ansible/roles/configure-base/defaults/main.yml`): every 15 min (keep 8),
+hourly (keep 24), daily at 23:59 (keep 14), weekly Sunday 23:59 (keep 4),
+monthly on the 1st (keep 6). That is the only schedule: the role removes the
+package's `/etc/cron.{hourly,daily,weekly,monthly}/zfs-auto-snapshot` scripts,
+which used to run every label a second time with other `--keep` values. A
+lower keep prunes the oldest snapshots of that label on its next run. To stop
+snapshotting a dataset, `zfs set com.sun:auto-snapshot=false <dataset>` (its
+existing snapshots are then left alone, not pruned).
 
 ```bash
 # List snapshots
