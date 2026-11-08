@@ -49,6 +49,11 @@ PLEX_PREFS="${PLEX_PREFS:-/mpool/plex/config/Library/Application Support/Plex Me
 PLEX_HOST_ROOT="${PLEX_HOST_ROOT:-/mpool/plex}"       # mounted at /data in plex
 PLEX_CONTAINER_ROOT="${PLEX_CONTAINER_ROOT:-/data}"
 PLEX_SCAN="${PLEX_SCAN:-true}"
+# Load gate: before each disc, wait while the 1-minute load average is above
+# MAX_LOAD (the router also runs DNS and everything else). After
+# LOAD_WAIT_MAX seconds the disc is skipped for this run (no failure marker).
+MAX_LOAD="${MAX_LOAD:-32}"
+LOAD_WAIT_MAX="${LOAD_WAIT_MAX:-21600}"
 # Locks and scratch live on tmpfs, not next to the media.
 RUN_DIR="${RUN_DIR:-/run/iso-convert}"
 ISO_LIST="${ISO_LIST:-}"
@@ -260,7 +265,7 @@ is_unfinalized() {
 # Those get loop-mounted read-only. Prints the makemkvcon source spec.
 open_source() {
     local iso="$1" work="$2" info="$3"
-    if "$MKVCON" -r --noscan --minlength="$MIN_TITLE_SECONDS" info "iso:$iso" >"$info" 2>&1 \
+    if nice -n 19 ionice -c3 "$MKVCON" -r --noscan --minlength="$MIN_TITLE_SECONDS" info "iso:$iso" >"$info" 2>&1 \
         && grep -qE '^TCOUNT:[1-9]' "$info"; then
         echo "iso:$iso"; return 0
     fi
@@ -276,6 +281,18 @@ open_source() {
         echo "iso:$inner"; return 0
     fi
     return 1
+}
+
+# Wait until the 1-minute load average is at or below MAX_LOAD.
+wait_for_load() {
+    local waited=0 load
+    while :; do
+        load=$(cut -d' ' -f1 /proc/loadavg)
+        awk -v l="$load" -v m="$MAX_LOAD" 'BEGIN { exit !(l <= m) }' && return 0
+        [[ $waited -ge $LOAD_WAIT_MAX ]] && return 1
+        [[ $waited -eq 0 ]] && log "  Load $load > $MAX_LOAD, waiting"
+        sleep 60; waited=$((waited + 60))
+    done
 }
 
 process_iso() {
@@ -328,6 +345,11 @@ process_iso() {
             exit 0
         }
 
+        if ! wait_for_load; then
+            log "  Load above ${MAX_LOAD} for ${LOAD_WAIT_MAX}s, skipping this run"
+            echo "SKIP_LOAD" >>"$RESULTS"; exit 0
+        fi
+
         mkdir -p "$work" || fail "cannot create $work"
 
         local top runtime
@@ -341,7 +363,7 @@ process_iso() {
         [[ "$src" == iso:"$iso" ]] || mounted=1
         if [[ -n "$mounted" ]]; then
             log "  Opened via read-only loop mount: ${src#*:}"
-            "$MKVCON" -r --noscan --minlength="$MIN_TITLE_SECONDS" info "$src" >"$info" 2>&1
+            nice -n 19 ionice -c3 "$MKVCON" -r --noscan --minlength="$MIN_TITLE_SECONDS" info "$src" >"$info" 2>&1
         fi
 
         local pick tid
@@ -404,10 +426,10 @@ process_iso() {
     ) 9>"$lock_file"
 }
 
-export -f process_iso open_source last_mkv_error is_unfinalized log ts plex_scan_dir
+export -f process_iso wait_for_load open_source last_mkv_error is_unfinalized log ts plex_scan_dir
 export MKVCON CONVERSION_TIMEOUT MIN_TITLE_SECONDS MIN_RUNTIME_RATIO FALLBACK_MIN_SECONDS \
     ROOT_DIR QUARANTINE_DIR WORK_ROOT DELETE_ISO RUN_DIR RUN_TMP RESULTS RUNTIMES PY_SELECT \
-    PLEX_HOST_ROOT PLEX_CONTAINER_ROOT
+    PLEX_HOST_ROOT PLEX_CONTAINER_ROOT MAX_LOAD LOAD_WAIT_MAX
 
 # Locks used to sit next to the media as .makemkv_convert.lock; they now live
 # in $RUN_DIR. Clear the empty leftovers.
@@ -432,5 +454,5 @@ xargs -0 -P "$MAX_PARALLEL_JOBS" -I {} bash -c 'process_iso "$1" "$2"' _ {} "$MO
 count() { grep -cx "$1" "$RESULTS"; }
 echo "iso-convert summary: mode=$MODE isos=$(tr -cd '\0' <"$LIST_FILE" | wc -c)" \
     "converted=$(count OK) failed=$(count FAIL) skipped_existing=$(count SKIP_EXISTS)" \
-    "skipped_failed=$(count SKIP_FAILED) skipped_locked=$(count SKIP_LOCKED) missing=$(count SKIP_MISSING)" \
+    "skipped_failed=$(count SKIP_FAILED) skipped_locked=$(count SKIP_LOCKED) missing=$(count SKIP_MISSING) skipped_load=$(count SKIP_LOAD)" \
     "elapsed=$(( $(date +%s) - START_TS ))s"
