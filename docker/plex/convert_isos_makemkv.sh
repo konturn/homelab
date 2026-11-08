@@ -189,12 +189,17 @@ PY_SELECT='
 import re, sys
 runtime = int(sys.argv[1]) * 60
 titles = {}
+def title(tid):
+    return titles.setdefault(tid, dict(id=tid, dur=0, chapters=0, size=0, src="", audio=0))
 for line in sys.stdin:
+    m = re.match(r"SINFO:(\d+),\d+,1,6202,", line)
+    if m:
+        title(int(m.group(1)))["audio"] += 1
+        continue
     m = re.match(r"TINFO:(\d+),(\d+),\d+,\"(.*)\"\s*$", line)
     if not m:
         continue
-    tid, attr, val = int(m.group(1)), int(m.group(2)), m.group(3)
-    t = titles.setdefault(tid, dict(id=tid, dur=0, chapters=0, size=0, src=""))
+    t, attr, val = title(int(m.group(1))), int(m.group(2)), m.group(3)
     if attr == 9:
         h, mi, s = (val.split(":") + ["0", "0"])[:3]
         t["dur"] = int(h) * 3600 + int(mi) * 60 + int(s)
@@ -208,32 +213,35 @@ ts = [t for t in titles.values() if t["dur"] > 0]
 if not ts:
     print("FAIL\tno titles found on disc"); sys.exit(0)
 longest = max(t["dur"] for t in ts)
-# "Near-equal" = within 3% of the longest title.
-near = [t for t in ts if t["dur"] >= longest * 0.97]
 # Many near-identical playlists from different files is the usual
 # playlist-obfuscation pattern; without a known-good playlist we cannot pick.
-if len(set(t["src"] for t in near)) >= 8:
-    print("FAIL\tplaylist obfuscation suspected (%d near-identical playlists)" % len(near))
+same = [t for t in ts if t["dur"] >= longest * 0.99]
+if len(set(t["src"] for t in same)) >= 8:
+    print("FAIL\tplaylist obfuscation suspected (%d near-identical playlists)" % len(same))
     sys.exit(0)
-# A "play all" or extras playlist can dwarf the film. If the longest title is
-# far past the Radarr runtime and some title is close to it, use those.
-if runtime and longest > runtime * 1.35:
-    close = [t for t in ts if runtime * 0.85 <= t["dur"] <= runtime * 1.25]
-    if close:
-        near = close
-if runtime and len(near) > 1:
+if runtime:
+    # Long titles (within 10% of the longest) compete on closeness to the
+    # Radarr runtime: alternate presentations (commentary/story-reel cuts,
+    # localized versions) are often a few minutes longer than the film.
+    near = [t for t in ts if t["dur"] >= longest * 0.90]
+    # A "play all" or extras playlist can dwarf the film; if the longest is
+    # far past the runtime and some title is close to it, use those.
+    if longest > runtime * 1.35:
+        close = [t for t in ts if runtime * 0.85 <= t["dur"] <= runtime * 1.25]
+        if close:
+            near = close
     best_gap = min(abs(t["dur"] - runtime) for t in near)
     near = [t for t in near if abs(t["dur"] - runtime) <= best_gap + 60]
-    how = "closest to Radarr runtime among near-equal titles"
+    how = "closest to Radarr runtime" if len(near) < len(ts) else "only candidate"
 else:
+    near = [t for t in ts if t["dur"] >= longest - 60]
     how = "longest"
-# Seamless-branching / angle duplicates: more chapters, then larger.
-near.sort(key=lambda t: (t["dur"], t["chapters"], t["size"]), reverse=True)
-top = near[0]
-near.sort(key=lambda t: (t["dur"] >= top["dur"] - 60, t["chapters"], t["size"], t["dur"]), reverse=True)
+# Seamless-branching / angle duplicates: more audio tracks (the feature
+# carries the full language set), then more chapters, then larger.
+near.sort(key=lambda t: (t["audio"], t["chapters"], t["size"], t["dur"]), reverse=True)
 t = near[0]
-print("%d\t%s: %s %ds %d chapters %.1fGB (%d titles scanned)" % (
-    t["id"], how, t["src"], t["dur"], t["chapters"], t["size"] / 1e9, len(ts)))
+print("%d\t%s: %s %ds %d chapters %d audio %.1fGB (%d titles scanned)" % (
+    t["id"], how, t["src"], t["dur"], t["chapters"], t["audio"], t["size"] / 1e9, len(ts)))
 '
 
 # Last useful makemkvcon message from a robot-mode log.
