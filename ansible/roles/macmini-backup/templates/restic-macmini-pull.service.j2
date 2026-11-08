@@ -1,0 +1,19 @@
+# {{ ansible_managed }}
+# Pull the Mac mini into {{ macmini_backup_dir }} (docs/backups.md, "Mac mini").
+# Started by restic-backup.service (Wants= + After=), after the nightly
+# database dumps; a failure here never stops the file backup. Named restic-*
+# so telegraf's systemd_units input and the Restic Unit Failed alert see it.
+[Unit]
+Description=Pull the Mac mini into the restic staging copy
+Wants=network-online.target
+After=network-online.target restic-db-dumps.service
+OnFailure=restic-notify-failure@%n.service
+
+[Service]
+Type=oneshot
+User=root
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+TimeoutStartSec={{ macmini_backup_timeout }}
+ExecStart=/usr/local/sbin/restic-macmini-pull

@@ -8,6 +8,13 @@ OnFailure=restic-notify-failure@%n.service
 Wants=restic-db-dumps.service
 After=restic-db-dumps.service
 {% endif %}
+{% for unit in restic_backup_pre_units %}
+# Pre-backup step (restic_backup_pre_units), same contract as the dumps:
+# Wants=, so its failure is alerted on by its own unit and never stops the
+# file backup; After=, so the backup sees its finished output.
+Wants={{ unit }}
+After={{ unit }}
+{% endfor %}
 
 [Service]
 Type=oneshot
@@ -39,7 +46,7 @@ ExecStartPre={{ restic_path }} check
 {% endif -%}
 
 {% for folder in restic_folders_combined %}
-ExecStart={{ restic_path }} backup --verbose {{ folder.path }} {% for excl in restic_global_excludes %}--exclude "{{ excl }}" {% endfor %}{% if folder.exclude is defined %}--exclude {{ folder.exclude }}{% endif %}
+ExecStart={{ restic_path }} backup --verbose {% if folder.tag is defined %}--tag {{ folder.tag }} {% endif %}{{ folder.path }} {% if folder.global_excludes | default(true) %}{% for excl in restic_global_excludes %}--exclude "{{ excl }}" {% endfor %}{% endif %}{% if folder.exclude is defined %}--exclude {{ folder.exclude }}{% endif %}
 
 {% endfor -%}
 

@@ -432,6 +432,40 @@ irreversibility of enabling it. It stays an option for that threat.
 - Large media files (movies/TV shows - can be re-downloaded)
 - `/mpool/plex/Movies` and `/mpool/plex/TV` (optional, storage-dependent)
 
+### Mac mini
+
+The Mac mini (`macmini.lab.nkontur.com`) is backed up by the router, not by itself: the Mac
+holds no restic password and no B2 key. Role `macmini-backup` installs
+`restic-macmini-pull.service`, which `restic-backup.service` starts and waits for
+(`restic_backup_pre_units`, after `restic-db-dumps`), so it runs every night at 03:00 just before
+the upload. A failed pull is alerted on (Restic Unit Failed, OnFailure mail) but never stops the
+rest of the backup.
+
+1. Over the router's root SSH, `tmutil localsnapshot` takes an APFS snapshot of the Mac's Data
+   volume, and the script mounts it read-only. Everything is copied as of that one instant, so
+   Photos and Messages (SQLite with WAL) are crash-consistent even while the apps run; nothing
+   has to be quit. The snapshot is unmounted and deleted at the end of the run.
+2. `rsync -a --delete` (incremental) from the snapshot to `/mpool/backups/macmini/data/`: all of
+   `/Users` (home directories incl. Photos library, `Library/Messages`, Mail, Notes, Calendar,
+   `Application Support`, `Preferences`, keychains, dotfiles and SSH keys), `/etc`, root's home,
+   crontabs, `/Library/LaunchDaemons|LaunchAgents|Preferences`, Homebrew's `etc`.
+   Excluded: `Library/Caches` at any depth, `.Trash`, the Spotlight index
+   (`Library/Metadata/CoreSpotlight`), Xcode DerivedData/simulators, VM and Docker disk images,
+   and iCloud files evicted from the disk (dataless; listed per run). Extended attributes are
+   not kept (macOS ships openrsync, which cannot send them).
+3. Inventories of the live system into `meta/`: `Brewfile` (`brew bundle dump`), brew versions,
+   `/Applications`, `pkgutil --pkgs`, `system_profiler`, `sw_vers`.
+
+Root over SSH has Full Disk Access on the Mac, which the TCC-protected paths need. If the pull
+starts failing with "Operation not permitted", re-enable it in System Settings, General, Sharing,
+Remote Login, "Allow full disk access for remote users".
+
+The staging copy is on the LUKS-encrypted pool (the script refuses any other filesystem), mode
+0700. restic backs it up as one folder with tag `macmini` and without the global `*-wal`
+excludes, since the WAL files come from the same snapshot as their databases. Retention is the
+main 90-day `forget`. Restore: `restic restore latest --tag macmini --target /tmp/r --include
+/mpool/backups/macmini/data/Users/<user>/...`, then copy each database together with its `-wal`.
+
 ### ZFS Snapshots
 
 **Strategy:** Local ZFS snapshots for quick recovery
