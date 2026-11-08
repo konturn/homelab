@@ -1,2 +1,11 @@
 create wan_ip hash:ip family inet hashsize 1024 maxelem 65536
 create wan_bypass_ha hash:ip family inet hashsize 64 maxelem 1024 timeout 3600
+# IoT devices without internet access (docs/FIREWALL.md, "IoT devices without
+# internet"): FORWARD rejects anything they send out via Mullvad or the WAN.
+# Rendered by Ansible; the addresses are DHCP reservations in ansible/inventory.yml.
+create iot_no_wan hash:ip family inet hashsize 64 maxelem 64
+add iot_no_wan {{ back_camera_address }}
+add iot_no_wan {{ projector_address }}
+add iot_no_wan {{ brother_printer_address }}
+add iot_no_wan {{ iot_poe_switch_address }}
+add iot_no_wan {{ zigbee_radio_address }}

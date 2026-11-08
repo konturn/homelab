@@ -156,6 +156,7 @@ for Home Assistant"). HA's other traffic stays on Mullvad.
 | 10.6.32.7 | Mopidy (music player) |
 | 10.6.32.24 - 10.6.32.31 | AirPlay receivers, one per audio zone (`airplay_*`, docs/AUDIO.md) |
 | 10.6.32.9 | petlibro-camera, LAN access to the feeder camera (`petlibro_camera_iot_ip`) |
+| 10.6.32.10 | iot-dns, the IoT devices' resolver (`iot_dns_ip`, [IoT resolver](#iot-resolver)) |
 
 **Physical Devices:**
 | IP | Device |
@@ -174,8 +175,17 @@ for Home Assistant"). HA's other traffic stays on Mullvad.
 | 10.6.128.19 | Apple TV |
 | 10.6.128.20 | Zigbee radio |
 | 10.6.128.21 | Frame TV (Samsung, Wi-Fi) |
+| 10.6.128.22, .23 | Thermador hood, range |
+| 10.6.128.24 | Brother printer |
+| 10.6.128.25 | NETGEAR GS308EP PoE switch (management address; moving it to VLAN 4 is a rack-day job) |
+| 10.6.128.26 | Miele dishwasher |
+| 10.6.128.27, .28 | Litter-Robot 4 (two) |
+| 10.6.128.29 | PETLIBRO feeder |
 
-**Egress:** Routes through Mullvad VPN (marked traffic).
+**Egress:** Routes through Mullvad VPN (marked traffic). Devices in the
+`iot_no_wan` ipset have no internet at all (docs/FIREWALL.md).
+
+**DNS:** IoT devices resolve through iot-dns only ([IoT resolver](#iot-resolver)).
 
 ---
 
@@ -511,7 +521,8 @@ vlan6-shim ─── Allows router to reach VLAN 6 containers
 
 ### PiHole (10.3.32.2)
 
-Primary DNS (via DHCP) for VLAN 3 (internal), VLAN 4 (mgmt) and VLAN 6 (iot):
+Primary DNS (via DHCP) for VLAN 3 (internal) and VLAN 4 (mgmt), and the
+upstream of iot-dns for VLAN 6 (iot, [IoT resolver](#iot-resolver)):
 - Ad-blocking
 - Local DNS entries via `custom.list`
 - Custom DHCP/DNS overrides via `custom.conf`
@@ -520,6 +531,61 @@ Primary DNS (via DHCP) for VLAN 3 (internal), VLAN 4 (mgmt) and VLAN 6 (iot):
 
 - 1.1.1.1 (Cloudflare)
 - 8.8.8.8 (Google)
+
+### IoT resolver
+
+**Requirement:** devices on the IoT VLAN must not learn internal DNS names.
+Pi-hole answers every `*.nkontur.com` name with an internal address
+(`pihole_dns_hosts`, the `address=/.../` wildcards in docker/pihole/custom.conf),
+serves the `lan` domain and answers private PTR lookups from its host records,
+so IoT devices do not ask Pi-hole directly.
+
+**iot-dns** (`iot_dns_ip`, 10.6.32.10, dnsmasq; docker/iot-dns/dnsmasq.conf):
+
+- forwards every query to Pi-hole, so its blocklists apply, with EDNS Client
+  Subnet (`add-subnet=32`): Pi-hole (`dns.EDNS0ECS`) logs the real device;
+- answers locally with NXDOMAIN, never forwarded: `nkontur.com` and every name
+  below it, `lan`, `pi.hole`, `local`, `home.arpa`, `internal`, unqualified
+  names, and PTR lookups of private ranges (RFC 1918, CGNAT/Tailscale,
+  link-local, ULA);
+- no cache (every query reaches Pi-hole's log).
+
+**Exceptions:** none. In the November 2026 review (Pi-hole query log, iot_nginx
+access logs back to 2022, device configs) no IoT device resolved an internal
+name it needs: the Apple TV's `lb._dns-sd._udp` and `_aaplcache` browse
+queries under `lab.nkontur.com` are optional discovery, and the last
+`*.iot.lab.nkontur.com` client that was not a Pi (a wall tablet with the Home
+Assistant app) was seen in April 2024. Devices are configured by IP (SLZB,
+weather station upload, cameras for Frigate) or reached from containers. To
+allow a name, add a more specific `server=` line, which wins over the
+`local=` zone, for example
+`server=/homeassistant.iot.lab.nkontur.com/{{ pihole_ip }}`.
+
+**Not IoT devices for this purpose:**
+
+- containers on the iot docker network (Home Assistant, Frigate's peers,
+  AirPlay receivers, petlibro-camera, ...) use Docker's embedded DNS and reach
+  Pi-hole from `vlan6-shim`; nothing changes for them;
+- the zwave and satellite-2 Pis are managed hosts that need internal names
+  (`loki.iot.lab.nkontur.com`, their own names, Vault): their dhcpd host
+  entries hand out Pi-hole, and the firewall lets them reach it.
+
+**Enforcement** (docs/FIREWALL.md, "IoT DNS"): DHCP for VLAN 6 hands out only
+`iot_dns_ip`; the router redirects any other DNS from VLAN 6 devices
+(`bond0.6`), whether to Pi-hole, 1.1.1.1 or a hardcoded 8.8.8.8, to iot-dns, drops
+everything else from them to Pi-hole, and refuses DNS over TLS/QUIC (853).
+
+**Limits:**
+
+- DNS over HTTPS to a public resolver looks like any HTTPS and is not
+  blocked; a device with built-in DoH bypasses iot-dns (and Pi-hole).
+- Devices that use hardcoded IPs (the Denon's and Apple TV's NTP, for
+  example) do not need DNS at all; this only governs names.
+- The DHCP domain name is still `lab.nkontur.com` (global option), so
+  devices know the zone name, but every name in it is NXDOMAIN.
+- If iot-dns is down, IoT devices cannot resolve anything (no fallback, by
+  design). Its healthcheck and `inventory/dependencies.yml` (`iot_resolver`)
+  cover it.
 
 ### Local Domain
 
@@ -551,7 +617,7 @@ ISC DHCP server runs on the router, serving:
 | 3 (internal) | 10.3.64.0 - 10.3.127.255 | PiHole, 1.1.1.1 |
 | 4 (mgmt) | 10.4.64.0 - 10.4.127.255 | PiHole, 1.1.1.1 |
 | 5 (guest) | 10.5.64.0 - 10.5.127.255 | 1.1.1.1, 8.8.8.8 |
-| 6 (iot) | 10.6.64.0 - 10.6.127.255 | PiHole, 1.1.1.1 |
+| 6 (iot) | 10.6.64.0 - 10.6.127.255 | iot-dns only (the zwave and satellite-2 Pis: PiHole) |
 | 7 | 10.7.64.0 - 10.7.127.255 | 1.1.1.1 |
 
 Lease times: 12 h default / 24 h max (`default-lease-time 43200`,
@@ -606,7 +672,7 @@ Zigbee uses a network coordinator (10.6.128.20); `zigbee2mqtt` runs on the route
 │                                                                          │
 │  ┌─────────────────────────────────────────────────────────────────┐    │
 │  │  VLAN 6 (IoT)                                                    │    │
-│  │  - Can reach PiHole for DNS                                      │    │
+│  │  - DNS via iot-dns only (internal names NXDOMAIN)                │    │
 │  │  - Pis (zwave, satellite-2) can reach Vault (8200)               │    │
 │  │  - Egress via Mullvad VPN                                        │    │
 │  └─────────────────────────────────────────────────────────────────┘    │

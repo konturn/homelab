@@ -147,6 +147,17 @@ COMMIT
 -A PREROUTING ! -d 10.0.0.0/8 -i vlan3-shim -j MARK --set-xmark 0x1/0xffffffff
 -A PREROUTING ! -d 10.0.0.0/8 -i {{ local_interface_name }}.3 -j MARK --set-xmark 0x1/0xffffffff
 
+# DNS from IoT devices (bond0.6) is redirected to iot-dns by nat PREROUTING
+# (IOT-DNS there). It must not get the Mullvad mark: after the DNAT the packet
+# is for iot-dns on the IoT VLAN, and a marked packet would be routed into the
+# tunnel by table mullvad. The Pis keep their own DNS and are marked as before.
+:IOT-DNS - [0:0]
+-A PREROUTING -i {{ local_interface_name }}.6 -p udp -m udp --dport 53 -j IOT-DNS
+-A PREROUTING -i {{ local_interface_name }}.6 -p tcp -m tcp --dport 53 -j IOT-DNS
+-A IOT-DNS -s {{ zwave_address }}/32 -j RETURN
+-A IOT-DNS -s {{ satellite_2_address }}/32 -j RETURN
+-A IOT-DNS -j ACCEPT
+
 # Mark IoT VLAN (10.6.x.x) internet-bound traffic  
 # Purpose: Policy routing for IoT network outbound traffic
 -A PREROUTING ! -d 10.0.0.0/8 -i vlan6-shim -j MARK --set-xmark 0x1/0xffffffff
@@ -183,6 +194,21 @@ COMMIT
 # Inbound connections from Mullvad tunnel to Deluge container
 -A PREROUTING -i {{ mullvad_interface_name }} -p tcp -m tcp --dport 62941 -j DNAT --to-destination {{ deluge_ip }}
 
+# IoT DNS redirect (docs/FIREWALL.md, "IoT DNS"): DNS from IoT devices on
+# the VLAN (bond0.6) to anything other than iot-dns -- Pi-hole, 1.1.1.1, a
+# hardcoded 8.8.8.8 -- is sent to iot-dns. Containers on the iot docker network
+# arrive on vlan6-shim and are not affected; neither are the two Pis (managed
+# hosts, they keep Pi-hole). Devices asking iot-dns directly do not pass the
+# router at all (same L2).
+:IOT-DNS - [0:0]
+-A PREROUTING -i {{ local_interface_name }}.6 -p udp -m udp --dport 53 -j IOT-DNS
+-A PREROUTING -i {{ local_interface_name }}.6 -p tcp -m tcp --dport 53 -j IOT-DNS
+-A IOT-DNS -s {{ zwave_address }}/32 -j RETURN
+-A IOT-DNS -s {{ satellite_2_address }}/32 -j RETURN
+-A IOT-DNS -d {{ iot_dns_ip }}/32 -j RETURN
+-A IOT-DNS -p udp -j DNAT --to-destination {{ iot_dns_ip }}:53
+-A IOT-DNS -p tcp -j DNAT --to-destination {{ iot_dns_ip }}:53
+
 # Hairpin NAT - Internal devices accessing external services via public IP
 # Allows IoT (10.6.x.x), Internal (10.3.x.x), and Mgmt (10.4.x.x) to reach services via WAN IP
 -A PREROUTING -s 10.6.0.0/16 -p tcp -m set --match-set wan_ip dst -m tcp -j DNAT --to-destination {{ nginx_ip }}
@@ -205,6 +231,14 @@ COMMIT
 # Protected CI job network (br-ci-prot): same. Devices see the router's own
 # address on the egress interface, as they did with the host-network runner.
 -A POSTROUTING -s 172.28.1.0/24 ! -o br-ci-prot -j MASQUERADE
+
+# IoT DNS redirect: unlike the hairpin below, the client and iot-dns are on
+# the same subnet, so iot-dns would answer the client directly from its own
+# address and the client would drop the reply. Masquerade the redirected flows
+# to the router's shim address (10.6.0.2) so replies come back through the
+# router and are un-DNATed. Pi-hole logs these few as the shim address.
+-A POSTROUTING -o vlan6-shim -d {{ iot_dns_ip }}/32 -p udp -m udp --dport 53 -m conntrack --ctstate DNAT -j MASQUERADE
+-A POSTROUTING -o vlan6-shim -d {{ iot_dns_ip }}/32 -p tcp -m tcp --dport 53 -m conntrack --ctstate DNAT -j MASQUERADE
 
 # Hairpin NAT needs no SNAT: the hairpinned clients are on other subnets than
 # nginx, so nginx's replies already return via the router (its gateway) and
@@ -283,6 +317,10 @@ COMMIT
 # NTP for the UPS network card (AP9631, docs/POWER.md); it polls the router
 -A INPUT -i {{ local_interface_name }}.4 -s 10.4.128.8/32 -d 10.4.0.1/32 -p udp -m udp --dport 123 -j ACCEPT
 
+# NTP for IoT devices (ntpd on the router's VLAN 6 gateway address); the back
+# camera syncs here instead of the internet
+-A INPUT -i {{ local_interface_name }}.6 -d 10.6.0.1/32 -p udp -m udp --dport 123 -j ACCEPT
+
 # TFTP access from mgmt VLAN (for PXE boot)
 -A INPUT -i {{ local_interface_name }}.4 -p udp -m udp --dport 69 -j ACCEPT
 
@@ -324,6 +362,13 @@ COMMIT
 
 # Block ICMP to internal nginx (prevents ping-based discovery from other networks)
 -A FORWARD -p icmp -d {{ lab_nginx_ip }} -j DROP
+
+# IoT devices without internet access (ipset iot_no_wan, members in
+# rules.ipset): nothing they send leaves via Mullvad or the WAN. Before
+# RELATED,ESTABLISHED so that existing sessions stop too. LAN flows (Frigate,
+# Home Assistant, NTP on the router) are unaffected.
+-A FORWARD -i {{ local_interface_name }}.6 -m set --match-set iot_no_wan src -o {{ mullvad_interface_name }} -j REJECT --reject-with icmp-admin-prohibited
+-A FORWARD -i {{ local_interface_name }}.6 -m set --match-set iot_no_wan src -o {{ inet_interface_name }} -j REJECT --reject-with icmp-admin-prohibited
 
 # Allow established/related connections (stateful firewall)
 -A FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
@@ -379,9 +424,21 @@ COMMIT
 # ICMP from internal to mgmt (diagnostics)
 -A FORWARD -p icmp -i vlan3-shim -o bond0.4 -j ACCEPT
 
-# IoT to Pi-hole DNS (udp/tcp 53 only)
--A FORWARD -d {{ pihole_ip }} -i {{ local_interface_name }}.6 -p udp -m udp --dport 53 -j ACCEPT
--A FORWARD -d {{ pihole_ip }} -i {{ local_interface_name }}.6 -p tcp -m tcp --dport 53 -j ACCEPT
+# IoT DNS (docs/FIREWALL.md, "IoT DNS"). IoT devices resolve through iot-dns
+# only; nat PREROUTING redirects their other DNS there (ctstate DNAT below).
+# Containers on the iot network (vlan6-shim, iot-dns among them) and the two
+# Pis reach Pi-hole directly. Everything else from VLAN 6 to Pi-hole is
+# dropped, and DNS over TLS/QUIC (853) from VLAN 6 is refused so that devices
+# fall back to plain DNS.
+-A FORWARD -i {{ local_interface_name }}.6 -o vlan6-shim -d {{ iot_dns_ip }}/32 -p udp -m udp --dport 53 -m conntrack --ctstate DNAT -j ACCEPT
+-A FORWARD -i {{ local_interface_name }}.6 -o vlan6-shim -d {{ iot_dns_ip }}/32 -p tcp -m tcp --dport 53 -m conntrack --ctstate DNAT -j ACCEPT
+-A FORWARD -s {{ zwave_address }} -d {{ pihole_ip }} -i {{ local_interface_name }}.6 -p udp -m udp --dport 53 -j ACCEPT
+-A FORWARD -s {{ zwave_address }} -d {{ pihole_ip }} -i {{ local_interface_name }}.6 -p tcp -m tcp --dport 53 -j ACCEPT
+-A FORWARD -s {{ satellite_2_address }} -d {{ pihole_ip }} -i {{ local_interface_name }}.6 -p udp -m udp --dport 53 -j ACCEPT
+-A FORWARD -s {{ satellite_2_address }} -d {{ pihole_ip }} -i {{ local_interface_name }}.6 -p tcp -m tcp --dport 53 -j ACCEPT
+-A FORWARD -d {{ pihole_ip }} -i {{ local_interface_name }}.6 -j DROP
+-A FORWARD -i {{ local_interface_name }}.6 -p tcp -m tcp --dport 853 -j REJECT --reject-with tcp-reset
+-A FORWARD -i {{ local_interface_name }}.6 -p udp -m udp --dport 853 -j REJECT --reject-with icmp-port-unreachable
 -A FORWARD -d {{ pihole_ip }} -i vlan6-shim -p udp -m udp --dport 53 -j ACCEPT
 -A FORWARD -d {{ pihole_ip }} -i vlan6-shim -p tcp -m tcp --dport 53 -j ACCEPT
 

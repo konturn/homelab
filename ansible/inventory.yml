@@ -108,6 +108,21 @@ all:
     thermador_hood_address: 10.6.128.22
     thermador_range_mac: 68:a4:0e:ab:35:f6
     thermador_range_address: 10.6.128.23
+    # Reservations for the remaining IoT devices. Static: the iot_no_wan ipset
+    # (networking/iptables/rules.ipset) and Home Assistant's Brother/IPP
+    # entries use these addresses.
+    brother_printer_mac: f0:a6:54:d4:0f:9e
+    brother_printer_address: 10.6.128.24
+    iot_poe_switch_mac: 34:98:b5:ae:b4:9a
+    iot_poe_switch_address: 10.6.128.25
+    miele_dishwasher_mac: 00:1d:63:70:1c:b2
+    miele_dishwasher_address: 10.6.128.26
+    litter_robot_1_mac: c4:d8:d5:6c:5a:f0
+    litter_robot_1_address: 10.6.128.27
+    litter_robot_2_mac: 70:b8:f6:65:4e:58
+    litter_robot_2_address: 10.6.128.28
+    petlibro_feeder_mac: c8:fe:0f:2a:39:d8
+    petlibro_feeder_address: 10.6.128.29
     snapserver_address: 10.6.32.2
     mosquitto_address: 10.6.32.3
     iot_nginx_ip: 10.6.32.5
