@@ -9,6 +9,12 @@ groups:
     folder: General Alerting
     interval: 1m
     rules:
+      # CI build containers (runner-*) run the ansible image, which ships a
+      # HEALTHCHECK that blips to failing_streak 1 under build load. Over 7d
+      # ~110 distinct runner-* containers hit a nonzero streak; two blips in
+      # 5m keep the series alive past `for: 10m` and page as critical
+      # (2026-11-08 08:20Z). They live minutes and nothing depends on them,
+      # so exclude them here, as the restart rules already do.
       - uid: container-health-failure
         title: Container Health Check Failed
         condition: B
@@ -22,6 +28,7 @@ groups:
                   |> range(start: -5m)
                   |> filter(fn: (r) => r._measurement == "docker_container_health")
                   |> filter(fn: (r) => r._field == "failing_streak")
+                  |> filter(fn: (r) => not r.container_name =~ /^runner-/)
                   |> filter(fn: (r) => r._value > 0)
                   |> group(columns: ["container_name"])
                   |> last()
