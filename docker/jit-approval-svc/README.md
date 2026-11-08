@@ -209,7 +209,7 @@ All configuration via environment variables:
 | `GITLAB_URL` | No | `https://gitlab.lab.nkontur.com` | GitLab URL for the `gitlab` and `gitlab-moltbot` backends |
 | `GITLAB_ADMIN_TOKEN` | No | — | Maintainer token for the `gitlab` backend (project access tokens) |
 | `GITLAB_PROJECT_ID` | No | `4` | Default project for `gitlab` tokens |
-| `GITLAB_AGENT_USER` | No | `moltbot` | User the `gitlab-<user>` backend impersonates |
+| `GITLAB_AGENT_USER` | No | `moltbot` | User the `gitlab-<user>` backend impersonates. Only `gitlab-moltbot` has a tier-1 entry; any other `gitlab-<user>` needs tier 2 (approval) |
 | `GITLAB_AGENT_ADMIN_TOKEN` | No | — | Administrator token for impersonation tokens; the backend is disabled without it |
 | `GITLAB_AGENT_SCOPES` | No | `api,read_api,read_repository,write_repository` | Scope allowlist for agent tokens |
 | `TAILSCALE_API_URL` | No | `https://api.tailscale.com` | Tailscale API for the dynamic backend |

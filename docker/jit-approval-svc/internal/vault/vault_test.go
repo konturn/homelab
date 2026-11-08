@@ -168,6 +168,12 @@ func TestMinTierForResource(t *testing.T) {
 	if got := MinTierForResource("unknown"); got != 0 {
 		t.Errorf("unknown min tier: expected 0, got %d", got)
 	}
+	// An agent identity other than the reviewed one needs approval.
+	for _, res := range []string{"gitlab-root", "gitlab-alice", "gitlab-moltbot2", "gitlab-"} {
+		if got := MinTierForResource(res); got < 2 {
+			t.Errorf("%s min tier = %d, want >= 2", res, got)
+		}
+	}
 }
 
 func TestResourceTierConsistency(t *testing.T) {
