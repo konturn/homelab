@@ -88,6 +88,44 @@ All local VLANs can reach the internet. Some traffic is routed through Mullvad V
 
 Exception: excel-vm (`excel_vm_address`, VLAN 3) routes via WAN for client M365 sign-in. A mangle `RETURN` skips the Mullvad mark for that one host and a FORWARD rule allows it out the WAN interface; every other VLAN 3 host stays marked and kill-switched.
 
+Exception: Home Assistant (`homeassistant_ip`, VLAN 3) reaches a short list of vehicle-service hosts via WAN; see [WAN bypass for Home Assistant](#wan-bypass-for-home-assistant). The rest of its traffic stays on Mullvad.
+
+### WAN bypass for Home Assistant
+
+**Why:** the connected-vehicle services used by the `toyota_connected` integration (Toyota, Lexus and Subaru/Solterra share one platform) reject VPN egress: the ForgeRock sign-in endpoint answers `403` from Mullvad exits and `200` from the home WAN address. Home Assistant cannot sign in through Mullvad.
+
+**What is bypassed:** only traffic *from Home Assistant's internal address* (`homeassistant_ip`, pinned in `ansible/inventory.yml` and `docker-compose.yml`) *to the current addresses of the listed hostnames*. Nothing else on VLAN 3/6 changes, and HA's other internet traffic still exits via Mullvad.
+
+| Host | Used for |
+|------|----------|
+| `login.subarudriverslogin.com` | Sign-in (Subaru / Solterra) |
+| `login.toyotadriverslogin.com` | Sign-in (Toyota) |
+| `login.lexusdriverslogin.com` | Sign-in (Lexus) |
+| `onecdn.telematicsct.com` | REST API gateway |
+| `oa-api.telematicsct.com` | GraphQL API (HTTPS and realtime websocket) |
+
+The list lives in `networking/iptables/wan-bypass-ha.hosts`. The integration's EU endpoints (`*.toyota-europe.com`, `*.toyotaconnectedeurope.io`) are not listed; they are only used for EU accounts.
+
+**How it works:**
+
+1. ipset `wan_bypass_ha` (`hash:ip`, 1 h timeout per entry) is declared in `rules.ipset`. The deploy creates it before `rules.v4` is validated, because `iptables-restore` refuses a ruleset that references a missing set; at boot `netfilter-persistent` creates it (plugin `10-ipset`) before loading `rules.v4`.
+2. `wan-bypass-update` (`/usr/local/sbin`, run by `wan-bypass-update.timer` every minute and 30 s after boot) resolves each hostname through the router's resolver (Pi-hole, the same resolver HA uses through Docker's embedded DNS), keeps only public unicast IPv4 answers, and adds them with a 1 h timeout (re-adding resets it). The hosts sit behind AWS load balancers and CloudFront with 0-60 s TTLs, hence the short interval; addresses that stop being handed out age out.
+3. mangle PREROUTING: `-s homeassistant_ip -i vlan3-shim -m set --match-set wan_bypass_ha dst -j RETURN`, before the VLAN 3 Mullvad mark. The packet stays unmarked, so it uses the `main` table (default route via WAN) instead of table `mullvad`.
+4. filter FORWARD: `-s homeassistant_ip -i vlan3-shim -o WAN -m set --match-set wan_bypass_ha dst -j ACCEPT`, after the kill switch. The kill switch (`REJECT` for mark `0x1` out the WAN) does not match because the packet is unmarked.
+5. nat POSTROUTING: the existing `-o WAN -j MASQUERADE` applies, as for VLAN 2/4/5.
+
+**Adding a host:** add the hostname to `wan-bypass-ha.hosts` (exact names only, no wildcards) with a comment saying what uses it, and merge. The deploy installs the list and runs `wan-bypass-update` once. Only add hosts that HA itself contacts and that demonstrably fail through Mullvad.
+
+**Checking it:**
+
+```bash
+ipset list wan_bypass_ha                     # current addresses + remaining timeout
+wan-bypass-update --dry-run                  # what the hostnames resolve to now
+systemctl status wan-bypass-update.timer
+journalctl -u wan-bypass-update -n 20
+iptables -t mangle -vnL PREROUTING           # RETURN counter for wan_bypass_ha
+```
+
 ### Inter-VLAN Traffic
 
 | Source | Destination | Policy |
@@ -367,4 +405,5 @@ iptables -A FORWARD -j LOG --log-prefix "FWD-DROPPED: "
 | 2026-10 | excel-vm routes via WAN for client M365 sign-in |
 | 2026-10 | Tailscale: role installs from the pinned apt repo; tailnet → nginx:443 rule; ts-* hooks documented |
 | 2026-10 | Vaultwarden, Audioserve, Home Assistant restricted to LAN + tailnet (Ombi stays public); game-server and port 22 forwards removed |
+| 2026-11 | Home Assistant reaches the connected-vehicle service hosts via WAN (ipset `wan_bypass_ha`); HA's internal address pinned |
 | 2026-11 | Docs audit: device rules (Shield TV gone, Apple TV limited), snapserver ports, NTP from the S2500, registry container retired, test/apply commands |

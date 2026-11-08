@@ -1,0 +1,8 @@
+[Unit]
+Description=Refresh the wan_bypass_ha ipset (Home Assistant WAN bypass, docs/FIREWALL.md)
+After=netfilter-persistent.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/wan-bypass-update /etc/iptables/wan-bypass-ha.hosts

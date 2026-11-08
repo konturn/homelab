@@ -91,6 +91,33 @@
   become: yes
   when: netplan.changed
 
+- name: Copy the ipset rules file
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/iptables/rules.ipset' }}"
+    dest: /etc/iptables/rules.ipset
+    owner: root
+    group: root
+    mode: '0640'
+  register: ipset
+
+- name: Copy the ipset netfilter plugin
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/iptables/10-ipset' }}"
+    dest: /usr/share/netfilter-persistent/plugins.d/10-ipset
+    owner: root
+    group: root
+    mode: '0755'
+  register: netfilter
+
+# rules.v4 references the sets (-m set), and both the validate step below and
+# fw-apply fail when a referenced set does not exist yet. -exist leaves
+# existing sets and their members alone.
+- name: Create the ipsets before rules.v4 is validated
+  ansible.builtin.shell: set -o pipefail; grep ^create /etc/iptables/rules.ipset | ipset -exist restore
+  args:
+    executable: /bin/bash
+  changed_when: false
+
 - name: Template the iptables rules file
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/iptables/rules.v4' }}"
@@ -111,24 +138,6 @@
     validate: /usr/sbin/ip6tables-restore --test %s
   register: iptables6
 
-- name: Copy the ipset rules file
-  ansible.builtin.copy:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/iptables/rules.ipset' }}"
-    dest: /etc/iptables/rules.ipset
-    owner: root
-    group: root
-    mode: '0640'
-  register: ipset
-
-- name: Copy the ipset netfilter plugin
-  ansible.builtin.copy:
-    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/iptables/10-ipset' }}"
-    dest: /usr/share/netfilter-persistent/plugins.d/10-ipset
-    owner: root
-    group: root
-    mode: '0755'
-  register: netfilter
-
 # `netfilter-persistent reload` flushes every table and deletes the chains
 # Docker (DOCKER*), Tailscale (ts-*) and libvirt (LIBVIRT_*) install at
 # runtime; the deploy used to restart Docker afterwards (restarting every
@@ -146,6 +155,39 @@
 - name: Reload ipsets
   ansible.builtin.command: /usr/share/netfilter-persistent/plugins.d/10-ipset reload
   when: ipset.changed or netfilter.changed
+  register: ipset_reload
+
+# The reload flushes every set; refill them right away instead of waiting
+# for the cron job / timer.
+- name: Refill the wan_ip ipset after a reload
+  ansible.builtin.command: /bin/bash /root/cron/ip_update.sh
+  when: ipset_reload is changed
+
+- name: Install the WAN bypass host list and updater (docs/FIREWALL.md)
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/networking/iptables/' + item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - { src: wan-bypass-ha.hosts, dest: /etc/iptables/wan-bypass-ha.hosts, mode: '0644' }
+    - { src: wan-bypass-update, dest: /usr/local/sbin/wan-bypass-update, mode: '0755' }
+    - { src: wan-bypass-update.service, dest: /etc/systemd/system/wan-bypass-update.service, mode: '0644' }
+    - { src: wan-bypass-update.timer, dest: /etc/systemd/system/wan-bypass-update.timer, mode: '0644' }
+  register: wan_bypass_files
+
+- name: Enable the wan-bypass-update timer
+  ansible.builtin.systemd:
+    name: wan-bypass-update.timer
+    state: started
+    enabled: true
+    daemon_reload: "{{ wan_bypass_files is changed }}"
+  when: not ansible_check_mode
+
+- name: Refresh the wan_bypass_ha ipset now
+  ansible.builtin.command: /usr/local/sbin/wan-bypass-update /etc/iptables/wan-bypass-ha.hosts
+  when: (wan_bypass_files is changed or ipset_reload is changed) and not ansible_check_mode
 
 - name: Load iptables rules (keeps Docker/Tailscale/libvirt chains)
   ansible.builtin.command: /usr/local/sbin/fw-apply 4 /etc/iptables/rules.v4
