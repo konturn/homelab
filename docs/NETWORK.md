@@ -319,7 +319,9 @@ VLAN 3/6 traffic is marked for Mullvad in mangle PREROUTING, which runs before
 the DNAT. Packets addressed to one of the router's own addresses (`addrtype
 LOCAL`, which includes the WAN address) skip the mark, so hairpinned VLAN 3/6
 flows are routed to nginx by the main table instead of into the tunnel.
-Internet-bound traffic is still marked. Clients using Pi-hole do not hairpin at
+Internet-bound traffic is still marked. FORWARD then accepts them only as
+DNATed flows (`--ctstate DNAT`) to nginx on 443 and 32400, the ports the WAN
+exposes; direct connections from VLAN 3/6 to the nginx address stay blocked. Clients using Pi-hole do not hairpin at
 all, because Pi-hole answers `*.nkontur.com` with the nginx address.
 
 ---

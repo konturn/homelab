@@ -399,6 +399,13 @@ COMMIT
 # IoT VLAN to Mullvad VPN
 -A FORWARD -i vlan6-shim -o {{ mullvad_interface_name }} -j ACCEPT
 
+# Hairpin NAT from VLAN 3/6 (docs/NETWORK.md): only flows that nat PREROUTING
+# DNATed from the WAN address to nginx (ctstate DNAT), only on the ports the
+# WAN exposes. Direct connections to nginx_ip stay blocked. VLAN 4 needs no
+# rule (full forward access).
+-A FORWARD -s 10.3.0.0/16 -o vlan2-shim -d {{ nginx_ip }}/32 -p tcp -m multiport --dports 443,32400 -m conntrack --ctstate DNAT -j ACCEPT
+-A FORWARD -s 10.6.0.0/16 -o vlan2-shim -d {{ nginx_ip }}/32 -p tcp -m multiport --dports 443,32400 -m conntrack --ctstate DNAT -j ACCEPT
+
 # Management VLAN (vlan4-shim) - Full forward access
 -A FORWARD -i vlan4-shim -j ACCEPT
 
