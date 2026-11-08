@@ -687,26 +687,33 @@ notification history):
 
 ---
 
-## 11. Open questions for Noah
+## 11. Decisions (2026-11-08)
 
-1. **Receiver choice.** Agree with a standalone `event-router` (option B) rather than extending `grafana.js`?
-2. **Executor split.** Is a separate root-owned host helper with a Unix socket acceptable, or would you rather the container talk to a new restricted docker-socket-proxy instance (containers restart only) and skip systemd actions at first?
-3. **Paging channel when OpenClaw is down.** Email from the router is the fallback in this draft. Do you want a second, independent Telegram path (e.g. reusing the JIT service's bot) so pages stay on your phone?
-4. **Email in phase 3.** OK to narrow Grafana email to page classes only, or keep email for every `critical` as a belt-and-braces channel?
-5. **Page classes.** Is the list in 6.3 right? In particular: platform down (GitLab, Vault, HA, Pi-hole), host not reporting (row 8), certificate at 3 days.
-6. **Quiet hours.** Should non-security pages between 23:00 and 08:00 wait for the morning (as `ALERTS.md` does for warnings), with UPS, security and data-at-risk exempt?
-7. **Platform restarts.** Should the router ever restart GitLab, Vault or Pi-hole on its own (with strict limits), or only `collect` and page?
-8. **Pi actions.** Z-Wave and satellite containers run on the Pis. Extend the executor to them over SSH in phase 3, or leave Pi-side remediation to the agent until the PDU exists?
-9. **Rate-limit defaults.** 1 run per 6h per playbook and 6 actions/hour globally: too tight, too loose?
-10. **Shadow playbook MRs.** Section 8.3 has every playbook MR reviewed by you, including ones that only add a `shadow`-mode playbook (which cannot act). Keep it that way, or allow a narrow auto-merge for shadow-only additions, with promotion to `active` always yours?
-11. **Drift integration.** Should the router own the drift classification outcomes (row 16), or should the drift jobs keep acting on their own and only report to the router for the digest?
-12. **Crash-loop with no deploy.** For row 5 when no deploy explains it: restart-once anyway (it may be a dependency that recovered), or straight to the agent?
-13. **Kill-switch location.** Is a host override file enough, or do you want a Telegram command (via OpenClaw) or an HA toggle too?
-14. **Success targets.** Are fewer than 10 pages/month and < 30 min MTTR the right bars?
-15. **I5-style regressions.** Out of scope here; do you want a separate CI guard (e.g. fail an MR whose diff reverts lines changed by commits after its merge base) tracked as its own issue?
-16. **Learning-loop tuning by bot-config.** Threshold/`for`/wording tuning of existing rules would auto-merge through the bot-config class (8.3). Comfortable with that being driven by the routing review, or should tuning MRs that come from it wait for you for the first few months?
-17. ~~Feedback capture~~ — resolved: no per-event feedback from Noah; outcomes are judged from observed signals (8.4).
-18. **Routing-review cadence and output.** Weekly, results in the Monday Morning Digest: right cadence and place? Should findings that need a decision go to the monthly decision queue instead of separate issues?
+Noah accepted every recommendation. These are now part of the design:
+
+| # | Decision |
+|---|---|
+| 1 | Standalone `event-router` service (option B), not an extension of the OpenClaw Grafana hook. |
+| 2 | Root-owned host executor behind a Unix socket; container and systemd restarts. |
+| 3 | Second, independent Telegram paging path via the JIT service's bot when OpenClaw is down; email remains the last fallback. |
+| 4 | After phase 3, Grafana email only for page classes. |
+| 5 | Page classes as in 6.3: security, data at risk, UPS, failed remediation, platform down (GitLab, Vault, HA, Pi-hole), host not reporting, certificate ≤ 3 days. |
+| 6 | Quiet hours 23:00–08:00 for non-urgent pages; UPS, security and data-at-risk exempt. |
+| 7 | The router never restarts GitLab, Vault or Pi-hole: `collect` and page only. |
+| 8 | No Pi-side executor; Pi remediation stays with OpenClaw until the PDU exists. |
+| 9 | Defaults: 1 run per 6h per playbook, 6 actions/hour globally; the routing review tunes them. |
+| 10 | Shadow-only playbook additions may auto-merge; promotion to `active` is always a reviewed MR. |
+| 11 | Drift jobs keep acting on their own (auto-resolve rules); they only report to the router for the digest. |
+| 12 | Crash-loop with no deploy: restart once, then the agent. |
+| 13 | Kill switch: host override file plus a Telegram command; flipping it notifies Noah, and an override older than 24h re-notifies. |
+| 14 | Targets: < 10 pages/month, < 30 min MTTR; revisited after 3 months. |
+| 15 | Resolved: the stale-revert CI guard is being built separately. |
+| 16 | Threshold, `for` and wording tuning from the routing review auto-merges through bot-config. |
+| 17 | Resolved: no per-event feedback from Noah; outcomes are judged from observed signals (8.4). |
+| 18 | Weekly routing review, results in the Monday digest; anything needing a decision goes to the monthly decision queue. |
+| A | Executor authentication: Unix socket permissions plus kernel peer credentials (`SO_PEERCRED`), no bearer token. The executor keeps its own allowlist, rate limits and append-only journal log, independent of the router. |
+| B | Events a playbook handled reach OpenClaw only through the batch decision log, never as a per-event wake-up. |
+| C | Terminology: "PB" in tables means playbook. |
 
 ## 12. Formal model: properties to check (for review)
 
