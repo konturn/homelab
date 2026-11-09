@@ -8,11 +8,14 @@ ha_config_sync_user: ha-config
 ha_config_sync_principal: ha-config-deploy
 ha_config_sync_config_dir: "{{ docker_persistent_data_path }}/homeassistant"
 # Directories loaded by the `automation manual:` / `script manual:` /
-# `scene manual:` includes in docker/homeassistant/configuration.yaml.
+# `scene manual:` includes in docker/homeassistant/configuration.yaml, and the
+# private repo's packages (packages/private/, loaded by the recursive
+# `packages: !include_dir_named packages`).
 ha_config_sync_managed_dirs:
   - automations
   - scripts
   - scenes
+  - packages/private
 ha_config_sync_state_dir: /var/lib/ha-config-sync
 # Pre-deploy archives of the managed and UI files (last 30 kept). /var/backups
 # is not in restic; the HA volume itself is.

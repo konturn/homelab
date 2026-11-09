@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
 """ha-config-sync: deploy repo-managed Home Assistant automations, scripts,
-scenes and blueprints into the HA config directory, and export the live state.
+scenes, blueprints and private packages into the HA config directory, and
+export the live state.
 
 Runs as root through sudo, as the forced command of the `ha-config` SSH user
 (ansible/roles/ha-config-sync, docs/HOMEASSISTANT.md). The subcommand comes
 from SSH_ORIGINAL_COMMAND (or argv when run by hand):
 
-  deploy    stdin: tar.gz of automations/ scripts/ scenes/ blueprints/.
-            Checks it, absorbs identical items out of the UI files, backs up,
-            then replaces the managed directories. Prints a JSON summary.
+  deploy    stdin: tar.gz of automations/ scripts/ scenes/ blueprints/
+            packages/. Checks it, absorbs identical items out of the UI files,
+            backs up, then replaces the managed directories (packages/ goes to
+            packages/private/). Prints a JSON summary.
             Does not reload Home Assistant (the CI job does, over the API).
   check     like deploy, but writes nothing.
   export    stdout: tar.gz of the UI files, the managed directories, the
-            managed blueprints and meta.json (image, package ids, counts).
+            managed blueprints, the private packages and meta.json (image,
+            package ids and file names, counts).
   status    JSON: item counts per domain and source.
-  log SINCE JSON: automation/script/scene/blueprint ERROR and WARNING lines in
-            home-assistant.log at or after SINCE (unix seconds).
+  log SINCE JSON: ERROR and WARNING lines in home-assistant.log at or after
+            SINCE (unix seconds) from automation/script/scene/blueprint, config
+            loading and the helper integrations packages may configure.
 
 Nothing here talks to Home Assistant or reads secrets.yaml.
 """
@@ -47,6 +51,13 @@ DOMAINS = {
 BLUEPRINTS = "blueprints"
 # Blueprints HA ships and recreates itself; never managed.
 BLUEPRINT_SKIP = re.compile(r"^[^/]+/homeassistant/")
+# Packages from the private repo: its packages/<name>.yaml is deployed to
+# packages/private/<name>.yaml. `packages: !include_dir_named packages` walks
+# subdirectories (skipping hidden ones) and names each package after the file's
+# base name, so a name must not also be used by a package of the homelab repo
+# (top level of packages/), or one would silently replace the other.
+PACKAGES = "packages"
+PRIVATE_PACKAGES = os.path.join(PACKAGES, "private")
 
 
 class Fail(Exception):
@@ -162,9 +173,12 @@ def read_ui():
 def read_packages():
     """{domain: {key: package file}} for items defined in packages/."""
     out = {d: {} for d in DOMAINS}
-    pdir = os.path.join(CONFIG, "packages")
+    pdir = os.path.join(CONFIG, PACKAGES)
     for dirpath, dirnames, files in os.walk(pdir):
-        dirnames.sort()
+        # private packages may not define automations/scripts/scenes (checked
+        # on deploy); hidden directories are staging copies HA does not load.
+        dirnames[:] = sorted(d for d in dirnames if not d.startswith(".")
+                             and os.path.join(dirpath, d) != os.path.join(CONFIG, PRIVATE_PACKAGES))
         for fn in sorted(files):
             if not fn.endswith(".yaml"):
                 continue
@@ -202,9 +216,69 @@ def managed_blueprints(root):
     return files
 
 
+def homelab_package_files():
+    """Base names of the homelab repo's packages (packages/*.yaml, not private/)."""
+    pdir = os.path.join(CONFIG, PACKAGES)
+    names = set()
+    for dirpath, dirnames, files in os.walk(pdir):
+        dirnames[:] = [d for d in dirnames if not d.startswith(".")
+                       and os.path.join(dirpath, d) != os.path.join(CONFIG, PRIVATE_PACKAGES)]
+        names |= {fn[:-5] for fn in files if fn.endswith(".yaml") and not fn.startswith(".")}
+    return names
+
+
+def read_private_packages(base):
+    """{name: package mapping} from a packages directory (flat, *.yaml).
+    Fail on problems: not a mapping, automations/scripts/scenes (those belong
+    in their directories), or a name the homelab repo already uses."""
+    out, errors = {}, []
+    if not os.path.isdir(base):
+        return out
+    taken = homelab_package_files()
+    for fn in sorted(os.listdir(base)):
+        path = os.path.join(base, fn)
+        if fn.startswith(".") or fn == "README.md" or not fn.endswith(".yaml"):
+            continue
+        name = fn[:-5]
+        try:
+            data = yload(path)
+        except yaml.YAMLError as e:
+            errors.append(f"packages/{fn}: {e}")
+            continue
+        if data is None:
+            data = {}
+        if not isinstance(data, dict):
+            errors.append(f"packages/{fn}: must be a mapping (a Home Assistant package)")
+            continue
+        bad = sorted(str(k) for k in data if str(k).split(" ")[0] in DOMAINS)
+        if bad:
+            errors.append(f"packages/{fn}: defines {', '.join(bad)}; automations, scripts and scenes "
+                          "belong in their own directories")
+        if name in taken:
+            errors.append(f"packages/{fn}: the homelab repo already has a package named {name!r} "
+                          f"(packages/{fn}); Home Assistant would load only one of them")
+        out[name] = data
+    if errors:
+        raise Fail("private packages:\n  " + "\n  ".join(errors))
+    return out
+
+
+def package_changed_keys(old, new):
+    """Top-level keys (integrations, e.g. `light`, `input_boolean`) whose
+    content differs between two {name: package} sets."""
+    keys = {str(k) for pkg in list(old.values()) + list(new.values()) for k in pkg}
+    changed = set()
+    for k in keys:
+        a = {n: p.get(k) for n, p in old.items() if k in p}
+        b = {n: p.get(k) for n, p in new.items() if k in p}
+        if a != b:
+            changed.add(k)
+    return sorted(changed)
+
+
 # --- helpers ---------------------------------------------------------------
 def safe_extract(data, dest):
-    allowed_top = {d[0] for d in DOMAINS.values()} | {BLUEPRINTS}
+    allowed_top = {d[0] for d in DOMAINS.values()} | {BLUEPRINTS, PACKAGES}
     with tarfile.open(fileobj=io.BytesIO(data), mode="r:*") as tar:
         members = []
         for m in tar.getmembers():
@@ -218,6 +292,8 @@ def safe_extract(data, dest):
                 raise Fail(f"refusing tar member {m.name!r}")
             if m.isfile() and not name.endswith(".yaml") and parts[-1] not in (".gitkeep", "README.md"):
                 raise Fail(f"refusing non-.yaml file {m.name!r}")
+            if parts[0] == PACKAGES and len(parts) > 2:
+                raise Fail(f"refusing {m.name!r}: packages/ is flat (one file per package)")
             members.append(m)
         tar.extractall(dest, members=members, filter="data")
 
@@ -250,9 +326,10 @@ def backup(stamp):
                 p = os.path.join(CONFIG, name)
                 if os.path.exists(p):
                     tar.add(p, arcname=name)
-        bp = os.path.join(CONFIG, BLUEPRINTS)
-        if os.path.isdir(bp):
-            tar.add(bp, arcname=BLUEPRINTS)
+        for name in (BLUEPRINTS, PRIVATE_PACKAGES):
+            p = os.path.join(CONFIG, name)
+            if os.path.isdir(p):
+                tar.add(p, arcname=name)
     os.chmod(path, 0o600)
     old = sorted(f for f in os.listdir(BACKUPS) if f.endswith(".tar.gz"))
     for f in old[:-KEEP_BACKUPS]:
@@ -262,7 +339,9 @@ def backup(stamp):
 
 def replace_dir(staged, name):
     dest = os.path.join(CONFIG, name)
-    new, old = os.path.join(CONFIG, f".{name}.new"), os.path.join(CONFIG, f".{name}.old")
+    # Hidden siblings: HA's include_dir loaders skip hidden directories.
+    parent, base = os.path.split(dest)
+    new, old = os.path.join(parent, f".{base}.new"), os.path.join(parent, f".{base}.old")
     for p in (new, old):
         shutil.rmtree(p, ignore_errors=True)
     if os.path.isdir(staged):
@@ -302,6 +381,11 @@ def cmd_deploy(dry_run):
         managed = read_managed(stage)
         ui = read_ui()
         packages = read_packages()
+        new_pkgs = read_private_packages(os.path.join(stage, PACKAGES))
+        try:
+            old_pkgs = read_private_packages(os.path.join(CONFIG, PRIVATE_PACKAGES))
+        except Fail:
+            old_pkgs = {}  # what is live now is replaced either way
 
         errors, absorb = [], {d: [] for d in DOMAINS}
         for d in DOMAINS:
@@ -346,6 +430,10 @@ def cmd_deploy(dry_run):
         bp_live = managed_blueprints(CONFIG)
         summary["changed"]["blueprints"] = (any(bp_live.get(k) != v for k, v in new_bp.items())
                                             or bool(old_bp - set(new_bp)))
+        summary["changed"]["packages"] = not tree_equal(os.path.join(stage, PACKAGES),
+                                                        os.path.join(CONFIG, PRIVATE_PACKAGES))
+        summary["packages"] = {"files": sorted(new_pkgs),
+                               "changed_keys": package_changed_keys(old_pkgs, new_pkgs)}
         if dry_run:
             print(json.dumps(summary, indent=2))
             return 0
@@ -353,6 +441,8 @@ def cmd_deploy(dry_run):
         summary["backup"] = backup(stamp)
         for d, (sub, ui_name, kind) in DOMAINS.items():
             replace_dir(os.path.join(stage, sub), sub)
+        if summary["changed"]["packages"]:
+            replace_dir(os.path.join(stage, PACKAGES), PRIVATE_PACKAGES)
         for d, (sub, ui_name, kind) in DOMAINS.items():
             if not absorb[d]:
                 continue
@@ -404,6 +494,10 @@ def cmd_status():
         "counts": counts(managed, ui, packages),
         "ui_ids": {d: [k for k, _c in ui[d][1]] for d in DOMAINS},
         "package_ids": {d: sorted(packages[d]) for d in DOMAINS},
+        "package_files": sorted(homelab_package_files()),
+        "private_package_files": sorted(fn[:-5] for fn in os.listdir(os.path.join(CONFIG, PRIVATE_PACKAGES))
+                                        if fn.endswith(".yaml") and not fn.startswith("."))
+        if os.path.isdir(os.path.join(CONFIG, PRIVATE_PACKAGES)) else [],
         "image": ha_image(),
     }
 
@@ -417,6 +511,10 @@ def cmd_export():
                 p = os.path.join(CONFIG, name)
                 if os.path.exists(p):
                     tar.add(p, arcname=f"live/{name}")
+        pp = os.path.join(CONFIG, PRIVATE_PACKAGES)
+        if os.path.isdir(pp):
+            tar.add(pp, arcname=f"live/{PACKAGES}",
+                    filter=lambda ti: None if os.path.basename(ti.name).startswith(".") else ti)
         for rel, content in managed_blueprints(CONFIG).items():
             ti = tarfile.TarInfo(f"live/{BLUEPRINTS}/{rel}")
             ti.size, ti.mode = len(content), 0o644
@@ -430,8 +528,10 @@ def cmd_export():
 
 
 LOG_LINE = re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)(?:\.\d+)? (ERROR|WARNING) \(\S+\) \[([^\]]+)\] (.*)")
-LOG_COMPONENTS = re.compile(r"homeassistant\.(components\.(automation|script|scene|blueprint|homeassistant\.scene)"
-                            r"|helpers\.(script|entity_platform|config_validation)|config)\b")
+LOG_COMPONENTS = re.compile(r"(homeassistant\.(components\.(automation|script|scene|blueprint|homeassistant\.scene"
+                            r"|group|input_[a-z]+|counter|timer|schedule|template|integration)"
+                            r"|helpers\.(script|entity_platform|entity_registry|config_validation|reload)"
+                            r"|config|setup)|custom_components\.adaptive_lighting)\b")
 
 
 def cmd_log(since):
