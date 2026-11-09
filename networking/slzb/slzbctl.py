@@ -16,15 +16,22 @@ Strictly read-only: the tool sends only GET requests to /api2?action=0
 (the UI's "get page" call), /ha_info and /ha_sensors. It has no apply and
 never calls the save, restart, update or flash endpoints.
 
+The web API needs a login (HTTP basic auth): SLZB_USER / SLZB_PASSWORD, else
+the username and password fields of the file's vault_path (VAULT_ADDR plus
+VAULT_TOKEN, or VAULT_ID_TOKEN for a JWT login with VAULT_JWT_ROLE, default
+"ci-deploy"). A rejected login is never retried.
+
 Exit codes: 0 ok / no differences, 1 error, 2 drift.
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import re
+import ssl
 import sys
 import urllib.error
 import urllib.request
@@ -99,13 +106,24 @@ def is_secret_key(k: str) -> bool:
 
 
 class Coordinator:
-    def __init__(self, host: str, timeout: float = 10):
+    def __init__(self, host: str, timeout: float = 10, user: str | None = None, password: str | None = None):
         self.base = host if "://" in host else "http://" + host
         self.timeout = timeout
+        self.headers = {}
+        if user and password:
+            tok = base64.b64encode(("%s:%s" % (user, password)).encode()).decode()
+            self.headers["Authorization"] = "Basic " + tok
 
     def _get(self, path: str):
-        req = urllib.request.Request(self.base + path, method="GET")
-        return urllib.request.urlopen(req, timeout=self.timeout)
+        req = urllib.request.Request(self.base + path, method="GET", headers=self.headers)
+        try:
+            return urllib.request.urlopen(req, timeout=self.timeout)
+        except urllib.error.HTTPError as e:
+            if e.code == 401:
+                # one attempt only; no other user or password is tried
+                raise RuntimeError("login rejected (HTTP 401); not retrying. Check the credentials in Vault.") \
+                    from None
+            raise
 
     def json(self, path: str) -> dict:
         with self._get(path) as r:
@@ -155,7 +173,7 @@ class Coordinator:
 # --------------------------------------------------------------------------
 
 _PLAIN_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-TOP_ORDER = ["schema", "name", "host", "device", "settings"]
+TOP_ORDER = ["schema", "name", "host", "vault_path", "device", "settings"]
 SECTION_ORDER = ["status", *PAGES.values(), "sensors"]
 
 
@@ -264,6 +282,46 @@ def fmt(p: tuple) -> str:
     return ".".join(p)
 
 
+def vault_creds(path: str) -> tuple[str, str]:
+    addr = os.environ.get("VAULT_ADDR")
+    if not addr:
+        raise RuntimeError("VAULT_ADDR is not set and SLZB_USER/SLZB_PASSWORD are not in the environment")
+    ctx = ssl.create_default_context(cafile=os.environ.get("VAULT_CACERT") or None)
+    if os.environ.get("VAULT_SKIP_VERIFY", "").lower() in ("1", "true"):
+        ctx.check_hostname, ctx.verify_mode = False, ssl.CERT_NONE
+    token = os.environ.get("VAULT_TOKEN")
+    if not token:
+        jwt = os.environ.get("VAULT_ID_TOKEN")
+        if not jwt:
+            raise RuntimeError("neither VAULT_TOKEN nor VAULT_ID_TOKEN is set")
+        body = json.dumps({"role": os.environ.get("VAULT_JWT_ROLE", "ci-deploy"), "jwt": jwt}).encode()
+        req = urllib.request.Request(f"{addr}/v1/auth/jwt/login", data=body, method="POST")
+        try:
+            with urllib.request.urlopen(req, context=ctx, timeout=15) as r:
+                token = json.load(r)["auth"]["client_token"]
+        except (urllib.error.URLError, KeyError, ValueError) as e:
+            raise RuntimeError(f"Vault JWT login failed: {type(e).__name__}") from None
+    mount, _, rest = path.partition("/")
+    req = urllib.request.Request(f"{addr}/v1/{mount}/data/{rest}", headers={"X-Vault-Token": token})
+    try:
+        with urllib.request.urlopen(req, context=ctx, timeout=15) as r:
+            data = json.load(r)["data"]["data"]
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"Vault read of {path} failed: HTTP {e.code}") from None
+    except (urllib.error.URLError, KeyError, ValueError) as e:
+        raise RuntimeError(f"Vault read of {path} failed: {type(e).__name__}") from None
+    if not data.get("username") or not data.get("password"):
+        raise RuntimeError(f"Vault secret {path} lacks username/password")
+    return data["username"], data["password"]
+
+
+def coordinator(desired: dict, host: str) -> Coordinator:
+    user, pw = os.environ.get("SLZB_USER"), os.environ.get("SLZB_PASSWORD")
+    if not (user and pw) and desired.get("vault_path"):
+        user, pw = vault_creds(desired["vault_path"])
+    return Coordinator(host, user=user, password=pw)
+
+
 def host_of(desired: dict, a) -> str:
     host = a.host or os.environ.get("SLZB_HOST") or desired.get("host")
     if not host:
@@ -274,9 +332,9 @@ def host_of(desired: dict, a) -> str:
 def cmd_export(a) -> int:
     old = read_file(a.file)
     host = host_of(old, a)
-    live = Coordinator(host).read()
+    live = coordinator(old, host).read()
     new = {"schema": SCHEMA, "name": old.get("name") or "slzb-mr1", "host": a.host or old.get("host") or host,
-           **live}
+           **({"vault_path": old["vault_path"]} if old.get("vault_path") else {}), **live}
     write_file(a.output or a.file, new)
     print("Exported %d values from %s." % (len(flat(new)), host), file=sys.stderr)
     return 0
@@ -288,7 +346,7 @@ def cmd_drift(a) -> int:
         print("ERROR    %s is missing or has no settings" % a.file)
         return 1
     host = host_of(desired, a)
-    changed, new, unread = compare(desired, Coordinator(host).read())
+    changed, new, unread = compare(desired, coordinator(desired, host).read())
     print("== %s (%s)" % (desired.get("name", "slzb"), host))
     for p, want, have in changed:
         print("DRIFT    %s: file %r, live %r" % (fmt(p), want, have))
@@ -314,6 +372,8 @@ def cmd_check(a) -> int:
         errors.append("no host")
     if not (d.get("settings") or {}).get("mode"):
         errors.append("no settings.mode")
+    if not d.get("vault_path"):
+        errors.append("no vault_path (the web API needs a login)")
     for p in flat(d):
         if any(is_secret_key(x) for x in p[1:]):
             errors.append("%s looks like a credential or identifier; it must not be in the file" % fmt(p))
