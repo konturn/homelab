@@ -289,6 +289,10 @@
     # from /root/cron/credentials.
     job: "bash -c 'set -o pipefail; /bin/bash /root/cron/renew.sh 2>&1 | logger -t ssl-renew-cron'"
 
+# MakeMKV (pinned version) and its registration key, for the ISO converter.
+- name: MakeMKV
+  ansible.builtin.import_tasks: makemkv.yml
+
 - name: Template out cron script for ISO conversion
   ansible.builtin.template:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/docker/plex/convert_isos_makemkv.sh' }}"

@@ -1,0 +1,12 @@
+# MakeMKV for the ISO converter (tasks/makemkv.yml).
+# Bump all three together. Superseded releases move to /download/old/, which
+# also holds the current one, so the URL keeps working for a pinned version.
+# The hashes are of the files downloaded from that URL when the version was
+# pinned (makemkv.com publishes none). 1.18.2's bin tarball holds the same
+# makemkvcon binary as the build installed on the router since 2025-11-16.
+makemkv_version: "1.18.2"
+makemkv_download_url: https://www.makemkv.com/download/old
+makemkv_sha256:
+  oss: b9497f5555c257f5d3c7f18b6ab03c74cff3ea4437e80349d618d115bf5fa445
+  bin: bfc4c7cebc0f00497671ffd56e6a34f0770a9e6af7eff2f0127efa143f28636e
+makemkv_src_dir: /usr/local/src/makemkv

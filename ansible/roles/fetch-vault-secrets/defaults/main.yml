@@ -177,6 +177,12 @@ vault_secret_paths:
     fields:
       vault_rear_camera_pass: "password"
 
+  # MakeMKV registration key for the ISO converter (configure-router-network,
+  # tasks/makemkv.yml -> /root/.MakeMKV/settings.conf)
+  - path: "services/makemkv"
+    fields:
+      vault_makemkv_app_key: "app_key"
+
   # Email secrets
   - path: "email/gmail"
     fields:
