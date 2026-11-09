@@ -10,13 +10,18 @@
 - name: Read the installed MakeMKV version
   # A throwaway HOME, so the probe neither reads the key nor rewrites
   # /root/.MakeMKV. disc:9999 does not exist: makemkvcon prints its version
-  # and exits.
+  # and exits non-zero (253), so its exit status is ignored; only a timeout
+  # (124) fails the probe. An empty version means "not installed" and
+  # triggers the build, whose own probe below is asserted.
   ansible.builtin.shell: |
     set -o pipefail
     h=$(mktemp -d)
     trap 'rm -rf "$h"' EXIT
     command -v makemkvcon >/dev/null || exit 0
-    HOME="$h" timeout 60 makemkvcon -r info disc:9999 2>/dev/null |
+    rc=0
+    out=$(HOME="$h" timeout 60 makemkvcon -r info disc:9999 2>/dev/null) || rc=$?
+    [ "$rc" -ne 124 ] || exit 124
+    printf '%s\n' "$out" |
       sed -n 's/^MSG:1005,.*"MakeMKV v\([0-9][0-9.]*\) .*/\1/p' | head -1
   args:
     executable: /bin/bash
@@ -80,11 +85,15 @@
         executable: /bin/bash
 
     - name: Read the MakeMKV version again
+      # Exit status ignored for the same reason as the first probe.
       ansible.builtin.shell: |
         set -o pipefail
         h=$(mktemp -d)
         trap 'rm -rf "$h"' EXIT
-        HOME="$h" timeout 60 makemkvcon -r info disc:9999 2>/dev/null |
+        rc=0
+        out=$(HOME="$h" timeout 60 makemkvcon -r info disc:9999 2>/dev/null) || rc=$?
+        [ "$rc" -ne 124 ] || exit 124
+        printf '%s\n' "$out" |
           sed -n 's/^MSG:1005,.*"MakeMKV v\([0-9][0-9.]*\) .*/\1/p' | head -1
       args:
         executable: /bin/bash
