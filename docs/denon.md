@@ -69,6 +69,9 @@ and selecting another input would change the receiver. So:
   `UNREAD` (`drift`), never treated as drift.
 - `sound_mode` is exported but not drift-checked, because it changes with the
   remote all the time.
+- Other on-the-fly / quick-menu settings are also exported and applied but
+  never drift-checked (neither `DRIFT` nor `NEW`); see "Not drift-checked"
+  below.
 
 ### Runtime state (never in the file)
 
@@ -129,8 +132,28 @@ allows the receiver's telnet and HTTP ports. It is strictly read-only.
 |---|---|---|
 | No differences | 0 | Job passes |
 | Receiver in standby | 0 | `SKIPPED` line, job passes |
-| `DRIFT` (value changed) or `NEW` (setting reported but not in the file) | 2 | Job fails and mails the report to root (`Homelab: Denon AVR settings drift`), the same path as the Aruba and NETGEAR drift checks |
+| `DRIFT` (value changed) or `NEW` (setting reported but not in the file), except the settings not drift-checked | 2 | Job fails and mails the report to root (`Homelab: Denon AVR settings drift`), the same path as the Aruba and NETGEAR drift checks |
 | Receiver unreachable / error | 1 | Same mail |
+
+### Not drift-checked
+
+These settings are adjusted on the fly from the remote or the Quick Select /
+options menus, so they are exported and still sent by `apply`, but `drift`
+ignores them (changed values and `NEW` entries alike):
+
+| Group | Fields |
+|---|---|
+| Per-input levels and tone | channel levels (`CV`), subwoofer level/on (`PSSWL`, `PSSWR`), bass/treble/tone control (`PSBAS`, `PSTRE`, `PSTONE CTRL`), LFE level (`PSLFE`), dialog level/enhancer (`PSDIC`, `PSDEH`) |
+| Per-input Audyssey and dynamics | Dynamic EQ (`PSDYNEQ`), Dynamic Volume (`PSDYNVOL`), reference level offset (`PSREFLEV`), Cinema EQ, DRC |
+| Zones 2/3 | bass, treble and channel levels |
+| System | front-panel dimmer (`DIM`) |
+| Web | `quick_select.<n>.source` (re-saved by long-pressing a Quick Select button) |
+| Per-input | `sound_mode` |
+
+Structural configuration is still checked: speaker config, sizes, crossovers,
+speaker levels and distances, MultEQ mode, HDMI/video setup, source names and
+use, ECO, standby, zone names and zone channel settings. `plan` and `apply`
+compare all fields, including the ones above.
 
 `UNREAD` (value in the file that the receiver didn't report) and `INFO`
 lines (main zone off, input not captured yet) are shown but don't fail the

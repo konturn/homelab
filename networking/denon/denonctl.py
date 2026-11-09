@@ -142,47 +142,47 @@ QUERIES: tuple = (
     Query("VSVPM ?", (S("VSVPM", "video", "processing_mode"),)),
     # system
     Query("ECO?", (S("ECO", "system", "eco"),)),
-    Query("DIM ?", (S("DIM ", "system", "dimmer"),)),
+    Query("DIM ?", (S("DIM ", "system", "dimmer", drift=False),)),
     Query("STBY?", (S("STBY", "system", "auto_standby"),)),
     Query("SSLOC ?", (S("SSLOC ", "system", "setup_lock", protected=True, unverified=True),)),
     Query("BTTX ?", (S("BTTX ", "system", "bluetooth_tx"),)),
     # zones 2 and 3 (power, source and volume are runtime, see RUNTIME)
     Query("Z2CS?", (S("Z2CS", "zone2", "channel_setting"),)),
-    Query("Z2CV?", (M("Z2CV", "zone2", "levels_db", codec=DB),)),
+    Query("Z2CV?", (M("Z2CV", "zone2", "levels_db", codec=DB, drift=False),)),
     Query("Z2HPF?", (S("Z2HPF", "zone2", "hpf"),)),
-    Query("Z2PSBAS ?", (S("Z2PSBAS ", "zone2", "bass_db", codec=DB),)),
-    Query("Z2PSTRE ?", (S("Z2PSTRE ", "zone2", "treble_db", codec=DB),)),
+    Query("Z2PSBAS ?", (S("Z2PSBAS ", "zone2", "bass_db", codec=DB, drift=False),)),
+    Query("Z2PSTRE ?", (S("Z2PSTRE ", "zone2", "treble_db", codec=DB, drift=False),)),
     Query("Z2STBY?", (S("Z2STBY", "zone2", "auto_standby"),)),
     Query("Z3CS?", (S("Z3CS", "zone3", "channel_setting"),)),
-    Query("Z3CV?", (M("Z3CV", "zone3", "levels_db", codec=DB),)),
+    Query("Z3CV?", (M("Z3CV", "zone3", "levels_db", codec=DB, drift=False),)),
     Query("Z3HPF?", (S("Z3HPF", "zone3", "hpf"),)),
-    Query("Z3PSBAS ?", (S("Z3PSBAS ", "zone3", "bass_db", codec=DB),)),
-    Query("Z3PSTRE ?", (S("Z3PSTRE ", "zone3", "treble_db", codec=DB),)),
+    Query("Z3PSBAS ?", (S("Z3PSBAS ", "zone3", "bass_db", codec=DB, drift=False),)),
+    Query("Z3PSTRE ?", (S("Z3PSTRE ", "zone3", "treble_db", codec=DB, drift=False),)),
     Query("Z3STBY?", (S("Z3STBY", "zone3", "auto_standby"),)),
     # per input source (main zone)
     Query("MS?", (S("MS", PI, "sound_mode", drift=False),)),
     Query("SD?", (S("SD", PI, "input_mode"),)),
     Query("PSMULTEQ: ?", (S("PSMULTEQ:", PI, "audyssey", "multeq"),)),
-    Query("PSDYNEQ ?", (S("PSDYNEQ ", PI, "audyssey", "dynamic_eq"),)),
-    Query("PSREFLEV ?", (S("PSREFLEV ", PI, "audyssey", "reference_level_offset"),)),
-    Query("PSDYNVOL ?", (S("PSDYNVOL ", PI, "audyssey", "dynamic_volume"),)),
+    Query("PSDYNEQ ?", (S("PSDYNEQ ", PI, "audyssey", "dynamic_eq", drift=False),)),
+    Query("PSREFLEV ?", (S("PSREFLEV ", PI, "audyssey", "reference_level_offset", drift=False),)),
+    Query("PSDYNVOL ?", (S("PSDYNVOL ", PI, "audyssey", "dynamic_volume", drift=False),)),
     Query("PSLFC ?", (S("PSLFC ", PI, "audyssey", "lfc"),)),
     Query("PSCNTAMT ?", (S("PSCNTAMT ", PI, "audyssey", "containment_amount"),)),
     Query("PSGEQ ?", (S("PSGEQ ", PI, "graphic_eq"),)),
-    Query("PSTONE CTRL ?", (S("PSTONE CTRL ", PI, "tone", "control"),)),
-    Query("PSBAS ?", (S("PSBAS ", PI, "tone", "bass_db", codec=DB),)),
-    Query("PSTRE ?", (S("PSTRE ", PI, "tone", "treble_db", codec=DB),)),
-    Query("CV?", (M("CV", PI, "levels", "channels_db", codec=DB),)),
+    Query("PSTONE CTRL ?", (S("PSTONE CTRL ", PI, "tone", "control", drift=False),)),
+    Query("PSBAS ?", (S("PSBAS ", PI, "tone", "bass_db", codec=DB, drift=False),)),
+    Query("PSTRE ?", (S("PSTRE ", PI, "tone", "treble_db", codec=DB, drift=False),)),
+    Query("CV?", (M("CV", PI, "levels", "channels_db", codec=DB, drift=False),)),
     Query("PSSWL ?", (
-        S("PSSWL ", PI, "levels", "subwoofer_db", codec=DB),
-        S("PSSWL2 ", PI, "levels", "subwoofer2_db", codec=DB),
+        S("PSSWL ", PI, "levels", "subwoofer_db", codec=DB, drift=False),
+        S("PSSWL2 ", PI, "levels", "subwoofer2_db", codec=DB, drift=False),
     )),
-    Query("PSSWR ?", (S("PSSWR ", PI, "levels", "subwoofer_on"),)),
-    Query("PSLFE ?", (S("PSLFE ", PI, "levels", "lfe_attenuation"),)),
-    Query("PSDIC ?", (S("PSDIC ", PI, "levels", "dialog_enhancer"),)),
-    Query("PSCINEMA EQ. ?", (S("PSCINEMA EQ.", PI, "surround", "cinema_eq"),)),
-    Query("PSDRC ?", (S("PSDRC ", PI, "surround", "dynamic_compression"),)),
-    Query("PSDEH ?", (S("PSDEH ", PI, "surround", "dialog_enhancer_level"),)),
+    Query("PSSWR ?", (S("PSSWR ", PI, "levels", "subwoofer_on", drift=False),)),
+    Query("PSLFE ?", (S("PSLFE ", PI, "levels", "lfe_attenuation", drift=False),)),
+    Query("PSDIC ?", (S("PSDIC ", PI, "levels", "dialog_enhancer", drift=False),)),
+    Query("PSCINEMA EQ. ?", (S("PSCINEMA EQ.", PI, "surround", "cinema_eq", drift=False),)),
+    Query("PSDRC ?", (S("PSDRC ", PI, "surround", "dynamic_compression", drift=False),)),
+    Query("PSDEH ?", (S("PSDEH ", PI, "surround", "dialog_enhancer_level", drift=False),)),
     Query("PSBSC ?", (S("PSBSC ", PI, "surround", "bass_sync"),)),
     Query("PSDEL ?", (S("PSDEL ", PI, "surround", "delay"),)),
     Query("PSDELAY ?", (S("PSDELAY ", PI, "surround", "audio_delay_ms"),)),
@@ -573,6 +573,12 @@ def ext_for(path: tuple):
     return None, None
 
 
+def is_quick_select_source(path: tuple) -> bool:
+    """web.quick_select.<n>.source: re-saved by long-pressing a Quick Select
+    button, so it is exported and not drift-checked."""
+    return len(path) == 4 and path[:2] == ("web", "quick_select") and path[3] == "source"
+
+
 @dataclass
 class Diff:
     changed: list   # (path, desired, live)
@@ -581,10 +587,12 @@ class Diff:
     info: list      # free text
 
 
-def compare(desired: dict, live: Snapshot) -> Diff:
+def compare(desired: dict, live: Snapshot, for_drift: bool = True) -> Diff:
     """Compare a live snapshot with the file. Only the selected input's
     per_input entry is compared; device info, sound_mode and runtime state
-    are ignored."""
+    are ignored. With ``for_drift`` (the drift check), fields marked
+    drift=False (on-the-fly settings) are skipped too, DRIFT and NEW alike;
+    plan/apply compare everything."""
     want = {k: v for k, v in desired.items() if k not in ("schema", "device", PI)}
     have = {k: v for k, v in live.settings.items() if k not in ("device", PI)}
     info = []
@@ -600,7 +608,7 @@ def compare(desired: dict, live: Snapshot) -> Diff:
     d = Diff([], [], [], info)
     for p in sorted(set(fw) | set(fh)):
         e, _ = ext_for(p)
-        if e is not None and not e.drift:
+        if for_drift and ((e is not None and not e.drift) or is_quick_select_source(p)):
             continue
         if p in fw and p in fh:
             if fw[p] != fh[p]:
@@ -667,7 +675,7 @@ def build_commands(path: tuple, desired: str) -> tuple:
 
 def plan(desired: dict, live: Snapshot) -> list:
     steps = []
-    d = compare(desired, live)
+    d = compare(desired, live, for_drift=False)
     for p, want, have in d.changed:
         e, cmds = build_commands(p, want)
         if e is None:
@@ -801,7 +809,7 @@ def cmd_plan(a, send: bool = False) -> int:
             for c in s.commands:
                 print("sent %r -> %s" % (c, " | ".join(t.send(c))))
                 time.sleep(0.3)
-    after = compare(desired, read_live(a.host, with_web=False))
+    after = compare(desired, read_live(a.host, with_web=False), for_drift=False)
     rem = [c for c in after.changed if ext_for(c[0])[0] and ext_for(c[0])[0].apply]
     if rem:
         print("\nStill different after apply:")
