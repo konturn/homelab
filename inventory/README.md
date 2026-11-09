@@ -39,7 +39,7 @@ the connected amps' `/dev/serial/by-id` adapters to their `ha_port`.
 `SCHEDULED_TASK=ipmi-drift`; by hand: Run pipeline on `main` with
 `SCHEDULED_TASK=facts-drift`). `ci/facts/drift.py` sends `collect.py` to the
 router over SSH (read-only: lsblk with LUKS UUIDs, `/dev/disk/by-path`, `zpool status`,
-`/sys/class/sound`, `docker ps`/`inspect`, `systemctl is-active`, TCP/DNS
+`/sys/class/sound`, `docker ps`/`inspect`, `systemctl is-active`, `openclaw cron list`, TCP/DNS
 probes) and compares:
 
 - disks: each slot holds the declared model and serial suffix, its LUKS
@@ -50,7 +50,15 @@ probes) and compares:
 - containers: every service in `docker/docker-compose.yml` is running and
   not unhealthy (one-shot init services: exited 0), except services behind
   a compose profile and `snapclient_disabled_zones`;
-- services: every node with a probe is up, listed with what depends on it.
+- services: every node with a probe is up, listed with what depends on it;
+- openclaw crons: OpenClaw's cron jobs (`openclaw cron list --all --json` in
+  the `openclaw-gateway` container; they live in OpenClaw's own store) match
+  `inventory/openclaw-crons.yml`: none missing, none undeclared, and the same
+  schedule, enabled flag, agent, session, wake mode, delivery and payload
+  settings. Prompt text is never collected or compared. A one-shot (`at`) cron
+  that has run and gone is a NOTE. A cron changed on purpose in OpenClaw:
+  update its entry in an MR. Drift here always needs hands (living issue);
+  nothing changes OpenClaw's crons.
 
 ### What happens to drift
 

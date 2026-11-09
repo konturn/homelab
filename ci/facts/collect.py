@@ -8,11 +8,13 @@ so nothing is installed on the host). Python stdlib only.
 
 Nothing here changes the host: it reads /sys, /dev/disk/by-path, lsblk,
 `zpool status`, `docker ps`/`docker inspect`, containers' /proc/<pid>/net/dev,
-Home Assistant's .storage/core.network, /dev/serial/by-id, `systemctl is-active`, and opens TCP/UDP
-connections for the probes.
+Home Assistant's .storage/core.network, /dev/serial/by-id, `systemctl is-active`,
+OpenClaw's cron list (`openclaw cron list --all --json`, prompts dropped), and
+opens TCP/UDP connections for the probes.
 """
 
 import json
+import shlex
 import os
 import random
 import re
@@ -263,6 +265,51 @@ def probe(kind, arg):
     return False, "unknown probe kind %s" % kind
 
 
+def normalize_cron(job):
+    """One `openclaw cron list --json` job, reduced to what inventory/openclaw-crons.yml
+    declares. The prompt (payload.message) and the trigger script are dropped:
+    only that a trigger exists is kept."""
+    s = job.get("schedule") or {}
+    kind = s.get("kind")
+    if kind == "cron":
+        sched = "cron %s %s" % (s.get("expr"), s.get("tz") or "UTC")
+        if s.get("staggerMs") is not None:
+            sched += " stagger %sms" % s["staggerMs"]
+    elif kind == "every":
+        sched = "every %sms" % s.get("everyMs")
+    elif kind == "at":
+        sched = "at %s" % s.get("at")
+    else:
+        sched = "%s %s" % (kind, json.dumps({k: v for k, v in s.items() if k not in ("kind", "anchorMs")},
+                                            sort_keys=True))
+    d = job.get("delivery") or {}
+    delivery = " ".join(str(x) for x in (d.get("mode") or "none", d.get("channel"), d.get("to")) if x)
+    p = job.get("payload") or {}
+    payload = {"kind": p.get("kind") or ""}
+    for src, dst in (("model", "model"), ("timeoutSeconds", "timeout"), ("thinking", "thinking"),
+                     ("lightContext", "light_context")):
+        if p.get(src) is not None:
+            payload[dst] = p[src]
+    if p.get("argv"):
+        payload["command"] = shlex.join(str(a) for a in p["argv"])
+    return {"name": job.get("name") or "", "enabled": bool(job.get("enabled")), "schedule": sched,
+            "agent": job.get("agentId") or "", "session": job.get("sessionTarget") or "",
+            "wake": job.get("wakeMode") or "", "delivery": delivery, "payload": payload,
+            "trigger": job.get("trigger") is not None}
+
+
+def openclaw_crons(container):
+    """OpenClaw's cron jobs, every one including disabled ones, normalized."""
+    rc, out, err = run(["docker", "exec", container, "openclaw", "cron", "list", "--all", "--json"], timeout=120)
+    if rc != 0:
+        raise RuntimeError("openclaw cron list failed (rc %s): %s" % (rc, err[-300:]))
+    data = json.loads(out[out.index("{"):])
+    jobs = data.get("jobs") or []
+    if data.get("hasMore"):
+        raise RuntimeError("openclaw cron list returned %d of %s jobs" % (len(jobs), data.get("total")))
+    return [normalize_cron(j) for j in jobs]
+
+
 def collect(spec):
     out = {"errors": []}
     for key, fn in (("disks", disks), ("zpools", zpool_status), ("sound_cards", sound_cards),
@@ -273,7 +320,8 @@ def collect(spec):
             out[key] = None
             out["errors"].append("%s: %s" % (key, e))
     for key, fn, arg in (("interfaces", interfaces, spec.get("interfaces")),
-                         ("ha_adapters", ha_adapters, spec.get("ha_core_network"))):
+                         ("ha_adapters", ha_adapters, spec.get("ha_core_network")),
+                         ("openclaw_crons", openclaw_crons, spec.get("openclaw_container"))):
         if arg is None:
             continue
         try:

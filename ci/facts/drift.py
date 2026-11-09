@@ -26,6 +26,10 @@ Checks:
             running and not unhealthy, unit active, mount readable, pool
             ONLINE, TCP port open, DNS answering); a down node is reported
             with everything that depends on it
+  crons     OpenClaw's cron jobs (its own store, `openclaw cron list`) match
+            inventory/openclaw-crons.yml: none missing, none undeclared, same
+            schedule, enabled flag, agent, session, delivery and payload
+            settings (not the prompt text)
 
 Exit 0: no drift. 2: drift (report lists it). 1: the check could not run.
 Items marked NOTE are reported but do not count as drift.
@@ -47,6 +51,9 @@ import facts  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 HOST = os.environ.get("FACTS_HOST", "10.4.0.1")
+CRONS = "inventory/openclaw-crons.yml"
+OPENCLAW_CONTAINER = "openclaw-gateway"
+CRON_FIELDS = ("enabled", "schedule", "agent", "session", "wake", "delivery", "payload", "trigger")
 
 
 def norm(s: str) -> str:
@@ -408,8 +415,62 @@ def check_interfaces(ifaces: dict, live: dict, rep: Report) -> str:
     return f"{total - bad}/{total} interface names and adapter selections as declared"
 
 
+def declared_crons(root: Path = facts.ROOT) -> list[dict] | None:
+    """inventory/openclaw-crons.yml as a list, or None when the file does not exist."""
+    if not (root / CRONS).exists():
+        return None
+    data = facts.load_yaml(CRONS, root) or {}
+    crons = data.get("crons") or []
+    names = [c.get("name") for c in crons]
+    dup = sorted({n for n in names if names.count(n) > 1})
+    if dup:
+        raise facts.FactsError(f"{CRONS}: duplicate cron names {dup}")
+    for c in crons:
+        missing = [k for k in ("name", *CRON_FIELDS) if k not in c]
+        if missing:
+            raise facts.FactsError(f"{CRONS}: {c.get('name')!r} lacks {missing}")
+    return crons
+
+
+def check_crons(declared: list[dict], live: dict, rep: Report) -> str:
+    S = "openclaw crons"
+    rep.key = None
+    if "openclaw_crons" not in live:
+        rep.note(S, "not collected (snapshot from before this check)")
+        return "not checked"
+    have = live.get("openclaw_crons")
+    if have is None:
+        rep.drift(S, "could not list OpenClaw's crons (see collector errors)", key="cron:list")
+        return "not checked"
+    want = {c["name"]: c for c in declared}
+    got: dict[str, dict] = {}
+    for c in have:
+        if c["name"] in got:
+            rep.drift(S, f"`{c['name']}`: more than one cron with this name in OpenClaw.", key=f"cron:{c['name']}")
+        got[c["name"]] = c
+    ok = 0
+    for name, w in want.items():
+        rep.key = f"cron:{name}"
+        g = got.get(name)
+        if g is None:
+            if str(w["schedule"]).startswith("at "):
+                rep.note(S, f"`{name}`: one-shot ({w['schedule']}) no longer in OpenClaw; drop it from {CRONS}.")
+            else:
+                rep.drift(S, f"`{name}`: declared in {CRONS}, not in OpenClaw.")
+            continue
+        diffs = [f"{k} is {g.get(k)!r}, declared {w.get(k)!r}" for k in CRON_FIELDS if g.get(k) != w.get(k)]
+        if diffs:
+            rep.drift(S, f"`{name}`: " + "; ".join(diffs) + ".")
+        else:
+            ok += 1
+    for name in sorted(set(got) - set(want)):
+        rep.key = f"cron:{name}"
+        rep.drift(S, f"`{name}`: in OpenClaw, not declared in {CRONS} ({got[name]['schedule']}).")
+    return f"{ok}/{len(want)} declared crons as declared, {len(got)} live"
+
+
 def compare(hw: dict, deps: dict, live: dict, expected: dict | None = None,
-            ifaces: dict | None = None) -> tuple[Report, dict]:
+            ifaces: dict | None = None, crons: list[dict] | None = None) -> tuple[Report, dict]:
     rep = Report()
     audio = check_audio(hw, live, rep)
     checked = {
@@ -421,10 +482,13 @@ def compare(hw: dict, deps: dict, live: dict, expected: dict | None = None,
     if ifaces is not None:
         checked["interfaces"] = check_interfaces(ifaces, live, rep)
     checked["services and endpoints"] = check_services(deps, live, rep)
+    if crons is not None:
+        checked["openclaw crons"] = check_crons(crons, live, rep)
     rep.key = None
     for e in live.get("errors") or []:
         section = ("disks" if e.startswith(("disks", "zpools")) else
                    "containers" if e.startswith("containers") else
+                   "openclaw crons" if e.startswith("openclaw_crons") else
                    "interfaces" if e.startswith(("interfaces", "ha_adapters")) else "audio zones")
         rep.drift(section, f"collector error: {e}")
     return rep, checked
@@ -445,7 +509,8 @@ def collect(args, spec):
     return collect_local(spec) if args.local else collect_remote(spec)
 
 
-def resolve_drift(args, hw, deps, expected, spec, live, rep, checked, ifaces=None) -> tuple[str, int]:
+def resolve_drift(args, hw, deps, expected, spec, live, rep, checked, ifaces=None,
+                  crons=None) -> tuple[str, int]:
     """Fix, record, report (resolve.py). Returns (report text, exit code)."""
     import render  # noqa: PLC0415
     import resolve  # noqa: PLC0415
@@ -472,7 +537,7 @@ def resolve_drift(args, hw, deps, expected, spec, live, rep, checked, ifaces=Non
     if any(not v.startswith(("not fixed", "dry run")) for v in tried.values()):
         time.sleep(args.settle)
         live = collect(args, spec)
-        rep, checked = compare(hw, deps, live, expected, ifaces)
+        rep, checked = compare(hw, deps, live, expected, ifaces, crons)
     fixed = [k for k, v in tried.items() if not v.startswith(("not fixed", "dry run"))
              and k not in {i["key"] for i in rep.items}]
     # 2. physical changes that explain themselves: the record MR
@@ -540,7 +605,10 @@ def main(argv=None) -> int:
         hw, deps = facts.load(args.root)
         expected = expected_containers(args.root)
         ifaces = expected_interfaces(args.root)
+        crons = declared_crons(args.root)
         spec = {**probe_spec(deps), **interface_spec(ifaces)}
+        if crons is not None:
+            spec["openclaw_container"] = OPENCLAW_CONTAINER
         live = collect(args, spec)
     except Exception as e:  # noqa: BLE001 - any failure here means the check did not run
         msg = f"## Facts drift: check failed\n\n{type(e).__name__}: {e}\n"
@@ -550,9 +618,9 @@ def main(argv=None) -> int:
         return 1
     if args.save_snapshot:
         args.save_snapshot.write_text(json.dumps(live, indent=1, sort_keys=True) + "\n")
-    rep, checked = compare(hw, deps, live, expected, ifaces)
+    rep, checked = compare(hw, deps, live, expected, ifaces, crons)
     if args.resolve:
-        text, rc = resolve_drift(args, hw, deps, expected, spec, live, rep, checked, ifaces)
+        text, rc = resolve_drift(args, hw, deps, expected, spec, live, rep, checked, ifaces, crons)
     else:
         text, rc = rep.render(checked), (2 if rep.drift_count else 0)
     print(text)
