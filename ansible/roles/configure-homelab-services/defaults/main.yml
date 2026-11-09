@@ -46,7 +46,7 @@ homeassistant_pinned_integrations:
 # reviewing the fork. Deploy token: Vault gitlab/hcpy.
 hcpy_source:
   project: root/hcpy
-  sha: 6733e083da46efe973f3d290fc782d69032c1cca  # v0.4.12-homelab.2
+  sha: 23e23d628287b3a24eed525115ce53ebd5cc0650  # v0.4.12-homelab.3
 # Devices (names from the devices file) that may receive commands. Every
 # other device is read-only in the bridge itself. Allowed devices' control
 # entities are still disabled by default in Home Assistant. The range is
