@@ -1625,7 +1625,7 @@ services:
       - "443:8080"
     networks:
       internal:
-    image: jgraph/drawio:32.6.10@sha256:7d856f20877dc4119cbb497377208768392031fbbafe91507df8146f7e669646
+    image: jgraph/drawio:32.6.10@sha256:b2dfa027e7878a4a1124f38d8fc6d257526f8d77fccf6c423189fc27ae931737
     restart: unless-stopped
     # Memory right-sized (March 2026 audit): 7-day peak 158MB, avg 140MB.
     # 768M was 5x peak. 384M gives 2.4x headroom over peak.
