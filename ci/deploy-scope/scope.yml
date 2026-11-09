@@ -63,6 +63,7 @@ shared:
     # the deploy themselves.
     - inventory/hardware.yml
     - inventory/README.md
+    - inventory/openclaw-crons.yml
     - ci/facts/**
     - ansible/tests/**
     - ansible/bootstrap.yml

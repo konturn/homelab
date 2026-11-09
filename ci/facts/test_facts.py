@@ -312,3 +312,66 @@ class DriftTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+CRON_JOB = {"id": "x", "name": "digest", "enabled": True,
+            "schedule": {"kind": "cron", "expr": "0 8 * * *", "tz": "America/New_York", "staggerMs": 0},
+            "agentId": "main", "sessionTarget": "isolated", "wakeMode": "now",
+            "delivery": {"mode": "announce", "channel": "telegram", "to": "1"},
+            "payload": {"kind": "agentTurn", "message": "SECRET PROMPT", "timeoutSeconds": 300},
+            "state": {"nextRunAtMs": 1}, "lastRunAtMs": 5}
+
+
+class CronTest(unittest.TestCase):
+    def norm(self, **over):
+        return collect.normalize_cron({**CRON_JOB, **over})
+
+    def test_normalize_drops_prompt_and_runtime(self):
+        c = self.norm()
+        self.assertEqual(c, {"name": "digest", "enabled": True,
+                             "schedule": "cron 0 8 * * * America/New_York stagger 0ms", "agent": "main",
+                             "session": "isolated", "wake": "now", "delivery": "announce telegram 1",
+                             "payload": {"kind": "agentTurn", "timeout": 300}, "trigger": False})
+        self.assertNotIn("SECRET", json.dumps(c))
+
+    def test_normalize_other_schedules_and_command(self):
+        c = self.norm(schedule={"kind": "every", "everyMs": 60000, "anchorMs": 99}, agentId=None,
+                      payload={"kind": "command", "argv": ["sh", "-lc", "a b"]}, trigger={"script": "x"})
+        self.assertEqual((c["schedule"], c["agent"], c["trigger"]), ("every 60000ms", "", True))
+        self.assertEqual(c["payload"], {"kind": "command", "command": "sh -lc 'a b'"})
+        self.assertEqual(self.norm(schedule={"kind": "at", "at": "2026-12-08T14:30:00.000Z"})["schedule"],
+                         "at 2026-12-08T14:30:00.000Z")
+
+    def check(self, declared, live):
+        rep = drift.Report()
+        drift.check_crons(declared, live, rep)
+        return [(lvl, t) for items in rep.sections.values() for lvl, t in items]
+
+    def test_match_missing_extra_changed(self):
+        want = self.norm()
+        self.assertEqual(self.check([want], {"openclaw_crons": [want]}), [])
+        out = self.check([want], {"openclaw_crons": [self.norm(name="other")]})
+        self.assertTrue(any(l == "DRIFT" and "`digest`: declared" in t for l, t in out), out)
+        self.assertTrue(any(l == "DRIFT" and "`other`: in OpenClaw, not declared" in t for l, t in out), out)
+        out = self.check([want], {"openclaw_crons": [self.norm(enabled=False)]})
+        self.assertEqual(len(out), 1)
+        self.assertIn("enabled is False, declared True", out[0][1])
+
+    def test_finished_one_shot_is_a_note(self):
+        want = self.norm(schedule={"kind": "at", "at": "2026-01-01T00:00:00Z"})
+        self.assertEqual([l for l, _ in self.check([want], {"openclaw_crons": []})], ["NOTE"])
+
+    def test_not_collected_and_failed(self):
+        self.assertEqual([l for l, _ in self.check([], {})], ["NOTE"])
+        self.assertEqual([l for l, _ in self.check([], {"openclaw_crons": None})], ["DRIFT"])
+
+    def test_items_have_stable_keys(self):
+        rep = drift.Report()
+        drift.check_crons([self.norm()], {"openclaw_crons": [self.norm(enabled=False)]}, rep)
+        self.assertEqual([i["key"] for i in rep.items], ["cron:digest"])
+
+    def test_declared_file_is_valid(self):
+        crons = drift.declared_crons()
+        self.assertTrue(crons)
+        for c in crons:
+            self.assertEqual(set(c), {"name", *drift.CRON_FIELDS}, c["name"])

@@ -1,0 +1,205 @@
+# OpenClaw's cron jobs, declared. OpenClaw keeps them in its own store
+# (~/.openclaw/state/openclaw.sqlite in the openclaw-gateway container); this
+# file does not create or change them. facts:drift (ci/facts/drift.py, check
+# "openclaw crons") compares it with `openclaw cron list --all --json` and
+# reports a missing, undeclared or changed cron to the facts-drift living
+# issue, which drops the item once the two agree again (inventory/README.md).
+#
+# Fields as collect.normalize_cron() reduces a job: schedule ("cron <expr>
+# <tz> [stagger <n>ms]", "every <n>ms" or "at <ISO time>"), agent (agentId,
+# "" for none), session (sessionTarget), wake (wakeMode), delivery ("<mode>
+# [<channel>] [<to>]"), payload settings without the prompt text, and whether
+# a trigger script is attached. The prompts live in OpenClaw (and its
+# workspace repo's config/cron-jobs.json snapshot), not here.
+#
+# A cron changed on purpose in OpenClaw: update its entry here in an MR.
+crons:
+  - name: "job-apply"
+    enabled: true
+    schedule: "cron */30 * * * * America/New_York"
+    agent: "main"
+    session: "isolated"
+    wake: "next-heartbeat"
+    delivery: "none telegram 8531859108"
+    payload: {kind: "agentTurn", model: "claude-cli/claude-opus-5", timeout: 900}
+    trigger: false
+  - name: "nightly-meditation"
+    enabled: true
+    schedule: "cron 0 23 * * * America/New_York"
+    agent: "main"
+    session: "isolated"
+    wake: "now"
+    delivery: "none"
+    payload: {kind: "agentTurn", timeout: 900}
+    trigger: false
+  - name: "imessage-check"
+    enabled: true
+    schedule: "every 1800000ms"
+    agent: ""
+    session: "isolated"
+    wake: "now"
+    delivery: "none last"
+    payload: {kind: "agentTurn", timeout: 180, thinking: "off", light_context: true}
+    trigger: true
+  - name: "main-pipeline-fix"
+    enabled: true
+    schedule: "cron 0 */6 * * * America/New_York stagger 300000ms"
+    agent: "main"
+    session: "isolated"
+    wake: "next-heartbeat"
+    delivery: "announce telegram 8531859108"
+    payload: {kind: "agentTurn"}
+    trigger: false
+  - name: "cron-config-sync"
+    enabled: true
+    schedule: "cron 0 */6 * * * America/New_York stagger 300000ms"
+    agent: "main"
+    session: "isolated"
+    wake: "now"
+    delivery: "none"
+    payload: {kind: "agentTurn", timeout: 120}
+    trigger: false
+  - name: "nightly-redteam"
+    enabled: true
+    schedule: "cron 0 1 * * * America/New_York"
+    agent: "main"
+    session: "isolated"
+    wake: "now"
+    delivery: "none last"
+    payload: {kind: "agentTurn", timeout: 1200}
+    trigger: false
+  - name: "job-scout"
+    enabled: true
+    schedule: "cron 0 2 * * * America/New_York"
+    agent: "main"
+    session: "isolated"
+    wake: "next-heartbeat"
+    delivery: "none telegram 8531859108"
+    payload: {kind: "agentTurn", model: "claude-cli/claude-opus-5", timeout: 1500}
+    trigger: false
+  - name: "MR Health Check"
+    enabled: true
+    schedule: "cron 0 3 * * * America/New_York"
+    agent: "main"
+    session: "isolated"
+    wake: "next-heartbeat"
+    delivery: "none"
+    payload: {kind: "agentTurn", timeout: 900}
+    trigger: false
+  - name: "job-retry-nightly"
+    enabled: true
+    schedule: "cron 0 3 * * * America/New_York"
+    agent: "main"
+    session: "isolated"
+    wake: "next-heartbeat"
+    delivery: "announce telegram 8531859108"
+    payload: {kind: "agentTurn", model: "claude-cli/claude-sonnet-5"}
+    trigger: false
+  - name: "image-update-check"
+    enabled: true
+    schedule: "cron 30 3 * * * America/New_York"
+    agent: "main"
+    session: "isolated"
+    wake: "next-heartbeat"
+    delivery: "none"
+    payload: {kind: "agentTurn", timeout: 1800}
+    trigger: false
+  - name: "Infrastructure Audit"
+    enabled: true
+    schedule: "cron 0 4 * * * America/New_York"
+    agent: "main"
+    session: "isolated"
+    wake: "next-heartbeat"
+    delivery: "none"
+    payload: {kind: "agentTurn", timeout: 1800}
+    trigger: false
+  - name: "routing-review"
+    enabled: true
+    schedule: "cron 0 5 * * 1 America/New_York"
+    agent: "main"
+    session: "isolated"
+    wake: "now"
+    delivery: "announce telegram 8531859108"
+    payload: {kind: "agentTurn", timeout: 1800}
+    trigger: false
+  - name: "fact-extraction"
+    enabled: true
+    schedule: "cron 0 6 * * * America/New_York"
+    agent: "main"
+    session: "isolated"
+    wake: "now"
+    delivery: "none"
+    payload: {kind: "agentTurn", timeout: 1500}
+    trigger: false
+  - name: "advisory-watch"
+    enabled: true
+    schedule: "cron 30 6 * * * America/New_York stagger 0ms"
+    agent: "main"
+    session: "isolated"
+    wake: "now"
+    delivery: "none last"
+    payload: {kind: "agentTurn", timeout: 900}
+    trigger: false
+  - name: "anomaly-digest"
+    enabled: true
+    schedule: "cron 0 8 * * * America/New_York stagger 0ms"
+    agent: "main"
+    session: "isolated"
+    wake: "now"
+    delivery: "announce telegram 8531859108"
+    payload: {kind: "agentTurn", timeout: 300}
+    trigger: false
+  - name: "schedule-failures"
+    enabled: true
+    schedule: "cron 30 8 * * * America/New_York"
+    agent: ""
+    session: "isolated"
+    wake: "now"
+    delivery: "none last"
+    payload: {kind: "command", timeout: 180, command: "sh -lc 'bash /home/node/.openclaw/workspace/tools/schedule-failures.sh --dry-run; bash /home/node/.openclaw/workspace/tools/router-parity.sh'"}
+    trigger: false
+  - name: "email-check"
+    enabled: true
+    schedule: "cron 0 9,13,17 * * * America/New_York"
+    agent: "main"
+    session: "isolated"
+    wake: "now"
+    delivery: "announce telegram 8531859108"
+    payload: {kind: "agentTurn", timeout: 120}
+    trigger: false
+  - name: "Morning Digest"
+    enabled: true
+    schedule: "cron 0 9 * * * America/New_York"
+    agent: "main"
+    session: "isolated"
+    wake: "next-heartbeat"
+    delivery: "announce telegram 8531859108"
+    payload: {kind: "agentTurn", timeout: 900}
+    trigger: false
+  - name: "skill-review"
+    enabled: true
+    schedule: "cron 0 2 * * 3 America/New_York"
+    agent: "main"
+    session: "isolated"
+    wake: "now"
+    delivery: "none"
+    payload: {kind: "agentTurn", timeout: 400}
+    trigger: false
+  - name: "weekly-knowledge-synthesis"
+    enabled: true
+    schedule: "cron 0 10 * * 0 America/New_York"
+    agent: "main"
+    session: "isolated"
+    wake: "next-heartbeat"
+    delivery: "none"
+    payload: {kind: "agentTurn", timeout: 1200}
+    trigger: false
+  - name: "llm-shadow-report"
+    enabled: true
+    schedule: "at 2026-12-08T14:30:00.000Z"
+    agent: "main"
+    session: "isolated"
+    wake: "now"
+    delivery: "announce telegram 8531859108"
+    payload: {kind: "agentTurn", timeout: 600}
+    trigger: false
