@@ -2694,7 +2694,12 @@ groups:
                 import "array"
                 import "date"
 
-                silentAfter = (service) => if service == "openclaw-gateway" then -12h else -2h
+                // How long each emitter may stay silent.
+                window = (service) => if service == "openclaw-gateway" then 12h else 2h
+                // When otel-collector started counting (!1170 deployed). Until an
+                // emitter's window has passed since then, 0 means "not counted
+                // long enough", not "silent". Harmless once the date is past.
+                countingSince = 2026-11-09T02:35:00Z
 
                 expected = array.from(rows: [
                   {service: "gitlab", spans: 0.0},
@@ -2706,14 +2711,18 @@ groups:
                   |> range(start: -12h)
                   |> filter(fn: (r) => r._measurement == "otelcol_spans_by_service" and r._field == "gauge")
                   |> filter(fn: (r) => r["service.name"] == "gitlab" or r["service.name"] == "grafana" or r["service.name"] == "openclaw-gateway")
-                  |> filter(fn: (r) => r._time >= date.add(d: silentAfter(service: r["service.name"]), to: now()))
+                  |> filter(fn: (r) => r._time >= date.sub(d: window(service: r["service.name"]), from: now()))
                   |> map(fn: (r) => ({service: r["service.name"], spans: float(v: r._value)}))
                   |> group()
 
                 union(tables: [expected, seen])
                   |> group(columns: ["service"])
                   |> sum(column: "spans")
-                  |> map(fn: (r) => ({_time: now(), service: r.service, _value: r.spans}))
+                  |> map(fn: (r) => ({
+                      _time: now(),
+                      service: r.service,
+                      _value: if date.add(d: window(service: r.service), to: countingSince) > now() then 1.0 + r.spans else r.spans,
+                  }))
               refId: A
           - refId: B
             relativeTimeRange: {from: 0, to: 0}
@@ -2725,8 +2734,8 @@ groups:
             model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [1]}}]}
         noDataState: Alerting
         execErrState: Error
-        # Also the grace period after the count first starts (a new emitter
-        # or a fresh deploy reads 0 until its first span).
+        # A new emitter added to `expected` later reads 0 until its first
+        # span; add it once it is known to be emitting.
         for: 30m
         annotations:
           summary: "{{ $labels.service }} has sent no spans to otel-collector in its window (2h; openclaw-gateway 12h)"
