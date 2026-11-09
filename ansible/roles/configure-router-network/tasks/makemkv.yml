@@ -14,6 +14,7 @@
   # (124) fails the probe. An empty version means "not installed" and
   # triggers the build, whose own probe below is asserted.
   ansible.builtin.shell: |
+    set -o pipefail
     h=$(mktemp -d)
     trap 'rm -rf "$h"' EXIT
     command -v makemkvcon >/dev/null || exit 0
@@ -86,6 +87,7 @@
     - name: Read the MakeMKV version again
       # Exit status ignored for the same reason as the first probe.
       ansible.builtin.shell: |
+        set -o pipefail
         h=$(mktemp -d)
         trap 'rm -rf "$h"' EXIT
         rc=0
