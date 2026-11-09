@@ -84,7 +84,7 @@ and it never tries another user or password.
 
 `amcrest:drift` in `.gitlab-ci.yml` runs on the pipeline schedule
 **"iot-devices: daily config drift"** (`SCHEDULED_TASK=iot-device-drift`, daily
-at 06:32 America/New_York). It runs on the protected runner, whose job network
+at 06:32 America/New_York; `slzb:drift`, docs/slzb.md, runs in the same pipeline). It runs on the protected runner, whose job network
 (`gitlab-ci-protected`, docs/FIREWALL.md) allows the camera's HTTP port, and
 reads the password from Vault with the job's JWT (role `ci-deploy`). It is
 strictly read-only.

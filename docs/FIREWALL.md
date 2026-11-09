@@ -359,7 +359,7 @@ The protected runner's jobs get their own network `gitlab-ci-protected` (bridge 
 
 | Table / chain | Rule |
 |---|---|
-| raw `PREROUTING` → `CI-PROT-EGRESS` | allow Pi-hole :53, lab_nginx :443 and :2376 (docker-socket-proxy), Vault :8200; SSH :22 to the router (10.4.0.1), the Pis, the Mac mini, the Aruba Instant VC and APs, the S2500 (10.100.0.1) and the UPS card; NETGEAR switches :80; Denon :23/:8080; back camera :80; then the same drops as `CI-EGRESS` |
+| raw `PREROUTING` → `CI-PROT-EGRESS` | allow Pi-hole :53, lab_nginx :443 and :2376 (docker-socket-proxy), Vault :8200; SSH :22 to the router (10.4.0.1), the Pis, the Mac mini, the Aruba Instant VC and APs, the S2500 (10.100.0.1) and the UPS card; NETGEAR switches :80; Denon :23/:8080; back camera :80; SLZB-MR1 :80; then the same drops as `CI-EGRESS` |
 | filter `INPUT` | accept tcp :22 to 10.4.0.1 from `br-ci-prot`, drop the rest |
 | filter `FORWARD` | same allowlist + `-o` WAN, then drop |
 | nat `POSTROUTING` | MASQUERADE 172.28.1.0/24 leaving `br-ci-prot` |

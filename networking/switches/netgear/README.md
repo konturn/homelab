@@ -23,6 +23,12 @@ reboots the switch.
 Everything else in the configuration is not written by the tool. Drift checks
 compare it with the committed export.
 
+The NETGEAR GS308EP PoE switch on the IoT VLAN (`iot_poe_switch_address`) is
+not covered. It is a Smart Managed Plus model with a different web UI (a
+password-only `login.cgi` and its own pages) than the MS510TXPP, so
+`ngswitch.py` cannot read it. It has no export or drift check yet: that needs
+its admin password in Vault first.
+
 ## Protected ports
 
 `management.protected_ports` lists the uplink and every port that carries the
