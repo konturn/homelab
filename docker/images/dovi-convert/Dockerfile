@@ -4,7 +4,7 @@
 # exact version (apt checks them against the signed archive metadata), and
 # dovi_tool by release version plus the sha256 of its tarball.
 # Bump a version: change it here and update the matching checksum/digest.
-FROM debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4
+FROM debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
 
 # UTF-8 locale: under the default C locale mkvmerge truncates its JSON (and
 # mangles names) at the first non-ASCII track name.
