@@ -2463,8 +2463,8 @@ satellite-2:deploy-service:
 # =============================================================================
 # GitLab project settings that .gitlab-ci.yml cannot express (see docs/GITLAB_SETTINGS.md)
 # =============================================================================
-# Deploy resource groups in newest_ready_first mode and "Prevent outdated
-# deployment jobs" on. Idempotent: only writes what differs. Scheduled daily on
+# Deploy resource groups in newest_ready_first mode, "Prevent outdated
+# deployment jobs" on, the event-router webhooks and outbound allowlist entry. Idempotent: only writes what differs. Scheduled daily on
 # main with SCHEDULED_TASK=gitlab-settings, and runs on main when the script or
 # this file changes. GITLAB_SETTINGS_TOKEN is the protected APPROLE_ROTATION_PAT
 # (Maintainer project access token), so only main's copy of the job sees it.
@@ -2472,11 +2472,19 @@ gitlab:settings:
   stage: deploy
   image: alpine:3.22@sha256:bfe7ceb9f09ec0566c48fb93356e45a47a00be5a1dd14fa5b909e7709c66b034
   needs: []
+  # The event-router webhook token is read from Vault (JWT login, ci-deploy).
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: https://vault.lab.nkontur.com:8200
   variables:
     GITLAB_SETTINGS_TOKEN: $APPROLE_ROTATION_PAT
-    # The instance plan limit is set inside the router's gitlab container over
-    # SSH with the deploy key (protected), instead of an admin API token.
+    # The instance plan limit, the outbound allowlist and the event-router
+    # webhooks are checked inside the router's gitlab container over SSH with
+    # the deploy key (protected), instead of an admin API token.
     ROUTER_SSH_KEY: $CI_PROJECT_DIR/.router_ssh_key
+    VAULT_ADDR: "https://vault.lab.nkontur.com:8200"
+    VAULT_SKIP_VERIFY: "true"
+    VAULT_JWT_ROLE: "ci-deploy"
   before_script:
     - apk add --no-cache bash curl jq openssh-client
     - (umask 077; echo "${ROUTER_PRIVATE_KEY_BASE64}" | base64 -d > "$ROUTER_SSH_KEY")

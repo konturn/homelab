@@ -11,6 +11,8 @@ the `gitlab:settings` CI job.
 | Project `ci_forward_deployment_enabled` ("Prevent outdated deployment jobs") | `true` | With the deploy jobs' `environment:`, an older deploy still waiting for its resource group is skipped once a newer one has run. |
 | Project `reset_approvals_on_push` ("Remove all approvals when commits are added to the source branch") | `true` | An approval covers the commit it was given for. `scripts/approve-root-mr.sh` and the automerge sweep approve one reviewed head commit; a later push drops the approval, so the new head needs a new one. Was already on; enforced here since 2026-11-07. |
 | Instance plan limit `ci_pipeline_schedules` (plan `default`) | `20` | GitLab allows 10 pipeline schedules per project by default; this project has 18 (nightly full deploy, 4 reports, 5 drift checks, NETGEAR and Aruba firmware check and rollout, renovate, automerge sweep and report, this job). Raised by hand on 2026-10-20 (Admin > plan limits, the same as `PUT /application/plan_limits`), now enforced here. |
+| Project webhooks on `root/homelab` (4) and `root/homeassistant` (14) | URL `http://event-router:8080/gitlab`, pipeline and job events only, SSL verification off, secret token = Vault `homelab/docker/event-router` `gitlab_webhook_token` | The event router's GitLab input ([docker/event-router/README.md](../docker/event-router/README.md), "GitLab events"). Created by hand on 2026-11-08, enforced here since. |
+| Instance outbound local-request allowlist (Admin > Network > Outbound requests) | contains `event-router` | GitLab refuses to deliver hooks to local addresses unless they are on this list; local requests in general stay off. Only the entry is added; other entries are left alone. |
 
 `<host>:deploy` and `<host>:deploy-service` share `deploy-<host>` (router, zwave, satellite-2). Resource
 groups for the other jobs (`netgear-switches`, `aruba-iap`, `aruba-s2500`, `denon`,
@@ -51,6 +53,27 @@ that `router:deploy` and the drift jobs already hold, so the job gets no
 access that main pipelines did not already have and no new credential exists.
 The job writes the key to a 0600 file and removes it in `after_script`.
 
+### Webhooks and the allowlist: inside the container too
+
+GitLab never returns a hook's token, and the project token cannot see project
+14's hooks, so these are checked with one `gitlab-rails runner` in the gitlab
+container (the same SSH path as the plan limit). It takes about 2 minutes on
+every run, check or fix. For each project it looks for the hook with the
+URL above: missing is created, and differing event flags, SSL verification or
+token are updated (`FIXED ... token` means the token no longer matched Vault;
+the value is never printed). Other hooks on the projects are left alone; two
+hooks with that URL is an `ERROR`.
+
+The token comes from Vault: in CI by JWT login (`VAULT_ID_TOKEN`, role
+`ci-deploy`), on the router from `VAULT_TOKEN` or the `VAULT_TOKEN` CI variable
+through `glab`. It reaches the runner on stdin, never on a command line. If
+Vault cannot be read, the job reports an `ERROR` and checks everything but
+the token.
+
+To rotate the token: write the new value to Vault, run `router:deploy` (the
+event router reads it from its environment), then run this job; it updates
+both hooks.
+
 ## Running it by hand
 
 On the router, from the repo checkout (`glab` logged in as root; the script
@@ -67,4 +90,5 @@ plan limit line reports `ERROR`.
 ## Adding a setting
 
 Add the resource group key to `RESOURCE_GROUPS`, or another GET/compare/PUT
-block for a project setting, in the script and in the table above.
+block for a project setting, in the script and in the table above. Another
+webhook to the event router: add the project ID to `HOOK_PROJECTS`.

@@ -118,7 +118,8 @@ and job events, to `http://event-router:8080/gitlab` with the secret token
 from Vault (`homelab/docker/event-router`, `gitlab_webhook_token`). GitLab
 reaches the container because `event-router` is on its outbound local-request
 allowlist (Admin, Network, "Local IP addresses and domain names that hooks
-and integrations can access").
+and integrations can access"). Both hooks and the allowlist entry are enforced and
+drift-checked by `gitlab:settings` ([docs/GITLAB_SETTINGS.md](../../docs/GITLAB_SETTINGS.md)).
 
 | Event | Becomes |
 |---|---|
