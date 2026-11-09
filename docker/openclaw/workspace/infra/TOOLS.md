@@ -185,7 +185,7 @@ with this file, they win: say so.
 
 ## Where things are written down
 
-- `docs/`: AUDIO, AUTOMERGE, backups, CANARY, CONTAINER-REGISTRY, DEADMAN, denon, DEPLOY, DISASTER_RECOVERY, docker-proxy-architecture, FIREWALL, frigate, GITLAB_SETTINGS, HOMEASSISTANT, IPMI, jit-access-design, jit-webhook-design, minidsp, NETWORK, OBSERVABILITY, ollama, paperless-ai, petlibro-camera, plex-gpu, POWER, raspberry-pi, RENOVATE, SECRET_ROTATION.
+- `docs/`: amcrest, AUDIO, AUTOMERGE, backups, CANARY, CONTAINER-REGISTRY, DEADMAN, denon, DEPLOY, DISASTER_RECOVERY, docker-proxy-architecture, FIREWALL, frigate, GITLAB_SETTINGS, HOMEASSISTANT, IPMI, jit-access-design, jit-webhook-design, minidsp, NETWORK, OBSERVABILITY, ollama, paperless-ai, petlibro-camera, plex-gpu, POWER, raspberry-pi, RENOVATE, SECRET_ROTATION.
 - The GitLab project wiki (private, not mirrored) holds the security and
   network reviews.
 - Your checkout `workspace/homelab` is hard-reset to `origin/main` every

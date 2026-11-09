@@ -53,6 +53,7 @@ shared:
     - networking/aruba-s2500/**
     - networking/firmware_night.py
     - networking/denon/**
+    - networking/amcrest/**
     - networking/ups/**
     - ci/ipmi/**
     - ci/revert-guard/**

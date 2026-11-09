@@ -51,6 +51,10 @@
 #   DENON AVR (see docs/denon.md; read-only, CI never changes the receiver)
 #   denon:test (MR + main, offline), denon:drift (scheduled, DENON_TASK=drift)
 #
+#   IOT DEVICES (read-only; CI never writes to them)
+#   amcrest:test (MR + main, offline), amcrest:drift (scheduled,
+#   SCHEDULED_TASK=iot-device-drift; see docs/amcrest.md)
+#
 #   UPS (see docs/POWER.md; CI never sends a command to the UPS or its card)
 #   ups:test (MR + main, offline), ups-card:drift (scheduled, SCHEDULED_TASK=ups-card-drift)
 #
@@ -1940,6 +1944,66 @@ denon:drift:
     expire_in: 30 days
   rules:
     - if: $CI_COMMIT_BRANCH == "main" && $DENON_TASK == "drift" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+
+# =============================================================================
+# Amcrest cameras (networking/amcrest, see docs/amcrest.md)
+# =============================================================================
+# Read-only. amcrestctl.py only sends getConfig/magicBox get* requests; it
+# has no apply.
+
+amcrest:test:
+  extends: .interruptible
+  stage: validate
+  image: willhallonline/ansible:latest
+  needs: []
+  script:
+    - python3 -m unittest discover -s networking/amcrest -p 'test_*.py' -v
+    - python3 networking/amcrest/amcrestctl.py check --all
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - networking/amcrest/**/*
+        - .gitlab-ci.yml
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - networking/amcrest/**/*
+
+# Scheduled daily with SCHEDULED_TASK=iot-device-drift (protected runner; its
+# job network allows the cameras' HTTP port): fails and mails the report to
+# root when a camera differs from its networking/amcrest/*.yaml. The password
+# comes from Vault (JWT, ci-deploy); a rejected login is never retried.
+amcrest:drift:
+  extends: .ansible
+  stage: deploy
+  needs: []
+  resource_group: amcrest
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: https://vault.lab.nkontur.com:8200
+  variables:
+    VAULT_ADDR: "https://vault.lab.nkontur.com:8200"
+    VAULT_SKIP_VERIFY: "true"
+    VAULT_JWT_ROLE: "ci-deploy"
+  script:
+    - rc=0; python3 networking/amcrest/amcrestctl.py drift --all > amcrest-drift.txt 2>&1 || rc=$?
+    - cat amcrest-drift.txt
+    - |
+      if [ "$rc" -ne 0 ]; then
+        printf '\nExit code: %s\nJob: %s\n' "$rc" "$CI_JOB_URL" >> amcrest-drift.txt
+        ssh -i tmp -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 \
+          -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$CI_PROJECT_DIR/ansible/known_hosts" -o LogLevel=ERROR \
+          root@10.4.0.1 "mail -s 'Homelab: Amcrest camera settings drift' root" < amcrest-drift.txt \
+          || echo "WARN: sending mail failed"
+        exit 1
+      fi
+  artifacts:
+    when: always
+    paths:
+      - amcrest-drift.txt
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "iot-device-drift" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
 
 # =============================================================================
 # UPS: NUT shutdown logic (base/nut) and the AP9631 card (networking/ups)
