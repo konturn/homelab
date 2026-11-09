@@ -54,6 +54,8 @@
 #   IOT DEVICES (read-only; CI never writes to them)
 #   amcrest:test (MR + main, offline), amcrest:drift (scheduled,
 #   SCHEDULED_TASK=iot-device-drift; see docs/amcrest.md)
+#   slzb:test (MR + main, offline), slzb:drift (scheduled with amcrest:drift;
+#   see docs/slzb.md)
 #
 #   UPS (see docs/POWER.md; CI never sends a command to the UPS or its card)
 #   ups:test (MR + main, offline), ups-card:drift (scheduled, SCHEDULED_TASK=ups-card-drift)
@@ -2001,6 +2003,58 @@ amcrest:drift:
     when: always
     paths:
       - amcrest-drift.txt
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "iot-device-drift" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+
+# =============================================================================
+# SLZB-MR1 Zigbee coordinator (networking/slzb, see docs/slzb.md)
+# =============================================================================
+# Read-only. slzbctl.py sends only GETs of the UI's get-page call, /ha_info and
+# /ha_sensors; it has no apply.
+
+slzb:test:
+  extends: .interruptible
+  stage: validate
+  image: willhallonline/ansible:latest
+  needs: []
+  script:
+    - python3 -m unittest discover -s networking/slzb -p 'test_*.py' -v
+    - python3 networking/slzb/slzbctl.py check
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - networking/slzb/**/*
+        - .gitlab-ci.yml
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - networking/slzb/**/*
+
+# Scheduled daily with SCHEDULED_TASK=iot-device-drift (with amcrest:drift):
+# fails and mails the report to root when the coordinator differs from
+# slzb-mr1.yaml, firmware versions included.
+slzb:drift:
+  extends: .ansible
+  stage: deploy
+  needs: []
+  resource_group: slzb
+  script:
+    - rc=0; python3 networking/slzb/slzbctl.py drift > slzb-drift.txt 2>&1 || rc=$?
+    - cat slzb-drift.txt
+    - |
+      if [ "$rc" -ne 0 ]; then
+        printf '\nExit code: %s\nJob: %s\n' "$rc" "$CI_JOB_URL" >> slzb-drift.txt
+        ssh -i tmp -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 \
+          -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$CI_PROJECT_DIR/ansible/known_hosts" -o LogLevel=ERROR \
+          root@10.4.0.1 "mail -s 'Homelab: SLZB-MR1 coordinator config drift' root" < slzb-drift.txt \
+          || echo "WARN: sending mail failed"
+        exit 1
+      fi
+  artifacts:
+    when: always
+    paths:
+      - slzb-drift.txt
     expire_in: 30 days
   rules:
     - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "iot-device-drift" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
