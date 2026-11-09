@@ -406,7 +406,7 @@ jit-approval-svc:test:
 anomaly-detector:test:
   extends: .interruptible
   stage: validate
-  image: python:3.13-alpine3.22@sha256:e81548ac35b07a3bd4805f275107592ef458b1e893c0e04d45aedaa19416cca5
+  image: python:3.14-alpine3.22@sha256:6b91e66ab2a880ce9ca5a1b91c70f45963ff71ff68268df056336e1a657d5efd
   needs: []
   script:
     - apk add --no-cache tzdata
@@ -462,7 +462,7 @@ event-router:tlc:
 event-router:test:
   extends: .interruptible
   stage: validate
-  image: python:3.13-alpine3.22@sha256:e81548ac35b07a3bd4805f275107592ef458b1e893c0e04d45aedaa19416cca5
+  image: python:3.14-alpine3.22@sha256:6b91e66ab2a880ce9ca5a1b91c70f45963ff71ff68268df056336e1a657d5efd
   needs: []
   script:
     - apk add --no-cache tzdata
@@ -496,7 +496,7 @@ event-router:test:
 revert-guard:
   extends: .interruptible
   stage: validate
-  image: python:3.13-alpine3.22@sha256:e81548ac35b07a3bd4805f275107592ef458b1e893c0e04d45aedaa19416cca5
+  image: python:3.14-alpine3.22@sha256:6b91e66ab2a880ce9ca5a1b91c70f45963ff71ff68268df056336e1a657d5efd
   needs: []
   variables:
     GIT_DEPTH: "0"
@@ -512,7 +512,7 @@ revert-guard:
 revert-guard:test:
   extends: .interruptible
   stage: validate
-  image: python:3.13-alpine3.22@sha256:e81548ac35b07a3bd4805f275107592ef458b1e893c0e04d45aedaa19416cca5
+  image: python:3.14-alpine3.22@sha256:6b91e66ab2a880ce9ca5a1b91c70f45963ff71ff68268df056336e1a657d5efd
   needs: []
   script:
     - apk add --no-cache git
@@ -552,7 +552,7 @@ fetch-vault-secrets:test:
 # Required for these paths: not allow_failure, so a failing canary blocks the
 # merge, Renovate auto-merges included (the sweep needs a passed pipeline).
 canary:
-  image: python:3.13-alpine3.22@sha256:e81548ac35b07a3bd4805f275107592ef458b1e893c0e04d45aedaa19416cca5
+  image: python:3.14-alpine3.22@sha256:6b91e66ab2a880ce9ca5a1b91c70f45963ff71ff68268df056336e1a657d5efd
   extends: .interruptible
   stage: validate
   needs: []
@@ -2068,7 +2068,7 @@ ups:test:
   extends: .interruptible
   stage: validate
   # python + root apk (the ansible image runs as a non-root user)
-  image: python:3.13-alpine3.22@sha256:e81548ac35b07a3bd4805f275107592ef458b1e893c0e04d45aedaa19416cca5
+  image: python:3.14-alpine3.22@sha256:6b91e66ab2a880ce9ca5a1b91c70f45963ff71ff68268df056336e1a657d5efd
   needs: []
   script:
     # the orderly-shutdown script tests run it under bash (not in the image)
