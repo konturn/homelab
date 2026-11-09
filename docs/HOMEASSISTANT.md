@@ -50,12 +50,36 @@ the deploy plumbing:
   `homelab/docker/homeassistant`. MR and branch pipelines get no Vault role
   or Home Assistant token; lint reads a data snapshot that `main` publishes.
 - `ha-config-sync` refuses an id that is also defined in `/config/packages/`.
-  Packages stay in this repo. To move a package automation to the private
-  repo, delete it here and add it there in the same change window.
+  Packages with automations stay in this repo. To move a package automation
+  to the private repo, delete it here and add it there in the same change
+  window.
 - Don't edit the managed directories on the volume by hand: the next deploy
   overwrites them, and the drift job reports the difference.
 - By hand: `sudo ha-config-sync status` (item counts per source) on the
   router.
+
+### Helpers (private repo packages)
+
+The helpers that used to be created in the UI (light, media player and
+switch groups, `input_*`, the Riemann sum sensor, the Adaptive Lighting
+entry) are YAML in the private repo's `packages/`, one Home Assistant package
+per file. Their names and members are personal, so they are not in this repo.
+
+- `ha-config-sync deploy` writes them to `/config/packages/private/`, which
+  the existing `packages: !include_dir_named packages` line already loads
+  (it walks subdirectories; the package name is the file's base name). It
+  refuses a private package that defines automations, scripts or scenes, or
+  that reuses the name of a package in `docker/homeassistant/packages/`.
+- The private repo's deploy calls the reload service of each integration
+  whose package section changed (`group.reload`, `input_boolean.reload`
+  ...). Sections that cannot be reloaded (the Riemann sum sensor, Adaptive
+  Lighting) need a restart; the deploy says so and does not restart.
+- Its hourly drift job also lists helper config entries and `input_*`/
+  `timer`/`counter`/`schedule` items created in the UI and opens an MR there
+  listing the new ones. A helper that has no YAML form (proximity) stays in the
+  UI and is listed in that repo as accepted.
+- The Ansible role only creates `/config/packages/private/`; don't put files
+  there by hand, the next private deploy replaces the directory.
 
 ## Packages (repo-managed automations)
 
