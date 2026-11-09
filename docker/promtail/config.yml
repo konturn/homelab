@@ -120,6 +120,15 @@ scrape_configs:
             - drop:
                 expression: '^\s*$'
                 drop_counter_reason: gitlab_blank_line
+            # GitLab tracing (#106): LabKit's cache_read span sets
+            # cache.super_operation to a Symbol or nil, which the OpenTelemetry
+            # SDK drops with an ERROR line per span. Upstream bug, no
+            # information. Measured in the 2026-11-08 canary: ~230/min from an
+            # idle Sidekiq. Other "OpenTelemetry error" lines (export failures)
+            # still ship.
+            - drop:
+                expression: "OpenTelemetry error: invalid span attribute value type \\w+ for key 'cache\\.super_operation'"
+                drop_counter_reason: gitlab_otel_cache_attr
       # Loki indexes its own housekeeping chatter. The compactor logs a
       # "compacting table"/"finished compacting table" pair and a "listed files"
       # line for every index table on every compaction cycle, and index_set.go

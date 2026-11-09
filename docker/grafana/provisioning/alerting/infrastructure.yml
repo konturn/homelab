@@ -2660,6 +2660,81 @@ groups:
           severity: critical
 
   # =========================================================================
+  # Trace emitters: an expected service stops sending spans (#106)
+  # =========================================================================
+  # In May 2026 openclaw-gateway silently stopped exporting and Tempo was down
+  # to grafana alone; nobody noticed until a monthly audit. The tempo /
+  # otel-collector container alerts only catch the pipeline being down, not
+  # one emitter going quiet. otel-collector's `count` connector writes spans
+  # received per service.name to InfluxDB (otelcol_spans_by_service, field
+  # gauge = spans in that batch), docker/otel-collector/config.yaml.
+  # (Tempo's TraceQL metrics only see its last ~15 minutes, too short for a
+  # bursty emitter, so this does not query Tempo.)
+  #
+  # The expected rows are unioned with what was seen, so a silent emitter
+  # reads 0 rather than vanishing. Windows: gitlab samples 1% of ~700+
+  # requests/h at its quietest (2026-11-08), so ~7 traces/h; grafana traces
+  # every alert evaluation. openclaw-gateway only emits when it has work, so
+  # it gets 12h. Adding an emitter: add it to `expected` and the name filter.
+  # Not a page: event router / OpenClaw only (policies.yml catch-all routes).
+  - orgId: 1
+    name: trace-emitter-alerts
+    folder: General Alerting
+    interval: 5m
+    rules:
+      - uid: trace-emitter-silent
+        title: Trace Emitter Silent
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 43200, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                import "array"
+                import "date"
+
+                silentAfter = (service) => if service == "openclaw-gateway" then -12h else -2h
+
+                expected = array.from(rows: [
+                  {service: "gitlab", spans: 0.0},
+                  {service: "grafana", spans: 0.0},
+                  {service: "openclaw-gateway", spans: 0.0},
+                ])
+
+                seen = from(bucket: "metrics")
+                  |> range(start: -12h)
+                  |> filter(fn: (r) => r._measurement == "otelcol_spans_by_service" and r._field == "gauge")
+                  |> filter(fn: (r) => r["service.name"] == "gitlab" or r["service.name"] == "grafana" or r["service.name"] == "openclaw-gateway")
+                  |> filter(fn: (r) => r._time >= date.add(d: silentAfter(service: r["service.name"]), to: now()))
+                  |> map(fn: (r) => ({service: r["service.name"], spans: float(v: r._value)}))
+                  |> group()
+
+                union(tables: [expected, seen])
+                  |> group(columns: ["service"])
+                  |> sum(column: "spans")
+                  |> map(fn: (r) => ({_time: now(), service: r.service, _value: r.spans}))
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [1]}}]}
+        noDataState: Alerting
+        execErrState: Error
+        # Also the grace period after the count first starts (a new emitter
+        # or a fresh deploy reads 0 until its first span).
+        for: 30m
+        annotations:
+          summary: "{{ $labels.service }} has sent no spans to otel-collector in its window (2h; openclaw-gateway 12h)"
+          description: "Tempo has no new traces from {{ $labels.service }}. Check the service's own tracing config (docs/OBSERVABILITY.md, Instrumented Services) and its logs for OTLP export errors; docker logs --since 1h otel-collector | grep -i error. If every emitter fires at once, otel-collector or the count pipeline is the problem, not the services."
+        labels:
+          severity: warning
+
+  # =========================================================================
   # Radio silence: the Zigbee / Z-Wave bridge runs but hears nothing
   # =========================================================================
   # On 2026-11-07 an SLZB coordinator firmware update left zigbee2mqtt with a
