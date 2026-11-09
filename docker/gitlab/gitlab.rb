@@ -95,13 +95,20 @@ gitlab_pages['enable'] = false
 ###
 gitlab_rails['env'] = {
   'MALLOC_CONF' => 'dirty_decay_ms:1000,muzzy_decay_ms:1000',
-  # OpenTelemetry tracing — export GitLab traces via OTLP to otel-collector
-  # GITLAB_ENABLE_OTEL_EXPORTERS enables the Rails initializer that wires up exporters
-  'GITLAB_ENABLE_OTEL_EXPORTERS' => 'true',
-  'OTEL_EXPORTER' => 'otlphttp',
-  'OTEL_EXPORTER_OTLP_ENDPOINT' => 'http://otel-collector:4318',
-  'OTEL_SERVICE_NAME' => 'gitlab',
-  'OTEL_TRACES_EXPORTER' => 'otlp',
+  # Tracing (#106, docs/OBSERVABILITY.md "GitLab"). GitLab traces through
+  # LabKit, which reads only GITLAB_TRACING (the OTEL_EXPORTER_* / service-name
+  # variables are not read). The /v1/traces path is required: LabKit posts to
+  # the URL exactly as written. 1% of traces (TraceIdRatioBased).
+  'GITLAB_TRACING' => 'otlp://otel-collector:4318/v1/traces?service_name=gitlab&sampler=probabilistic&sampler_param=0.01',
+  # Workaround for an upstream bug (GitLab 19.5.x, LabKit 5.5-5.8): with
+  # GITLAB_TRACING set, LabKit installs the ActionMailer instrumentation, whose
+  # railtie calls OpenTelemetry::Instrumentation::ActiveSupport, which nothing
+  # requires: NameError at Rails boot, so reconfigure, Puma and Sidekiq die
+  # (outage 2026-11-07). Disabling that one instrumentation skips its railtie.
+  # The variable name is the instrumentation class path upcased (ACTIONMAILER,
+  # no underscore). Cost: no spans for outgoing mail. Remove once a canary
+  # passes without it.
+  'OTEL_RUBY_INSTRUMENTATION_ACTIONMAILER_ENABLED' => 'false',
   'OTEL_LOG_LEVEL' => 'warn'
 }
 

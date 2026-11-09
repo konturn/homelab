@@ -25,6 +25,26 @@ processors:
         value: homelab
         action: upsert
 
+  # Span counts (below) keep only service.name: the counted spans' other
+  # resource attributes (process.pid, host.name, ...) would become InfluxDB
+  # tags, one series per Puma worker.
+  transform/spancount:
+    metric_statements:
+      - keep_keys(resource.attributes, ["service.name"])
+
+connectors:
+  # Spans received per service.name -> InfluxDB measurement
+  # otelcol_spans_by_service (field gauge = spans in that batch, tag
+  # service.name). The Trace Emitter Silent alert (trace-emitter-silent)
+  # reads it to catch one expected emitter going quiet (#106).
+  count:
+    spans:
+      otelcol_spans_by_service:
+        description: Spans received by otel-collector, by resource service.name
+        attributes:
+          - key: service.name
+            default_value: unknown
+
 exporters:
   # OTLP over gRPC (the old "otlp" exporter name is a deprecated alias).
   otlp_grpc/tempo:
@@ -49,7 +69,12 @@ service:
     traces:
       receivers: [otlp]
       processors: [resource, batch]
-      exporters: [otlp_grpc/tempo]
+      exporters: [otlp_grpc/tempo, count]
+
+    metrics/spancount:
+      receivers: [count]
+      processors: [transform/spancount]
+      exporters: [influxdb]
 
     metrics:
       receivers: [otlp]
