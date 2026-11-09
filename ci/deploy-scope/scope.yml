@@ -116,7 +116,7 @@ playbooks:
       roles: [event-router]
     - match: [docker/**]
       roles: [configure-homelab-services]
-    - match: [scripts/grafana-token-cleanup.sh, base/nut/**]
+    - match: [scripts/grafana-token-cleanup.sh, scripts/ha-helpers/**, base/nut/**]
       roles: [configure-homelab-services]
     - match:
         - base/disk/**

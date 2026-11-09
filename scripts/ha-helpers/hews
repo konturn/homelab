@@ -1,0 +1,19 @@
+#!/bin/bash
+# hews: Home Assistant websocket helper for root on the router.
+#
+#   hews '{"type": "config/area_registry/list"}' ['<another message>' ...]
+#
+# Each argument is one websocket message without "id"; each result is printed
+# as one JSON line (ok, error, result; cut at 1500 characters). The client
+# (hews.py) runs inside the homeassistant container, which has aiohttp, against
+# 127.0.0.1:8123. The token comes from Vault (homelab/docker/homeassistant,
+# token) and is passed in the environment, never printed.
+#
+# Deployed by configure-homelab-services to /usr/local/sbin/hews (client:
+# /usr/local/lib/ha-helpers/hews.py), with a symlink at /root/hews
+# (scripts/ha-helpers/README.md).
+cd /root/repos/homelab || exit 3
+T=$(VAULT_TOKEN=$(glab variable get VAULT_TOKEN 2>/dev/null) VAULT_ADDR=https://10.3.32.6:8200 VAULT_SKIP_VERIFY=1 vault kv get -field=token homelab/docker/homeassistant 2>/dev/null)
+[ -n "$T" ] || { echo "no token" >&2; exit 3; }
+docker cp /usr/local/lib/ha-helpers/hews.py homeassistant:/tmp/hews.py >/dev/null
+HASS_TOKEN="$T" docker exec -e HASS_TOKEN homeassistant python3 /tmp/hews.py "$@"

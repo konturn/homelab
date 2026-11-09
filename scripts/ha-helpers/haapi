@@ -1,0 +1,18 @@
+#!/bin/bash
+# haapi: Home Assistant REST API helper for root on the router.
+#
+#   haapi GET|POST <path under /api/> [json body]
+#   haapi GET states/sun.sun
+#   haapi POST services/light/turn_off '{"entity_id": "light.kitchen"}'
+#
+# The long-lived token is read from Vault (homelab/docker/homeassistant, the
+# first field whose name contains "token") with the VAULT_TOKEN CI variable,
+# through glab in the repo checkout. It is never printed. Refuses to call HA
+# without a token: unauthenticated calls count as failed logins and HA bans
+# the source IP (the router, 10.3.0.2) after 5.
+#
+# Deployed by configure-homelab-services to /usr/local/sbin/haapi, with a
+# symlink at /root/haapi (scripts/ha-helpers/README.md).
+T=$(VAULT_TOKEN=$(cd /root/repos/homelab && glab variable get VAULT_TOKEN 2>/dev/null) VAULT_ADDR=https://10.3.32.6:8200 VAULT_SKIP_VERIFY=1 vault kv get -format=json homelab/docker/homeassistant 2>/dev/null | jq -r ".data.data | to_entries[] | select(.key|test(\"token\";\"i\")) | .value" | head -1)
+if [ -z "$T" ] || [ "$T" = null ]; then echo "haapi: no HA token from Vault (GitLab/Vault down?); not calling HA" >&2; exit 3; fi
+curl -sk -X "$1" -H "Authorization: Bearer $T" -H "Content-Type: application/json" ${3:+-d "$3"} "https://homeassistant.lab.nkontur.com/api/$2"
