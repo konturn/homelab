@@ -1,0 +1,118 @@
+# MakeMKV for the nightly ISO converter (docker/plex/convert_isos_makemkv.sh).
+#
+# The version is pinned (makemkv_version in ../defaults/main.yml) and built
+# from the vendor tarballs, checked against pinned SHA-256s, only when the
+# installed makemkvcon reports a different version. The registration key
+# comes from Vault (services/makemkv, app_key) into
+# /root/.MakeMKV/settings.conf; without it the converter refuses every disc
+# (MSG 5021). See the header of docker/plex/convert_isos_makemkv.sh.
+
+- name: Read the installed MakeMKV version
+  # A throwaway HOME, so the probe neither reads the key nor rewrites
+  # /root/.MakeMKV. disc:9999 does not exist: makemkvcon prints its version
+  # and exits.
+  ansible.builtin.shell: |
+    set -o pipefail
+    h=$(mktemp -d)
+    trap 'rm -rf "$h"' EXIT
+    command -v makemkvcon >/dev/null || exit 0
+    HOME="$h" timeout 60 makemkvcon -r info disc:9999 2>/dev/null |
+      sed -n 's/^MSG:1005,.*"MakeMKV v\([0-9][0-9.]*\) .*/\1/p' | head -1
+  args:
+    executable: /bin/bash
+  register: makemkv_installed
+  changed_when: false
+  check_mode: false
+
+- name: Build and install MakeMKV {{ makemkv_version }}
+  when: makemkv_installed.stdout != makemkv_version
+  block:
+    - name: MakeMKV build dependencies
+      ansible.builtin.apt:
+        name: [build-essential, pkg-config, libc6-dev, libssl-dev, libexpat1-dev, libavcodec-dev, zlib1g-dev]
+        state: present
+
+    - name: MakeMKV source directory
+      ansible.builtin.file:
+        path: "{{ makemkv_src_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Download the MakeMKV {{ makemkv_version }} tarballs
+      ansible.builtin.get_url:
+        url: "{{ makemkv_download_url }}/makemkv-{{ item.key }}-{{ makemkv_version }}.tar.gz"
+        dest: "{{ makemkv_src_dir }}/makemkv-{{ item.key }}-{{ makemkv_version }}.tar.gz"
+        checksum: "sha256:{{ item.value }}"
+        mode: '0644'
+      loop: "{{ makemkv_sha256 | dict2items }}"
+
+    - name: Unpack the MakeMKV tarballs
+      ansible.builtin.unarchive:
+        src: "{{ makemkv_src_dir }}/makemkv-{{ item }}-{{ makemkv_version }}.tar.gz"
+        dest: "{{ makemkv_src_dir }}"
+        remote_src: true
+      loop: [oss, bin]
+
+    # libmakemkv, libdriveio, libmmbd and the GUI's sources. The converter
+    # needs makemkvcon and the libraries only, so no GUI (and no Qt).
+    - name: Build and install makemkv-oss
+      ansible.builtin.shell: |
+        set -e
+        ./configure --disable-gui
+        make -j"$(nproc)"
+        make install
+      args:
+        chdir: "{{ makemkv_src_dir }}/makemkv-oss-{{ makemkv_version }}"
+        executable: /bin/bash
+
+    # makemkvcon itself (prebuilt). Its Makefile asks to accept the EULA on a
+    # terminal; the marker file it writes after "yes" stands in for that.
+    - name: Install makemkv-bin
+      ansible.builtin.shell: |
+        set -e
+        mkdir -p tmp
+        echo accepted > tmp/eula_accepted
+        make install
+      args:
+        chdir: "{{ makemkv_src_dir }}/makemkv-bin-{{ makemkv_version }}"
+        executable: /bin/bash
+
+    - name: Read the MakeMKV version again
+      ansible.builtin.shell: |
+        set -o pipefail
+        h=$(mktemp -d)
+        trap 'rm -rf "$h"' EXIT
+        HOME="$h" timeout 60 makemkvcon -r info disc:9999 2>/dev/null |
+          sed -n 's/^MSG:1005,.*"MakeMKV v\([0-9][0-9.]*\) .*/\1/p' | head -1
+      args:
+        executable: /bin/bash
+      register: makemkv_after
+      changed_when: false
+
+    - name: makemkvcon reports the pinned version
+      ansible.builtin.assert:
+        that: makemkv_after.stdout == makemkv_version
+        fail_msg: "makemkvcon reports '{{ makemkv_after.stdout }}' after installing {{ makemkv_version }}"
+
+- name: MakeMKV settings directory
+  ansible.builtin.file:
+    path: /root/.MakeMKV
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+# Only the key line is managed: makemkvcon rewrites the rest of the file
+# itself. The value is never logged.
+- name: MakeMKV registration key
+  ansible.builtin.lineinfile:
+    path: /root/.MakeMKV/settings.conf
+    regexp: '^app_Key\s*='
+    line: 'app_Key = "{{ vault_makemkv_app_key | trim }}"'
+    create: true
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true

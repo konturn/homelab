@@ -19,6 +19,14 @@
 #                      is moved to QUARANTINE_DIR, never deleted.
 #
 # Every run ends with one "iso-convert summary:" line.
+#
+# MakeMKV itself is managed by the same role (tasks/makemkv.yml): the version
+# is pinned in its defaults (makemkv_version, built from the vendor tarballs
+# when the installed one differs), and the registration key comes from Vault
+# (homelab/services/makemkv, app_key) into /root/.MakeMKV/settings.conf
+# (0600). To upgrade: bump makemkv_version and both SHA-256s, then dry-run
+# `makemkvcon -r --cache=1 info <some.iso>` on the router after the deploy.
+# The makemkv snap (/snap/bin) is not used: cron's PATH has /usr/bin only.
 set -uo pipefail
 
 ########################################

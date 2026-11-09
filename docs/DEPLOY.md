@@ -54,7 +54,7 @@ healthy. See [CANARY.md](CANARY.md).
 | `docker/docker-compose.yml` | configure-homelab-services, configure-wordpress |
 | `docker/wordpress/**` | configure-wordpress |
 | `docker/daemon.json` | configure-docker, configure-homelab-services |
-| `docker/plex/convert_isos_makemkv.sh` | configure-router-network |
+| `docker/plex/convert_isos_makemkv.sh` | configure-router-network (also installs the pinned MakeMKV and its key) |
 | satellite compose files, `docker/promtail/satellite-config.yml`, `docker/telegraf/satellite-telegraf.conf` | none |
 | `docker/ollama/**` | configure-ollama-models |
 | everything else under `docker/**` | configure-homelab-services |
