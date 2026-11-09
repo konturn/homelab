@@ -104,6 +104,34 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self._send(405)
 
 
+class _AuthHandler(_Handler):
+    def do_GET(self):  # noqa: N802
+        if self.headers.get("Authorization") != "Basic YWRtaW46cHc=":  # admin:pw
+            type(self).seen.append(("GET", self.path))
+            return self._send(401, b"", {"WWW-Authenticate": 'Basic realm="x"'})
+        return super().do_GET()
+
+
+class Auth(unittest.TestCase):
+    def run_with(self, user, pw):
+        _AuthHandler.seen = []
+        srv = http.server.HTTPServer(("127.0.0.1", 0), _AuthHandler)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            return s.Coordinator("127.0.0.1:%d" % srv.server_port, timeout=5, user=user, password=pw).read()
+        finally:
+            srv.shutdown()
+            srv.server_close()
+
+    def test_basic_auth(self):
+        self.assertEqual(self.run_with("admin", "pw")["device"]["firmware"], "v3.3.1")
+
+    def test_rejected_login_not_retried(self):
+        with self.assertRaisesRegex(RuntimeError, "not retrying"):
+            self.run_with("admin", "wrong")
+        self.assertEqual(len(_AuthHandler.seen), 1)
+
+
 class Read(unittest.TestCase):
     def test_read_only_gets(self):
         _Handler.seen = []

@@ -4,6 +4,7 @@
 schema: "1"
 name: "slzb-mr1"
 host: "10.6.128.20"
+vault_path: "homelab/infrastructure/slzb"
 device:
   firmware: "v3.3.1"
   fw_channel: "release"
@@ -65,6 +66,7 @@ settings:
     useMultiClients: "false"
     usePackets: "false"
   security:
+    auth: "true"
     fwIp: ""
   vpn:
     endpointIp: ""
@@ -82,9 +84,9 @@ settings:
     nmEnd: "8"
     nmStart: "23"
   time:
-    server1: "pool.ntp.org"
-    server2: "time.google.com"
-    timezone: "EET-2EEST,M3.5.0/3,M10.5.0/4"
+    server1: "10.6.0.1"
+    server2: "10.6.0.1"
+    timezone: "EST5EDT,M3.2.0/2:00:00,M11.1.0/2:00:00"
     use12h: "false"
   syslog:
     syslogEn: "false"

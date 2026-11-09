@@ -15,7 +15,12 @@ to the endpoints the web UI and the Home Assistant `smlight` integration read:
 `/api2?action=0&page=N` (the UI's "get page" call; the values are in the
 `respValuesArr` response header), `/ha_info` and `/ha_sensors`. It has no
 apply. It never calls the save, restart, firmware update or radio flash
-endpoints. The local API needs no login.
+endpoints. The web UI and API need a login (HTTP basic auth). `slzbctl.py`
+reads it from the file's `vault_path` (`homelab/infrastructure/slzb`,
+`username` and `password`) at run time, or from `SLZB_USER` / `SLZB_PASSWORD`,
+and stops at the first rejected login. The Home Assistant `smlight`
+integration holds the same credentials. zigbee2mqtt uses the radio's TCP
+socket (7638), which the login does not cover.
 
 ## What is captured
 
@@ -45,15 +50,11 @@ Values are kept as the UI reports them, including its placeholders such as
 `[OFF]` and `[radio_ZC]`. Pages that return only the common status header
 (11 to 14 and 16 on firmware v3.3.1) are skipped.
 
-### As found (2026-11-08)
+### Notes
 
-The baseline is the configuration as it was, not as it should be:
-
-- `time`: time zone `EET-2EEST` and NTP `pool.ntp.org` / `time.google.com`. The
-  coordinator is in `iot_no_wan` (no internet), so it cannot reach those
-  servers. The router serves NTP to the IoT VLAN at 10.6.0.1
-  (docs/FIREWALL.md). Changing this is a separate, deliberate change in the
-  web UI, followed by `export`.
+- `time`: America/New_York (`EST5EDT,M3.2.0/2:00:00,M11.1.0/2:00:00`), NTP
+  from the router (10.6.0.1, the IoT VLAN gateway; the coordinator is in
+  `iot_no_wan` and has no internet). Set 2026-11-09.
 - `general.sendStat` is on. It goes nowhere without internet.
 - `auto_update.enabled` and the Zigbee auto-update (`status.ZbAutoUpd`) are off.
   Firmware updates are manual. After one, restart zigbee2mqtt
@@ -61,10 +62,12 @@ The baseline is the configuration as it was, not as it should be:
 
 ## Usage
 
-Run on the router (or anywhere that reaches the IoT VLAN):
+Run on the router (or anywhere that reaches the IoT VLAN), with a Vault token
+in the environment:
 
 ```sh
 cd networking/slzb
+export VAULT_ADDR=https://vault.lab.nkontur.com:8200 VAULT_TOKEN=$(glab variable get VAULT_TOKEN)
 python3 slzbctl.py export          # rewrite slzb-mr1.yaml from the coordinator
 python3 slzbctl.py export -o -     # print instead of writing
 python3 slzbctl.py drift           # exit 2 on drift
@@ -81,13 +84,13 @@ run `export`, review `git diff`, and commit.
 `slzb:drift` runs on the same daily pipeline schedule as the camera check,
 **"iot-devices: daily config drift"** (`SCHEDULED_TASK=iot-device-drift`), on
 the protected runner. Its job network may reach the coordinator on :80
-(docs/FIREWALL.md).
+(docs/FIREWALL.md), and it logs in to Vault with the job's JWT (role `ci-deploy`).
 
 | Result | Exit | Effect |
 |---|---|---|
 | No differences | 0 | Job passes |
 | `DRIFT` (value changed, firmware included) or `NEW` (setting not in the file) | 2 | Job fails and mails the report to root (`Homelab: SLZB-MR1 coordinator config drift`) |
-| Coordinator unreachable / error | 1 | Same mail |
+| Coordinator unreachable, login rejected, other error | 1 | Same mail |
 
 `UNREAD` lines (in the file, not reported live) are shown but do not fail the
 job. A firmware change shows up as `DRIFT device.firmware` or
