@@ -144,9 +144,27 @@ class Compare(unittest.TestCase):
         s = self.live_same()
         s["per_input"]["8K"]["sound_mode"] = "DOLBY ATMOS"
         s["device"]["friendly_name"] = "x"
-        s["per_input"]["8K"]["audyssey"]["dynamic_eq"] = "ON"
+        s["per_input"]["8K"]["audyssey"]["multeq"] = "OFF"
         r = d.compare(SAMPLE, live(s))
-        self.assertEqual(r.changed, [(("per_input", "8K", "audyssey", "dynamic_eq"), "OFF", "ON")])
+        self.assertEqual(r.changed, [(("per_input", "8K", "audyssey", "multeq"), "FLAT", "OFF")])
+
+    def test_drift_false_fields_ignored_changed_and_new(self):
+        s = self.live_same()
+        s["per_input"]["8K"]["audyssey"]["dynamic_eq"] = "ON"      # changed
+        s["per_input"]["8K"]["tone"]["bass_db"] = "+2.0"           # changed
+        s["per_input"]["8K"]["levels"] = {"channels_db": {"FL": "+1.0"}}  # NEW
+        s["system"]["dimmer"] = "DIM"                               # NEW
+        s["zone2"] = {"bass_db": "+1.0", "levels_db": {"FL": "-2.0"}}  # NEW
+        s["web"] = {"quick_select": {"1": {"source": "Apple TV"}}}  # NEW
+        r = d.compare(SAMPLE, live(s))
+        self.assertEqual((r.changed, r.added, r.unread), ([], [], []))
+
+    def test_quick_select_source_ignored_name_checked(self):
+        want = dict(SAMPLE, web={"quick_select": {"1": {"name": "A", "source": "X"}}})
+        s = self.live_same()
+        s["web"] = {"quick_select": {"1": {"name": "B", "source": "Y"}}}
+        r = d.compare(want, live(s))
+        self.assertEqual(r.changed, [(("web", "quick_select", "1", "name"), "A", "B")])
 
     def test_unread_is_not_drift(self):
         s = self.live_same()

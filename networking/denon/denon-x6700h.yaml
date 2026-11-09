@@ -17,7 +17,7 @@ sources:
     CD: "CD"
     DVD: "DVD"
     GAME: "NintendoSwitch"
-    MPLAY: "SHIELD"
+    MPLAY: "Apple TV"
     PHONO: "Phono"
     "SAT/CBL": "Videocore"
     TV: "TV Audio"
@@ -61,7 +61,7 @@ web:
       rename: "NintendoSwitch"
       use: "USE"
     "Media Player":
-      rename: "SHIELD"
+      rename: "Apple TV"
       use: "USE"
     NETWORK:
       rename: "HEOS Music"
@@ -84,7 +84,7 @@ web:
       source: "Blu-ray"
     "3":
       name: "Quick Select 3"
-      source: "SHIELD"
+      source: "Apple TV"
     "4":
       name: "Quick Select 4"
       source: "HEOS Music"
