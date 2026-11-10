@@ -48,20 +48,20 @@ ExecStartPre=-/usr/local/sbin/restic-b2-policy-check
 {% endif -%}
 
 {% if restic_check %}
-ExecStartPre={{ restic_path }} check
+ExecStartPre={{ restic_path }} check --retry-lock {{ restic_backup_retry_lock }}
 {% endif -%}
 
 {% for folder in restic_folders_combined %}
-ExecStart={{ restic_path }} backup --verbose {% if folder.tag is defined %}--tag {{ folder.tag }} {% endif %}{{ folder.path }} {% if folder.global_excludes | default(true) %}{% for excl in restic_global_excludes %}--exclude "{{ excl }}" {% endfor %}{% endif %}{% if folder.exclude is defined %}--exclude {{ folder.exclude }}{% endif %}
+ExecStart={{ restic_path }} backup --retry-lock {{ restic_backup_retry_lock }} --verbose {% if folder.tag is defined %}--tag {{ folder.tag }} {% endif %}{{ folder.path }} {% if folder.global_excludes | default(true) %}{% for excl in restic_global_excludes %}--exclude "{{ excl }}" {% endfor %}{% endif %}{% if folder.exclude is defined %}--exclude {{ folder.exclude }}{% endif %}
 
 {% endfor -%}
 
 {% for database in restic_databases %}
-ExecStart=/bin/sh -c "{{ database.dump_command }} {{ '| pigz |' if restic_dump_compression_enabled else '|' }} {{ restic_path }} backup --verbose --stdin --stdin-filename {{ database.name }}{{ '.dump.gz' if restic_dump_compression_enabled else '.dump' }}"
+ExecStart=/bin/sh -c "{{ database.dump_command }} {{ '| pigz |' if restic_dump_compression_enabled else '|' }} {{ restic_path }} backup --retry-lock {{ restic_backup_retry_lock }} --verbose --stdin --stdin-filename {{ database.name }}{{ '.dump.gz' if restic_dump_compression_enabled else '.dump' }}"
 {% endfor -%}
 
 {% if restic_forget %}
-ExecStartPost={{ restic_path }} forget --keep-within {{ restic_forget_keep_within }}
+ExecStartPost={{ restic_path }} forget --retry-lock {{ restic_backup_retry_lock }} --keep-within {{ restic_forget_keep_within }}
 {% endif -%}
 
 {% if restic_prune and restic_prune_timer_on_calendar | length == 0 %}

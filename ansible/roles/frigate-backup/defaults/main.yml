@@ -34,9 +34,11 @@ frigate_backup_recordings_filter: all
 frigate_backup_recordings_timeout: 4h
 
 # The main restic-backup.service runs `restic check` before and `restic
-# forget` after its backups, both exclusive locks without --retry-lock: any
-# Frigate job holding a lock then fails the main backup. So the Frigate jobs
-# never start while restic-backup or restic-db-dumps is active, nor after
-# this hour until the main backup has run (it starts at 03:00).
+# forget` after its backups, both exclusive locks. They now wait up to
+# restic_backup_retry_lock for a Frigate lock, but the Frigate jobs still
+# keep out of the way: they never start while restic-backup, restic-db-dumps
+# or restic-macmini-pull (its pre-backup units) is active, nor after this
+# hour until the main backup has run (its timer fires at 03:00; the
+# pre-backup units push the actual start to about 03:05).
 frigate_backup_quiet_from_hour: 2
 frigate_backup_quiet_until_hour: 3

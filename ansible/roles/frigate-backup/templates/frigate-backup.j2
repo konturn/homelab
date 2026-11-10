@@ -21,7 +21,8 @@ log() { echo "frigate-backup[$mode]: $*"; }
 
 main_backup_active() {
   systemctl is-active --quiet restic-backup.service \
-    || systemctl is-active --quiet restic-db-dumps.service
+    || systemctl is-active --quiet restic-db-dumps.service \
+    || systemctl is-active --quiet restic-macmini-pull.service
 }
 
 # Never overlap the main backup (see defaults/main.yml).
