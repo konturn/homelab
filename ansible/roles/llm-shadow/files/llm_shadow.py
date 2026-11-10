@@ -34,6 +34,7 @@ import os
 import re
 import shlex
 import sqlite3
+import stat
 import statistics
 import subprocess
 import sys
@@ -81,6 +82,11 @@ SKILL_FILE = os.path.join(OC_WS, "skills/imessage-plex/SKILL.md")
 FETCH_SCRIPT = os.path.join(OC_WS, "skills/imessage/scripts/fetch-messages-bb.sh")
 CHECK_DOWNLOADS_SCRIPT = os.path.join(OC_WS, "skills/imessage-plex/scripts/check-downloads.sh")
 STATE_DB = os.path.join(OC_DATA, "state/openclaw.sqlite")
+# Everything under OC_BASE is owned by the OpenClaw container's user, which
+# can put symlinks anywhere below it. This service runs as root on the host,
+# so every path under OC_BASE is opened with agent_open()/write_agent_json(),
+# which never follow a symlink below OC_BASE.
+OC_BASE = os.path.commonpath([OC_DATA, OC_WS, OC_CLAUDE_PROJECT, os.path.dirname(SUMMARY_OUT)])
 
 SKILLS = OC_HOME_WS + "/skills"
 # The only scripts the shadow ever executes. All of them only read.
@@ -173,6 +179,75 @@ def load_json(path, default):
         return default
 
 
+def _agent_dirfd(dirpath, create=False):
+    """Open a directory under OC_BASE, refusing a symlink at every component
+    below OC_BASE. With create, missing components are made (root, 0700)."""
+    rel = os.path.relpath(os.path.normpath(dirpath), OC_BASE)
+    if rel == ".." or rel.startswith("../") or os.path.isabs(rel):
+        raise ValueError("%s is not under %s" % (dirpath, OC_BASE))
+    fd = os.open(OC_BASE, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    try:
+        for part in ([] if rel == "." else rel.split("/")):
+            if create:
+                try:
+                    os.mkdir(part, 0o700, dir_fd=fd)
+                except FileExistsError:
+                    pass
+            nfd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=fd)
+            os.close(fd)
+            fd = nfd
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def agent_open(path, binary=False):
+    """Open a regular file under OC_BASE for reading without following any
+    symlink below OC_BASE (OSError otherwise, like a missing file)."""
+    dfd = _agent_dirfd(os.path.dirname(path))
+    try:
+        fd = os.open(os.path.basename(path),
+                     os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, dir_fd=dfd)
+    finally:
+        os.close(dfd)
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
+        raise OSError("not a regular file: %s" % path)
+    return os.fdopen(fd, "rb" if binary else "r")
+
+
+def agent_lstat(path):
+    dfd = _agent_dirfd(os.path.dirname(path))
+    try:
+        return os.stat(os.path.basename(path), dir_fd=dfd, follow_symlinks=False)
+    finally:
+        os.close(dfd)
+
+
+def write_agent_json(path, obj, uid, gid):
+    """Atomic write of a file under OC_BASE, owned by uid:gid, through a pinned
+    directory fd: the temp file is created O_EXCL|O_NOFOLLOW and chowned by fd."""
+    dfd = _agent_dirfd(os.path.dirname(path), create=True)
+    try:
+        os.fchown(dfd, uid, gid)
+        os.fchmod(dfd, 0o700)
+        name = os.path.basename(path)
+        tmp = name + ".tmp"
+        try:
+            os.unlink(tmp, dir_fd=dfd)
+        except FileNotFoundError:
+            pass
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
+                     0o600, dir_fd=dfd)
+        with os.fdopen(fd, "w") as f:
+            os.fchown(f.fileno(), uid, gid)
+            json.dump(obj, f, indent=1, sort_keys=True)
+        os.replace(tmp, name, src_dir_fd=dfd, dst_dir_fd=dfd)
+    finally:
+        os.close(dfd)
+
+
 def write_json_atomic(path, obj, mode=0o600, uid=None, gid=None):
     tmp = path + ".tmp"
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
@@ -184,8 +259,9 @@ def write_json_atomic(path, obj, mode=0o600, uid=None, gid=None):
 
 
 def file_sha(path):
+    """sha256 of a file under OC_BASE (agent-owned), None if unreadable."""
     try:
-        with open(path, "rb") as f:
+        with agent_open(path, binary=True) as f:
             return hashlib.sha256(f.read()).hexdigest()
     except OSError:
         return None
@@ -193,7 +269,8 @@ def file_sha(path):
 
 def read_checkpoint():
     try:
-        return int(re.sub(r"\D", "", open(CHECKPOINT_FILE).read()) or 0)
+        with agent_open(CHECKPOINT_FILE) as f:
+            return int(re.sub(r"\D", "", f.read()) or 0)
     except OSError:
         return None
 
@@ -201,6 +278,11 @@ def read_checkpoint():
 # --------------------------------------------------------------------------- real run discovery
 
 def db():
+    # sqlite opens by name; refuse a symlink anywhere below OC_BASE first.
+    # A swap between this check and the open can only point a read-only query
+    # of OpenClaw's own tables at another file.
+    if not stat.S_ISREG(agent_lstat(STATE_DB).st_mode):
+        raise sqlite3.OperationalError("state db is not a regular file")
     return sqlite3.connect("file:%s?mode=ro" % STATE_DB, uri=True, timeout=10)
 
 
@@ -237,13 +319,13 @@ def find_transcript(jid, run_at_ms, finished_ms):
     best = None
     for path in glob.glob(os.path.join(OC_CLAUDE_PROJECT, "*.jsonl")):
         try:
-            st = os.stat(path)
+            st = os.lstat(path)
         except OSError:
             continue
-        if st.st_mtime < lo:
+        if not stat.S_ISREG(st.st_mode) or st.st_mtime < lo:
             continue
         try:
-            with open(path) as f:
+            with agent_open(path) as f:
                 head = [next(f, "") for _ in range(6)]
         except OSError:
             continue
@@ -334,7 +416,7 @@ def parse_real_transcript(path):
     if not path:
         return out
     pending = {}
-    with open(path) as f:
+    with agent_open(path) as f:
         for line in f:
             try:
                 d = json.loads(line)
@@ -381,7 +463,8 @@ def docker_exec(argv, stdin=None, timeout=60, user=OC_USER):
 def fetch_window(lower_ms):
     """Run the live fetch script read-only, with its checkpoint path swapped
     for a private temp file holding the shadow cursor."""
-    src = open(FETCH_SCRIPT).read()
+    with agent_open(FETCH_SCRIPT) as f:
+        src = f.read()
     new, n = re.subn(
         r'(?m)^CHECKPOINT_FILE=.*$',
         'CHECKPOINT_FILE="$(mktemp /tmp/llm-shadow-cursor.XXXXXX)"; '
@@ -396,7 +479,8 @@ def fetch_window(lower_ms):
 
 
 def run_check_downloads(state_snapshot):
-    src = open(CHECK_DOWNLOADS_SCRIPT).read()
+    with agent_open(CHECK_DOWNLOADS_SCRIPT) as f:
+        src = f.read()
     new, n = re.subn(r'(?m)^STATE_FILE=.*$', 'STATE_FILE="$SHADOW_STATE"', src, count=1)
     if n != 1:
         raise RuntimeError("check-downloads layout changed")
@@ -661,7 +745,8 @@ class Shadow:
 
     # ---- model loop
     def plan_ctx(self):
-        self.skill = open(SKILL_FILE).read()
+        with agent_open(SKILL_FILE) as f:
+            self.skill = f.read()
         # ~3.8 chars/token for the English prompt, ~3 for JSON; measured 8.8k
         # prompt tokens for an 8-message batch. Leave ~5k for tool results/answers.
         approx = (len(PREAMBLE) + len(self.skill) + len(json.dumps(TOOLS))) / 3.8 + len(json.dumps(self.batch)) / 3.0
@@ -939,10 +1024,15 @@ def snapshot_inputs(st):
     so a shadow run can use the state as it was before the real run."""
     snapdir = os.path.join(SHADOW_DIR, "snapshots")
     sha = file_sha(STATE_FILE)
+    data = None
     if sha and sha != st.get("state_sha"):
+        try:
+            with agent_open(STATE_FILE, binary=True) as f:
+                data = f.read()
+        except OSError:
+            data = None
+    if data is not None:
         dst = os.path.join(snapdir, "state-%d.json" % now_ms())
-        with open(STATE_FILE, "rb") as f:
-            data = f.read()
         fd = os.open(dst, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         os.write(fd, data)
         os.close(fd)
@@ -1003,7 +1093,7 @@ def tick(args):
         return 0
     if not st["pending"]:
         try:
-            stale = time.time() - os.stat(SUMMARY_OUT).st_mtime > 3600
+            stale = time.time() - agent_lstat(SUMMARY_OUT).st_mtime > 3600
         except OSError:
             stale = True
         if stale:
@@ -1282,11 +1372,8 @@ def summarize(args):
             "families": sorted(set(FAMILY.values())),
         },
     }
-    os.makedirs(os.path.dirname(SUMMARY_OUT), exist_ok=True)
     st = os.stat(OC_DATA)
-    os.chown(os.path.dirname(SUMMARY_OUT), st.st_uid, st.st_gid)
-    os.chmod(os.path.dirname(SUMMARY_OUT), 0o700)
-    write_json_atomic(SUMMARY_OUT, summary, mode=0o600, uid=st.st_uid, gid=st.st_gid)
+    write_agent_json(SUMMARY_OUT, summary, st.st_uid, st.st_gid)
     write_json_atomic(os.path.join(SHADOW_DIR, "summary.json"), summary)
     if args is not None:
         t = summary["total"]

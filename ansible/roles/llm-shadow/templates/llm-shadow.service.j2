@@ -24,6 +24,10 @@ ExecStart=/usr/bin/python3 -I {{ llm_shadow_install_dir }}/llm_shadow.py tick
 # Load cap + decision cap + fetch/compare overhead.
 TimeoutStartSec={{ ((llm_shadow_load_deadline_s | int) + (llm_shadow_run_deadline_s | int) + 240) }}s
 UMask=0077
+# Runs as root but only writes its data dir and the OpenClaw summary dir.
+NoNewPrivileges=yes
+ProtectSystem=full
+PrivateTmp=yes
 Nice=10
 # stdout reaches the journal (and Loki): the harness only ever prints counts.
 SyslogIdentifier=llm-shadow
