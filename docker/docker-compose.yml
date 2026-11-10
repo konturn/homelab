@@ -127,6 +127,14 @@ networks:
     ipam:
       config:
         - subnet: 172.30.4.0/24
+  # paperless-ngx <-> its Redis broker only. Redis has no auth, so it is not on
+  # a VLAN; no egress.
+  paperless-redis:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.5.0/24
 # AirPlay 2 receivers (shairport-sync), one per Snapcast zone: docs/AUDIO.md.
 # The services below differ only in name, address, MAC and config directory.
 x-airplay: &airplay
@@ -2391,7 +2399,7 @@ services:
     cap_drop:
       - ALL
     networks:
-      internal:
+      paperless-redis:
     deploy:
       resources:
         limits:
@@ -2422,6 +2430,7 @@ services:
     networks:
       internal:
       paperless-ai:
+      paperless-redis:
     deploy:
       resources:
         limits:
