@@ -2340,7 +2340,7 @@ services:
       PORT: 8080
       MQTT_USERNAME: mosquitto
       MQTT_PASSWORD: {{ vault_mqtt_pass | trim | replace("$", "$$") }}
-      MQTT_REJECT_UNAUTHORIZED: "false"
+      MQTT_REJECT_UNAUTHORIZED: "true"
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/data/ || exit 1"]
       interval: 30s
