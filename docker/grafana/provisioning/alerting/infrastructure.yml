@@ -2744,6 +2744,60 @@ groups:
           severity: warning
 
   # =========================================================================
+  # Tempo blocklist poll failing (#161)
+  # =========================================================================
+  # Tempo rebuilds its blocklist by polling the backend every 5m. In Nov 2026
+  # one block with an empty meta.json made every poll fail for ~3 days: no
+  # backend block was queryable, and compaction and retention (which work
+  # from the blocklist) stopped while the container stayed up. otel-collector
+  # scrapes Tempo's /metrics into InfluxDB (docker/otel-collector/config.yaml);
+  # tempodb_blocklist_poll_errors_total (field `counter`, tag tenant) only
+  # exists once a poll has failed since Tempo started, so no data is normal.
+  # A: errors in the last 20m (increase() skips a counter reset). Persistent
+  # failure adds one per poll (~4 per 20m); >1 plus `for: 30m` ignores a
+  # one-off error or a short burst, and fires ~45m into a real outage.
+  # Not a page: event router / OpenClaw only (policies.yml catch-all routes).
+  - orgId: 1
+    name: tempo-alerts
+    folder: General Alerting
+    interval: 1m
+    rules:
+      - uid: tempo-blocklist-poll-failing
+        title: Tempo Blocklist Poll Failing
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 1200, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -20m)
+                  |> filter(fn: (r) => r._measurement == "tempodb_blocklist_poll_errors_total" and r._field == "counter")
+                  |> group(columns: ["tenant"])
+                  |> sort(columns: ["_time"])
+                  |> increase()
+                  |> last()
+                  |> keep(columns: ["_time", "_value", "tenant"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [1]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 30m
+        annotations:
+          summary: "Tempo blocklist polling has been failing for 30+ minutes (tenant {{ $labels.tenant }})"
+          description: "While polls fail, stored traces older than ~1h are not queryable and compaction/retention stop, so block count grows. Find the error: docker logs --since 1h tempo 2>&1 | grep 'failed to poll'. A block with an empty or invalid meta.json was the cause in #161: move that block directory out of the tempo-storage volume (do not delete it) and restart tempo, then check the error is gone and tempodb_blocklist_length starts falling."
+        labels:
+          severity: warning
+
+  # =========================================================================
   # Radio silence: the Zigbee / Z-Wave bridge runs but hears nothing
   # =========================================================================
   # On 2026-11-07 an SLZB coordinator firmware update left zigbee2mqtt with a

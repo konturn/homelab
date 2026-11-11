@@ -13,6 +13,18 @@ receivers:
       http:
         endpoint: "0.0.0.0:4318"
 
+  # Tempo's own /metrics (same loki-backend network). Only the blocklist and
+  # error series are kept (filter/tempo); the Tempo Blocklist Poll Failing
+  # alert (tempo-blocklist-poll-failing) reads tempodb_blocklist_poll_errors_total
+  # (#161). Counters land as field `counter`, gauges as field `gauge`.
+  prometheus/tempo:
+    config:
+      scrape_configs:
+        - job_name: tempo
+          scrape_interval: 60s
+          static_configs:
+            - targets: ["tempo:3200"]
+
 processors:
   batch:
     send_batch_size: 1024
@@ -31,6 +43,14 @@ processors:
   transform/spancount:
     metric_statements:
       - keep_keys(resource.attributes, ["service.name"])
+
+  filter/tempo:
+    metrics:
+      include:
+        match_type: regexp
+        metric_names:
+          - ^tempodb_blocklist_(poll_errors_total|length)$
+          - ^tempodb_(compaction|retention)_errors_total$
 
 connectors:
   # Spans received per service.name -> InfluxDB measurement
@@ -79,6 +99,11 @@ service:
     metrics:
       receivers: [otlp]
       processors: [resource, batch]
+      exporters: [influxdb]
+
+    metrics/tempo:
+      receivers: [prometheus/tempo]
+      processors: [filter/tempo, batch]
       exporters: [influxdb]
 
     logs:
