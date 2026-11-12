@@ -2383,7 +2383,7 @@ services:
   # Celery broker for paperless-ngx 2.x (the linuxserver 1.x image bundled
   # its own Redis). Queue only, no persistence needed; internal network only.
   paperless-redis:
-    image: redis:8.10.3-alpine@sha256:71885d8cc6e42f2bc0aa2eb853bfc4be200b5108a46ac50e117ae1df0531fb80
+    image: redis:8.10.3-alpine@sha256:7958cfbb9d152f87dadfbc89f1b0b15938f0b81ff8982feb327476f4911935c3
     container_name: paperless-redis
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     security_opt:
