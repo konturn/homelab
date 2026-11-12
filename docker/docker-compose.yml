@@ -130,7 +130,7 @@ networks:
 # AirPlay 2 receivers (shairport-sync), one per Snapcast zone: docs/AUDIO.md.
 # The services below differ only in name, address, MAC and config directory.
 x-airplay: &airplay
-  image: mikebrady/shairport-sync:5.5.2@sha256:bed60f067bd328034ee772a597f2d2ff9f1d4d2fe95c84b8e10ff86208fa9046
+  image: mikebrady/shairport-sync:5.6.3@sha256:8ae074fc6ca71dc9e52789afc21e59319d878efe5b06d2ac4e9a08db78ad329c
   restart: unless-stopped
   # Reaps the per-session nc that the play hooks start (docker/airplay/feed.sh).
   init: true
