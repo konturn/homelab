@@ -1236,7 +1236,7 @@ services:
     # 2.0.2). As root it starts, auto-unseals and loads all mounts. Keep root
     # until those paths are re-owned to uid 100 and disable_mlock is revisited.
     user: "0:0"
-    image: hashicorp/vault:2.2.1@sha256:962a92876e168d68eaaa24b0b8b49bbce1cb63024060a67bba95cd158a366fc2
+    image: hashicorp/vault:2.2.2@sha256:dfa48c2fa2b0099ccb47681ec5c4804bf5aec9d6879ecfee07ad4b92a5427ad6
     restart: unless-stopped
     networks:
       internal:
