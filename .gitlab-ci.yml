@@ -386,7 +386,7 @@ satellite-2:validate:
 jit-approval-svc:test:
   extends: .interruptible
   stage: validate
-  image: golang:1.22-alpine
+  image: golang:1.22-alpine@sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052
   needs: []
   script:
     - cd docker/jit-approval-svc
@@ -528,7 +528,7 @@ revert-guard:test:
 fetch-vault-secrets:test:
   extends: .interruptible
   stage: validate
-  image: willhallonline/ansible:latest
+  image: willhallonline/ansible:latest@sha256:376af9710e0c1ef94132184b7a026f2ba991ce97c86518d3085b0acb426c10d1
   needs: []
   script:
     - sh ansible/tests/fetch-vault-secrets/run.sh
@@ -645,7 +645,7 @@ deploy-scope:test:
 .docker_build:
   stage: build
   timeout: 45m
-  image: docker:27
+  image: docker:27@sha256:aa3df78ecf320f5fafdce71c659f1629e96e9de0968305fe1de670e0ca9176ce
   variables:
     DOCKER_HOST: "tcp://lab.nkontur.com:2376"
     DOCKER_TLS_VERIFY: "1"
@@ -1138,7 +1138,7 @@ macmini:deploy:
 # =============================================================================
 vault:configure:
   stage: deploy
-  image: alpine:3.19
+  image: alpine:3.19@sha256:6baf43584bcb78f2e5847d1de515f23499913ac9f12bdf834811a3145eb11ca1
   environment: admin
   needs: []
   variables:
@@ -1172,7 +1172,7 @@ vault:configure:
 
 vault:rotate-approles:
   stage: deploy
-  image: alpine:3.19
+  image: alpine:3.19@sha256:6baf43584bcb78f2e5847d1de515f23499913ac9f12bdf834811a3145eb11ca1
   environment: admin
   needs:
     - job: router:deploy
@@ -1392,7 +1392,7 @@ vault:rotate-approles:
 vault:validate:
   extends: .interruptible
   stage: validate
-  image: alpine:3.19
+  image: alpine:3.19@sha256:6baf43584bcb78f2e5847d1de515f23499913ac9f12bdf834811a3145eb11ca1
   needs: []
   id_tokens:
     VAULT_ID_TOKEN:
@@ -1452,7 +1452,7 @@ vault:validate:
 netgear:test:
   extends: .interruptible
   stage: validate
-  image: willhallonline/ansible:latest
+  image: willhallonline/ansible:latest@sha256:376af9710e0c1ef94132184b7a026f2ba991ce97c86518d3085b0acb426c10d1
   needs: []
   variables:
     GIT_DEPTH: "50"
@@ -1499,7 +1499,7 @@ netgear:test:
 netgear:apply:
   extends: .netgear_vault
   stage: deploy
-  image: willhallonline/ansible:latest
+  image: willhallonline/ansible:latest@sha256:376af9710e0c1ef94132184b7a026f2ba991ce97c86518d3085b0acb426c10d1
   resource_group: netgear-switches
   needs:
     - job: netgear:test
@@ -1621,7 +1621,7 @@ netgear:firmware:
 aruba-iap:test:
   extends: .interruptible
   stage: validate
-  image: willhallonline/ansible:latest
+  image: willhallonline/ansible:latest@sha256:376af9710e0c1ef94132184b7a026f2ba991ce97c86518d3085b0acb426c10d1
   needs: []
   variables:
     GIT_DEPTH: "50"
@@ -1654,7 +1654,7 @@ aruba-iap:test:
         - networking/firmware_night.py
 
 .aruba_iap_live:
-  image: willhallonline/ansible:latest
+  image: willhallonline/ansible:latest@sha256:376af9710e0c1ef94132184b7a026f2ba991ce97c86518d3085b0acb426c10d1
   resource_group: aruba-iap
   id_tokens:
     VAULT_ID_TOKEN:
@@ -1808,7 +1808,7 @@ aruba-iap:firmware:
 aruba-s2500:test:
   extends: .interruptible
   stage: validate
-  image: willhallonline/ansible:latest
+  image: willhallonline/ansible:latest@sha256:376af9710e0c1ef94132184b7a026f2ba991ce97c86518d3085b0acb426c10d1
   needs: []
   script:
     - python3 -m unittest discover -s networking/aruba-s2500 -p 'test_*.py' -v
@@ -1903,7 +1903,7 @@ aruba-s2500:firmware:
 denon:test:
   extends: .interruptible
   stage: validate
-  image: willhallonline/ansible:latest
+  image: willhallonline/ansible:latest@sha256:376af9710e0c1ef94132184b7a026f2ba991ce97c86518d3085b0acb426c10d1
   needs: []
   script:
     - python3 -m unittest discover -s networking/denon -p 'test_*.py' -v
@@ -1956,7 +1956,7 @@ denon:drift:
 amcrest:test:
   extends: .interruptible
   stage: validate
-  image: willhallonline/ansible:latest
+  image: willhallonline/ansible:latest@sha256:376af9710e0c1ef94132184b7a026f2ba991ce97c86518d3085b0acb426c10d1
   needs: []
   script:
     - python3 -m unittest discover -s networking/amcrest -p 'test_*.py' -v
@@ -2016,7 +2016,7 @@ amcrest:drift:
 slzb:test:
   extends: .interruptible
   stage: validate
-  image: willhallonline/ansible:latest
+  image: willhallonline/ansible:latest@sha256:376af9710e0c1ef94132184b7a026f2ba991ce97c86518d3085b0acb426c10d1
   needs: []
   script:
     - python3 -m unittest discover -s networking/slzb -p 'test_*.py' -v
@@ -2146,7 +2146,7 @@ ups-card:drift:
 ipmi:test:
   extends: .interruptible
   stage: validate
-  image: willhallonline/ansible:latest
+  image: willhallonline/ansible:latest@sha256:376af9710e0c1ef94132184b7a026f2ba991ce97c86518d3085b0acb426c10d1
   needs: []
   script:
     - python3 -m unittest discover -s ansible/roles/ipmi/files -p 'test_*.py' -v
