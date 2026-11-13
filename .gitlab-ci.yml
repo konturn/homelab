@@ -386,7 +386,7 @@ satellite-2:validate:
 jit-approval-svc:test:
   extends: .interruptible
   stage: validate
-  image: golang:1.22-alpine
+  image: golang:1.27-alpine@sha256:eb61c3873c97416fff0116553fff65d67a3549f72e11d9758849a689cdd8b523
   needs: []
   script:
     - cd docker/jit-approval-svc
