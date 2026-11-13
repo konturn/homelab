@@ -1138,7 +1138,7 @@ macmini:deploy:
 # =============================================================================
 vault:configure:
   stage: deploy
-  image: alpine:3.19
+  image: alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
   environment: admin
   needs: []
   variables:
@@ -1172,7 +1172,7 @@ vault:configure:
 
 vault:rotate-approles:
   stage: deploy
-  image: alpine:3.19
+  image: alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
   environment: admin
   needs:
     - job: router:deploy
@@ -1392,7 +1392,7 @@ vault:rotate-approles:
 vault:validate:
   extends: .interruptible
   stage: validate
-  image: alpine:3.19
+  image: alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
   needs: []
   id_tokens:
     VAULT_ID_TOKEN:
@@ -2596,7 +2596,7 @@ satellite-2:deploy-service:
 # (Maintainer project access token), so only main's copy of the job sees it.
 gitlab:settings:
   stage: deploy
-  image: alpine:3.22@sha256:49340b346798875b5592e5d420241f2f9cfba5f47e62ebb1446a1b34734e898f
+  image: alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
   needs: []
   # The event-router webhook token is read from Vault (JWT login, ci-deploy).
   id_tokens:
