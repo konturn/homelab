@@ -405,6 +405,7 @@ Controls traffic TO the router itself:
 |---------|-----------|-------|
 | SSH | mgmt, tailscale | 22 |
 | SSH (to 10.4.0.1 only) | protected CI network (`br-ci-prot`) | 22 |
+| SSH (to 10.4.0.1 only, from the agent gateway's address only; login needs an approved JIT certificate) | internal (`vlan3-shim`) | 22 |
 | DNS | tailscale | 53 |
 | SSH (rate-limited) | WAN | 22 |
 | ICMP | any | - |

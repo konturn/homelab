@@ -290,6 +290,10 @@ COMMIT
 # WAN: out-of-band access when Tailscale is down (key-only auth)
 -A INPUT -s 10.4.0.0/16 -p tcp -m tcp --dport 22 -j ACCEPT
 -A INPUT -s 100.64.0.0/10 -p tcp -m tcp --dport 22 -j ACCEPT
+# Agent gateway (internal VLAN, arrives on vlan3-shim): SSH to the router's
+# mgmt address only. Reachability only: a login still needs a short-lived JIT
+# certificate that Noah approves per request (docs/jit-access-design.md).
+-A INPUT -i vlan3-shim -s {{ openclaw_gateway_ip }}/32 -d 10.4.0.1/32 -p tcp -m tcp --dport 22 -j ACCEPT
 # WAN SSH rate limiting: max 4 new connections per 60 seconds per source IP
 # Mitigates brute-force attacks on the out-of-band SSH access
 -A INPUT -i {{ inet_interface_name }} -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --set --name SSH
