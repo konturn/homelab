@@ -292,7 +292,7 @@ services:
       resources:
         limits:
           cpus: '16'
-          memory: 8G
+          memory: 10G
         reservations:
           memory: 3G
           devices:
