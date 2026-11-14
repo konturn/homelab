@@ -19,10 +19,17 @@ tag={{ frigate_backup_tag | quote }}
 
 log() { echo "frigate-backup[$mode]: $*"; }
 
+# These are Type=oneshot units: while their ExecStartPre/ExecStart run they
+# are "activating", and `systemctl is-active` is true only for "active", so it
+# never sees them running (2026-11-14: events started during the pre-backup
+# check's exclusive lock). Compare ActiveState instead.
 main_backup_active() {
-  systemctl is-active --quiet restic-backup.service \
-    || systemctl is-active --quiet restic-db-dumps.service \
-    || systemctl is-active --quiet restic-macmini-pull.service
+  local u state
+  for u in restic-backup.service restic-db-dumps.service restic-macmini-pull.service; do
+    state=$(systemctl show -p ActiveState --value "$u" 2>/dev/null || true)
+    case "$state" in active|activating|reloading|deactivating) return 0 ;; esac
+  done
+  return 1
 }
 
 # Never overlap the main backup (see defaults/main.yml).
