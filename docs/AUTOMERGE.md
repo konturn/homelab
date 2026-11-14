@@ -361,8 +361,14 @@ in its host's resource group (`deploy-router`, `deploy-zwave`,
 3. Health gate (`ci/automerge/wait-healthy.sh`, per service, up to `timeout`,
    default 600s). The container (found by its compose project and service
    labels) must run the new digest, its Docker healthcheck must report
-   `healthy` (or, without one, it must stay up for 60s without restarting),
-   and the optional `probe` URL must return 2xx/3xx. Probes go to the internal
+   `healthy` with no failing checks (or, without one, it must not restart),
+   the optional `probe` URL must return 2xx/3xx, and all of that must hold
+   continuously for 60s (`--stable`), sampled every 10s. One good sample is
+   not enough: Docker probes every 5s during `start_period`, so a container
+   is `healthy` after its first answer. On 2026-11-14 plex passed the gate 5s
+   after a recreate and hung ~45s later; the deploy reported success and no
+   rollback ran. A failure inside the hold restarts it, so a service that
+   never settles fails at the timeout and takes the rollback path. Probes go to the internal
    reverse proxy (`lab_nginx_ip`) with the URL's hostname, so they don't
    depend on DNS. If the container exits or restarts three times, the gate
    fails straight away. Every long-running service in the listed compose files
