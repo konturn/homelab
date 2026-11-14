@@ -113,8 +113,9 @@ RUN git init -q /opt/nikto \
 
 # playwright + agent-browser from tools/package-lock.json (exact versions and
 # integrity hashes; npm ci fails on any mismatch). Install scripts are skipped:
-# agent-browser ships its native binary in the tarball, and its postinstall
-# only chmods it. The old /usr/local/lib/node_modules paths are kept as
+# since 0.43 agent-browser ships its native binary in the optional
+# per-platform package @agent-browser/cli-linux-x64-gnu (npm ci installs it from
+# the lockfile), and its postinstall only links it. The old /usr/local/lib/node_modules paths are kept as
 # symlinks for scripts that require() them by absolute path.
 # Browsers: `playwright install chromium` fetches the Chromium and headless
 # shell builds named in the locked playwright-core's browsers.json, so the
@@ -123,8 +124,8 @@ RUN git init -q /opt/nikto \
 COPY tools/package.json tools/package-lock.json /opt/openclaw-tools/
 RUN cd /opt/openclaw-tools \
     && npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
-    && chmod 755 node_modules/agent-browser/bin/agent-browser-linux-x64 \
-    && ln -s /opt/openclaw-tools/node_modules/agent-browser/bin/agent-browser-linux-x64 /usr/local/bin/agent-browser \
+    && chmod 755 node_modules/@agent-browser/cli-linux-x64-gnu/bin/agent-browser \
+    && ln -s /opt/openclaw-tools/node_modules/@agent-browser/cli-linux-x64-gnu/bin/agent-browser /usr/local/bin/agent-browser \
     && ln -s /opt/openclaw-tools/node_modules/playwright/cli.js /usr/local/bin/playwright \
     && ln -s /opt/openclaw-tools/node_modules/playwright /usr/local/lib/node_modules/playwright \
     && ln -s /opt/openclaw-tools/node_modules/agent-browser /usr/local/lib/node_modules/agent-browser \
