@@ -43,7 +43,7 @@ PLAYBOOKS = [
      "verify": {"alert_resolved": "10m"}, "limits": {"max_runs": 1, "per": "6h", "cooldown": "30m"}},
     {"id": "restart-once", "mode": "active",
      "match": {"source": "grafana", "rule_uid": "container-health-failure"},
-     "node": {"from_label": "container_name"},
+     "node": {"from_label": "container_name"}, "preconditions": [{"no_deploy_touching": "2h"}],
      "action": {"type": "restart_container", "target_from_label": "container_name"},
      "verify": {"alert_resolved": "10m"}, "limits": {"max_runs": 1, "per": "6h", "cooldown": "30m"}},
     {"id": "app-log-restart", "mode": "active",
