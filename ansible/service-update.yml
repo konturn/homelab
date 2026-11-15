@@ -13,10 +13,10 @@
 #   AUTOMERGE_RESULT  path where the outcome JSON is written (on the controller)
 #
 # Pre-upgrade backups: a version update of a service with
-# `pre_upgrade_backup` in ci/automerge-policy.yml (Home Assistant, InfluxDB)
-# is backed up by ci/automerge/pre-upgrade-backup.sh before the new image
-# starts, and the backup is restored before the rollback starts the previous
-# image (docs/AUTOMERGE.md, "Pre-upgrade backups").
+# `pre_upgrade_backup` in ci/automerge-policy.yml (Home Assistant, InfluxDB,
+# Nextcloud) is backed up by ci/automerge/pre-upgrade-backup.sh before the new
+# image starts, and the backup is restored before the rollback starts the
+# previous image (docs/AUTOMERGE.md, "Pre-upgrade backups").
 #
 # Bot-config merges (docs/AUTOMERGE.md, "Bot-config class") also use this
 # playbook: changed services (resource limits, log levels) are recreated like
@@ -86,22 +86,35 @@
             name: configure-homelab-services
             tasks_from: render_compose
 
-        # A same-tag digest refresh must not change the packaged Nextcloud
-        # version: a new version upgrades the installed code and database on
-        # start, which rolling back the image cannot undo. Checked before
-        # anything is recreated, so a refusal leaves the running container as is.
-        - name: Nextcloud - refuse an image whose packaged version differs from the installed one
+        # A new Nextcloud version upgrades the installed code and database on
+        # start, which rolling back the image cannot undo. Without a
+        # pre-upgrade backup (a same-tag digest refresh) the packaged version
+        # must equal the installed one. With one (a patch release) it must be
+        # a newer release of the same major.minor: the backup is what the
+        # rollback restores. Checked before anything is stopped or recreated,
+        # so a refusal leaves the running container as is.
+        - name: Nextcloud - refuse an image whose packaged version is not the expected one
           ansible.builtin.shell:
             cmd: |
               set -euo pipefail
-              img={{ (automerge_plan.services | selectattr('service', 'equalto', 'nextcloud') | first).new | quote }}
+              img={{ automerge_nc.new | quote }}
+              backup={{ 'yes' if automerge_nc.pre_upgrade_backup | default('') else 'no' }}
               docker pull -q "$img" >/dev/null
               ver='include $argv[1]; echo implode(".", $OC_Version);'
               want=$(docker run --rm --entrypoint php "$img" -r "$ver" /usr/src/nextcloud/version.php)
               have=$(docker exec nextcloud php -r "$ver" /var/www/html/version.php)
-              echo "installed ${have}, image ${want}"
-              [ -n "$want" ] && [ "$want" = "$have" ]
+              echo "installed ${have}, image ${want}, pre-upgrade backup: ${backup}"
+              [ -n "$want" ] && [ -n "$have" ]
+              if [ "$backup" = no ]; then
+                [ "$want" = "$have" ]
+              else
+                [ "$(cut -d. -f1,2 <<<"$want")" = "$(cut -d. -f1,2 <<<"$have")" ]
+                [ "$want" != "$have" ]
+                [ "$(printf '%s\n' "$have" "$want" | sort -V | tail -n 1)" = "$want" ]
+              fi
             executable: /bin/bash
+          vars:
+            automerge_nc: "{{ automerge_plan.services | selectattr('service', 'equalto', 'nextcloud') | first }}"
           changed_when: false
           when: "'nextcloud' in automerge_services"
 

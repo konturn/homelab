@@ -8,8 +8,8 @@
 #   - services that run only under a compose profile (e.g. `wordpress`),
 #   - update kinds a service's entry under `services` restricts.
 # Version updates of services whose data migrates one way (Home Assistant,
-# InfluxDB) are backed up before they deploy (`pre_upgrade_backup` below).
-# Those wait for a human; the sweep labels them `automerge-manual`.
+# InfluxDB, Nextcloud) are backed up before they deploy and restored if the
+# rollback fires (`pre_upgrade_backup` below).
 # This file is CODEOWNERS-protected.
 
 # MR authors whose image-update MRs may be auto-merged. The merging identity
@@ -263,7 +263,8 @@ freeze_label: freeze
 default_health_timeout: 600
 
 # Pre-upgrade backups (docs/AUTOMERGE.md, "Pre-upgrade backups"). A version
-# (minor) update of a service with `pre_upgrade_backup` is backed up by
+# update of a service with `pre_upgrade_backup` (a minor; for Nextcloud also
+# a patch) is backed up by
 # ci/automerge/pre-upgrade-backup.sh before the new image starts, into
 # <dir>/<service>/<UTC time>-<old tag>-to-<new tag>, and restored if the
 # rollback fires. The newest `keep` backups per service are kept. `dir` must
@@ -291,9 +292,11 @@ pre_upgrade_backups:
 #   zero_minor_is_minor: true counts a 0.x minor (0.163 -> 0.165) as a minor
 #            update instead of a major one, for projects that ship routine
 #            releases as 0.x minors. Majors stay manual.
-#   pre_upgrade_backup: homeassistant | influxdb. Before a version (minor)
-#            update deploys, back up the data its new version migrates one
-#            way, and restore it on rollback (see pre_upgrade_backups above).
+#   pre_upgrade_backup: homeassistant | influxdb | nextcloud. Before a
+#            version update deploys (homeassistant, influxdb: minors;
+#            nextcloud: patches and minors), back up the data its new version
+#            migrates one way, and restore it on rollback (see
+#            pre_upgrade_backups above).
 # Without a probe the gate is the container's own healthcheck. Every
 # long-running service in the deployed compose files has one; services
 # without one are on the denylist (checked by test_fast_track.py).
@@ -347,18 +350,22 @@ services:
     probe_via: external
   lab_nginx:
     probe: https://grafana.lab.nkontur.com/api/health
-  # Digest-only services. A new version of these runs a one-way migration on
-  # start (nextcloud: `occ upgrade`; vaultwarden: its database schema), so
-  # rolling back the image would not restore the previous state. A digest
-  # refresh of the same tag keeps the version and rolls back cleanly; version
-  # updates go through a reviewed merge and the full deploy (which also runs
-  # `occ upgrade`). The deploy refuses a nextcloud digest whose packaged
-  # version differs from the installed one (ansible/service-update.yml).
+  # A new Nextcloud version runs a one-way migration on start (the image
+  # entrypoint's `occ upgrade`), so patch releases are backed up first
+  # (database dump, /var/www/html, app data) and restored on rollback.
+  # Minors are not taken: `updates` stops them, and majors are always manual.
+  # A digest refresh of the same tag keeps the version and rolls back
+  # cleanly; the deploy refuses a digest whose packaged version differs from
+  # the installed one, and a patch whose packaged version is not a newer
+  # release of the same major.minor (ansible/service-update.yml).
   nextcloud:
-    updates: [digest]
+    updates: [digest, patch]
+    pre_upgrade_backup: nextcloud
     probe: https://nextcloud.nkontur.com/status.php
     probe_via: external
     timeout: 900
+  # Digest-only: a new version migrates its database schema on start, so
+  # rolling back the image would not restore the previous state.
   bitwarden:
     updates: [digest]
     probe: https://bitwarden.nkontur.com/alive

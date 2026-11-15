@@ -8,6 +8,7 @@ Run: python3 -m unittest discover -s ci/automerge -v
 
 import copy
 import filecmp
+import gzip
 import os
 import shutil
 import sqlite3
@@ -41,6 +42,8 @@ BASE = f"""services:
     image: influxdb:2.9.1@{D1}
   grafana:
     image: grafana/grafana:13.3.0-ubuntu@{D1}
+  nextcloud:
+    image: nextcloud:35.0.2-apache@{D1}
 """
 
 ALLOW = {
@@ -50,6 +53,7 @@ ALLOW = {
     "services": {
         "homeassistant": {"pre_upgrade_backup": "homeassistant"},
         "influxdb": {"pre_upgrade_backup": "influxdb"},
+        "nextcloud": {"updates": ["digest", "patch"], "pre_upgrade_backup": "nextcloud"},
     },
     "pre_upgrade_backups": {"dir": "/mpool/backups/automerge-pre-upgrade", "keep": 2,
                             "rate_mb": 40, "timeout": 1800},
@@ -86,6 +90,36 @@ class PolicyTests(unittest.TestCase):
                                "20261107T120000Z-2026.11.0-to-2026.12.0"}})
                 else:
                     self.assertEqual(b, {})
+
+    def test_nextcloud_backup_for_patch(self):
+        # !1249: nextcloud 35.0.2-apache -> 35.0.3-apache
+        cases = {"35.0.3-apache": "patch", "35.0.2-apache": "digest"}
+        for tag, kind in cases.items():
+            with self.subTest(kind=kind):
+                v = evaluate(BASE.replace(f"nextcloud:35.0.2-apache@{D1}", f"nextcloud:{tag}@{D2}"))
+                self.assertTrue(v.eligible, v.reasons)
+                self.assertEqual(v.changes[0].kind, kind)
+                b = policy.pre_upgrade_backups(v.changes, ALLOW, "20261115T120000Z")
+                if kind == "patch":
+                    self.assertEqual(b, {"nextcloud": {
+                        "type": "nextcloud",
+                        "dir": "/mpool/backups/automerge-pre-upgrade/nextcloud/"
+                               "20261115T120000Z-35.0.2-apache-to-35.0.3-apache"}})
+                    self.assertIn("nextcloud: nextcloud pre-upgrade backup", " ".join(v.notes))
+                else:
+                    self.assertEqual(b, {})
+
+    def test_nextcloud_minor_and_major_refused(self):
+        for tag in ("35.1.0-apache", "36.0.0-apache"):
+            with self.subTest(tag=tag):
+                v = evaluate(BASE.replace(f"nextcloud:35.0.2-apache@{D1}", f"nextcloud:{tag}@{D2}"))
+                self.assertFalse(v.eligible)
+
+    def test_backup_kinds_cover_every_type(self):
+        self.assertEqual(set(policy.PRE_UPGRADE_TYPES), set(policy.PRE_UPGRADE_KINDS_BY_TYPE))
+        for t, kinds in policy.PRE_UPGRADE_KINDS_BY_TYPE.items():
+            self.assertNotIn("digest", kinds, t)    # a digest refresh never migrates
+            self.assertTrue(set(kinds) <= {"patch", "minor"}, t)
 
     def test_other_services_take_no_backup(self):
         v = evaluate(BASE.replace(f"grafana:13.3.0-ubuntu@{D1}", f"grafana:13.4.0-ubuntu@{D2}"))
@@ -170,6 +204,16 @@ class PlaybookOrderTests(unittest.TestCase):
         self.assertNotIn("ignore_errors", task)       # a failed backup fails the deploy
         self.assertIn("automerge_upgrade_started: true", yaml.safe_dump(self.block[mark]))
 
+    def test_nextcloud_version_check_before_backup(self):
+        c = self.index(self.block, "Nextcloud - refuse an image whose packaged version is not the expected one")
+        self.assertLess(c, self.index(self.block, "Pre-upgrade backup"))
+        task = self.block[c]
+        self.assertNotIn("ignore_errors", task)
+        cmd = task["ansible.builtin.shell"]["cmd"]
+        self.assertIn("pre_upgrade_backup", cmd)     # a version change only with a backup
+        self.assertIn('[ "$want" = "$have" ]', cmd)   # otherwise the version must not change
+        self.assertIn("cut -d. -f1,2", cmd)          # and never across a minor
+
     def test_prune_does_not_fail_the_deploy(self):
         t = self.block[self.index(self.block, "Prune old pre-upgrade backups")]
         self.assertTrue(t["ignore_errors"])
@@ -207,7 +251,8 @@ class RealPolicyTests(unittest.TestCase):
 
     def test_config(self):
         cfg = policy.pre_upgrade_config(self.allow)
-        self.assertEqual(cfg["services"], {"homeassistant": "homeassistant", "influxdb": "influxdb"})
+        self.assertEqual(cfg["services"], {"homeassistant": "homeassistant", "influxdb": "influxdb",
+                                           "nextcloud": "nextcloud"})
         self.assertTrue(cfg["dir"].startswith("/mpool/"))
         self.assertEqual(cfg["keep"], 2)
         self.assertGreaterEqual(cfg["timeout"], 1200)
@@ -215,6 +260,11 @@ class RealPolicyTests(unittest.TestCase):
     def test_minors_allowed(self):
         for svc, image in (("homeassistant", "homeassistant/home-assistant"), ("influxdb", "influxdb")):
             self.assertIn("minor", policy.allowed_kinds(svc, image, self.allow))
+
+    def test_nextcloud_patches_only(self):
+        kinds = policy.allowed_kinds("nextcloud", "nextcloud", self.allow)
+        self.assertEqual(set(kinds), {"digest", "patch"})
+        self.assertEqual(self.allow["services"]["nextcloud"]["pre_upgrade_backup"], "nextcloud")
 
     def test_backed_up_services_run_on_the_router_only(self):
         # the backups go to the router's ZFS pool
@@ -235,16 +285,24 @@ STUB_DOCKER = r"""#!/bin/bash
 # Stub docker for test_pre_upgrade.py. State lives in $STUB_DIR.
 echo "$*" >> "$STUB_DIR/calls"
 case "$1" in
-  ps) cat "$STUB_DIR/cid" ;;
+  # A container with its own state_<cid> file (the Nextcloud database) is
+  # tracked apart from the service's ($STUB_DIR/state).
+  ps) svc=$(sed -nE 's/.*com[.]docker[.]compose[.]service=([^ ]+).*/\1/p' <<<"$*")
+      if [ -f "$STUB_DIR/cid_$svc" ]; then cat "$STUB_DIR/cid_$svc"; else cat "$STUB_DIR/cid"; fi ;;
   pull) exit 0 ;;
-  stop) echo stopped > "$STUB_DIR/state" ;;
+  stop) cid="${*: -1}"
+        if [ -f "$STUB_DIR/state_$cid" ]; then echo stopped > "$STUB_DIR/state_$cid"
+        else echo stopped > "$STUB_DIR/state"; fi ;;
   run) echo "$STUB_IMAGE_SCHEMA" ;;
+  # exec -i: a database restore (stdin is saved); exec: a dump (prints $STUB_DIR/dump)
+  exec) if [ "$2" = -i ]; then cat > "$STUB_DIR/loaded"; else cat "$STUB_DIR/dump"; fi ;;
   inspect)
     tmpl="$3"
     case "$tmpl" in
       *Mounts*) dest=$(sed -E 's/.*Destination "([^"]+)".*/\1/' <<<"$tmpl")
                 cat "$STUB_DIR/mount$(tr / _ <<<"$dest")" ;;
-      *State.Running*) [ "$(cat "$STUB_DIR/state")" = running ] && echo true || echo false ;;
+      *State.Running*) f="$STUB_DIR/state"; [ ! -f "$STUB_DIR/state_$4" ] || f="$STUB_DIR/state_$4"
+                       [ "$(cat "$f")" = running ] && echo true || echo false ;;
       *State.Restarting*) echo false ;;
       *.Name*) echo /stub ;;
       *Config.Image*) echo "old/image:1.0@sha256:aaaa" ;;
@@ -255,7 +313,7 @@ case "$1" in
 esac
 """
 
-TOOLS = ("bash", "rsync", "pv", "sqlite3", "sha256sum", "numfmt", "findmnt")
+TOOLS = ("bash", "rsync", "pv", "sqlite3", "sha256sum", "numfmt", "findmnt", "gzip")
 
 
 def make_ha_db(path: Path, schema: int, rows: int = 200) -> None:
@@ -465,6 +523,127 @@ class ScriptTests(unittest.TestCase):
         (self.stub / "env").write_text("INFLUXD_BOLT_PATH=/elsewhere/influxd.bolt\n")
         d = self.root / "influxdb" / "20261107T120000Z-a-to-b"
         self.assertIn("default paths", self.influx("backup", d, "--new-image", "x", ok=False).stdout)
+
+    # --- Nextcloud ------------------------------------------------------------
+
+    DUMP = ("-- MariaDB dump\nDROP DATABASE IF EXISTS `nextcloud`;\nCREATE DATABASE `nextcloud`;\n"
+            "INSERT INTO oc_appconfig VALUES ('core','vendor','nextcloud');\n"
+            "-- Dump completed on 2026-11-15  3:00:00\n")
+
+    def nc_setup(self, version="35,0,2,1", instance="oc1a2b3c", maintenance=False):
+        html = self.tmp / "html"
+        (html / "config").mkdir(parents=True)
+        (html / "apps" / "files").mkdir(parents=True)
+        (html / "custom_apps" / "calendar").mkdir(parents=True)
+        (html / "version.php").write_text(f"<?php\n$OC_Version = array({version});\n$OC_VersionString = 'x';\n")
+        (html / "config" / "config.php").write_text(
+            "<?php\n$CONFIG = array (\n"
+            f"  'instanceid' => '{instance}',\n  'version' => '{version.replace(',', '.')}',\n"
+            + ("  'maintenance' => true,\n" if maintenance else "  'maintenance' => false,\n") + ");\n")
+        (html / "config" / "custom.config.php").write_text("")       # the bind mount's placeholder
+        (html / "apps" / "files" / "appinfo.xml").write_text("<version>2.0</version>")
+        (html / "custom_apps" / "calendar" / "info.xml").write_text("<version>6.0</version>")
+        data = self.tmp / "data"
+        app = data / f"appdata_{instance}"
+        (app / "js" / "core").mkdir(parents=True)
+        (app / "preview" / "1").mkdir(parents=True)
+        (app / "js" / "core" / "merged.js").write_text("old js")
+        (app / "preview" / "1" / "256.png").write_bytes(b"png")
+        (data / "alice" / "files").mkdir(parents=True)
+        (data / "alice" / "files" / "doc.txt").write_text("user file")
+        self.mount("/var/www/html", html)
+        self.mount("/data", data)
+        (self.stub / "cid_nextcloud_db").write_text("dbc1\n")
+        (self.stub / "state_dbc1").write_text("running\n")
+        (self.stub / "dump").write_text(self.DUMP)
+        return html, app
+
+    def nc(self, cmd, d, *extra, ok=True):
+        return self.run_script(cmd, "--type", "nextcloud", "--service", "nextcloud", "--dir", str(d),
+                               "--rate", "50", *extra, ok=ok)
+
+    def test_nc_backup_and_restore(self):
+        html, app = self.nc_setup()
+        d = self.root / "nextcloud" / "20261115T120000Z-35.0.2-apache-to-35.0.3-apache"
+        self.nc("backup", d, "--new-image", "nextcloud:35.0.3-apache")
+        self.assertTrue((d / "COMPLETE").exists())
+        self.assertEqual(gzip.decompress((d / "nextcloud.sql.gz").read_bytes()).decode(), self.DUMP)
+        self.assertEqual((d / "html" / "version.php").read_text(), (html / "version.php").read_text())
+        self.assertTrue((d / "html" / "custom_apps" / "calendar" / "info.xml").exists())
+        self.assertFalse((d / "html" / "config" / "custom.config.php").exists())
+        self.assertTrue((d / "appdata" / "js" / "core" / "merged.js").exists())
+        self.assertFalse((d / "appdata" / "preview").exists())          # previews are not copied
+        self.assertFalse(any("doc.txt" in str(p) for p in d.rglob("*")))  # nor user files
+        info = (d / "INFO").read_text()
+        self.assertIn("version=35.0.2.1", info)
+        self.assertIn("appdata=appdata_oc1a2b3c", info)
+        calls = self.calls()
+        self.assertLess(calls.index("pull"), calls.index("stop"))
+        self.assertLess(calls.index("stop"), calls.index("exec"))     # dumped with Nextcloud stopped
+        self.assertEqual((self.stub / "state").read_text().strip(), "stopped")
+        self.assertEqual((self.stub / "state_dbc1").read_text().strip(), "running")
+
+        # the new version: new code and config.php version, a new app, the
+        # app data cache rewritten; meanwhile a preview and a user file appear
+        (self.stub / "state").write_text("running\n")
+        (html / "version.php").write_text("<?php\n$OC_Version = array(35,0,3,1);\n")
+        (html / "config" / "config.php").write_text(
+            (html / "config" / "config.php").read_text().replace("35.0.2.1", "35.0.3.1"))
+        (html / "apps" / "new_in_35_0_3").mkdir()
+        (html / "config" / "custom.config.php").write_text("ansible-managed")
+        (app / "js" / "core" / "merged.js").write_text("new js")
+        (app / "js" / "core" / "extra.js").write_text("new")
+        (app / "preview" / "1" / "512.png").write_bytes(b"png")
+        (app.parent / "alice" / "files" / "new.txt").write_text("uploaded meanwhile")
+
+        self.nc("restore", d)
+        self.assertEqual((self.stub / "state").read_text().strip(), "stopped")
+        self.assertEqual((self.stub / "loaded").read_text(), self.DUMP)
+        self.assertIn("array(35,0,2,1)", (html / "version.php").read_text())
+        self.assertIn("'version' => '35.0.2.1'", (html / "config" / "config.php").read_text())
+        self.assertFalse((html / "apps" / "new_in_35_0_3").exists())
+        self.assertEqual((html / "config" / "custom.config.php").read_text(), "ansible-managed")
+        self.assertEqual((app / "js" / "core" / "merged.js").read_text(), "old js")
+        self.assertFalse((app / "js" / "core" / "extra.js").exists())
+        self.assertTrue((app / "preview" / "1" / "512.png").exists())     # previews left alone
+        self.assertTrue((app.parent / "alice" / "files" / "new.txt").exists())
+
+    def test_nc_truncated_dump_refused(self):
+        self.nc_setup()
+        (self.stub / "dump").write_text("-- MariaDB dump\nCREATE TABLE x;\n")
+        d = self.root / "nextcloud" / "20261115T120000Z-a-to-b"
+        self.assertIn("truncated", self.nc("backup", d, "--new-image", "nextcloud:new", ok=False).stdout)
+        self.assertFalse((d / "COMPLETE").exists())
+
+    def test_nc_maintenance_mode_refused_before_stop(self):
+        self.nc_setup(maintenance=True)
+        d = self.root / "nextcloud" / "20261115T120000Z-a-to-b"
+        self.assertIn("maintenance", self.nc("backup", d, "--new-image", "nextcloud:new", ok=False).stdout)
+        self.assertEqual((self.stub / "state").read_text().strip(), "running")
+
+    def test_nc_database_not_running_refused(self):
+        self.nc_setup()
+        (self.stub / "state_dbc1").write_text("stopped\n")
+        d = self.root / "nextcloud" / "20261115T120000Z-a-to-b"
+        self.assertIn("not running", self.nc("backup", d, "--new-image", "nextcloud:new", ok=False).stdout)
+        self.assertEqual((self.stub / "state").read_text().strip(), "running")
+
+    def test_nc_restore_refuses_bad_backup(self):
+        html, app = self.nc_setup()
+        d = self.root / "nextcloud" / "20261115T120000Z-a-to-b"
+        self.nc("backup", d, "--new-image", "nextcloud:new")
+        (self.stub / "state").write_text("running\n")
+        (html / "version.php").write_text("<?php\n$OC_Version = array(35,0,3,1);\n")
+        good = (d / "nextcloud.sql.gz").read_bytes()
+        (d / "nextcloud.sql.gz").write_bytes(gzip.compress(b"DROP DATABASE `nextcloud`;\n"))
+        self.assertIn("checksums", self.nc("restore", d, ok=False).stdout)
+        (d / "nextcloud.sql.gz").write_bytes(good)
+        info = (d / "INFO").read_text()
+        (d / "INFO").write_text(info.replace("appdata=appdata_oc1a2b3c", "appdata=appdata_other"))
+        self.assertIn("another Nextcloud instance", self.nc("restore", d, ok=False).stdout)
+        self.assertFalse((self.stub / "loaded").exists())
+        self.assertIn("array(35,0,3,1)", (html / "version.php").read_text())
+        self.assertEqual((self.stub / "state").read_text().strip(), "running")
 
     # --- prune ----------------------------------------------------------------
 
