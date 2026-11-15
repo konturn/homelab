@@ -46,8 +46,10 @@ Five classes share the policy:
   against the general budget and follows its dry run. See [CI images](#ci-images).
 - **Dependency**: non-major version bumps in our own build and deploy files,
   opened by Renovate: Dockerfile base images and pinned tool versions, the
-  OpenClaw tool npm dependencies, and annotated version pins in ansible
-  tasks/defaults. The image's `build-check` job must have passed; the merge
+  OpenClaw tool npm dependencies, annotated version pins in ansible
+  tasks/defaults, and two pip requirements files (the anomaly detector's,
+  the event router's test-only `requirements-dev.txt`), whose service test
+  job must also have passed. The image's `build-check` job must have passed; the merge
   deploys like a reviewed one, and the sweep watches its main pipeline and
   reverts on a failed build or host deploy. Counts against the general
   budget and follows its dry run. See [Dependency updates](#dependency-updates).
@@ -633,6 +635,21 @@ on the head commit, not a draft, no conflicts, the general daily budget):
      with the version when the pin has one: a version bump that leaves the
      checksum alone would fail the deploy, so it is refused. Changed lines
      must not contain braces (Jinja);
+   - **pip requirements files** (`dependencies.pip_requirements`, exact
+     paths, each mapped to the service's own test job):
+     `docker/anomaly-detector/requirements.txt` (`anomaly-detector:test`)
+     and `docker/event-router/requirements-dev.txt` (`event-router:test`).
+     A changed line must be a plain `name==x.y[.z[.w]]` pin before and after,
+     same package name, only the version changed: no extras, environment
+     markers, hashes, URLs, options (`-r`, `--index-url`) or comments, and
+     no pre-releases. Patch and minor only. Never listable, whatever the
+     policy file says (`policy.PIP_NEVER`, a config error): the event
+     router's runtime `requirements.txt` (its image runs the executor), any
+     file under `docker/jit-approval-svc/`, and anything OpenClaw/moltbot.
+     Renovate bumps a package in every file that pins it in one MR, so a
+     PyYAML update (also pinned in the event router's runtime file) stays
+     manual. The bot-config never-list entry `docker/event-router/**` is
+     unchanged: moltbot's own MRs still may not touch the dev requirements;
 4. not a major (a 0.x minor counts as one, unless the package is listed under
    `dependencies.zero_minor_is_minor`; none is today), and the image is on
    neither the global `denylist.images` nor `dependencies.denylist` (the
@@ -656,7 +673,9 @@ on the head commit, not a draft, no conflicts, the general daily budget):
    `<image>:build-check` jobs in `main`'s `.gitlab-ci.yml`), that job ran
    and passed in the MR pipeline for the head commit (the latest attempt; a
    build-check that only offered a manual run does not count). A Dockerfile
-   without a build-check job is refused;
+   without a build-check job is refused. A pip requirements file also needs
+   its test job (`pip_requirements`) to have passed there, whether or not
+   it is in a build context;
 8. no open rollback issue holds one of its dependencies (`job=dep`), and no
    earlier CI image or dependency merge is still waiting for its main
    pipeline.
@@ -665,12 +684,18 @@ The merge commit carries `Automerge-Class: dependency` and
 `Automerge-Policy: dependency`. Neither selects a per-service deploy nor
 matches `.automerged_commit_manual`, so the main pipeline runs as for a
 reviewed merge: the image build of the changed context and the changed-only
-host deploy. The MR gets the labels `automerged`, `automerge-dependency` and
+host deploy. For the pip files: an anomaly-detector requirements bump
+rebuilds the image (`anomaly-detector:build`) and the router's changed-only
+deploy recreates the container (`configure-homelab-services`); the event
+router's `requirements-dev.txt` is not in its image, so its deploy selects
+no role (`ci/deploy-scope/scope.yml`) and only `event-router:build`
+re-runs, with an unchanged image. The MR gets the labels `automerged`, `automerge-dependency` and
 `automerge-dep-watch`.
 
 After the merge, every sweep run checks the main pipeline of each merged MR
 still labelled `automerge-dep-watch`, like the [CI image](#ci-images) watch:
-a failed (not `allow_failure`) `<image>:build` job of a changed context or
+a failed (not `allow_failure`) `<image>:build` job of a changed context, a
+pip file's test job (`<service>:test`, which also runs on `main`) or a
 `<host>:deploy` job opens a revert MR (`automerge-revert/<iid>`: the
 pre-merge files, or the changed lines put back if main moved on since), an
 `automerge-rollback` issue with the scope `job=dep services=<names>`, labels
@@ -856,7 +881,10 @@ All in `ci/automerge-policy.yml` (reviewed, since `ci/` is code-owned):
   under `dependencies.denylist` (and the "Dependency class denylist" rule).
   A new Dockerfile needs a `<image>:build-check` job and a CODEOWNERS line
   listing the bot; a new annotated ansible pin file needs the CODEOWNERS line
-  too. `test_dependency_class.py` checks each of these.
+  too. `test_dependency_class.py` checks each of these. A pip requirements
+  file goes under `dependencies.pip_requirements` with its service's test
+  job (it must run on MR and `main` pipelines for that directory) and a
+  CODEOWNERS line listing the bot; `test_pip_requirements.py` checks these.
 
 ## Root-authored MRs
 

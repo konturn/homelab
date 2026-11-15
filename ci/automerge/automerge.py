@@ -896,9 +896,10 @@ def watch_one(gl: GitLab, allow: dict, mr: dict, label: str) -> bool:
 
 def dep_watch_jobs(required_jobs: List[str], jobs: List[dict]) -> List[str]:
     """Main-pipeline jobs a dependency merge affects: the image builds of the
-    build contexts it changed (`<image>:build` for `<image>:build-check`) and
-    the host deploys (`<host>:deploy`)."""
-    builds = {j[:-len("-check")] for j in required_jobs if j.endswith(":build-check")}
+    build contexts it changed (`<image>:build` for `<image>:build-check`), the
+    other required jobs (a pip requirements file's `<service>:test`) and the
+    host deploys (`<host>:deploy`)."""
+    builds = {j[:-len("-check")] if j.endswith(":build-check") else j for j in required_jobs}
     return sorted({j["name"] for j in jobs if j["name"] in builds or j["name"].endswith(":deploy")})
 
 

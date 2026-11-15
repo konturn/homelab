@@ -47,6 +47,14 @@ class SampleDiffs(unittest.TestCase):
         self.assertEqual(sel("router", "docker/nginx/router.lab.nkontur.com/internal_http.conf"),
                          ["configure-homelab-services"])
 
+    def test_event_router_dev_requirements_deploy_nothing(self):
+        # Test-only file, auto-merged by the dependency class (pip_requirements).
+        self.assertEqual(sel("router", "docker/event-router/requirements-dev.txt"), [])
+        self.assertEqual(sel("router", "docker/event-router/requirements.txt"),
+                         ["event-router", "configure-homelab-services"])
+        self.assertEqual(sel("router", "docker/anomaly-detector/requirements.txt"),
+                         ["configure-homelab-services"])
+
     def test_ollama_modelfile_selects_ollama_models(self):
         f = "docker/ollama/paperless-qwen3.Modelfile"
         self.assertEqual(sel("router", f), ["configure-ollama-models"])
