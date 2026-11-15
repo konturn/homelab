@@ -2369,8 +2369,6 @@ automerge:test:
   script:
     # Hypothesis for test_properties.py (300 examples per property here, ~1 min)
     - pip3 install -q --break-system-packages --cache-dir /cache/pip -r ci/automerge/requirements-test.txt
-    # Tools pre-upgrade-backup.sh uses; without them test_pre_upgrade.ScriptTests skip
-    - apk add -q --no-cache bash coreutils findmnt gzip pv rsync sqlite
     - python3 -m unittest discover -s ci/automerge -p 'test_*.py' -v
     - ansible-playbook -i ansible/inventory.yml ansible/service-update.yml -e automerge_host=router.lab.nkontur.com --syntax-check
   rules:
