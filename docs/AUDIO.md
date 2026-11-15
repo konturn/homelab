@@ -91,9 +91,10 @@ forward access; from VLAN 3, TCP 7000 and 7100-7199 and UDP 319, 320,
 (AirPlay 1) senders get timing and resend requests from the receiver on their
 own UDP ports, so the receivers may send UDP to VLANs 3 and 4.
 
-Version: 5.5.2. 5.6.1 and 5.6.2 exit when a classic sender offers a format
-they cannot decode (pyatv sends L16), so Renovate skips 5.6-5.6.2
-(`renovate.json`).
+Version: 5.5.2. 5.6.1 to 5.6.3 exit when a classic sender offers a format
+they cannot decode (pyatv sends L16), so Renovate skips 5.6-5.6.3
+(`renovate.json`). Retested 2026-11-15: 5.6.3 still exits (`could not
+initialise the codec context`); 5.5.2 keeps playing.
 
 ### Home Assistant
 
