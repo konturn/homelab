@@ -82,8 +82,13 @@ services:
       - {path: /etc/gitlab}
       - {path: /var/opt/gitlab}
       - {path: /var/log/gitlab}
+      # Production bind-mounts one extra initializer into this directory
+      # (docker-compose.yml); here it is the image's own, plus that file.
+      - {path: /opt/gitlab/embedded/service/gitlab-rails/config/initializers, seed: image}
     files:
       - {src: docker/gitlab/gitlab.rb, dest: /etc/gitlab/gitlab.rb}
+      - src: docker/gitlab/initializers/homelab_labkit_sql_span_name.rb
+        dest: /opt/gitlab/embedded/service/gitlab-rails/config/initializers/homelab_labkit_sql_span_name.rb
     sidecars:
       # Production gitlab.rb points at otel-collector; on the canary network
       # that name is this throwaway collector, which only logs what it gets.
@@ -123,6 +128,13 @@ services:
         timeout: 600
         traffic: for i in $(seq 1 300); do curl -s -o /dev/null http://localhost/users/sign_in; done
         sidecar_log: {sidecar: otel-collector, matches: "service\\.name: Str\\(gitlab\\)"}
+      # Issue #163: with tracing on, a query whose name is a Symbol (GitLab's
+      # partition manager does this) raised TypeError in LabKit's SQL
+      # subscriber, so the query never ran.
+      - name: SQL with a Symbol query name runs under tracing
+        when: {dest: /etc/gitlab/gitlab.rb, matches: "^[^#\\n]*GITLAB_TRACING"}
+        timeout: 600
+        exec: gitlab-rails runner 'puts ApplicationRecord.connection.select_value("SELECT 1", :canary_symbol_name)'
     log_files:
       - /var/log/gitlab/puma/current
       - /var/log/gitlab/puma/puma_stderr.log
