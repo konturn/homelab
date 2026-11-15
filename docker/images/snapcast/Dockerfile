@@ -5,8 +5,4 @@ RUN wget https://github.com/librespot-org/librespot/archive/refs/tags/v0.8.0.tar
 RUN cd librespot-0.8.0 && cargo build --release
 RUN mv librespot-0.8.0/target/release/librespot /bin/
 RUN mkdir -p /root/.config/snapserver && echo '{"ConfigVersion": 2,"Groups": []}' > /root/.config/snapserver/server.json
-RUN apt update && apt install -y --no-install-recommends build-essential git autoconf automake libtool \
-    libpopt-dev libconfig-dev libasound2-dev avahi-daemon libavahi-client-dev libssl-dev libsoxr-dev \
-    libplist-dev libsodium-dev libavutil-dev libavcodec-dev libavformat-dev uuid-dev libgcrypt-dev xxd
-RUN git clone https://github.com/mikebrady/shairport-sync.git && cd shairport-sync && autoreconf -fi && ./configure --with-stdout --with-avahi --with-ssl=openssl --with-metadata && make && make install
 ENTRYPOINT ["/usr/bin/snapserver"]
