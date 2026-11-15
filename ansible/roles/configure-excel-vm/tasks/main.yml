@@ -74,14 +74,41 @@
     line: "namespaces = []"
   register: _excel_vm_qemu_conf
 
+# libvirtd's node-device (nodedev) driver is unused here: the guest has no host
+# devices and the host has no mediated devices. On libvirt 10.0 it reacts to
+# udev events (container veth churn) by scheduling mdevctl refreshes from a
+# periodic timer. After a burst on 2026-11-14 those timers kept firing about 33
+# times a second with no further events. Each firing started a thread, the
+# threads queued behind one another, and libvirtd hit TasksMax (issue #165).
+# Diverting the module keeps it out of the daemon that the guest and the UPS
+# shutdown path depend on, across package upgrades; libvirtd skips a missing
+# driver module. `virsh nodedev-*` is unavailable as a result. To undo:
+# dpkg-divert --local --rename --remove <path>, then restart libvirtd.
+- name: Keep the nodedev driver out of libvirtd
+  ansible.builtin.command:
+    argv:
+      - dpkg-divert
+      - --local
+      - --rename
+      - --divert
+      - "{{ excel_vm_nodedev_module }}.disabled"
+      - --add
+      - "{{ excel_vm_nodedev_module }}"
+    creates: "{{ excel_vm_nodedev_module }}.disabled"
+  vars:
+    excel_vm_nodedev_module: /usr/lib/x86_64-linux-gnu/libvirt/connection-driver/libvirt_driver_nodedev.so
+  register: _excel_vm_nodedev
+
 # Inline rather than a handler, so other roles' handlers are not flushed early.
-# Restarting libvirtd does not stop running guests (QEMU keeps running and the
-# daemon reconnects).
-- name: Restart libvirtd to apply qemu.conf
+# Restarting libvirtd does not stop running guests (QEMU keeps running in its
+# own machine.slice scope, the unit has KillMode=process, and the daemon
+# reconnects). libvirt-guests does not depend on libvirtd, so it is not
+# restarted with it.
+- name: Restart libvirtd to apply qemu.conf / driver changes
   ansible.builtin.systemd_service:
     name: libvirtd.service
     state: restarted
-  when: _excel_vm_qemu_conf is changed
+  when: _excel_vm_qemu_conf is changed or _excel_vm_nodedev is changed
 
 # 0711: libvirt-qemu must traverse to the images, nobody needs to list them.
 - name: Create VM directories

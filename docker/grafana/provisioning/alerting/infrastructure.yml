@@ -324,6 +324,49 @@ groups:
         labels:
           severity: warning
 
+      # libvirtd thread count, from telegraf procstat (systemd_unit
+      # libvirtd.service). It normally runs ~20 threads, and excel-vm and the UPS
+      # shutdown path (virsh shutdown/destroy) depend on it. On 2026-11-14 it
+      # leaked ~33k threads in 25 minutes and sat at TasksMax for over a day
+      # (issue #165). pids-limit-fork-rejected only catches the moment the
+      # limit is hit, once. This fires while the leak is still growing and
+      # stays firing until the count is back down. No data (libvirtd not
+      # running) is OK.
+      - uid: libvirtd-threads-high
+        title: libvirtd Thread Count High
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -10m)
+                  |> filter(fn: (r) => r._measurement == "procstat")
+                  |> filter(fn: (r) => r._field == "num_threads")
+                  |> filter(fn: (r) => r.systemd_unit == "libvirtd.service")
+                  |> group(columns: ["host"])
+                  |> last()
+                  |> keep(columns: ["_time", "_value", "host"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [500]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "libvirtd on {{ $labels.host }} has {{ $values.B }} threads (normal ~20, limit 32768)"
+          description: "libvirtd is leaking threads. At TasksMax (32768) it can no longer start threads, and virsh shutdown of excel-vm (UPS path) may fail. Thread names: ps -L -o comm= -p $(systemctl show -p MainPID --value libvirtd) | sort | uniq -c | sort -rn | head. Restarting libvirtd does not stop running guests (KillMode=process, qemu runs in machine.slice); compare pgrep -af qemu-system before and after."
+        labels:
+          severity: warning
+
       # Container OOM Kill above only fires *after* the kernel has already killed
       # the container. For anything that other services depend on, that is too
       # late: influxdb dying takes every alert in this file down with it, because
