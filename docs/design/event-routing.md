@@ -894,9 +894,12 @@ properties):
 | `ci-liveness.cfg` (CI) | 2 alerts (MQTT, one container); OpenClaw may stay down for good | 100,668 | 1m34s | S1–S12, L1, L3, L5, L7, L8 hold |
 | `ci-fallback.cfg` (CI) | the same 2 alerts, Grafana's fallback route modelled, OpenClaw outages end | 111,720 | 1m42s | S1–S12, L1, L3, L4, L5 hold |
 | `ci-suppress.cfg` (CI) | one container alert under a suppression | 37,800 | 27s | S1–S12, L1, L3, L5–L8 hold |
-| 26 mutations (CI) | the instances above, or a one-alert instance | 54–24,700 each | ≤ 4s each | each fails on its named property |
+| `ci-deferred.cfg` (CI, 2026-11-14) | `app` (user-facing) with the recent-deploy guard, recreated up to twice; deferred retry and re-escalation | 30,666 | 15s | S1–S13, L5, L7–L10 hold |
+| `ci-deferred-handoff.cfg` (CI) | the same with the forward queue, OpenClaw may stay down for good | 146,628 | 1m23s | S1–S13, L1, L3, L5 hold |
+| `ci-stale.cfg` (CI) | `mqtt` (no playbook, not user-facing) re-escalated while it fires | 8,424 | 5s | S1–S13, L1, L3, L10 hold |
+| 33 mutations (CI) | the instances above, or a one-alert instance | 64–28,200 each | ≤ 3s each | each fails on its named property |
 
-The whole CI profile takes about 6 minutes on 2 workers.
+The whole CI profile takes about 9 minutes on 2 workers (2026-11-14; the CI job's timeout is 20).
 
 Liveness is checked on smaller instances than safety: TLC's liveness check
 grows with states times fairness conditions (up to 60 here), and a 4-alert liveness
