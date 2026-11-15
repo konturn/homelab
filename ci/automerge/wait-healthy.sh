@@ -3,10 +3,19 @@
 #
 # Passes when, before the timeout:
 #   - the service container is running the expected image digest,
-#   - its Docker healthcheck reports "healthy" (if it defines one), otherwise it
-#     has stayed up without restarting for --stable seconds,
-#   - and the optional HTTP probe returns 2xx/3xx.
+#   - its Docker healthcheck reports "healthy" with no failing checks (if it
+#     defines one), otherwise it has not restarted,
+#   - the optional HTTP probe returns 2xx/3xx,
+#   - and all of that has held continuously for --stable seconds.
 # Fails fast if the container exits or restart-loops.
+#
+# Why the hold applies to healthchecked services too: Docker probes every 5s
+# during start_period, so a container is "healthy" after one good answer. On
+# 2026-11-14 plex passed this gate 5s after a recreate, failed its next check
+# ~45s later and was unhealthy from 07:59Z on, while the deploy reported
+# success and no rollback ran. FailingStreak counts failed checks since the
+# last success, so it shows a failure one check after it happens, long before
+# Docker flips the status to unhealthy (interval x retries).
 #
 # Usage: wait-healthy.sh --project P --service S [--expect-digest sha256:..]
 #                        [--timeout 600] [--probe URL --probe-ip IP] [--stable 60]
@@ -68,40 +77,60 @@ probe_ok() {
   [[ "$PROBE_CODE" =~ ^[23][0-9][0-9]$ ]]
 }
 
-say "healthcheck: $HAS_HC; probe: ${PROBE:-none}; timeout ${TIMEOUT}s"
+say "healthcheck: $HAS_HC; probe: ${PROBE:-none}; hold ${STABLE}s; timeout ${TIMEOUT}s"
 START=$(date +%s)
+OK_SINCE=""
 DELAY=5
 while :; do
-  ELAPSED=$(( $(date +%s) - START ))
+  NOW=$(date +%s)
+  ELAPSED=$(( NOW - START ))
   STATUS=$(docker inspect -f '{{.State.Status}}' "$CID" 2>/dev/null || echo missing)
   RESTARTS=$(docker inspect -f '{{.RestartCount}}' "$CID" 2>/dev/null || echo 0)
-  HEALTH=$([ "$HAS_HC" = yes ] && docker inspect -f '{{.State.Health.Status}}' "$CID" || echo n/a)
+  HEALTH=n/a STREAK=0
+  if [ "$HAS_HC" = yes ]; then
+    read -r HEALTH STREAK < <(docker inspect -f '{{.State.Health.Status}} {{.State.Health.FailingStreak}}' "$CID" 2>/dev/null || echo "unknown 0")
+  fi
 
   case "$STATUS" in
     exited|dead|missing) fail "container is $STATUS" ;;
   esac
   [ $(( RESTARTS - R0 )) -ge 3 ] && fail "container restarted $(( RESTARTS - R0 )) times (restart loop)"
 
+  # A restart since the previous sample breaks the hold. With a healthcheck,
+  # one or two restarts during startup are tolerated (as before); without
+  # one, staying up without any restart is the only signal, so none are.
   container_ok=no
-  if [ "$STATUS" = running ]; then
+  if [ "$STATUS" = running ] && [ "$RESTARTS" = "${LAST_RESTARTS:-$R0}" ]; then
     if [ "$HAS_HC" = yes ]; then
-      [ "$HEALTH" = healthy ] && container_ok=yes
+      [ "$HEALTH" = healthy ] && [ "${STREAK:-0}" = 0 ] && container_ok=yes
     else
-      STARTED=$(date -d "$(docker inspect -f '{{.State.StartedAt}}' "$CID")" +%s 2>/dev/null || echo "$START")
-      UP=$(( $(date +%s) - STARTED ))
-      [ "$UP" -ge "$STABLE" ] && [ "$RESTARTS" = "$R0" ] && container_ok=yes
+      [ "$RESTARTS" = "$R0" ] && container_ok=yes
     fi
   fi
+  LAST_RESTARTS=$RESTARTS
   PROBE_CODE="-"
-  probe_result=no
-  if [ "$container_ok" = yes ] && probe_ok; then probe_result=yes; fi
+  ok=no
+  if [ "$container_ok" = yes ] && probe_ok; then ok=yes; fi
 
-  say "t=${ELAPSED}s status=$STATUS health=$HEALTH restarts=$((RESTARTS - R0)) probe=${PROBE_CODE}"
-  if [ "$container_ok" = yes ] && [ "$probe_result" = yes ]; then
-    say "HEALTHY"
+  if [ "$ok" = yes ]; then
+    [ -n "$OK_SINCE" ] || OK_SINCE=$NOW
+  else
+    [ -n "$OK_SINCE" ] && say "lost health after $(( NOW - OK_SINCE ))s of the ${STABLE}s hold"
+    OK_SINCE=""
+  fi
+
+  HELD=$([ -n "$OK_SINCE" ] && echo $(( NOW - OK_SINCE )) || echo 0)
+  say "t=${ELAPSED}s status=$STATUS health=$HEALTH failing=${STREAK:-0} restarts=$((RESTARTS - R0)) probe=${PROBE_CODE} held=${HELD}s"
+  if [ -n "$OK_SINCE" ] && [ "$HELD" -ge "$STABLE" ]; then
+    say "HEALTHY (held ${HELD}s)"
     exit 0
   fi
-  [ "$ELAPSED" -ge "$TIMEOUT" ] && fail "not healthy after ${TIMEOUT}s (status=$STATUS health=$HEALTH probe=${PROBE_CODE})"
-  sleep "$DELAY"
-  DELAY=$(( DELAY * 2 )); [ "$DELAY" -gt 60 ] && DELAY=60
+  [ "$ELAPSED" -ge "$TIMEOUT" ] && fail "not healthy for ${STABLE}s within ${TIMEOUT}s (status=$STATUS health=$HEALTH failing=${STREAK:-0} probe=${PROBE_CODE})"
+  if [ -n "$OK_SINCE" ]; then
+    # Holding: sample often enough to see every healthcheck interval.
+    sleep 10
+  else
+    sleep "$DELAY"
+    DELAY=$(( DELAY * 2 )); [ "$DELAY" -gt 60 ] && DELAY=60
+  fi
 done
