@@ -13,6 +13,8 @@ action, so a reviewer can hold the two side by side:
   _execute      Execute           re-check, then call the executor
   _verify       VerifyOk/Fail     release the lock; resolve or escalate
   _close_windows MaintClose        recovery check after a window
+  _retry_deferred (not in the spec) one re-evaluation after the
+                                  recent-deploy guard, if still firing
 
 Hand-off (phase 3, `openclaw.forward: true`): "escalated" and "paged"
 incidents are queued for OpenClaw's /hooks/event-router with what the router
@@ -48,6 +50,7 @@ DEPLOY_EXEMPT = CI_ACTIONS         # S7: CI actions free the lock or queue behin
 FORWARD_BACKOFF_MAX = 300
 PAGE_REFUSALS = ("rate_limit", "dependency")   # the rest of the refusals are residue
 DECISIONS_IN_PAYLOAD = 12
+RETRY_GRACE = 60                   # past the end of the recent-deploy window
 
 
 def _pb_version(pb):
@@ -207,6 +210,9 @@ class Engine:
             if inc is None:
                 return
             self._set(inc, alert_state="resolved")
+            if inc.get("retry_at"):
+                self._set(inc, retry_at=None)
+                self._log({"decision": "retry_cancelled", "reason": "alert resolved before the retry", **ids}, inc)
             if inc["status"] in ("open", "symptom", "maint"):           # AlertResolves
                 self._close(inc, "resolved", note="alert resolved before any action")
                 self._log({"decision": "resolved", "reason": "alert resolved", **ids}, inc)
@@ -279,6 +285,7 @@ class Engine:
         """One pass over the active incidents (oldest first). Each incident
         takes at most one transition per pass."""
         self._close_windows()
+        self._retry_deferred()
         for inc in self.store.active():
             inc = self.store.get(inc["id"])
             if inc["status"] not in ACTIVE:
@@ -294,6 +301,34 @@ class Engine:
             elif st == "verifying":
                 self._verify(inc, pb)
             # "maint" leaves only through _close_windows (recovery check).
+
+    def _retry_deferred(self):
+        """An action the executor refused only because a deploy (re)created
+        the container recently (`no_deploy_touching`) gets one more look
+        once that window is over, if the same alert still fires. Without
+        it, dedupe keeps a still-firing alert one incident for 24h and the
+        playbook never runs. The incident goes back to "open" and takes
+        every guard and limit again (_open, _start, the executor); it is
+        never scheduled a second time."""
+        now = self.clock.now()
+        for inc in self.store.retries_due(now):
+            self._set(inc, retry_at=None)
+            latest = self.store.latest_for_fp(inc["fp"])
+            if (inc["status"] != "escalated" or inc["alert_state"] != "firing"
+                    or latest is None or latest["id"] != inc["id"]):
+                self._log({"decision": "retry_cancelled",
+                           "reason": "alert no longer firing" if inc["alert_state"] != "firing"
+                           else "incident superseded"}, inc)
+                continue
+            self._set(inc, status="open", closed_at=None, waiting=None, exec_started_at=None,
+                      retried=1)
+            self._log({"decision": "retry", "reason": "recent-deploy window over, alert still firing"}, inc)
+
+    def _deploy_window(self, pb):
+        for k, v in pb.preconditions:
+            if k == "no_deploy_touching":
+                return v
+        return None
 
     def _reevaluate(self, inc):
         if inc["alert_state"] == "resolved":
@@ -499,6 +534,19 @@ class Engine:
         reason = f"executor {('refused: ' + refused) if refused else 'error'}: {res.get('detail') or res.get('error', '')}".strip()
         text = (f"Event router: {action} for {inc['alertname'] or inc['fp']} was not done ({reason}). "
                 f"OpenClaw has the alert.")
+        if refused == "recent_deploy" and not inc.get("retried") and self._deploy_window(pb):
+            # Refused before anything ran: the run does not count, and the
+            # router looks again once the window is over (_retry_deferred).
+            # OpenClaw still gets the residue now, as before.
+            retry_at = now + self._deploy_window(pb) + RETRY_GRACE
+            self.store.drop_runs(pb.id, inc["id"])
+            self._forward(inc, "denied", reason=f"{reason}; the router retries once at "
+                          f"{datetime.fromtimestamp(retry_at).astimezone():%H:%M} if the alert still fires",
+                          action=action, refused=refused, retry_in_s=int(retry_at - now))
+            self._set(inc, retry_at=retry_at)
+            if not self.forwarding:
+                self._notify(text, urgent=False)
+            return
         if refused and refused not in PAGE_REFUSALS:
             # A precondition that did not hold (a deploy touched the
             # container, the job is not orphaned or was superseded): nothing

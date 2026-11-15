@@ -111,7 +111,8 @@ class RouterMachine(RuleBasedStateMachine):
     @rule(reply=st.sampled_from([
         {"ok": True}, {"ok": False, "refused": "deploy"}, {"ok": False, "refused": "maintenance"},
         {"ok": False, "refused": "kill_switch"}, {"ok": False, "refused": "dependency"},
-        {"ok": False, "refused": "rate_limit"}, {"ok": False, "error": "boom"},
+        {"ok": False, "refused": "rate_limit"}, {"ok": False, "refused": "recent_deploy"},
+        {"ok": False, "error": "boom"},
         {"ok": False, "unknown": True}]))
     def executor_behaviour(self, reply):
         self.w.executor.reply = reply

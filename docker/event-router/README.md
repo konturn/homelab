@@ -78,6 +78,16 @@ preconditions are checked there too: `no_deploy_touching: 2h` refuses a
 restart of a container (re)created less than 2h ago, since compose recreates
 exactly the services a deploy changed.
 
+A `no_deploy_touching` refusal (executor reason `recent_deploy`) still goes
+to OpenClaw as residue, but it does not count as a run, and the router looks
+at the incident once more when the window has passed (window + 1 min after
+the refusal). If the same alert is still firing then, the incident reopens
+and the playbook goes through every guard and limit again; if the alert
+resolved first, the retry is cancelled. It happens at most once per
+incident: a second `recent_deploy` refusal is plain residue. Without this,
+dedupe (24h per still-firing alert) meant a container that hung right after
+a deploy stayed hung until someone restarted it by hand.
+
 ## Residue to OpenClaw (phase 3)
 
 What reaches OpenClaw, through its `/hooks/event-router` mapping

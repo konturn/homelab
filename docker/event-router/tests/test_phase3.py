@@ -138,6 +138,84 @@ class TestResidue(Fwd):
         self.assertEqual(self.w.openclaw.delivered[-1]["kind"], "page")
 
 
+class TestRecentDeployRetry(Fwd):
+    """restart-once refused by the recent-deploy guard (no_deploy_touching:
+    2h): one more look once the window is over, only if still firing."""
+    WINDOW = 2 * 3600
+
+    def setUp(self):
+        super().setUp()
+        self.w.executor.reply = {"ok": False, "refused": "recent_deploy",
+                                 "detail": "app was (re)created 5m ago by a deploy"}
+        self.e.ingest(event("app"))
+        self.tick()
+
+    def test_refused_within_the_window(self):
+        inc = self.inc("grafana:app")
+        self.assertEqual(inc["status"], "escalated")
+        self.assertEqual(len(self.w.executor.calls), 1)
+        [d] = self.decisions("denied")
+        self.assertEqual(d["refused"], "recent_deploy")
+        self.assertIn("retries once", d["reason"])
+        self.assertEqual(self.w.openclaw.delivered[-1]["kind"], "residue")   # OpenClaw still told
+        self.assertEqual(self.e.store.runs_since("restart-once", "app", "active", 0), [])
+        # Re-deliveries inside the window stay one incident, nothing runs.
+        for _ in range(4):
+            self.w.clock.advance(20 * 60)
+            self.e.ingest(event("app"))
+            self.tick()
+        self.assertEqual(len(self.w.executor.calls), 1)
+        self.assertEqual(self.inc("grafana:app")["status"], "escalated")
+        self.assertEqual(self.decisions("retry"), [])
+
+    def test_still_firing_after_the_window_retries_once(self):
+        inc_id = self.inc("grafana:app")["id"]
+        self.w.clock.advance(self.WINDOW + 120)
+        self.w.executor.reply = {"ok": True, "detail": "restarted"}
+        self.tick()
+        self.assertEqual(len(self.decisions("retry")), 1)
+        self.assertEqual(len(self.w.executor.calls), 2)
+        self.assertEqual(self.w.executor.calls[-1][:2], ("restart_container", "app"))
+        inc = self.inc("grafana:app")
+        self.assertEqual((inc["id"], inc["status"]), (inc_id, "verifying"))
+        self.assertIsNone(self.e.store.breaker("restart-once", "active"))   # the refusal did not count
+        self.e.ingest(event("app", "resolved"))
+        self.tick()
+        self.assertEqual(self.inc("grafana:app")["status"], "resolved")
+        self.assertEqual(len(self.decisions("verified")), 1)
+
+    def test_retry_happens_only_once(self):
+        self.w.clock.advance(self.WINDOW + 120)
+        self.tick()                                       # refused again (another deploy)
+        self.assertEqual(len(self.w.executor.calls), 2)
+        self.assertEqual(self.inc("grafana:app")["status"], "escalated")
+        self.assertNotIn("retries once", self.decisions("denied")[-1]["reason"])
+        self.w.clock.advance(3 * self.WINDOW)
+        self.e.ingest(event("app"))
+        self.tick()
+        self.assertEqual(len(self.w.executor.calls), 2)
+        self.assertEqual(len(self.decisions("retry")), 1)
+
+    def test_resolved_before_the_window_ends_does_nothing(self):
+        self.w.clock.advance(30 * 60)
+        self.e.ingest(event("app", "resolved"))
+        self.tick()
+        self.assertEqual(len(self.decisions("retry_cancelled")), 1)
+        self.w.clock.advance(self.WINDOW)
+        self.w.executor.reply = {"ok": True}
+        self.tick()
+        self.assertEqual(len(self.w.executor.calls), 1)
+        self.assertEqual(self.decisions("retry"), [])
+        self.assertIsNone(self.inc("grafana:app")["retry_at"])
+
+    def test_retry_survives_a_router_restart(self):
+        self.e = self.w.new_engine()
+        self.w.clock.advance(self.WINDOW + 120)
+        self.w.executor.reply = {"ok": True}
+        self.tick()
+        self.assertEqual(len(self.w.executor.calls), 2)
+
+
 class TestOpenClawDown(Fwd):
     def test_residue_waits_and_is_delivered_when_back(self):
         self.w.openclaw.result = "down"

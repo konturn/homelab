@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS incidents (
   opened_at REAL NOT NULL, updated_at REAL NOT NULL, closed_at REAL,
   deliveries INTEGER NOT NULL DEFAULT 1, exec_count INTEGER NOT NULL DEFAULT 0,
   exec_started_at REAL, verify_deadline REAL, root TEXT, waiting TEXT, note TEXT,
-  summary TEXT, verify_ref TEXT);
+  summary TEXT, verify_ref TEXT, retry_at REAL, retried INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS incidents_fp ON incidents(fp, opened_at);
 CREATE INDEX IF NOT EXISTS incidents_status ON incidents(status);
 CREATE TABLE IF NOT EXISTS locks (
@@ -78,7 +78,8 @@ class Store:
 
     # Columns added after a database was created (phase 3). SQLite has no
     # ADD COLUMN IF NOT EXISTS.
-    MIGRATIONS = {"incidents": {"summary": "TEXT", "verify_ref": "TEXT"}}
+    MIGRATIONS = {"incidents": {"summary": "TEXT", "verify_ref": "TEXT", "retry_at": "REAL",
+                                "retried": "INTEGER NOT NULL DEFAULT 0"}}
 
     def _migrate(self):
         for table, cols in self.MIGRATIONS.items():
@@ -191,6 +192,13 @@ class Store:
             "AND alert_state = 'firing' AND opened_at >= ? ORDER BY opened_at", (*HANDED_OFF, since)).fetchall()
         return [self._inc(r) for r in rows]
 
+    def retries_due(self, now):
+        """Incidents with a deferred retry (recent-deploy guard) that is due."""
+        rows = self.conn.execute(
+            "SELECT * FROM incidents WHERE retry_at IS NOT NULL AND retry_at <= ? ORDER BY retry_at, rowid",
+            (now,)).fetchall()
+        return [self._inc(r) for r in rows]
+
     def update(self, inc_id, now, **fields):
         fields["updated_at"] = now
         sets = ", ".join(f"{k} = ?" for k in fields)
@@ -229,6 +237,12 @@ class Store:
         return [r["ts"] for r in self.conn.execute(
             "SELECT ts FROM runs WHERE playbook = ? AND target = ? AND mode = ? AND ts >= ? ORDER BY ts",
             (playbook, target, mode, since))]
+
+    def drop_runs(self, playbook, inc_id):
+        """Forget the runs an incident counted for a playbook. Only for an
+        action the executor refused before doing anything (a deferred retry
+        must not trip the limit that the refused attempt never used)."""
+        self.conn.execute("DELETE FROM runs WHERE playbook = ? AND incident = ?", (playbook, inc_id))
 
     def active_runs_since(self, since):
         return self.conn.execute("SELECT COUNT(*) FROM runs WHERE mode = 'active' AND ts >= ?",
