@@ -242,6 +242,8 @@ services:
           memory: 128M
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Log streams without the 10m idle timeout (see the file's header).
+      - {{ docker_persistent_data_path }}/docker-socket-proxy-ro/haproxy.cfg.template:/usr/local/etc/haproxy/haproxy.cfg.template:ro
     environment:
       - CONTAINERS=1
       - EVENTS=1

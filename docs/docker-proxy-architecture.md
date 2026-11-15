@@ -48,6 +48,7 @@ docker-socket-proxy (proxy-internal network)
 - A second Tecnativa proxy on its own internal bridge `docker-ro`, used only by promtail (`tcp://docker-socket-proxy-ro:2375`) for container discovery and log tailing
 - GET only (`POST=0`): containers, events and networks; no builds, images, exec or volumes
 - Not reachable through lab_nginx or from CI
+- Runs the image's haproxy template from `docker/docker-socket-proxy-ro/haproxy.cfg.template`, which adds a `/containers/{id}/logs` backend with no server timeout so idle log streams are not cut every 10 minutes. Re-diff it against the image when bumping the version.
 
 ## Certificate Generation
 
