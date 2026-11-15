@@ -157,6 +157,7 @@ for Home Assistant"). HA's other traffic stays on Mullvad.
 | 10.6.32.24 - 10.6.32.31 | AirPlay receivers, one per audio zone (`airplay_*`, docs/AUDIO.md) |
 | 10.6.32.9 | petlibro-camera, LAN access to the feeder camera (`petlibro_camera_iot_ip`) |
 | 10.6.32.10 | iot-dns, the IoT devices' resolver (`iot_dns_ip`, [IoT resolver](#iot-resolver)) |
+| 10.6.32.11 | lr4-broker, the Litter-Robots' MQTT broker (`lr4_broker_address`, docs/litter-robot.md) |
 
 **Physical Devices:**
 | IP | Device |
@@ -179,7 +180,7 @@ for Home Assistant"). HA's other traffic stays on Mullvad.
 | 10.6.128.24 | Brother printer |
 | 10.6.128.25 | NETGEAR GS308EP PoE switch (management address; moving it to VLAN 4 is a rack-day job) |
 | 10.6.128.26 | Miele dishwasher |
-| 10.6.128.27, .28 | Litter-Robot 4 (two) |
+| 10.6.128.27, .28 | Litter-Robot 4 (two); local MQTT target is lr4-broker (docs/litter-robot.md) |
 | 10.6.128.29 | PETLIBRO feeder |
 
 **Egress:** Routes through Mullvad VPN (marked traffic). Devices in the

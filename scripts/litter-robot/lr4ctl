@@ -1,0 +1,64 @@
+#!/bin/bash
+# lr4ctl: router-side helper for the Litter-Robot 4s on lr4-broker
+# (docs/litter-robot.md). Root on the router only.
+#
+#   lr4ctl bundle cli               this laptop's whiskerless identity + CA + broker host (JSON)
+#   lr4ctl bundle <robot>           a robot's serial, certificate and key + CA + host (JSON)
+#   lr4ctl status [seconds]         lr4-broker health, bridge state, which robots publish
+#
+# <robot> is a name under Vault homelab/pki/whiskerless/robots/ (main,
+# movie-room). `bundle` writes key material to stdout and is meant to be read
+# over SSH by whiskerless-mac on the laptop, straight into a private temp dir:
+#   ssh root@<router> lr4ctl bundle movie-room
+# Nothing is written to disk here. The broker host is taken from the SAN of
+# the server certificate lr4-broker serves, so it is always the address the
+# robots must be provisioned with.
+#
+# Vault access: the VAULT_TOKEN CI variable through glab in the repo checkout
+# (same as haapi). Deployed by configure-homelab-services to
+# /usr/local/sbin/lr4ctl.
+set -euo pipefail
+
+export VAULT_ADDR=https://10.3.32.6:8200 VAULT_SKIP_VERIFY=1
+VAULT_TOKEN=$(cd /root/repos/homelab && glab variable get VAULT_TOKEN 2>/dev/null) || VAULT_TOKEN=
+[ -n "$VAULT_TOKEN" ] || { echo "lr4ctl: no Vault token (GitLab down?)" >&2; exit 3; }
+export VAULT_TOKEN
+
+kv() { vault kv get -format=json "homelab/$1" | jq -c .data.data; }
+
+broker_host() {
+  vault kv get -field=server_crt homelab/docker/lr4-broker \
+    | openssl x509 -noout -ext subjectAltName \
+    | grep -o 'IP Address:[0-9.]*' | head -1 | cut -d: -f2
+}
+
+case "${1:-}" in
+  bundle)
+    who=${2:-}
+    [[ $who =~ ^[a-z0-9-]+$ ]] || { echo "usage: lr4ctl bundle cli|<robot>" >&2; exit 2; }
+    host=$(broker_host); [ -n "$host" ] || { echo "lr4ctl: no broker host" >&2; exit 1; }
+    ca=$(vault kv get -field=ca_crt homelab/docker/lr4-broker)
+    if [ "$who" = cli ]; then
+      kv pki/whiskerless/cli
+    else
+      kv "pki/whiskerless/robots/$who"
+    fi | jq -c --arg host "$host" --arg ca "$ca" '. + {host: $host, ca_crt: $ca}'
+    ;;
+  status)
+    secs=${2:-20}
+    echo "lr4-broker: $(docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' lr4-broker 2>/dev/null || echo missing)"
+    pw=$(vault kv get -field=monitor_password homelab/docker/lr4-broker)
+    sub() { docker exec -e PW="$pw" mosquitto sh -c 'mosquitto_sub -h 127.0.0.1 -p 1883 -u lr4-monitor -P "$PW" "$@"' sh "$@"; }
+    state=$(sub -t '$SYS/broker/connection/lr4-bridge/state' -C 1 -W 3 2>/dev/null || true)
+    case "$state" in 1) echo "bridge into mosquitto: connected" ;; 0) echo "bridge into mosquitto: DISCONNECTED" ;; *) echo "bridge into mosquitto: unknown (no state message)" ;; esac
+    echo "robots publishing through the bridge (listening ${secs}s):"
+    sub -t 'prod/LR4/+/state' -t 'prod/LR4/+/activity' -v -W "$secs" 2>/dev/null \
+      | awk '{split($1, t, "/"); n[t[3]]++} END {if (!length(n)) print "  none"; for (s in n) printf "  %s: %d messages\n", s, n[s]}' || true
+    echo "lr4-broker connection log (last 10 robot lines):"
+    docker logs --since 24h lr4-broker 2>&1 | grep -E "u'LR4|Client LR4|exceeded timeout|OpenSSL Error" | tail -10 | sed 's/^/  /' || true
+    ;;
+  *)
+    sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
+    exit 2
+    ;;
+esac

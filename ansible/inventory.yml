@@ -128,6 +128,11 @@ all:
     iot_nginx_ip: 10.6.32.5
     weather_mqtt_bridge_ip: 10.6.32.6
     mopidy_address: 10.6.32.7
+    # lr4-broker, the Litter-Robots' own MQTT broker (docs/litter-robot.md).
+    # Static: it is the broker host provisioned into each robot over BLE, and
+    # its server certificate names this address (IP and DNS SAN). Changing it
+    # means a new server certificate and re-provisioning every robot.
+    lr4_broker_address: 10.6.32.11
     # AirPlay 2 receivers (shairport-sync), one per Snapcast zone plus House
     # (Global); docs/AUDIO.md. Each feeds the snapserver tcp:// source on
     # `port` (`stream`, docker/snapserver/snapserver.conf). Each is its own
@@ -308,6 +313,39 @@ all:
         - src: "docker/mqtt/mosquitto.conf"
           dest: "{{ docker_persistent_data_path }}/mqtt/conf/mosquitto.conf"
           name: "mosquitto"
+        # lr4-broker (docs/litter-robot.md): runs as uid 1883, reads only.
+        # The certificates and the bridge password come from Vault
+        # (docker/lr4-broker).
+        - src: "docker/lr4-broker/mosquitto.conf"
+          dest: "{{ docker_persistent_data_path }}/lr4-broker/mosquitto.conf"
+          name: "lr4-broker"
+          owner: "1883"
+          group: "1883"
+          mode: "0400"
+        - src: "docker/lr4-broker/acl"
+          dest: "{{ docker_persistent_data_path }}/lr4-broker/acl"
+          name: "lr4-broker"
+          owner: "1883"
+          group: "1883"
+          mode: "0400"
+        - src: "docker/lr4-broker/ca.crt"
+          dest: "{{ docker_persistent_data_path }}/lr4-broker/ca.crt"
+          name: "lr4-broker"
+          owner: "1883"
+          group: "1883"
+          mode: "0400"
+        - src: "docker/lr4-broker/server.crt"
+          dest: "{{ docker_persistent_data_path }}/lr4-broker/server.crt"
+          name: "lr4-broker"
+          owner: "1883"
+          group: "1883"
+          mode: "0400"
+        - src: "docker/lr4-broker/server.key"
+          dest: "{{ docker_persistent_data_path }}/lr4-broker/server.key"
+          name: "lr4-broker"
+          owner: "1883"
+          group: "1883"
+          mode: "0400"
         - src: "docker/zigbee2mqtt/configuration.yaml"
           dest: "{{ docker_persistent_data_path }}/zigbee2mqtt/configuration.yaml"
           name: "zigbee2mqtt"

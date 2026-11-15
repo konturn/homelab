@@ -205,6 +205,15 @@ Apple TV.
 | hcpy (`hcpy_ip`, internal) | mosquitto (iot) | TCP 8883; anything else from hcpy is refused |
 | Apple TV | internet, lab_nginx | Internet + TCP 32400 (Plex) |
 
+**Litter-Robots and lr4-broker need no rule.** The robots (10.6.128.x),
+lr4-broker and mosquitto are all on VLAN 6 (L2 on bond0.6 and the iot
+macvlan), so robot -> lr4-broker:8883 and lr4-broker -> mosquitto:8883 (the
+bridge) never pass the router's netfilter, and Home Assistant only talks to
+mosquitto. telegraf (host) reaches mosquitto through `vlan6-shim`
+(OUTPUT). The robots are provisioned with the broker's address, not a name,
+so iot-dns is not involved. Their WAN access is unchanged until they are
+moved to `iot_no_wan` (docs/litter-robot.md, "Later: cutting WAN").
+
 ---
 
 ## Services by Network
@@ -254,6 +263,7 @@ Smart home and media devices:
 |---------|--------------|---------|
 | Home Assistant | `homeassistant` | Smart home hub |
 | Mosquitto | `mosquitto` | MQTT broker |
+| lr4-broker | `lr4-broker` | Litter-Robot 4 MQTT broker (mutual TLS), bridged to mosquitto (docs/litter-robot.md) |
 | Zigbee2MQTT | `zigbee2mqtt` | Zigbee gateway |
 | Snapserver | `snapserver` | Multi-room audio server |
 | Snapclients | `snapclient_*` | Audio zone endpoints |

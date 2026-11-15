@@ -35,7 +35,7 @@ with this file, they win: say so.
 
 ## Services *(from the compose files each host renders)*
 
-- **router**: airplay_guest_bathroom, airplay_guest_bedroom, airplay_house, airplay_kitchen, airplay_main_bathroom, airplay_main_bedroom, airplay_movie_room, airplay_office, ambientweather, amcrest2mqtt, anomaly-detector, bitwarden, bluebubbles-relay, booksonic, chromium-browser, deluge, diagram, docker-socket-proxy, docker-socket-proxy-ro, event-router, frigate, gitlab, grafana, hcpy, homeassistant, influxdb, iot-dns, iot_nginx, iperf3, jackett, jit-approval-svc, lab_nginx, lidarr, loki, mopidy, mosquitto, navidrome, nextcloud, nextcloud_db, nginx, novnc-dev1, novnc-dev2, novnc-dev3, nzbget, ollama, ombi, openclaw-gateway, otel-collector, paperless-ai, paperless-ngx, paperless-redis, petlibro-camera, pihole, plex, promtail, prowlarr, radarr, snapclient_global, snapserver, sonarr, tautulli, tempo, vault, zigbee2mqtt.
+- **router**: airplay_guest_bathroom, airplay_guest_bedroom, airplay_house, airplay_kitchen, airplay_main_bathroom, airplay_main_bedroom, airplay_movie_room, airplay_office, ambientweather, amcrest2mqtt, anomaly-detector, bitwarden, bluebubbles-relay, booksonic, chromium-browser, deluge, diagram, docker-socket-proxy, docker-socket-proxy-ro, event-router, frigate, gitlab, grafana, hcpy, homeassistant, influxdb, iot-dns, iot_nginx, iperf3, jackett, jit-approval-svc, lab_nginx, lidarr, loki, lr4-broker, mopidy, mosquitto, navidrome, nextcloud, nextcloud_db, nginx, novnc-dev1, novnc-dev2, novnc-dev3, nzbget, ollama, ombi, openclaw-gateway, otel-collector, paperless-ai, paperless-ngx, paperless-redis, petlibro-camera, pihole, plex, promtail, prowlarr, radarr, snapclient_global, snapserver, sonarr, tautulli, tempo, vault, zigbee2mqtt.
   Defined, not running: snapclient_{guest_bathroom,guest_bedroom,kitchen,main_bathroom,main_bedroom,office} (no sound card, snapclient_disabled_zones); blog, wordpress_db (compose profile).
 - **zwave**: promtail, telegraf, zwavejs2mqtt.
 - **satellite-2**: promtail, telegraf.
@@ -76,7 +76,7 @@ with this file, they win: say so.
 - Dreame Z10 Pro vacuum, Valetudo (MQTT, local): Offline 2026-11-08.
 - SLZB-MR1 Zigbee coordinator (HA smlight, Zigbee2MQTT): No internet.
 - Samsung Frame TV QN65LS03DAFXZA (HA samsungtv_smart, local): 
-- Litter-Robot 4 x2, litter_robot_{1,2}_address (cloud only): Whiskerless pending.
+- Litter-Robot 4 x2 (cloud only): Local plan: docs/litter-robot.md
 - PETLIBRO PLAF203 feeder (cloud only): Never block its cloud MQTT (feeding).
 - Miele G7566 dishwasher (HA miele_lan, local): 
 - Thermador HPIN54WS hood (hcpy, local): 
@@ -186,7 +186,7 @@ with this file, they win: say so.
 
 ## Where things are written down
 
-- `docs/`: amcrest, AUDIO, AUTOMERGE, backups, CANARY, CONTAINER-REGISTRY, DEADMAN, denon, DEPLOY, DISASTER_RECOVERY, docker-proxy-architecture, FIREWALL, frigate, GITLAB_SETTINGS, HOMEASSISTANT, IPMI, jit-access-design, jit-webhook-design, minidsp, NETWORK, OBSERVABILITY, ollama, paperless-ai, petlibro-camera, plex-gpu, POWER, raspberry-pi, RENOVATE, SECRET_ROTATION, slzb.
+- `docs/`: amcrest, AUDIO, AUTOMERGE, backups, CANARY, CONTAINER-REGISTRY, DEADMAN, denon, DEPLOY, DISASTER_RECOVERY, docker-proxy-architecture, FIREWALL, frigate, GITLAB_SETTINGS, HOMEASSISTANT, IPMI, jit-access-design, jit-webhook-design, litter-robot, minidsp, NETWORK, OBSERVABILITY, ollama, paperless-ai, petlibro-camera, plex-gpu, POWER, raspberry-pi, RENOVATE, SECRET_ROTATION, slzb.
 - The GitLab project wiki (private, not mirrored) holds the security and
   network reviews.
 - Your checkout `workspace/homelab` is hard-reset to `origin/main` every

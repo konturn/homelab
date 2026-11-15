@@ -39,6 +39,15 @@ homeassistant_pinned_integrations:
     path: custom_components/miele_lan
     vault_user_var: vault_ha_miele_lan_deploy_user
     vault_token_var: vault_ha_miele_lan_deploy_token
+  # whiskerless, local MQTT for the Litter-Robot 4s through lr4-broker
+  # (docs/litter-robot.md). Installed only; no config entry until a robot is
+  # provisioned. Deploy token: Vault gitlab/ha-whiskerless.
+  - domain: whiskerless
+    project: root/ha-whiskerless
+    sha: c55e40345b57628baeb149c107f284e068e7db95  # v0.2.0-rc.76-homelab.1
+    path: custom_components/whiskerless
+    vault_user_var: vault_ha_whiskerless_deploy_user
+    vault_token_var: vault_ha_whiskerless_deploy_token
 
 # hcpy, the Home Connect to MQTT bridge (tasks/hcpy.yml, docs/HOMEASSISTANT.md
 # "Thermador"). The deploy builds the fork's Dockerfile at `sha` into

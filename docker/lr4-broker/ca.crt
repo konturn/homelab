@@ -1,0 +1,1 @@
+{{ vault_lr4_broker_ca_crt | trim }}
