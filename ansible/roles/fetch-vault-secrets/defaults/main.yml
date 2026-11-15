@@ -239,10 +239,20 @@ vault_secret_paths:
       vault_nut_selftest_password: "selftest_password"
     optional_fields: [vault_nut_selftest_password]
 
-  # MQTT secrets
+  # MQTT secrets. mqtt/mosquitto is Home Assistant's user (docs/MQTT.md);
+  # the others are per-service users.
   - path: "mqtt/mosquitto"
     fields:
       vault_mqtt_pass: "password"
+  - path: "mqtt/zigbee2mqtt"
+    fields:
+      vault_zigbee2mqtt_mqtt_password: "password"
+  - path: "mqtt/ambientweather"
+    fields:
+      vault_ambientweather_mqtt_password: "password"
+  - path: "mqtt/amcrest2mqtt"
+    fields:
+      vault_amcrest2mqtt_mqtt_password: "password"
 
   # lr4-broker, the Litter-Robots' broker (docs/litter-robot.md): its CA
   # certificate, server certificate and key (rendered into its config

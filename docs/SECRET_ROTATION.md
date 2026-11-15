@@ -272,32 +272,29 @@ The Vault root token is in none of these and no job or helper uses it
 
 ---
 
-### MQTT_PASS
+### MQTT passwords
 
-**Description:** Password for Mosquitto MQTT broker authentication.
+**Description:** Mosquitto users, one per client (docs/MQTT.md).
+Passwords live in Vault; `mosquitto.passwd` is host
+state the deploy only adds to.
 
-**Used by:**
-- `amcrest2mqtt` container (`MQTT_PASSWORD`)
-- `ambientweather` container (`MQTT_PASSWORD`)
-- Mosquitto config (stored in `{{ docker_persistent_data_path }}/mqtt/conf/`)
-- Home Assistant (configured in HA's configuration)
-- Zigbee2MQTT (configured in its data directory)
+| User | Vault | Used by |
+|---|---|---|
+| `mosquitto` | `homelab/mqtt/mosquitto` → `password` | Home Assistant (MQTT integration, set in HA's UI) |
+| `zigbee2mqtt` | `homelab/mqtt/zigbee2mqtt` → `password` | `docker/zigbee2mqtt/configuration.yaml` |
+| `ambientweather` | `homelab/mqtt/ambientweather` → `password` | `ambientweather` container |
+| `amcrest2mqtt` | `homelab/mqtt/amcrest2mqtt` → `password` | `amcrest2mqtt` container |
+| `frigate`, `hcpy`, `airplay`, `anomaly-detector` | `mqtt_password` in their `homelab/docker/<service>` path | those services |
 
-**How to rotate:**
-1. Update Mosquitto password file:
-   ```bash
-   docker exec mosquitto mosquitto_passwd -b /mosquitto/config/passwd mosquitto newpassword
-   ```
-2. Update in Vault: `homelab/mqtt/mosquitto` → `password`
-3. Update GitLab CI variable `MQTT_PASS`
-4. Redeploy: amcrest2mqtt, ambientweather
-5. Update Home Assistant MQTT integration configuration
-6. Update Zigbee2MQTT configuration
-7. Restart all affected services
+**How to rotate** (any user but `mosquitto`):
+1. Update the password in Vault.
+2. Delete the user's line from
+   `/persistent_data/application/mqtt/conf/mosquitto.passwd`.
+3. Redeploy: the deploy re-adds the user with the Vault password, reloads
+   mosquitto and restarts the client whose config changed.
 
-**Complexity:** 🔴 Hard (affects many services, some with external configs)
-
----
+For `mosquitto`, also update the Home Assistant MQTT integration
+(Settings → Devices & services → MQTT → Reconfigure) right after the deploy.
 
 ### NEXTCLOUD_DB_PASSWORD
 
@@ -401,7 +398,8 @@ This file contains Bitwarden-specific secrets. Manage directly on the router hos
 
 **Location:** `{{ docker_persistent_data_path }}/zigbee2mqtt/configuration.yaml`
 
-Contains MQTT credentials. Update when rotating MQTT_PASS.
+Contains the `zigbee2mqtt` MQTT user's password, rendered from Vault on
+deploy (see *MQTT passwords*).
 
 ---
 
