@@ -112,6 +112,7 @@ class RouterMachine(RuleBasedStateMachine):
         {"ok": True}, {"ok": False, "refused": "deploy"}, {"ok": False, "refused": "maintenance"},
         {"ok": False, "refused": "kill_switch"}, {"ok": False, "refused": "dependency"},
         {"ok": False, "refused": "rate_limit"}, {"ok": False, "refused": "recent_deploy"},
+        {"ok": False, "refused": "recent_deploy", "retry_after": 600},
         {"ok": False, "error": "boom"},
         {"ok": False, "unknown": True}]))
     def executor_behaviour(self, reply):
@@ -176,6 +177,8 @@ class RouterMachine(RuleBasedStateMachine):
                 w.clock.advance(13 * 3600)          # windows expire (L7), verify deadlines pass
                 w.engine.step()
             assert not w.engine.store.windows(), "L7: a window outlived its expiry"
+            stuck = [i["id"] for i in w.engine.store.active() if i["status"] == "deferred"]
+            assert not stuck, f"L9: deferred incidents never retried: {stuck}"
             for name in NAMES:
                 w.engine.ingest(event(name, "resolved"))
             for _ in range(6):
@@ -195,7 +198,7 @@ RouterMachine.TestCase.settings = settings(
 TestRouterProperties = RouterMachine.TestCase
 
 
-FWD_CONFIG = dict(CONFIG, openclaw={"forward": True})
+FWD_CONFIG = dict(CONFIG, openclaw={"forward": True}, stale={"user_facing": ["app"]})
 
 
 class ForwardingMachine(RouterMachine):
@@ -235,9 +238,24 @@ class ForwardingMachine(RouterMachine):
 
     @invariant()
     def one_forward_per_incident(self):
-        dup = self.w.engine.store.conn.execute(
-            "SELECT incident, COUNT(*) c FROM forwards GROUP BY incident HAVING c > 1").fetchall()
-        assert not dup, ("one forward per incident", [tuple(r) for r in dup])
+        """No duplicate wake-ups: one forward per hand-off. An incident is
+        handed off once, plus once per deferral (the residue says when the
+        router retries) and once per stale level (doc 16)."""
+        rows = self.w.engine.store.conn.execute(
+            "SELECT i.id, i.retried, i.stale_level, COUNT(f.id) c FROM incidents i "
+            "JOIN forwards f ON f.incident = i.id GROUP BY i.id").fetchall()
+        dup = [tuple(r) for r in rows if r["c"] > 1 + r["retried"] + r["stale_level"]]
+        assert not dup, ("one forward per hand-off", dup)
+
+    @invariant()
+    def deferred_has_a_due_time(self):
+        """A deferred incident always has its retry scheduled (never
+        "deferred" forever) and never more than max_per_incident times."""
+        e = self.w.engine
+        for inc in e.store.active():
+            if inc["status"] == "deferred":
+                assert inc["retry_at"] is not None, ("deferred without retry_at", inc["id"])
+            assert inc["retried"] <= e.cfg["deferred"]["max_per_incident"], ("deferrals", inc["id"])
 
     def teardown(self):
         try:

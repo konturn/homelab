@@ -37,10 +37,12 @@ module.exports = function transform(raw) {
     page: page,
     quiet_hours: !!p.quiet_hours,
     queued_s: p.queued_s || 0,
-    jit_paged: !!p.jit_paged
+    jit_paged: !!p.jit_paged,
+    stale: p.stale || null
   };
 
   var title = (kind === 'page' ? '📟 Event router PAGE' : '🧭 Event router escalation') +
+    (data.stale ? ' (still failing)' : '') +
     ': ' + clip(inc.alertname || inc.rule_uid || inc.fp, 120) + ' [' + inc.id + ']';
 
   var anomaly = inc.labels && inc.labels.source === 'anomaly-detector';
@@ -58,6 +60,11 @@ module.exports = function transform(raw) {
   } else {
     what = 'Follow skills/event-router/SKILL.md: the router already did what is in router_decisions; ' +
       'diagnose, fix if safe, and decide whether Noah needs to know.';
+  }
+  if (data.stale) {
+    // Re-escalation (doc 16): the same incident, handed off earlier, still fires.
+    what += ' This incident reached you before and is still failing after ' +
+      Math.floor((data.stale.age_s || 0) / 3600) + 'h: what was done or planned did not fix it.';
   }
 
   // Delivery is literal: the reply goes to Noah's Telegram.

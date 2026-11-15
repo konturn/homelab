@@ -95,8 +95,22 @@ class TestResidue(Fwd):
         for _ in range(3):
             self.e.ingest(event("mqtt"))
             self.tick()
-            self.w.clock.advance(4 * 3600)
+            self.w.clock.advance(30 * 60)
         self.assertEqual(len(self.w.openclaw.delivered), 1)
+
+    def test_still_firing_repeats_reescalate_once_per_level(self):
+        """A repeat is deduped, but an incident still firing after 2h and 6h
+        goes to OpenClaw again, marked stale (doc 16); mqtt is not
+        user-facing, so the 6h step is residue too."""
+        for _ in range(3):
+            self.e.ingest(event("mqtt"))
+            self.tick()
+            self.w.clock.advance(4 * 3600)
+        self.tick()
+        stale = [p.get("stale") for p in self.w.openclaw.delivered]
+        self.assertEqual(stale, [None, {"level": 1, "age_s": 4 * 3600, "user_facing": False, "deliveries": 2},
+                                 {"level": 2, "age_s": 8 * 3600, "user_facing": False, "deliveries": 3}])
+        self.assertTrue(all(p["kind"] == "residue" for p in self.w.openclaw.delivered))
 
     def test_shadow_playbook_event_is_residue(self):
         pbs = [dict(p, mode="shadow") for p in PLAYBOOKS]
@@ -129,7 +143,7 @@ class TestResidue(Fwd):
         self.w.executor.reply = {"ok": False, "refused": "recent_deploy", "detail": "recreated 10m ago"}
         self.e.ingest(event("app"))
         self.tick()
-        self.assertEqual(self.inc("grafana:app")["status"], "escalated")
+        self.assertEqual(self.inc("grafana:app")["status"], "deferred")
         self.assertEqual(self.w.openclaw.delivered[-1]["kind"], "residue")
         self.w.executor.reply = {"ok": False, "refused": "dependency", "detail": "down: x"}
         self.e.ingest(event("zig"))
@@ -140,7 +154,9 @@ class TestResidue(Fwd):
 
 class TestRecentDeployRetry(Fwd):
     """restart-once refused by the recent-deploy guard (no_deploy_touching:
-    2h): one more look once the window is over, only if still firing."""
+    2h): the incident is deferred, not escalated for good, and the router
+    looks again once the guard has expired, only if still firing.
+    tests/test_deferred.py replays the 2026-11-14 plex incident."""
     WINDOW = 2 * 3600
 
     def setUp(self):
@@ -152,12 +168,16 @@ class TestRecentDeployRetry(Fwd):
 
     def test_refused_within_the_window(self):
         inc = self.inc("grafana:app")
-        self.assertEqual(inc["status"], "escalated")
+        self.assertEqual(inc["status"], "deferred")
         self.assertEqual(len(self.w.executor.calls), 1)
-        [d] = self.decisions("denied")
+        [d] = self.decisions("deferred")
         self.assertEqual(d["refused"], "recent_deploy")
-        self.assertIn("retries once", d["reason"])
-        self.assertEqual(self.w.openclaw.delivered[-1]["kind"], "residue")   # OpenClaw still told
+        self.assertIn("retries at", d["reason"])
+        self.assertEqual(d["retry_in_s"], self.WINDOW + 60)   # no retry_after: the whole window
+        p = self.w.openclaw.delivered[-1]
+        self.assertEqual(p["kind"], "residue")                 # OpenClaw still told, with the due time
+        self.assertEqual(p["decisions"][-1]["decision"], "deferred")
+        self.assertIn("retry_at", p["decisions"][-1])
         self.assertEqual(self.e.store.runs_since("restart-once", "app", "active", 0), [])
         # Re-deliveries inside the window stay one incident, nothing runs.
         for _ in range(4):
@@ -165,10 +185,10 @@ class TestRecentDeployRetry(Fwd):
             self.e.ingest(event("app"))
             self.tick()
         self.assertEqual(len(self.w.executor.calls), 1)
-        self.assertEqual(self.inc("grafana:app")["status"], "escalated")
+        self.assertEqual(self.inc("grafana:app")["status"], "deferred")
         self.assertEqual(self.decisions("retry"), [])
 
-    def test_still_firing_after_the_window_retries_once(self):
+    def test_still_firing_after_the_window_retries(self):
         inc_id = self.inc("grafana:app")["id"]
         self.w.clock.advance(self.WINDOW + 120)
         self.w.executor.reply = {"ok": True, "detail": "restarted"}
@@ -184,22 +204,25 @@ class TestRecentDeployRetry(Fwd):
         self.assertEqual(self.inc("grafana:app")["status"], "resolved")
         self.assertEqual(len(self.decisions("verified")), 1)
 
-    def test_retry_happens_only_once(self):
-        self.w.clock.advance(self.WINDOW + 120)
-        self.tick()                                       # refused again (another deploy)
-        self.assertEqual(len(self.w.executor.calls), 2)
+    def test_deferrals_are_bounded(self):
+        for _ in range(2):                                # refused again (another deploy)
+            self.w.clock.advance(self.WINDOW + 120)
+            self.tick()
+        self.assertEqual(len(self.w.executor.calls), 3)
+        self.assertEqual(len(self.decisions("deferred")), 2)   # deferred.max_per_incident
         self.assertEqual(self.inc("grafana:app")["status"], "escalated")
-        self.assertNotIn("retries once", self.decisions("denied")[-1]["reason"])
+        self.assertEqual(self.decisions("denied")[-1]["refused"], "recent_deploy")
         self.w.clock.advance(3 * self.WINDOW)
         self.e.ingest(event("app"))
         self.tick()
-        self.assertEqual(len(self.w.executor.calls), 2)
-        self.assertEqual(len(self.decisions("retry")), 1)
+        self.assertEqual(len(self.w.executor.calls), 3)
+        self.assertEqual(len(self.decisions("retry")), 2)
 
     def test_resolved_before_the_window_ends_does_nothing(self):
         self.w.clock.advance(30 * 60)
         self.e.ingest(event("app", "resolved"))
         self.tick()
+        self.assertEqual(self.inc("grafana:app")["status"], "resolved")
         self.assertEqual(len(self.decisions("retry_cancelled")), 1)
         self.w.clock.advance(self.WINDOW)
         self.w.executor.reply = {"ok": True}

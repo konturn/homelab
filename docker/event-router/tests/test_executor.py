@@ -127,6 +127,7 @@ class TestExecutor(unittest.TestCase):
         with self.assertRaises(X.Refused) as cm:
             self.handle(**kw)
         self.assertEqual(cm.exception.why, why, cm.exception.detail)
+        return cm.exception
 
     def test_restart(self):
         self.assertEqual(self.handle()["detail"], "restarted zigbee2mqtt")
@@ -247,7 +248,8 @@ class TestExecutor(unittest.TestCase):
 
     def test_no_deploy_touching(self):
         self.env.created = self.now - 600                     # recreated 10 min ago
-        self.refused("recent_deploy", target="app1")
+        e = self.refused("recent_deploy", target="app1")
+        self.assertEqual(e.retry_after, 7200 - 600 + 1)       # the router defers until then
         self.env.created = self.now - 3 * 3600
         self.handle(target="app1")
         # zigbee-silence-restart has no such precondition

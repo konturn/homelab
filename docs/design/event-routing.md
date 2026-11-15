@@ -714,6 +714,9 @@ Noah accepted every recommendation. These are now part of the design:
 | A | Executor authentication: Unix socket permissions plus kernel peer credentials (`SO_PEERCRED`), no bearer token. The executor keeps its own allowlist, rate limits and append-only journal log, independent of the router. |
 | B | Events a playbook handled reach OpenClaw only through the batch decision log, never as a per-event wake-up. |
 | C | Terminology: "PB" in tables means playbook. |
+| D | (2026-11-14, after the plex incident, section 16.) A refusal for a time-bounded reason is "not yet", not "never": the incident is `deferred` and re-evaluated, through every guard, when the guard expires (at most twice per incident). The `no_deploy_touching` guard stays. |
+| E | (2026-11-14, section 16.) An incident handed off while its alert keeps firing is re-forwarded to OpenClaw after 2h and again after 6h; for user-facing services (`stale.user_facing` in `config.yml`: plex, Home Assistant, Zigbee, the audio and media stack) the 6h step is a page, class `still_failing`, non-urgent (held through quiet hours). |
+| F | (2026-11-14, section 16.) When OpenClaw concludes an allowlisted action is needed but is blocked (a guard, T2 approval in quiet hours) and the router has no deferred retry pending, it schedules the action with a one-shot cron instead of only filing the outcome. |
 
 ## 12. Formal model: properties to check (for review)
 
@@ -739,6 +742,7 @@ do not care about. Each property names the section it comes from.
 | S8 | An event is never acted on twice. Duplicates and re-deliveries of the same alert, including across a router restart, map to the same incident. | 4.3, 4.7 |
 | S9 | Always-page classes (security, data at risk, UPS) always reach Noah, even if a playbook also handles them. A suppression never applies to them, and Grafana emails them whatever the router's state. | 5, 6.3, 8.3 |
 | S12 | An event a playbook handled (verified) never wakes OpenClaw per event; it reaches OpenClaw only through the batch decision log (decision B). | 6.1, 11 B |
+| S13 | No action runs against a container a deploy recreated within `no_deploy_touching`, the deferred retry included (a revert, not a restart). | 16 |
 
 ### 12.2 Liveness: things that must eventually happen
 
@@ -750,6 +754,8 @@ do not care about. Each property names the section it comes from.
 | L4 | If the router is down, alerts still reach OpenClaw through the Grafana fallback route, and page-class alerts still reach email. A delivery the router missed is never mistaken for one it handled. | 7.4 |
 | L5 | An incident whose underlying alert resolves is eventually closed, and its playbook lock released. Nothing is left holding a lock forever: the lesson of the orphaned CI job. | 4.6, 1.2 (I3) |
 | L6 | A suppression always expires. Nothing stays hidden indefinitely. | 8.3 |
+| L9 | An incident whose action was refused for a time-bounded reason is eventually re-evaluated or re-escalated, unless its alert resolves. | 16 |
+| L10 | An incident handed off while its alert keeps firing is eventually re-escalated (a page for a user-facing service), unless its alert resolves. | 16 |
 
 ### 12.3 Assumptions the model allows (the "adversary")
 
@@ -772,7 +778,7 @@ The spec is mutation-tested. Each of these deliberate design bugs must make TLC 
 6. Never release a lock when an incident resolves → L5 must fail.
 
 The suite grew beyond these six: every safety property and every liveness
-property except L2 has at least one mutation (26 in all, listed in
+property except L2 has at least one mutation (33 in all, listed in
 [tla/README.md](tla/README.md)), and `run-tlc.sh` fails if any mutation stops
 failing. The bounds actually checked are in 12.6.
 
@@ -959,6 +965,15 @@ Forgotten or overrun maintenance surfaces this way, and a window can never becom
 | L7 | Every window closes by its expiry. |
 | L8 | After a window closes, every in-scope node is either verified healthy or re-enters normal handling within one cycle. |
 | Mutation | Skip the post-window recovery check → L8 must fail. Let a window have no expiry → L7 must fail. |
+
+### 13.5 Deferred retries and stale incidents during a window
+
+A deferred incident (section 16) whose retry falls inside a window is parked
+like any other open incident when it is re-evaluated, and the recovery check
+picks it up when the window closes. Re-escalation of a handed-off incident
+(re-forward at 2h, page at 6h) is held while its node is in an open window
+and resumes after it closes, if the alert still fires. A window never turns
+"not yet" into "never".
 
 ## 14. Implementation notes (phases 1–2)
 
@@ -1195,3 +1210,101 @@ one-line summary that the Monday Morning Digest includes. `main-pipeline-fix`
 runs every 6h as the safety net and `schedule-failures` daily in dry-run;
 anything they find that the webhook path missed is filed as an outcome record
 with `found_by`.
+
+## 16. Deferred retry and re-escalation (2026-11-14)
+
+**What happened.** An auto-merged change raised plex's memory limit; the
+deploy recreated plex at 02:57, in the middle of Plex's nightly maintenance,
+and the new process hung (port open, `/identity` never answering). At 03:09
+`container-health-failure` fired; `restart-once` decided to run and the
+executor refused: `recent_deploy`, recreated 12 minutes earlier. The incident
+went to OpenClaw, whose outcome said a restart was needed but blocked by the
+guard and by T2 approval in quiet hours. Nothing scheduled a retry, and
+Grafana's repeats at 07:09, 11:09, 15:09 and 19:09 were deduped into the
+handed-off incident (dedupe holds a still-firing alert as one incident for
+24h). Plex stayed down about 18 hours, until a manual restart.
+
+Two gaps: a refusal that only means "not yet" was treated as final, and a
+handed-off incident that keeps firing was silent until the 24h dedupe ran out.
+(A first fix the same day retried once after the guard window; this section
+replaces it with the general mechanism.)
+
+**Deferred retry (decision D).** The executor's `recent_deploy` refusal now
+says how long the guard has left (`retry_after`). The router records a
+`deferred` decision with the due time (guard expiry + `deferred.grace`, 1 min),
+releases the target lock and forgets the run (nothing ran), and keeps the
+incident active with status `deferred`: re-deliveries dedupe into it, a
+resolve closes it and cancels the retry, and it still counts as an open root
+cause for correlation. OpenClaw gets the residue at once, with `retry_at`, so
+it can diagnose or revert meanwhile. At the due time, if the alert still fires,
+the incident goes back to `open` and through everything again: kill switch,
+maintenance windows, correlation, breaker, rate limits and cooldown, the
+target lock, the deploy lock, and the executor's own checks (including the
+guard itself). At most `deferred.max_per_incident` (2) deferrals per incident;
+a refusal after that is handed off as before, and re-escalation covers it.
+The second deferral is there because the next deploy inside the window is
+often the revert.
+
+What is deferred: only `recent_deploy`. The other time-bounded guards already
+wait: a running deploy keeps the incident `waiting`, a maintenance window
+parks it until the recovery check. Rate limits, cooldowns and breakers are
+not deferred: reaching one means a remediation did not hold, and it pages as
+a failed remediation (S4, S5, L3). An executor reply that never arrived
+(`unknown`) is never deferred: the action may have run, and verification
+decides (S8; mutation `DeferOnLostReply`). Restart-once still means one action
+per incident: a refusal is not an attempt.
+
+**Re-escalation (decision E).** On every step the router looks at incidents
+it handed off (`escalated`, `paged`, `shadowed`; never `suppressed` or
+`digest`) from Grafana whose alert still fires:
+
+| Age (since opened) | Action |
+|---|---|
+| `stale.reforward_after` (2h) | to OpenClaw again, `stale: {level: 1}`, reason "still failing after 2h" |
+| `stale.page_after` (6h), user-facing | a page, class `still_failing`, non-urgent: held through quiet hours, dropped to the digest if the alert clears overnight, JIT bot if OpenClaw does not take it |
+| `stale.page_after` (6h), otherwise | to OpenClaw again, `stale: {level: 2}` |
+
+Each level happens once per incident. "Still fires" needs evidence: a
+delivery within `stale.firing_within` (270 min, above Grafana's 4h
+`repeat_interval`), so a lost resolve never pages. Nothing is re-escalated
+while its node is in a maintenance window (13.5). The user-facing set is
+`stale.user_facing` in `config.yml` (container names or nodes, globs).
+Replayed on 2026-11-14: the restart would have run at 04:58; had it been
+refused again, OpenClaw would have heard at 05:09 and Noah been paged at 09:09.
+
+**OpenClaw (decision F).** The `event-router` skill: a `deferred` decision
+means the router retries itself, so OpenClaw does not ask for T2 or restart
+by hand for it; a `stale` message means what was done or planned did not fix
+it. When OpenClaw concludes an allowlisted action is needed but is blocked
+and no deferred retry is pending, it schedules a one-shot cron (`openclaw
+cron add --at ... --delete-after-run`) that re-checks the alert and acts when
+the block ends, instead of only filing the outcome.
+
+**Not done: deploys during Plex's maintenance.** Avoiding recreating plex
+during its Butler window (02:00-05:00) on non-urgent deploys would need a
+per-service deploy window in the auto-merge sweep and `deploy-service`
+(`ci/`, docs/AUTOMERGE.md); not cheap to do cleanly here. The deferred retry
+and the 2h/6h re-escalation bound the damage of such a deploy instead.
+
+**Model (12, `tla/`).** New state `deferred` (in `Active`), the guard as an
+environment variable (a deploy recreates the target, up to twice; the guard
+expires, weakly fair), `Refuse` in `Execute`, and the router actions `Retry`
+and `ReEscalate` (weakly fair). New properties S13, L9 and L10; S3 and S8 now
+also cover the deferred path. New mutations, each failing on its property:
+`IgnoreGuard` (S13), `DeferOnLostReply` (S8), `RetryPreApproved` (S3: a retry
+that goes straight to the executor gets past the kill switch),
+`NoRetryNoStale` (L9: the behaviour of 2026-11-14), `DeferForever` (L9: a lost
+timer), `NoReEscalation` and `StaleNoPage` (L10). New CI instances
+`ci-deferred` (safety, L5, L7-L10 with the guard on a user-facing alert),
+`ci-deferred-handoff` (L1, L3, L5 with the deferred state and the forward
+queue) and `ci-stale` (L1, L3, L10 for an alert without a playbook). Numbers
+in 12.6.
+
+**Tests.** `docker/event-router/tests/test_deferred.py` replays the incident:
+deferral to 04:58 and the restart then; every look refused (re-forward at 2h,
+page at 6h, once each, no extra attempt); the JIT path; a page held through
+quiet hours; non-user-facing services; a lost resolve; maintenance; and the
+retry still stopped by the kill switch, windows and the breaker. The
+Hypothesis machines check that a deferred incident always has a due time and
+is retried once things calm down (L9), and allow one forward per hand-off
+(deferrals and stale levels included).

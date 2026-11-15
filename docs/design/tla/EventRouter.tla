@@ -10,7 +10,12 @@
 (* identity, runs the one allowed action), OpenClaw (may be down), the     *)
 (* JIT bot (independent paging path) and the environment (kill switch,     *)
 (* deploys, maintenance windows, suppressions, rate-limit windows,         *)
-(* restarts).                                                              *)
+(* restarts, the recent-deploy guard).                                     *)
+(*                                                                         *)
+(* Section 16 adds the deferred retry (a refusal for a time-bounded      *)
+(* reason parks the incident as "deferred" and re-evaluates it when the    *)
+(* guard expires) and the re-escalation of incidents that were handed off  *)
+(* but keep firing (re-forward, then a page for user-facing services).     *)
 (*                                                                         *)
 (* Environment actions have small budgets so the state space is finite;    *)
 (* router and executor actions are weakly fair.                            *)
@@ -30,9 +35,13 @@ CONSTANTS MUT,           \* "none" or one deliberate design bug (section 12.4)
           OcRecovers,    \* TRUE: an OpenClaw outage always ends (fairness)
           SuppFps,       \* alerts a suppression (phase 3, L6) would match
           FallbackFps,   \* alerts whose Grafana fallback route (L4) is modelled
-          Delivery       \* model the forward queue, OpenClaw outages and the
+          Delivery,      \* model the forward queue, OpenClaw outages and the
                          \* delivery history (liveness); FALSE for the safety
                          \* checks, which none of it can affect
+          GuardFps,      \* alerts whose target a deploy may recreate: the
+                         \* recent-deploy guard (no_deploy_touching) applies
+          StaleFps,      \* alerts whose re-escalation (16) is modelled
+          UserFacing     \* alerts about services Noah uses (stale -> page)
 
 \* ---- Topology (a small instance of inventory/dependencies.yml) ---------
 \* Alerts (fingerprints). "app" and "appdup" are different alerts about the
@@ -57,7 +66,8 @@ Targets   == {"zigbee2mqtt", "app"}
 Allowed   == {"restart_container"}
 Denied    == {"power_off"}
 
-Active    == {"open", "symptom", "acting", "verifying", "maint"}
+Active    == {"open", "symptom", "acting", "verifying", "maint", "deferred"}
+MaxDefer  == 1                            \* deferrals per incident (config: 2)
 Terminal  == {"resolved", "escalated", "paged", "suppressed"}
 Free      == "free"
 
@@ -88,14 +98,21 @@ VARIABLES
   unseen,     \* ground truth: fps whose latest delivery the router missed
   gq,         \* Grafana's pending fallback notifications to OpenClaw
   suppOn,     \* a suppression (reason + expiry) is active
+  guard,      \* the recent-deploy guard holds: a deploy recreated the
+              \* target of GuardFps less than no_deploy_touching ago
+  defN,       \* fp -> deferrals used in the current episode
+  stale,      \* fp -> re-escalation level: 0, 1 re-forwarded, 2 paged
+  refused,    \* ghost: fps refused for a time-bounded reason and not yet
+              \* re-evaluated or re-escalated (L9)
   budget      \* remaining environment events
 
 vars == <<inc, deliv, execN, lock, runs, breaker, viol, mode, ocUp,
           routerUp, deploying, maintOn, assist, pages, agentq, fwdq, pageq, digest,
-          email, acked, unseen, gq, suppOn, budget>>
+          email, acked, unseen, gq, suppOn, guard, defN, stale, refused, budget>>
 qv == <<fwdq, pageq, digest>>             \* the forward queue
 gv == <<email, acked, unseen, gq>>        \* Grafana's side
 wv == <<maintOn, assist>>                 \* the maintenance window
+dv == <<guard, defN, stale, refused>>     \* deferral and re-escalation (16)
 
 \* The window covers the radio stack, the app container and, to exercise
 \* S11, the node of a page-class alert (the window does not name the page
@@ -146,8 +163,14 @@ Init ==
   /\ pages = {} /\ agentq = {} /\ fwdq = {} /\ pageq = {} /\ digest = {}
   /\ email = {} /\ acked = {} /\ unseen = {} /\ gq = {}
   /\ suppOn = FALSE
+  /\ guard = FALSE
+  /\ defN = [f \in Fps |-> 0]
+  /\ stale = [f \in Fps |-> 0]
+  /\ refused = {}
+  \* Two recreations: the second refusal (deferrals used up) is checked too.
   /\ budget = [kill |-> 1, oc |-> 1, restart |-> 1, deploy |-> 1,
-               maint |-> 1, window |-> 1, resolve |-> 1, supp |-> 1]
+               maint |-> 1, window |-> 1, resolve |-> 1, supp |-> 1,
+               guard |-> IF GuardFps = {} THEN 0 ELSE 2]
 
 -----------------------------------------------------------------------------
 \* ---- Grafana: deliver (or re-deliver) an alert --------------------------
@@ -186,8 +209,14 @@ Deliver(f) ==
                                  ELSE IF DepOpen(f) /\ MUT # "NoCorrelation"
                                       THEN "symptom" ELSE "open"]
                           /\ UNCHANGED <<fwdq, pageq>>
+  \* A new episode starts with no deferrals and no re-escalation.
+  /\ IF routerUp /\ inc[f] \notin Active
+     THEN /\ defN' = [defN EXCEPT ![f] = 0]
+          /\ stale' = [stale EXCEPT ![f] = 0]
+          /\ refused' = refused \ {f}
+     ELSE UNCHANGED <<defN, stale, refused>>
   /\ UNCHANGED <<lock, runs, breaker, viol, mode, ocUp, routerUp,
-                 deploying, wv, pages, agentq, digest, suppOn, budget>>
+                 deploying, wv, pages, agentq, digest, suppOn, guard, budget>>
 
 \* Grafana's OpenClaw route (retried while OpenClaw is down). The transform
 \* asks the router's /ack; if the router is down or did not acknowledge
@@ -199,7 +228,7 @@ GrafanaOC(f) ==
                THEN agentq ELSE agentq \cup {f}
   /\ UNCHANGED <<inc, deliv, execN, lock, runs, breaker, viol, mode, ocUp,
                  routerUp, deploying, wv, pages, qv, email, acked, unseen,
-                 suppOn, budget>>
+                 suppOn, dv, budget>>
 
 \* ---- Router ---------------------------------------------------------------
 \* A symptom becomes an incident of its own once its dependency is handled.
@@ -207,7 +236,7 @@ ReEvaluate(f) ==
   /\ routerUp /\ inc[f] = "symptom" /\ ~DepOpen(f)
   /\ inc' = [inc EXCEPT ![f] = "open"]
   /\ UNCHANGED <<deliv, execN, lock, runs, breaker, viol, mode, ocUp,
-                 routerUp, deploying, wv, pages, agentq, qv, gv, suppOn, budget>>
+                 routerUp, deploying, wv, pages, agentq, qv, gv, suppOn, dv, budget>>
 
 \* A dependency failed after this incident opened: it becomes a symptom.
 \* (TLC found that correlating only on arrival lets the symptom's playbook
@@ -217,7 +246,7 @@ Correlate(f) ==
   /\ MUT # "CorrelateOnArrivalOnly"
   /\ inc' = [inc EXCEPT ![f] = "symptom"]
   /\ UNCHANGED <<deliv, execN, lock, runs, breaker, viol, mode, ocUp,
-                 routerUp, deploying, wv, pages, agentq, qv, gv, suppOn, budget>>
+                 routerUp, deploying, wv, pages, agentq, qv, gv, suppOn, dv, budget>>
 
 \* No playbook, or the kill switch is on: hand to OpenClaw (residue).
 Forward(f) ==
@@ -225,7 +254,7 @@ Forward(f) ==
   /\ PbOf[f] = NoPb \/ mode # "active"
   /\ Escalate(f, "escalated")
   /\ UNCHANGED <<deliv, execN, lock, runs, breaker, viol, mode, ocUp,
-                 routerUp, deploying, wv, gv, suppOn, budget>>
+                 routerUp, deploying, wv, gv, suppOn, dv, budget>>
 
 \* Rate limit exhausted or breaker open: trip (or keep) the breaker and page.
 Trip(f) ==
@@ -235,7 +264,7 @@ Trip(f) ==
   /\ breaker' = [breaker EXCEPT ![p] = TRUE]
   /\ Escalate(f, "paged")
   /\ UNCHANGED <<deliv, execN, lock, runs, viol, mode, ocUp, routerUp,
-                 deploying, wv, gv, suppOn, budget>>
+                 deploying, wv, gv, suppOn, dv, budget>>
 
 \* Start the matched playbook: take the target lock and count a run.
 StartPb(f) ==
@@ -251,7 +280,7 @@ StartPb(f) ==
   /\ runs' = [runs EXCEPT ![p] = @ + 1]
   /\ inc' = [inc EXCEPT ![f] = "acting"]
   /\ UNCHANGED <<deliv, execN, breaker, viol, mode, ocUp, routerUp,
-                 deploying, wv, pages, agentq, qv, gv, suppOn, budget>>
+                 deploying, wv, pages, agentq, qv, gv, suppOn, dv, budget>>
 
 \* Deliver the forward queue to OpenClaw (the hook /hooks/event-router).
 DeliverFwd(f) ==
@@ -260,7 +289,7 @@ DeliverFwd(f) ==
   /\ pageq' = pageq \ {f}
   /\ agentq' = agentq \cup {f}
   /\ UNCHANGED <<inc, deliv, execN, lock, runs, breaker, viol, mode, ocUp,
-                 routerUp, deploying, wv, pages, digest, gv, suppOn, budget>>
+                 routerUp, deploying, wv, pages, digest, gv, suppOn, dv, budget>>
 
 \* Second, independent paging path (decision 3): a page-kind item waiting
 \* for OpenClaw reaches Noah through the JIT bot. It stays queued for
@@ -271,7 +300,7 @@ JitPage(f) ==
   /\ MUT \notin {"NoJitPage", "DropQueue"}
   /\ pages' = pages \cup {f}
   /\ UNCHANGED <<inc, deliv, execN, lock, runs, breaker, viol, mode, ocUp,
-                 routerUp, deploying, wv, agentq, qv, gv, suppOn, budget>>
+                 routerUp, deploying, wv, agentq, qv, gv, suppOn, dv, budget>>
 
 \* Residue queued longer than its lifetime (6h) while OpenClaw stays down
 \* goes to the digest. A page-kind item expires only after it was paged.
@@ -282,7 +311,7 @@ Expire(f) ==
   /\ pageq' = pageq \ {f}
   /\ digest' = IF MUT = "DropQueue" THEN digest ELSE digest \cup {f}
   /\ UNCHANGED <<inc, deliv, execN, lock, runs, breaker, viol, mode, ocUp,
-                 routerUp, deploying, wv, pages, agentq, gv, suppOn, budget>>
+                 routerUp, deploying, wv, pages, agentq, gv, suppOn, dv, budget>>
 
 \* ---- Executor (host helper) ---------------------------------------------
 \* Re-checks, at execution time and independently of the router: the kill
@@ -291,22 +320,46 @@ Expire(f) ==
 \* or window begin in between; see doc 12.6.) The router passes the
 \* playbook id; the executor checks it against its own allowlist and lets
 \* an assist window through only for a playbook that window lists.
-ExecOk(f)   == (mode = "active" \/ MUT = "KillAtStartOnly")
+ExecOk(f)   == \/ mode = "active" \/ MUT = "KillAtStartOnly"
+               \/ MUT = "RetryPreApproved" /\ defN[f] > 0   \* bug: a retry skips it
 DeployOk    == ~deploying \/ MUT \in {"IgnoreDeploy", "DeployAtStartOnly"}
 MaintOk(f)  == IF MUT = "ExecutorIgnoresPlaybook"
                THEN ~(maintOn /\ NodeOf[f] \in MaintScope) \/ assist
                ELSE ~InMaint(f) \/ MUT = "MaintAtStartOnly"
 DepOk(f)    == ~DepOpen(f) \/ MUT \in {"NoCorrelation", "CorrelateOnArrivalOnly"}
+\* no_deploy_touching (16): the target was not (re)created by a deploy
+\* within the window. Checked last, as the executor does.
+GuardHolds(f) == guard /\ f \in GuardFps
+GuardOk(f)  == ~GuardHolds(f) \/ MUT = "IgnoreGuard"
+
+\* A refusal for a time-bounded reason (recent_deploy): nothing ran, so the
+\* lock is released and the run is not counted. The first time (MaxDefer)
+\* the incident is deferred: it stays active, re-deliveries dedupe into it,
+\* and Retry re-evaluates it once the guard has expired. After that it is
+\* handed off for good, and re-escalation (ReEscalate) keeps it from going
+\* silent. Either way OpenClaw gets the residue now. The bug variant is the
+\* behaviour of 2026-11-14: handed off, never looked at again.
+Refuse(f, p, t) ==
+  /\ lock' = [lock EXCEPT ![t] = IF @ = f THEN Free ELSE @]
+  /\ runs' = [runs EXCEPT ![p] = IF @ > 0 THEN @ - 1 ELSE 0]
+  /\ refused' = refused \cup {f}
+  /\ IF defN[f] < MaxDefer /\ MUT # "NoRetryNoStale"
+     THEN /\ inc' = [inc EXCEPT ![f] = "deferred"]
+          /\ defN' = [defN EXCEPT ![f] = @ + 1]
+     ELSE /\ inc' = [inc EXCEPT ![f] = "escalated"]
+          /\ UNCHANGED defN
+  /\ Queue(f, "escalated")
+  /\ UNCHANGED digest
 
 Execute(f) ==
   LET p == PbOf[f]  t == TargetOf[p] IN
   /\ inc[f] = "acting"
   /\ DeployOk                                   \* wait while a deploy runs
-  /\ IF ExecOk(f) /\ MaintOk(f) /\ DepOk(f)
+  /\ IF ExecOk(f) /\ MaintOk(f) /\ DepOk(f) /\ GuardOk(f)
      THEN \E a \in (IF MUT = "ActionFromEvent" THEN Allowed \cup Denied
                                                ELSE Allowed) :
           /\ viol' = viol \cup
-               { v \in {"S1", "S2", "S3", "S5", "S6", "S7", "S10"} :
+               { v \in {"S1", "S2", "S3", "S5", "S6", "S7", "S10", "S13"} :
                    \/ v = "S1"  /\ \E g \in Fps \ {f} :
                                    inc[g] = "acting" /\ PbOf[g] # NoPb
                                    /\ TargetOf[PbOf[g]] = t
@@ -315,18 +368,30 @@ Execute(f) ==
                    \/ v = "S5"  /\ breaker[p]
                    \/ v = "S6"  /\ DepOpenRaw(f)
                    \/ v = "S7"  /\ deploying
-                   \/ v = "S10" /\ InMaintRaw(f) }
+                   \/ v = "S10" /\ InMaintRaw(f)
+                   \/ v = "S13" /\ GuardHolds(f) }
           /\ execN' = [execN EXCEPT ![f] = @ + 1]
-          /\ inc' = [inc EXCEPT ![f] = "verifying"]
-          /\ UNCHANGED <<lock, pages, agentq, qv>>
-     ELSE /\ lock' = [lock EXCEPT ![t] = IF @ = f THEN Free ELSE @]
+          /\ \/ /\ inc' = [inc EXCEPT ![f] = "verifying"]
+                /\ UNCHANGED <<lock, runs, qv, defN, refused>>
+             \* Bug variant: the reply was lost (the action may have run) and
+             \* the router takes that for a refusal and defers. The real
+             \* router never defers an unknown result: it verifies.
+             \/ /\ MUT = "DeferOnLostReply" /\ defN[f] < MaxDefer
+                /\ Refuse(f, p, t)
+          /\ UNCHANGED <<pages, agentq, guard, stale>>
+     ELSE /\ UNCHANGED <<viol, execN>>
           /\ IF ~ExecOk(f)
-             THEN Escalate(f, "escalated")          \* kill switch: hand off
-             ELSE /\ inc' = [inc EXCEPT ![f] =
+             THEN /\ lock' = [lock EXCEPT ![t] = IF @ = f THEN Free ELSE @]
+                  /\ Escalate(f, "escalated")         \* kill switch: hand off
+                  /\ UNCHANGED <<runs, dv>>
+             ELSE IF ~MaintOk(f) \/ ~DepOk(f)
+             THEN /\ lock' = [lock EXCEPT ![t] = IF @ = f THEN Free ELSE @]
+                  /\ inc' = [inc EXCEPT ![f] =
                           IF ~MaintOk(f) THEN "maint" ELSE "symptom"]  \* park
-                  /\ UNCHANGED <<pages, agentq, qv>>
-          /\ UNCHANGED <<viol, execN>>
-  /\ UNCHANGED <<deliv, runs, breaker, mode, ocUp, routerUp, deploying,
+                  /\ UNCHANGED <<pages, agentq, qv, runs, dv>>
+             ELSE /\ Refuse(f, p, t)                  \* recent_deploy: not yet
+                  /\ UNCHANGED <<pages, agentq, guard, stale>>
+  /\ UNCHANGED <<deliv, breaker, mode, ocUp, routerUp, deploying,
                  wv, gv, suppOn, budget>>
 
 Release(t, f) == [lock EXCEPT ![t] = IF @ = f /\ MUT # "NoLockRelease"
@@ -344,7 +409,7 @@ VerifyOk(f) ==
      ELSE UNCHANGED <<fwdq, viol>>
   /\ UNCHANGED pageq
   /\ UNCHANGED <<deliv, execN, runs, breaker, mode, ocUp, routerUp,
-                 deploying, wv, pages, agentq, digest, gv, suppOn, budget>>
+                 deploying, wv, pages, agentq, digest, gv, suppOn, dv, budget>>
 
 \* Failed remediation is a page class (decision 5).
 VerifyFail(f) ==
@@ -352,14 +417,51 @@ VerifyFail(f) ==
   /\ lock' = Release(TargetOf[PbOf[f]], f)
   /\ Escalate(f, "paged")
   /\ UNCHANGED <<deliv, execN, runs, breaker, viol, mode, ocUp, routerUp,
-                 deploying, wv, gv, suppOn, budget>>
+                 deploying, wv, gv, suppOn, dv, budget>>
+
+\* ---- Deferred retry and re-escalation (16) ----------------------------
+\* Retry: the due time is past the guard's expiry, so a deferred incident is
+\* re-evaluated once the guard no longer holds, and goes back to "open":
+\* StartPb, Forward (kill switch), Trip (breaker, rate limit), the window
+\* and correlation checks all apply again. Bug variants: the timer is lost
+\* (DeferForever); the retry is treated as pre-approved and goes straight to
+\* the executor, which also waves it through (RetryPreApproved).
+Retry(f) ==
+  LET t == TargetOf[PbOf[f]] IN
+  /\ routerUp /\ inc[f] = "deferred" /\ ~GuardHolds(f)
+  /\ MUT # "DeferForever"
+  /\ IF MUT = "RetryPreApproved" /\ lock[t] = Free
+     THEN /\ inc' = [inc EXCEPT ![f] = "acting"]
+          /\ lock' = [lock EXCEPT ![t] = f]
+     ELSE /\ inc' = [inc EXCEPT ![f] = "open"]
+          /\ UNCHANGED lock
+  /\ refused' = refused \ {f}
+  /\ UNCHANGED <<deliv, execN, runs, breaker, viol, mode, ocUp, routerUp,
+                 deploying, wv, pages, agentq, qv, gv, suppOn, guard, defN, stale, budget>>
+
+\* ReEscalate: an incident handed off (escalated or paged) whose alert keeps
+\* firing goes to OpenClaw again (level 1, after 2h) and, for a user-facing
+\* service, is paged (level 2, after 6h; the JIT bot if OpenClaw is down).
+\* Time is abstract: "after the threshold" is "eventually". Not while its
+\* node is in a maintenance window: the recovery check owns it then.
+ReEscalate(f) ==
+  /\ routerUp /\ f \in StaleFps /\ inc[f] \in Handed /\ ~InMaint(f)
+  /\ MUT \notin {"NoReEscalation", "NoRetryNoStale"}
+  /\ \/ stale[f] = 0
+     \/ stale[f] = 1 /\ f \in UserFacing /\ MUT # "StaleNoPage"
+  /\ stale' = [stale EXCEPT ![f] = @ + 1]
+  /\ refused' = refused \ {f}
+  /\ Queue(f, IF stale[f] = 1 THEN "paged" ELSE "escalated")
+  /\ UNCHANGED <<inc, deliv, execN, lock, runs, breaker, viol, mode, ocUp,
+                 routerUp, deploying, wv, pages, agentq, digest, gv, suppOn,
+                 guard, defN, budget>>
 
 \* ---- Environment (budgeted) --------------------------------------------
 Spend(k) ==
   /\ budget[k] > 0
   /\ budget' = [budget EXCEPT ![k] = @ - 1]
 
-Others == <<inc, deliv, execN, lock, runs, breaker, viol, pages, agentq, qv, gv>>
+Others == <<inc, deliv, execN, lock, runs, breaker, viol, pages, agentq, qv, gv, dv>>
 
 FlipMode ==
   /\ Spend("kill")
@@ -374,7 +476,7 @@ OpenClawDown ==
 OpenClawUp ==
   /\ ~ocUp
   /\ ocUp' = TRUE
-  /\ UNCHANGED <<Others, mode, routerUp, deploying, wv, suppOn, budget>>
+  /\ UNCHANGED <<Others, mode, routerUp, deploying, wv, suppOn, dv, budget>>
 RouterDown ==
   /\ Spend("restart")
   /\ routerUp
@@ -389,7 +491,7 @@ RouterUp ==
              ELSE inc)
   /\ lock' = (IF MUT = "LoseState" THEN [t \in Targets |-> Free] ELSE lock)
   /\ UNCHANGED <<deliv, execN, runs, breaker, viol, mode, ocUp, deploying,
-                 wv, pages, agentq, qv, gv, suppOn, budget>>
+                 wv, pages, agentq, qv, gv, suppOn, dv, budget>>
 DeployStart ==
   /\ Spend("deploy")
   /\ ~deploying
@@ -398,7 +500,7 @@ DeployStart ==
 DeployEnd ==
   /\ deploying
   /\ deploying' = FALSE
-  /\ UNCHANGED <<Others, mode, ocUp, routerUp, wv, suppOn, budget>>
+  /\ UNCHANGED <<Others, mode, ocUp, routerUp, wv, suppOn, dv, budget>>
 MaintOpen ==
   /\ Spend("maint")
   /\ ~maintOn
@@ -415,12 +517,12 @@ MaintClose ==
                            THEN (IF MUT = "NoRecovery" THEN "dropped" ELSE "open")
                            ELSE inc[f]]
   /\ UNCHANGED <<deliv, execN, lock, runs, breaker, viol, mode, ocUp,
-                 routerUp, deploying, pages, agentq, qv, gv, suppOn, budget>>
+                 routerUp, deploying, pages, agentq, qv, gv, suppOn, dv, budget>>
 WindowElapse ==
   /\ Spend("window")
   /\ runs' = [p \in Playbooks |-> 0]
   /\ UNCHANGED <<inc, deliv, execN, lock, breaker, viol, pages, agentq, qv, gv,
-                 mode, ocUp, routerUp, deploying, wv, suppOn>>
+                 mode, ocUp, routerUp, deploying, wv, suppOn, dv>>
 \* A suppression (docker/event-router/suppressions.yml: reason and expiry
 \* are mandatory) starts, and ends at its expiry.
 SuppAdd ==
@@ -434,21 +536,36 @@ SuppExpire ==
   /\ suppOn' = FALSE
   /\ UNCHANGED <<Others, mode, ocUp, routerUp, deploying, wv, budget>>
 \* The alert clears by itself (or a human fixed it) before the router acts.
+\* A deploy recreates the target (the guard starts), and the guard expires.
+GuardOn ==
+  /\ GuardFps # {}
+  /\ Spend("guard")
+  /\ ~guard
+  /\ guard' = TRUE
+  /\ UNCHANGED <<inc, deliv, execN, lock, runs, breaker, viol, pages, agentq, qv, gv,
+                 mode, ocUp, routerUp, deploying, wv, suppOn, defN, stale, refused>>
+GuardOff ==
+  /\ guard
+  /\ guard' = FALSE
+  /\ UNCHANGED <<inc, deliv, execN, lock, runs, breaker, viol, pages, agentq, qv, gv,
+                 mode, ocUp, routerUp, deploying, wv, suppOn, defN, stale, refused, budget>>
 AlertResolves(f) ==
   /\ Spend("resolve")
-  /\ inc[f] \in {"open", "symptom", "maint"} \cup Handed
+  /\ inc[f] \in {"open", "symptom", "maint", "deferred"} \cup Handed
   /\ inc' = [inc EXCEPT ![f] = "resolved"]
+  /\ refused' = refused \ {f}
   /\ UNCHANGED <<deliv, execN, lock, runs, breaker, viol, pages, agentq, qv, gv,
-                 mode, ocUp, routerUp, deploying, wv, suppOn>>
+                 mode, ocUp, routerUp, deploying, wv, suppOn, guard, defN, stale>>
 
 Env == FlipMode \/ OpenClawDown \/ OpenClawUp \/ RouterDown \/ RouterUp
        \/ DeployStart \/ DeployEnd \/ MaintOpen \/ MaintClose \/ WindowElapse
-       \/ SuppAdd \/ SuppExpire
+       \/ SuppAdd \/ SuppExpire \/ GuardOn \/ GuardOff
        \/ \E f \in Fps : Deliver(f) \/ AlertResolves(f) \/ GrafanaOC(f)
 
 Router == \E f \in Fps : ReEvaluate(f) \/ Correlate(f) \/ Forward(f) \/ Trip(f) \/ StartPb(f)
                          \/ Execute(f) \/ VerifyOk(f) \/ VerifyFail(f)
                          \/ DeliverFwd(f) \/ JitPage(f) \/ Expire(f)
+                         \/ Retry(f) \/ ReEscalate(f)
 
 Next == Router \/ Env
 
@@ -464,7 +581,8 @@ Fairness ==
                     /\ WF_vars(Execute(f)) /\ WF_vars(VerifyOk(f) \/ VerifyFail(f))
                     /\ WF_vars(DeliverFwd(f)) /\ WF_vars(JitPage(f))
                     /\ WF_vars(Expire(f)) /\ WF_vars(GrafanaOC(f))
-  /\ WF_vars(RouterUp) /\ WF_vars(DeployEnd)
+                    /\ WF_vars(Retry(f)) /\ WF_vars(ReEscalate(f))
+  /\ WF_vars(RouterUp) /\ WF_vars(DeployEnd) /\ WF_vars(GuardOff)
   /\ IF MUT = "NoExpiry" THEN TRUE ELSE WF_vars(MaintClose)
   /\ IF MUT = "NoSuppressionExpiry" THEN TRUE ELSE WF_vars(SuppExpire)
   /\ IF OcRecovers THEN WF_vars(OpenClawUp) ELSE TRUE
@@ -490,11 +608,15 @@ S10_NoActInMaint      == "S10" \notin viol
 S11_PageInMaint       == \A f \in PageClass \cap Fps : inc[f] # "maint"
 \* Decision B: handled events never wake OpenClaw per event.
 S12_HandledNotForwarded == "S12" \notin viol
+\* 16: no action while the recent-deploy guard holds (a deploy recreated
+\* the target recently: a revert, not a restart), deferred retry included.
+S13_NoActWithinGuard  == "S13" \notin viol
 
 Safety == S1_OneActionPerTarget /\ S2_OnlyAllowedActions /\ S3_KillSwitchStops
           /\ S4_RateLimit /\ S5_BreakerHolds /\ S6_OneRootCause
           /\ S7_NoActDuringDeploy /\ S8_NoDoubleAction /\ S9_PageClassPaged
           /\ S10_NoActInMaint /\ S11_PageInMaint /\ S12_HandledNotForwarded
+          /\ S13_NoActWithinGuard
 
 \* ---- Liveness (section 12.2, 13.4) --------------------------------------
 \* L1/L2/L8: every incident ends handled, and "escalated"/"paged" really
@@ -521,4 +643,16 @@ L7_WindowsClose  == maintOn ~> ~maintOn
 \* handled) after the window closes; it is never dropped.
 Normal(f) == inc[f] \in {"open", "symptom", "acting", "verifying"}
 L8_RecoveryAfterWindow == \A f \in Fps : (inc[f] = "maint") ~> (Normal(f) \/ Handled(f))
+\* L9 (16): an incident whose action was refused for a time-bounded reason
+\* is eventually re-evaluated (Retry) or re-escalated, unless its alert
+\* resolves or a new episode starts. Never left alone while it fires: the
+\* 2026-11-14 plex incident (NoRetryNoStale) and a lost timer (DeferForever)
+\* fail it.
+L9_RefusalRetriedOrEscalated == \A f \in Fps : (f \in refused) ~> (f \notin refused)
+\* L10 (16): an incident handed off while its alert keeps firing is
+\* re-escalated, as a page for a user-facing service, unless the alert
+\* resolves (or its node is under maintenance for good, which L7 rules out).
+StaleDone(f) == stale[f] = (IF f \in UserFacing THEN 2 ELSE 1)
+L10_StillFailingReEscalated == \A f \in StaleFps :
+                                 (inc[f] \in Handed) ~> (StaleDone(f) \/ inc[f] \notin Handed)
 =============================================================================

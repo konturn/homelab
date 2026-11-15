@@ -78,15 +78,22 @@ preconditions are checked there too: `no_deploy_touching: 2h` refuses a
 restart of a container (re)created less than 2h ago, since compose recreates
 exactly the services a deploy changed.
 
-A `no_deploy_touching` refusal (executor reason `recent_deploy`) still goes
-to OpenClaw as residue, but it does not count as a run, and the router looks
-at the incident once more when the window has passed (window + 1 min after
-the refusal). If the same alert is still firing then, the incident reopens
-and the playbook goes through every guard and limit again; if the alert
-resolved first, the retry is cancelled. It happens at most once per
-incident: a second `recent_deploy` refusal is plain residue. Without this,
-dedupe (24h per still-firing alert) meant a container that hung right after
-a deploy stayed hung until someone restarted it by hand.
+A `no_deploy_touching` refusal (executor reason `recent_deploy`) is "not
+yet", not "never" (doc section 16). The executor says how long the guard has
+left; the router logs `deferred` with the due time, keeps the incident open
+as `deferred` (repeats dedupe into it, a resolve cancels it), does not count
+the refused run, and sends OpenClaw the residue at once with `retry_at`. At
+the due time, if the alert still fires, the playbook goes through every guard
+and limit again (kill switch, windows, correlation, breaker, rate limits,
+lock, executor). At most `deferred.max_per_incident` (2) times per incident.
+
+**Stale incidents.** An incident handed off (escalated, paged, shadowed)
+whose alert Grafana keeps re-sending goes to OpenClaw again after
+`stale.reforward_after` (2h), marked `stale`, and again after
+`stale.page_after` (6h): for services in `stale.user_facing` as a page (class
+`still_failing`, non-urgent, held through quiet hours). It needs a delivery
+within `stale.firing_within`, so a lost resolve never pages, and is held while
+the node is in a maintenance window.
 
 ## Residue to OpenClaw (phase 3)
 
@@ -95,8 +102,8 @@ What reaches OpenClaw, through its `/hooks/event-router` mapping
 
 | Kind | When |
 |---|---|
-| residue | no playbook matched; the kill switch is on; a shadow playbook would have acted; the executor refused (a deploy recreated the container, the job is not orphaned or was superseded); a burst; a failed retry of a CI job; a failed `main` or scheduled pipeline |
-| page | a page class (`page_classes` in `config.yml`), or a failed remediation: verification failed, a breaker opened, the action failed, a dependency was down |
+| residue | no playbook matched; the kill switch is on; a shadow playbook would have acted; the executor refused (a deploy recreated the container: deferred, with `retry_at`; the job is not orphaned or was superseded); still failing after 2h (`stale`); a burst; a failed retry of a CI job; a failed `main` or scheduled pipeline |
+| page | a page class (`page_classes` in `config.yml`), or a failed remediation: verification failed, a breaker opened, the action failed, a dependency was down; a user-facing service still failing after 6h (`still_failing`) |
 
 Never: an incident a playbook handled (decision B; it is in the decision log
 and the weekly summary), a digest-only event (`digest_only`), or one matching

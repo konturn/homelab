@@ -94,7 +94,7 @@ def parse_config(raw):
     known = {"mode", "limits", "correlation", "maintenance", "quiet_hours",
              "reconcile_interval", "step_interval", "restart_denylist",
              "page_classes", "ci_orphan", "deploy_jobs", "verify_grace",
-             "openclaw", "gitlab_events", "digest_only"}
+             "openclaw", "gitlab_events", "digest_only", "deferred", "stale"}
     unknown = set(raw) - known
     if unknown:
         raise ConfigError(f"config: unknown keys {sorted(unknown)}")
@@ -120,6 +120,8 @@ def parse_config(raw):
     }
     cfg["openclaw"] = _openclaw(raw.get("openclaw") or {})
     cfg["gitlab_events"] = _gitlab_events(raw.get("gitlab_events") or {})
+    cfg["deferred"] = _deferred(raw.get("deferred") or {})
+    cfg["stale"] = _stale(raw.get("stale") or {})
     cfg["digest_only"] = [_selector(r, f"digest_only[{i}]", extra={"reason"})
                           for i, r in enumerate(raw.get("digest_only") or [])]
     for i, r in enumerate(cfg["digest_only"]):
@@ -157,6 +159,50 @@ def _openclaw(raw):
             "max_age": _dur(raw.get("max_age", "6h"), "openclaw.max_age"),
             "jit_after": _dur(raw.get("jit_after", "2m"), "openclaw.jit_after"),
             "ack_window": _dur(raw.get("ack_window", "6h"), "openclaw.ack_window")}
+
+
+def _deferred(raw):
+    """Deferred retry (doc 16): an action the executor refused for a
+    time-bounded reason is looked at again when the guard expires, at most
+    `max_per_incident` times per incident (each look runs every guard)."""
+    keys = {"max_per_incident", "grace"}
+    if set(raw) - keys:
+        raise ConfigError(f"deferred: unknown keys {sorted(set(raw) - keys)}")
+    n = raw.get("max_per_incident", 2)
+    if not isinstance(n, int) or isinstance(n, bool) or not 0 <= n <= 5:
+        raise ConfigError("deferred.max_per_incident must be an integer from 0 to 5")
+    return {"max_per_incident": n, "grace": _dur(raw.get("grace", "1m"), "deferred.grace")}
+
+
+def _stale(raw):
+    """Re-escalation of long-lived incidents (doc 16): an incident handed
+    off while its alert keeps firing is re-forwarded to OpenClaw after
+    `reforward_after` and again after `page_after`; for `user_facing`
+    services the second step is a page (quiet hours apply)."""
+    keys = {"reforward_after", "page_after", "firing_within", "user_facing"}
+    if set(raw) - keys:
+        raise ConfigError(f"stale: unknown keys {sorted(set(raw) - keys)}")
+    out = {"reforward_after": _dur(raw.get("reforward_after", "2h"), "stale.reforward_after"),
+           "page_after": _dur(raw.get("page_after", "6h"), "stale.page_after"),
+           "firing_within": _dur(raw.get("firing_within", "270m"), "stale.firing_within"),
+           "user_facing": list(raw.get("user_facing") or [])}
+    if not 0 < out["reforward_after"] < out["page_after"]:
+        raise ConfigError("stale: need 0 < reforward_after < page_after")
+    for u in out["user_facing"]:
+        if not isinstance(u, str) or not re.match(r"^[a-z0-9_.*:-]{1,64}$", u):
+            raise ConfigError(f"stale.user_facing: {u!r} is not a container name or glob")
+    return out
+
+
+def user_facing(cfg, inc):
+    """Does this incident concern a service Noah uses directly (stale pages)?
+    Matched against the target, the container label and the node."""
+    names = {inc.get("target") or "", inc.get("node") or ""}
+    labels = inc.get("labels") or {}
+    names |= {labels.get(k) or "" for k in TARGET_LABELS}
+    names |= {n.split(":", 1)[1] for n in list(names) if n.startswith("container:")}
+    names.discard("")
+    return any(fnmatch.fnmatchcase(n, pat) for n in names for pat in cfg["stale"]["user_facing"])
 
 
 def _gitlab_events(raw):
