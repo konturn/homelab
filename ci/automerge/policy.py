@@ -5,8 +5,9 @@ label lists) so it can be unit tested without GitLab or a host. The CLI in
 automerge.py fetches that data and calls in here.
 
 The core rule: an MR qualifies only if its change is a set of in-place edits
-to `image:` lines of deployed compose files, each keeping the same image name
-and moving only the tag (patch/minor) and/or the digest. Every service
+to `image:` lines of deployed compose files (a service's own, or one shared
+through an anchored `x-` extension field: `compose_anchor_images`), each keeping
+the same image name and moving only the tag (patch/minor) and/or the digest. Every service
 qualifies except those on the denylist, those that run only under a compose
 profile, and update kinds a service's options restrict. Major versions, and
 tag changes whose version scheme is ambiguous, never qualify.
@@ -222,6 +223,114 @@ def compose_line_services(text: str) -> Tuple[List[Optional[str]], Dict[int, str
     return owner, images
 
 
+# An extension field (`x-<name>: &<anchor>`) at the top level whose `image:`
+# several services take through `<<: *<anchor>` (the airplay_* receivers share
+# `x-airplay`). Editing that one line changes the image of every such service.
+_EXT_ANCHOR_RE = re.compile(r"^(x-[A-Za-z0-9_.-]+):\s*&([A-Za-z0-9_.-]+)\s*(#.*)?$")
+_MERGE_ALIAS_RE = re.compile(r"^(\s+)<<:\s*\*([A-Za-z0-9_.-]+)\s*(#.*)?$")
+_ANCHOR_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9_.-])([&*])([A-Za-z0-9_.-]+)")
+
+
+def compose_anchor_images(text: str) -> Dict[int, Tuple[str, List[str]]]:
+    """Image lines of anchored extension fields, and the services they set.
+
+    Returns {0-based line index: (extension key, sorted services)} for each
+    `image:` line that is a direct child of a top-level `x-<name>: &<anchor>`
+    mapping, where:
+      - the anchor is defined once, and every alias of it in the file is a
+        `<<: *<anchor>` line that is a direct child of a service under
+        `services:` (no other alias, no merge list, no alias inside a value);
+      - the services taking it are those merging it without an `image:` key of
+        their own (an own `image:` overrides the merged one), and there is at
+        least one.
+    Anything else is left out, so an edit to it stays outside the policy."""
+    lines = text.split("\n")
+    owner, own_images = compose_line_services(text)
+    with_own_image = set(own_images.values())
+
+    # anchor -> (extension key, image line index); None when ambiguous
+    blocks: Dict[str, Optional[Tuple[str, int]]] = {}
+    i = 0
+    while i < len(lines):
+        m = _EXT_ANCHOR_RE.match(lines[i])
+        if not m:
+            i += 1
+            continue
+        key, anchor = m.group(1), m.group(2)
+        child: Optional[int] = None
+        found: List[int] = []
+        j = i + 1
+        while j < len(lines):
+            line = lines[j]
+            if line.strip() and not line.lstrip().startswith("#"):
+                indent = len(line) - len(line.lstrip(" "))
+                if indent == 0:
+                    break
+                if child is None:
+                    child = indent
+                if indent == child and _IMAGE_RE.match(line):
+                    found.append(j)
+            j += 1
+        blocks[anchor] = (key, found[0]) if len(found) == 1 and anchor not in blocks else None
+        i = j
+
+    # Every `&anchor` and `*alias` token outside whole-line comments.
+    defs: Dict[str, int] = {}
+    aliases: Dict[str, List[int]] = {}
+    for idx, line in enumerate(lines):
+        if line.lstrip().startswith("#"):
+            continue
+        for sigil, name in _ANCHOR_TOKEN_RE.findall(line):
+            if sigil == "&":
+                defs[name] = defs.get(name, 0) + 1
+            else:
+                aliases.setdefault(name, []).append(idx)
+
+    out: Dict[int, Tuple[str, List[str]]] = {}
+    for anchor, block in blocks.items():
+        if block is None or defs.get(anchor) != 1:
+            continue
+        key, img = block
+        users: List[str] = []
+        ok = True
+        for idx in aliases.get(anchor, []):
+            m = _MERGE_ALIAS_RE.match(lines[idx])
+            svc = owner[idx]
+            if not m or svc is None or not _is_service_child(lines, owner, idx):
+                ok = False
+                break
+            if svc in users:
+                ok = False
+                break
+            users.append(svc)
+        users = sorted(u for u in users if u not in with_own_image)
+        if ok and users:
+            out[img] = (key, users)
+    return out
+
+
+def _is_service_child(lines: List[str], owner: List[Optional[str]], idx: int) -> bool:
+    """Is line `idx` a direct child key of its service (the service's first
+    deeper indent)?"""
+    svc = owner[idx]
+    start = idx
+    while start > 0 and owner[start - 1] == svc:
+        start -= 1
+    # `start` is the service's own key line (comments before it belong to the
+    # previous service or to none)
+    while start < idx and not _KEY_RE.match(lines[start]):
+        start += 1
+    svc_indent = len(lines[start]) - len(lines[start].lstrip(" "))
+    for line in lines[start + 1:idx + 1]:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        if indent <= svc_indent:
+            return False
+        return indent == len(lines[idx]) - len(lines[idx].lstrip(" "))
+    return False
+
+
 @dataclass
 class ServiceInfo:
     profiles: List[str] = field(default_factory=list)
@@ -306,7 +415,9 @@ def _image_value(line: str) -> Tuple[str, str]:
 def diff_compose(base: str, head: str, path: str = COMPOSE_PATH,
                  zero_minor: Collection[str] = ()) -> List[ImageChange]:
     """Compare two versions of a compose file. Raise PolicyError unless every
-    difference is an in-place, same-image tag/digest edit of a service image line.
+    difference is an in-place, same-image tag/digest edit of a service image line,
+    or of the image line of an anchored extension field (`compose_anchor_images`),
+    which yields one ImageChange per service that takes that image.
     Services in `zero_minor` take 0.x minors as minors (`zero_minor_services`)."""
     b_lines, h_lines = base.split("\n"), head.split("\n")
     if len(b_lines) != len(h_lines):
@@ -315,18 +426,29 @@ def diff_compose(base: str, head: str, path: str = COMPOSE_PATH,
             "only in-place image line edits qualify")
     b_owner, b_images = compose_line_services(base)
     h_owner, h_images = compose_line_services(head)
+    b_anchored = h_anchored = None
     changes: List[ImageChange] = []
     for i, (bl, hl) in enumerate(zip(b_lines, h_lines)):
         if bl == hl:
             continue
         where = (f"{path} " if path != COMPOSE_PATH else "") + f"line {i + 1}"
-        if i not in b_images or i not in h_images:
-            svc = h_owner[i] or b_owner[i]
-            raise PolicyError(
-                f"{where}{' (service ' + svc + ')' if svc else ''} is not a service image line")
-        if b_images[i] != h_images[i]:
-            raise PolicyError(f"{where}: service structure changed")
-        service = h_images[i]
+        if i in b_images and i in h_images:
+            if b_images[i] != h_images[i]:
+                raise PolicyError(f"{where}: service structure changed")
+            service = h_images[i]
+            services = [service]
+        else:
+            # the image line of an extension field the services merge (`compose_anchor_images`)
+            if b_anchored is None:
+                b_anchored, h_anchored = compose_anchor_images(base), compose_anchor_images(head)
+            if i not in b_anchored or i not in h_anchored:
+                svc = h_owner[i] or b_owner[i]
+                raise PolicyError(
+                    f"{where}{' (service ' + svc + ')' if svc else ''} is not a service image line")
+            if b_anchored[i] != h_anchored[i]:
+                raise PolicyError(f"{where}: services using the anchored image changed")
+            ext, services = h_anchored[i]
+            service = f"{ext}: {', '.join(services)}"
         b_indent, b_val = _image_value(bl)
         h_indent, h_val = _image_value(hl)
         if b_indent != h_indent:
@@ -348,12 +470,14 @@ def diff_compose(base: str, head: str, path: str = COMPOSE_PATH,
             if old.tag is None or new.tag is None:
                 raise PolicyError(f"{where} ({service}): tag added or removed")
             try:
-                kind = classify_tag_change(old.tag, new.tag, service in zero_minor)
+                # an anchored image takes 0.x minors as minors only if every service using it does
+                kind = classify_tag_change(old.tag, new.tag, all(s in zero_minor for s in services))
             except MajorVersionChange as e:
-                raise MajorVersionChange(f"{where} ({service}): {e}", service=service, image=new.name)
+                raise MajorVersionChange(f"{where} ({service}): {e}", service=services[0], image=new.name)
             except PolicyError as e:
                 raise PolicyError(f"{where} ({service}): {e}")
-        changes.append(ImageChange(service, i + 1, old, new, kind, bl, hl, path))
+        # one change per service: each is deployed, health-gated and rolled back
+        changes += [ImageChange(s, i + 1, old, new, kind, bl, hl, path) for s in services]
     # Every service whose image changed must be fully accounted for by those lines.
     seen = {}
     for c in changes:

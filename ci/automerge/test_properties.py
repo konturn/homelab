@@ -497,6 +497,54 @@ def image_pair(draw):
     return base, head
 
 
+@st.composite
+def anchored_pair(draw):
+    """A compose file whose services may take an image from an anchored
+    extension field (`x-shared: &shared` + `<<: *shared`, some keeping an own
+    image), and a head with the shared image line bumped (any way), plus
+    maybe other edits."""
+    lines = draw(compose_file(image_lines=True)).split("\n")
+    start = lines.index("services:")
+    name, tag = draw(st.sampled_from(IMAGE_NAMES)), draw(version())[0]
+    out = lines[:start] + ["x-shared: &shared", f"  image: {render_ref(name, tag, DIGESTS[0])}",
+                           "  restart: unless-stopped", "services:"]
+    for i, line in enumerate(lines[start + 1:], start + 1):
+        if re.match(r"^    image: ", line) and re.match(r"^  [^ #].*:$", lines[i - 1]):
+            how = draw(st.sampled_from(["own", "merge", "merge", "merge_keep_image", "alias_value"]))
+            if how == "merge":
+                out.append("    <<: *shared")
+                continue
+            if how == "merge_keep_image":
+                out.append("    <<: *shared")
+            elif how == "alias_value":
+                out.append("    x-ref: *shared")
+        out.append(line)
+    base = "\n".join(out)
+    yaml.safe_load(base)
+    i = out.index("x-shared: &shared") + 1
+    how = draw(st.sampled_from(["pair", "pair", "digest", "name", "nodigest", "raw", "indent"]))
+    new = list(out)
+    if how == "pair":
+        (otag, *_), (ntag, *_) = draw(version_pair())
+        out[i] = f"  image: {render_ref(name, otag, DIGESTS[0])}"
+        base = "\n".join(out)
+        new[i] = f"  image: {render_ref(name, ntag, draw(st.sampled_from(DIGESTS)), '', draw(TRAILING))}"
+    elif how == "digest":
+        new[i] = f"  image: {render_ref(name, tag, draw(st.sampled_from(DIGESTS)))}"
+    elif how == "name":
+        new[i] = f"  image: {render_ref(draw(st.sampled_from(IMAGE_NAMES)), tag, DIGESTS[1])}"
+    elif how == "nodigest":
+        new[i] = f"  image: {render_ref(name, tag, None)}"
+    elif how == "raw":
+        new[i] = "  image: " + draw(TEXT)
+    else:
+        new[i] = "    image: " + render_ref(name, tag, DIGESTS[1])
+    head = "\n".join(new)
+    if draw(st.integers(0, 3)) == 0:
+        head = draw(edited(head, value_ops=False))
+    return base, head
+
+
 def evaluate(*, author, files, composes, labels=(), merger=MERGER, target="main"):
     return policy.evaluate_mr(author=author, target_branch=target, labels=list(labels), files=files,
                               composes=composes, allowlist=ALLOW, codeowners_text=CODEOWNERS, merger=merger,
@@ -781,6 +829,27 @@ class ImageClassProperties(unittest.TestCase):
         except PolicyError:
             return
         check_image_semantics(self, base, head, changes)
+        for c in changes:
+            self.assertEqual(c.old.name, c.new.name)
+            self.assertTrue(c.new.digest)
+            self.assertIn(c.kind, ("digest", "patch", "minor"))
+
+    @given(anchored_pair())
+    def test_accepted_anchored_image_bump_covers_every_user(self, pair):
+        """An accepted edit of a shared (anchored) image line is an image bump,
+        and its changes name exactly the services whose effective image moved,
+        so every one of them is deployed, health-gated and rolled back."""
+        base, head = pair
+        try:
+            changes = policy.diff_compose(base, head, C, policy.zero_minor_services(ALLOW))
+        except PolicyError:
+            return
+        check_image_semantics(self, base, head, changes, allowed_path=lambda p: p == ("x-shared", "image") or (
+            len(p) == 3 and p[0] == "services" and p[2] == "image"))
+        b, h = yaml.safe_load(base), yaml.safe_load(head)
+        moved = {s for s in h["services"]
+                 if ((b["services"].get(s) or {}).get("image")) != ((h["services"][s] or {}).get("image"))}
+        self.assertEqual(moved, {c.service for c in changes})
         for c in changes:
             self.assertEqual(c.old.name, c.new.name)
             self.assertTrue(c.new.digest)
