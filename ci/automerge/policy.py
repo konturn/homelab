@@ -697,13 +697,21 @@ def zero_minor_services(allowlist: dict) -> Set[str]:
 # Pre-upgrade backups
 # ---------------------------------------------------------------------------
 # A service whose version change migrates its data one way (Home Assistant's
-# recorder and .storage, InfluxDB's metadata) sets `pre_upgrade_backup: <type>`.
-# Before a version (minor) update of it is deployed, the per-service deploy
-# takes a backup with ci/automerge/pre-upgrade-backup.sh, and restores it if
-# the rollback fires. Digest and patch updates take none.
+# recorder and .storage, InfluxDB's metadata, Nextcloud's database, code and
+# app data) sets `pre_upgrade_backup: <type>`. Before a version update of it
+# is deployed, the per-service deploy takes a backup with
+# ci/automerge/pre-upgrade-backup.sh, and restores it if the rollback fires.
+# Which update kinds take a backup depends on the type: Home Assistant and
+# InfluxDB migrate on minors only; every Nextcloud version change (a patch
+# too) runs `occ upgrade`. Digest refreshes never take one (the deploy
+# refuses a Nextcloud digest whose packaged version differs).
 
-PRE_UPGRADE_TYPES = ("homeassistant", "influxdb")
-PRE_UPGRADE_KINDS = ("minor",)
+PRE_UPGRADE_KINDS_BY_TYPE = {
+    "homeassistant": ("minor",),
+    "influxdb": ("minor",),
+    "nextcloud": ("patch", "minor"),
+}
+PRE_UPGRADE_TYPES = tuple(PRE_UPGRADE_KINDS_BY_TYPE)
 
 
 def pre_upgrade_config(allowlist: dict) -> dict:
@@ -742,13 +750,14 @@ def _path_part(tag: Optional[str]) -> str:
 
 def pre_upgrade_backups(changes: List["ImageChange"], allowlist: dict, stamp: str) -> Dict[str, dict]:
     """service -> {type, dir} for the changes that need a pre-upgrade backup:
-    version (minor) updates of services with `pre_upgrade_backup`. `stamp` is
-    the UTC time (YYYYmmddTHHMMSSZ) that starts each backup directory name."""
+    version updates of services with `pre_upgrade_backup`, of the kinds their
+    type migrates on (PRE_UPGRADE_KINDS_BY_TYPE). `stamp` is the UTC time
+    (YYYYmmddTHHMMSSZ) that starts each backup directory name."""
     cfg = pre_upgrade_config(allowlist)
     out = {}
     for c in changes:
         t = cfg["services"].get(c.service)
-        if t and c.kind in PRE_UPGRADE_KINDS:
+        if t and c.kind in PRE_UPGRADE_KINDS_BY_TYPE[t]:
             out[c.service] = {
                 "type": t,
                 "dir": f"{cfg['dir']}/{c.service}/{stamp}-{_path_part(c.old.tag)}-to-{_path_part(c.new.tag)}",

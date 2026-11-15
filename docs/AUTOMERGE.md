@@ -216,11 +216,13 @@ someone merges or closes them. A checklist for merging one by hand:
 
 | Service | `updates` | Why |
 |---|---|---|
-| `nextcloud`, `bitwarden` | digest | A new version runs a one-way migration on start (`occ upgrade`, Vaultwarden's schema). |
+| `nextcloud` | digest, patch | A new version runs `occ upgrade` on start; patches are backed up first ([Pre-upgrade backups](#pre-upgrade-backups)), minors stay manual. |
+| `bitwarden` | digest | A new version migrates Vaultwarden's database schema on start. |
 
 Home Assistant and InfluxDB also migrate their data on a minor release, but
 they take every non-major kind: the deploy backs their data up first and the
-rollback restores it ([Pre-upgrade backups](#pre-upgrade-backups)).
+rollback restores it ([Pre-upgrade backups](#pre-upgrade-backups)). Nextcloud
+gets the same backup for its patch releases.
 
 Their other non-major updates wait for a human, who merges them through the
 normal review and full deploy.
@@ -281,7 +283,7 @@ The services published through the external reverse proxy
 | `homeassistant/home-assistant` | homeassistant | digest, patch | minors go through the general class, with a pre-upgrade backup |
 | `lscr.io/linuxserver/deluge` | deluge | digest, patch | peer port forwarded through the VPN |
 | `izderadicka/audioserve` | booksonic | digest | floating `latest` tag |
-| `nextcloud` | nextcloud | digest | a new version runs `occ upgrade` on start |
+| `nextcloud` | nextcloud | digest | patches go through the general class, with a pre-upgrade backup |
 | `vaultwarden/server` | bitwarden | digest | new versions migrate its database |
 
 Not fast-tracked:
@@ -305,16 +307,20 @@ ineligible), or if a database image is listed.
 
 ### Digest-only services and rollback
 
-`nextcloud` and `bitwarden` have `updates: [digest]`. A digest refresh of the
-same tag keeps the application version, so the previous image is a clean
-rollback. Version changes go through review and the full deploy, which runs
+`bitwarden` has `updates: [digest]`, `nextcloud` has `updates: [digest,
+patch]`. A digest refresh of the same tag keeps the application version, so
+the previous image is a clean rollback. A Nextcloud patch release is backed up
+first and restored on rollback ([Pre-upgrade backups](#pre-upgrade-backups)).
+Other version changes go through review and the full deploy, which runs
 `occ upgrade` for Nextcloud. For Nextcloud, `service-update.yml` also:
 
-- **before** recreating, compares the version packaged in the new image
-  (`/usr/src/nextcloud/version.php`) with the installed one
-  (`/var/www/html/version.php`, a persistent volume) and refuses the deploy if
-  they differ, so a same-tag rebuild that bumps the version cannot upgrade the
-  installed code and database one way;
+- **before** anything is stopped or recreated, compares the version packaged
+  in the new image (`/usr/src/nextcloud/version.php`) with the installed one
+  (`/var/www/html/version.php`, a persistent volume). Without a pre-upgrade
+  backup (a digest refresh) they must be equal, so a same-tag rebuild that
+  bumps the version cannot upgrade the installed code and database one way.
+  With one (a patch) the packaged version must be a newer release of the same
+  `major.minor`;
 - **after** the health gate, requires `occ status` to report installed, not in
   maintenance mode, and no pending database upgrade.
 
@@ -421,11 +427,15 @@ the issue.
 ## Pre-upgrade backups
 
 Home Assistant's monthly releases can migrate `.storage` and its recorder
-database, and InfluxDB 2.x minor releases migrate its metadata store. Starting
-the previous image on migrated data fails or misbehaves, so these services
-set `pre_upgrade_backup:` in the policy, and for a **minor** update of them
-(not a digest refresh or a patch) the per-service deploy runs
-`ci/automerge/pre-upgrade-backup.sh`:
+database, InfluxDB 2.x minor releases migrate its metadata store, and every
+Nextcloud version (a patch too) runs `occ upgrade` over its database, code and
+app data. Starting the previous image on migrated data fails or misbehaves, so
+these services set `pre_upgrade_backup:` in the policy, and for a version
+update of them the per-service deploy runs `ci/automerge/pre-upgrade-backup.sh`.
+Which kinds take a backup depends on the type (`PRE_UPGRADE_KINDS_BY_TYPE` in
+`policy.py`): Home Assistant and InfluxDB on a **minor** (not a digest refresh
+or a patch), Nextcloud on a **patch** (its minors are not auto-merged at all).
+A digest refresh never takes one.
 
 - `backup` before the new image starts: it pulls the new image, takes any
   online copy, then stops the container and copies the rest, so the service is
@@ -497,12 +507,51 @@ between the deploy and the rollback are lost, as is a shard group created in
 that window (its data stays on disk, unreferenced). The weekly full dump
 (`restic-db-dumps weekly`) stays the disaster backup.
 
+### Nextcloud
+
+The official image keeps its code, apps and `config.php` in the
+`/var/www/html` volume (on `/persistent_data`), the data directory is
+`/mpool/nextcloud/nextcloud` (mounted at `/data`), and the database is MariaDB
+in `nextcloud_db`. A new version's entrypoint copies its code into
+`/var/www/html`, raises the version in `config.php` and runs `occ upgrade`
+(database migrations and repair steps, which also rewrite the app data caches).
+The previous image refuses to start on code newer than itself, and a database
+migrated by the new version is not one the old code supports. So the script,
+with Nextcloud stopped (the new image already pulled; it refuses if
+`config.php` has maintenance mode on or the database container is not
+running), copies:
+
+- **Database**: `mariadb-dump --single-transaction --add-drop-database` of the
+  Nextcloud database inside `nextcloud_database` (root password from the
+  container's own environment, as in `restic-db-dumps`), gzip, read at 40
+  MB/s. A dump without the `-- Dump completed` trailer fails the backup.
+- **Code and config**: `/var/www/html` (code, `apps`, `custom_apps`,
+  `config.php`) at 40 MB/s, without the Ansible-managed `custom.config.php`.
+- **App data**: `<datadirectory>/appdata_<instanceid>` without `preview/`
+  (version-independent and large), ZFS to ZFS. User files are not copied: an
+  upgrade does not touch them.
+
+The restore checks the dump's checksum and that the backup is of the same
+instance, stops Nextcloud, loads the dump (it drops and recreates the
+database, so tables the new version added go too; the grants live in
+`mysql.*` and are kept), then `rsync --delete`s the code and the app data
+back and checks that `version.php` is the old version again. The previous
+image then starts on matching code, config and database, and its entrypoint
+does not upgrade anything. Changes made between the backup and the rollback
+(a few minutes, mostly with Nextcloud down) are lost from the database; a
+file uploaded in that window stays on disk without its database row until
+`occ files:scan` runs for that user.
+
 ### Timing and the sweep
 
 A Home Assistant job with a schema change takes at worst about 6 minutes of
 backup, the deploy and health gate (up to 10), 6 minutes of restore and the
 rollback's health gate (up to 10): within the job's 60-minute timeout. While
 the job runs the sweep merges nothing (a per-service deploy is still running).
+A Nextcloud job adds the database dump and the code copy (both at 40 MB/s,
+so their size sets the time) to its health gate of up to 15 minutes, twice
+on a rollback; each backup and restore is still bounded by `timeout` (30
+minutes).
 
 ### Restoring by hand
 
@@ -514,7 +563,8 @@ ci/automerge/pre-upgrade-backup.sh restore --type homeassistant \
   --service homeassistant --dir /mpool/backups/automerge-pre-upgrade/homeassistant/<dir>
 ```
 
-(`--type influxdb --service influxdb` for InfluxDB), then start the previous
+(`--type influxdb --service influxdb` for InfluxDB, `--type nextcloud
+--service nextcloud` for Nextcloud), then start the previous
 image: merge the revert MR and run `router:deploy`, or recreate the service
 with the previous image line by hand.
 
@@ -849,7 +899,7 @@ All in `ci/automerge-policy.yml` (reviewed, since `ci/` is code-owned):
   whose version change runs a one-way migration that no pre-upgrade backup
   type covers.
 - **Back up before a version update:** set `pre_upgrade_backup:
-  homeassistant|influxdb` under `services` (router services only; a new type
+  homeassistant|influxdb|nextcloud` under `services` (router services only; a new type
   needs code in `ci/automerge/pre-upgrade-backup.sh`).
 - **Add a probe or timeout:** add the service under `services` with the compose
   **service name**, not the container name:

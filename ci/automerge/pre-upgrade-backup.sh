@@ -17,6 +17,9 @@
 #   influxdb       influxd.bolt and influxd.sqlite (the metadata a 2.x minor
 #                  migrates), copied after the container is stopped. The TSM
 #                  data is not touched by a minor release and is not copied.
+#   nextcloud      the MariaDB database (a dump), /var/www/html (code, apps,
+#                  config.php) and the app data without previews, copied after
+#                  Nextcloud is stopped (see the Nextcloud section below).
 #
 # backup stops the service's container (the deploy recreates it right after);
 # its new image is pulled first, so the service is down only as long as a
@@ -72,9 +75,9 @@ check_fs() { # dir: backups go to ZFS only
   [ "$fs" = zfs ] || die "$1 is on $fs, not ZFS; refusing to write backups there"
 }
 
-container() {
+container() { # [service]: defaults to --service
   docker ps -aq --filter "label=com.docker.compose.project=$PROJECT" \
-    --filter "label=com.docker.compose.service=$SERVICE" | head -n 1
+    --filter "label=com.docker.compose.service=${1:-$SERVICE}" | head -n 1
 }
 
 mount_source() { # container destination
@@ -249,12 +252,132 @@ influx_restore() {
   say "metadata restored"
 }
 
+# --- Nextcloud ----------------------------------------------------------------
+
+# Nextcloud (official image): the code and config.php live in the container's
+# /var/www/html volume, the data directory is mounted at /data, the database
+# is MariaDB in the compose service nextcloud_db. A new version's entrypoint
+# syncs its code into /var/www/html, bumps the version in config.php and runs
+# `occ upgrade` (database migrations and repair steps, which also rewrite the
+# app data cache under <datadirectory>/appdata_<instanceid>). The previous
+# image refuses to start on code newer than itself, and would run on a
+# migrated database. So all three are backed up with Nextcloud stopped:
+#   database  mariadb-dump --single-transaction of the Nextcloud database
+#             (with DROP DATABASE, so the restore also removes tables the new
+#             version created), gzip, through pv at --rate MB/s
+#   code      /var/www/html (code, apps, custom_apps, config.php), at --rate
+#   appdata   <datadirectory>/appdata_<instanceid> without previews (version
+#             independent and large); ZFS to ZFS
+# User files are not copied: an upgrade does not touch them.
+NC_DB_SERVICE="${PRE_UPGRADE_NC_DB_SERVICE:-nextcloud_db}"
+# custom.config.php is a file bind mount (Ansible-managed), the lock is the
+# entrypoint's; neither belongs to the version.
+NC_HTML_EXCLUDES=(/config/custom.config.php /nextcloud-init-sync.lock)
+NC_APPDATA_EXCLUDES=(/preview/)
+NC_DUMP=nextcloud.sql.gz
+
+nc_locate() { # cid: sets HTML, DATA, APPDATA, DBCID, NC_VERSION
+  local cid=$1 id
+  HTML=$(mount_source "$cid" /var/www/html)
+  DATA=$(mount_source "$cid" /data)
+  [ -n "$HTML" ] && [ -f "$HTML/version.php" ] && [ -f "$HTML/config/config.php" ] \
+    || die "no /var/www/html volume with version.php and config/config.php found"
+  [ -n "$DATA" ] && [ -d "$DATA" ] || die "no /data mount found"
+  id=$(grep -ohE "'instanceid'[[:space:]]*=>[[:space:]]*'[A-Za-z0-9]+'" "$HTML/config/config.php" \
+       | sed -E "s/.*'([A-Za-z0-9]+)'$/\1/" | head -n 1)
+  [ -n "$id" ] || die "no instanceid in config.php"
+  # Only the datadirectory /data layout is supported: anywhere else, there
+  # is no appdata_<instanceid> under the /data mount and this refuses.
+  APPDATA="$DATA/appdata_$id"
+  [ -d "$APPDATA" ] || die "$APPDATA does not exist (is datadirectory /data?)"
+  NC_VERSION=$(nc_version "$HTML")
+  DBCID=$(container "$NC_DB_SERVICE")
+  [ -n "$DBCID" ] || die "no container for $PROJECT/$NC_DB_SERVICE"
+  [ "$(docker inspect -f '{{.State.Running}}' "$DBCID")" = true ] || die "$NC_DB_SERVICE is not running"
+}
+
+nc_version() { # html dir: installed version from version.php, e.g. 35.0.2.1
+  grep -E '^\$OC_Version[[:space:]]*=' "$1/version.php" | grep -oE '[0-9]+(,[[:space:]]*[0-9]+)*' \
+    | head -n 1 | tr -d ' ' | tr , .
+}
+
+nc_maintenance() { # html dir: true when config.php has maintenance on
+  grep -Eq "^[[:space:]]*'maintenance'[[:space:]]*=>[[:space:]]*true" "$1/config/config.php"
+}
+
+nc_backup() {
+  local cid=$1 ex=() p
+  nc_locate "$cid"
+  ! nc_maintenance "$HTML" || die "Nextcloud is in maintenance mode; refusing to back up mid-operation"
+  docker pull -q "$NEW_IMAGE" >/dev/null || die "cannot pull $NEW_IMAGE"
+  # Stopped, so nothing writes to the database, the code or the app data
+  # while they are copied, and the three match each other.
+  stop_container "$cid"
+  say "dumping the database at ${RATE} MB/s (Nextcloud $NC_VERSION)"
+  # The root password stays inside the database container (as in
+  # restic-db-dumps); MYSQL_PWD keeps it out of the process list.
+  # shellcheck disable=SC2016 # expanded by the container's shell
+  docker exec "$DBCID" sh -c '
+      bin=$(command -v mariadb-dump || command -v mysqldump) || exit 127
+      db=${MARIADB_DATABASE:-$MYSQL_DATABASE}; [ -n "$db" ] || exit 64
+      MYSQL_PWD=${MARIADB_ROOT_PASSWORD:-$MYSQL_ROOT_PASSWORD} exec "$bin" -uroot --single-transaction \
+        --quick --routines --events --triggers --hex-blob --add-drop-database --databases "$db"' \
+    | pv -q -L "${RATE}m" | gzip -1 > "$DIR/$NC_DUMP"
+  local ps=("${PIPESTATUS[@]}")
+  [ "${ps[*]}" = "0 0 0" ] || die "database dump failed (exit ${ps[*]})"
+  gzip -dc "$DIR/$NC_DUMP" | tail -n 1 | grep -q '^-- Dump completed' \
+    || die "database dump is truncated (no 'Dump completed' trailer)"
+  say "database dumped ($(human "$(stat -c %s "$DIR/$NC_DUMP")") compressed)"
+  for p in "${NC_HTML_EXCLUDES[@]}"; do ex+=(--exclude="$p"); done
+  rsync -a --bwlimit="$((RATE * 1024))" "${ex[@]}" "$HTML/" "$DIR/html/" || die "code copy failed"
+  say "code and config copied ($(du -sh "$DIR/html" | cut -f1))"
+  ex=()
+  for p in "${NC_APPDATA_EXCLUDES[@]}"; do ex+=(--exclude="$p"); done
+  rsync -a "${ex[@]}" "$APPDATA/" "$DIR/appdata/" || die "app data copy failed"
+  say "app data copied without previews ($(du -sh "$DIR/appdata" | cut -f1))"
+  (cd "$DIR" && sha256sum -- "$NC_DUMP" > SHA256SUMS)
+  { echo "version=$NC_VERSION"; echo "appdata=$(basename "$APPDATA")"; } >> "$DIR/INFO"
+}
+
+nc_restore() {
+  local cid=$1 ex=() p want
+  nc_locate "$cid"
+  (cd "$DIR" && sha256sum --quiet -c SHA256SUMS) || die "backup checksums do not match"
+  gzip -t "$DIR/$NC_DUMP" || die "database dump is corrupt"
+  [ -f "$DIR/html/version.php" ] && [ -f "$DIR/html/config/config.php" ] && [ -d "$DIR/appdata" ] \
+    || die "backup has no code, config or app data"
+  [ "appdata=$(basename "$APPDATA")" = "$(grep -m1 '^appdata=' "$DIR/INFO")" ] \
+    || die "the backup is of another Nextcloud instance"
+  want=$(grep -m1 '^version=' "$DIR/INFO" | cut -d= -f2)
+  stop_container "$cid"
+  say "restoring the database at ${RATE} MB/s (Nextcloud $NC_VERSION -> $want)"
+  # The dump starts with DROP DATABASE / CREATE DATABASE, so tables the new
+  # version added are removed too. Grants live in mysql.*, not in the database.
+  # shellcheck disable=SC2016 # expanded by the container's shell
+  gzip -dc "$DIR/$NC_DUMP" | pv -q -L "${RATE}m" | docker exec -i "$DBCID" sh -c '
+      bin=$(command -v mariadb || command -v mysql) || exit 127
+      MYSQL_PWD=${MARIADB_ROOT_PASSWORD:-$MYSQL_ROOT_PASSWORD} exec "$bin" -uroot'
+  local ps=("${PIPESTATUS[@]}")
+  [ "${ps[*]}" = "0 0 0" ] || die "database restore failed (exit ${ps[*]})"
+  say "database restored"
+  for p in "${NC_HTML_EXCLUDES[@]}"; do ex+=(--exclude="$p"); done
+  # --delete removes files the new version added; the excluded paths are
+  # neither copied nor deleted.
+  rsync -a --delete --bwlimit="$((RATE * 1024))" "${ex[@]}" "$DIR/html/" "$HTML/" || die "code restore failed"
+  [ "$(nc_version "$HTML")" = "$want" ] || die "restored code is not version $want"
+  say "code and config restored (version $want)"
+  ex=()
+  for p in "${NC_APPDATA_EXCLUDES[@]}"; do ex+=(--exclude="$p"); done
+  rsync -a --delete "${ex[@]}" "$DIR/appdata/" "$APPDATA/" || die "app data restore failed"
+  say "app data restored"
+}
+
 # --- commands -----------------------------------------------------------------
 
 case "$CMD" in
   backup|restore)
     [ -n "$SERVICE" ] && [ -n "$DIR" ] || die "--service and --dir are required"
-    case "$TYPE" in homeassistant|influxdb) ;; *) die "unknown --type '$TYPE'" ;; esac
+    case "$TYPE" in homeassistant|influxdb|nextcloud) ;; *) die "unknown --type '$TYPE'" ;; esac
     CID=$(container)
     [ -n "$CID" ] || die "no container for $PROJECT/$SERVICE"
     ;;
@@ -273,6 +396,7 @@ case "$CMD" in
     case "$TYPE" in
       homeassistant) ha_backup "$CID" ;;
       influxdb) influx_backup "$CID" ;;
+      nextcloud) nc_backup "$CID" ;;
     esac
     touch "$DIR/COMPLETE"
     say "backup complete in $(( $(date +%s) - start ))s: $DIR"
@@ -284,6 +408,7 @@ case "$CMD" in
     case "$TYPE" in
       homeassistant) ha_restore "$CID" ;;
       influxdb) influx_restore "$CID" ;;
+      nextcloud) nc_restore "$CID" ;;
     esac
     say "restore complete in $(( $(date +%s) - start ))s from $DIR"
     ;;
