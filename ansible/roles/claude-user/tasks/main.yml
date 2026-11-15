@@ -20,11 +20,15 @@
     create_home: yes
     comment: "Restricted read-only user for AI agent SSH access"
 
+# The restriction (PATH, the command set) lives in the home directory, so the
+# home directory, bin/ and the dotfiles belong to root: the restricted user can
+# read them but not rewrite, replace or add to them. Only the history file is
+# the user's.
 - name: Set claude home directory permissions
   file:
     path: "/home/{{ claude_user_name }}"
-    mode: '0700'
-    owner: "{{ claude_user_name }}"
+    mode: '0750'
+    owner: root
     group: "{{ claude_user_group }}"
 
 - name: Create restricted PATH bin directory
@@ -32,8 +36,18 @@
     path: "/home/{{ claude_user_name }}/bin"
     state: directory
     mode: '0755'
+    owner: root
+    group: root
+
+- name: Keep a user-writable history file
+  file:
+    path: "/home/{{ claude_user_name }}/.bash_history"
+    state: touch
+    mode: '0600'
     owner: "{{ claude_user_name }}"
     group: "{{ claude_user_group }}"
+    modification_time: preserve
+    access_time: preserve
 
 # One remote call instead of a stat and a file task per command: the two
 # 28-item loops took ~20s on the router and ~40s on each Pi. Not every host
@@ -63,7 +77,6 @@
       - /usr/bin/head
       - /usr/bin/tail
       - /usr/bin/grep
-      - /usr/bin/find
       - /usr/bin/df
       - /usr/bin/du
       - /usr/bin/ps
@@ -74,13 +87,9 @@
       - /usr/bin/hostname
       - /usr/bin/date
       - /usr/bin/wc
-      - /usr/bin/sort
       - /usr/bin/uniq
-      - /usr/bin/less
       - /usr/bin/stat
       - /usr/bin/file
-      - /usr/bin/journalctl
-      - /usr/bin/systemctl
       - /usr/bin/ip
       - /usr/bin/ss
       - /usr/bin/dig
@@ -90,11 +99,82 @@
   changed_when: claude_allowed_links.stdout | length > 0
   check_mode: false
 
+# These commands can start other programs or a pager (find -exec, sort
+# --compress-program, systemctl -H, the systemd pager), which rbash does not
+# check. They are installed as root-owned wrappers that refuse those options
+# instead of as symlinks; less is not offered at all.
+- name: Remove earlier symlinks that the wrappers replace
+  ansible.builtin.shell: |
+    set -eu
+    for n in find journalctl systemctl sort less; do
+      f=/home/{{ claude_user_name }}/bin/$n
+      if [ -L "$f" ]; then
+        {{ ':' if ansible_check_mode else '' }} rm -f "$f"
+        echo "removed $f"
+      fi
+    done
+  register: claude_old_links
+  changed_when: claude_old_links.stdout | length > 0
+  check_mode: false
+
+- name: Install wrapped commands
+  copy:
+    dest: "/home/{{ claude_user_name }}/bin/{{ item.name }}"
+    owner: root
+    group: root
+    mode: '0755'
+    content: "{{ item.content }}"
+  loop:
+    - name: find
+      content: |
+        #!/bin/sh
+        # find without the actions that run programs, write files or delete.
+        for a in "$@"; do
+          case "$a" in
+            -exec|-execdir|-ok|-okdir|-delete|-fprint|-fprint0|-fprintf|-fls)
+              echo "find: $a is not allowed here" >&2; exit 2 ;;
+          esac
+        done
+        exec /usr/bin/find "$@"
+    - name: sort
+      content: |
+        #!/bin/sh
+        # sort without --compress-program (getopt accepts any prefix down to --co).
+        for a in "$@"; do
+          case "$a" in
+            --co*) echo "sort: $a is not allowed here" >&2; exit 2 ;;
+          esac
+        done
+        exec /usr/bin/sort "$@"
+    - name: journalctl
+      content: |
+        #!/bin/sh
+        # Never page: the pager is a shell escape.
+        exec /usr/bin/env -u SYSTEMD_PAGER -u PAGER -u SYSTEMD_LESS SYSTEMD_PAGERSECURE=1 \
+          /usr/bin/journalctl --no-pager "$@"
+    - name: systemctl
+      content: |
+        #!/bin/sh
+        # Read-only verbs only, verb first; never page; no remote host or
+        # machine (-H runs ssh, -M enters a container).
+        case "${1:-}" in
+          status|show|cat|is-active|is-enabled|is-failed|list-units|list-unit-files|list-timers|list-sockets|list-dependencies) ;;
+          *) echo "systemctl: only status, show, cat, is-active, is-enabled, is-failed and list-* (verb first)" >&2; exit 2 ;;
+        esac
+        for a in "$@"; do
+          case "$a" in
+            --ho*|--m*|-H*|-M*|-[!-]*H*|-[!-]*M*|--user|--global|--root*|--image*)
+              echo "systemctl: $a is not allowed here" >&2; exit 2 ;;
+          esac
+        done
+        exec /usr/bin/env -u SYSTEMD_PAGER -u PAGER -u SYSTEMD_LESS -u SYSTEMD_EDITOR -u EDITOR -u VISUAL \
+          SYSTEMD_PAGERSECURE=1 /usr/bin/systemctl --no-pager "$@"
+
 - name: Configure restricted .bashrc
   copy:
     dest: "/home/{{ claude_user_name }}/.bashrc"
-    owner: "{{ claude_user_name }}"
-    group: "{{ claude_user_group }}"
+    owner: root
+    group: root
     mode: '0644'
     content: |
       # Restricted shell configuration
@@ -103,13 +183,13 @@
       export HISTSIZE=1000
       readonly PATH
       # No cd allowed in rbash by default
-      echo "Restricted shell. Commands: cat ls head tail grep find df du ps journalctl systemctl ip ss dig"
+      echo "Restricted shell. Commands: cat ls head tail grep find sort df du ps journalctl systemctl ip ss dig"
 
 - name: Create .profile
   copy:
     dest: "/home/{{ claude_user_name }}/.profile"
-    owner: "{{ claude_user_name }}"
-    group: "{{ claude_user_group }}"
+    owner: root
+    group: root
     mode: '0644'
     content: |
       if [ -f ~/.bashrc ]; then
