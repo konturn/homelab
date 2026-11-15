@@ -45,12 +45,15 @@ Secrets are managed through a **Vault-only** architecture:
 
 | Method | Role | Policy | Used By |
 |--------|------|--------|---------|
-| JWT (GitLab OIDC) | `vault-admin` | `vault-admin` | `vault:rotate-approles` (main only; `vault:configure` uses the `VAULT_TOKEN` CI variable) |
+| JWT (GitLab OIDC) | `vault-admin` | `vault-admin` | `vault:configure`, `vault:rotate-approles` (protected main only) |
 | JWT (GitLab OIDC) | `ci-deploy` | `ci-deploy` | `router:deploy`, `zwave:deploy`, `satellite-2:deploy`, `macmini:deploy` and other main-branch jobs (role bound to `ref=main`) |
 | JWT (GitLab OIDC) | `vault-read` | `vault-read` | `vault:validate` (MR only — terraform plan) |
 | JWT (GitLab OIDC) | `ha-config-deploy` | `ha-config-deploy` | CI of the Home Assistant config repo `root/homeassistant` (main only) |
 | AppRole | `openclaw` | `openclaw-ops` | OpenClaw container (scoped read-only) |
 | AppRole | `jit-approval-svc` | `jit-approval-svc` | JIT approval service (credential broker) |
+| AppRole | `router-helpers` | `router-helpers` | root's helpers on the router through `vault-router-token` (exact paths, 5-minute tokens) |
+
+Details, including where each consumer's credential lives: [VAULT.md](VAULT.md).
 
 ### Vault Secret Layout
 
@@ -162,6 +165,8 @@ To rotate a secret:
 | `VAULT_APPROLE_ROLE_ID` | Circular dependency — needed to auth to Vault |
 | `VAULT_APPROLE_SECRET_ID` | Circular dependency — needed to auth to Vault |
 | `VAULT_UNSEAL_KEYS` | Break-glass secret — must not depend on Vault |
+
+The Vault root token is in none of these: no job or helper uses it ([VAULT.md](VAULT.md), "Admin work by hand").
 | `ROUTER_PRIVATE_KEY_BASE64` | CI `before_script` writes the deploy key from this variable (a copy also sits in Vault `infrastructure/router`, read by nothing) |
 | `SMTP_PASSWORD` | Appears unused — candidate for deletion |
 

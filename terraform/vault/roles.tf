@@ -1,7 +1,7 @@
 # =============================================================================
 # JWT Role: ci-deploy
 # =============================================================================
-# Bound to the homelab project (ID 4), main branch only.
+# Bound to the homelab project (ID 4), protected main branch only.
 # CI jobs authenticate with $CI_JOB_JWT and receive a 5-minute token.
 
 resource "vault_jwt_auth_backend_role" "ci_deploy" {
@@ -12,9 +12,10 @@ resource "vault_jwt_auth_backend_role" "ci_deploy" {
   bound_audiences = ["https://vault.lab.nkontur.com:8200"]
 
   bound_claims = {
-    project_id = "4"
-    ref        = "main"
-    ref_type   = "branch"
+    project_id    = "4"
+    ref           = "main"
+    ref_type      = "branch"
+    ref_protected = "true"
   }
 
   user_claim      = "user_email"
@@ -92,7 +93,7 @@ resource "vault_approle_auth_backend_role" "router_helpers" {
 # Scoped admin role for the vault:configure CI job. Grants the vault-admin
 # policy so Terraform can manage auth backends, policies, and mounts.
 #
-# Tightly bound: only project 4 (homelab), only the main branch.
+# Tightly bound: only project 4 (homelab), only the protected main branch.
 # 15-minute TTL — enough for a terraform plan+apply cycle.
 
 resource "vault_jwt_auth_backend_role" "vault_admin" {
@@ -103,9 +104,10 @@ resource "vault_jwt_auth_backend_role" "vault_admin" {
   bound_audiences = ["https://vault.lab.nkontur.com:8200"]
 
   bound_claims = {
-    project_id = "4"
-    ref        = "main"
-    ref_type   = "branch"
+    project_id    = "4"
+    ref           = "main"
+    ref_type      = "branch"
+    ref_protected = "true"
   }
 
   user_claim     = "user_email"

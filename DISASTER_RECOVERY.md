@@ -274,7 +274,7 @@ export CLOUDFLARE_ZONE_ID="<from secure storage>"
 
 # Vault (needed in Phase 4.5 — Vault stays sealed without these)
 export VAULT_UNSEAL_KEYS="<3 of the 5 keys, one per line>"
-export VAULT_TOKEN="<vault root token>"
+export VAULT_TOKEN="<vault root token, break-glass copy; only for this phase>"
 
 # Optional services
 export GRAFANA_TOKEN="<from secure storage>"
@@ -415,9 +415,9 @@ Stop here if sealed=false. Everything below is Case B.
 > keys and the new root token. It is the only copy. If you lose it you are
 > rebuilding Vault from scratch a second time.
 
-Then paste the new keys into the `VAULT_UNSEAL_KEYS` CI/CD variable (protected)
-and the root token into `VAULT_TOKEN`, or every future pipeline re-seals on
-restart.
+Then paste the new keys into the `VAULT_UNSEAL_KEYS` CI/CD variable (protected),
+or every future pipeline re-seals on restart. Keep the root token as a
+break-glass secret off-box; do not put it in a CI variable (docs/VAULT.md).
 
 Everything in Vault is now gone, so it has to be rebuilt in this order:
 
@@ -429,14 +429,17 @@ export VAULT_ADDR="https://vault.lab.nkontur.com:8200"
 ```
 
 Normally the `vault:configure` CI job applies this (runs on `main` when
-`terraform/vault/**` changes). Its Terraform state lives in **GitLab**
+`terraform/vault/**` changes), but it logs in with the `vault-admin` JWT role,
+which this apply creates. On a fresh Vault, run this first apply by hand with
+the root token (`terraform -chdir=terraform/vault apply -var vault_token=...`,
+backend config as in the job); later changes go through CI. Its Terraform state lives in **GitLab**
 (`/api/v4/projects/<id>/terraform/state/vault`), so if GitLab was also lost and
 restored from restic, the state comes back with it. If the state is gone,
 Terraform will plan to create everything from nothing — which is correct here,
 but read the plan before applying.
 
 This creates the JWT backend (roles `ci-deploy`, `vault-admin`, `vault-read`,
-`ha-config-deploy`), the AppRole backend (roles `openclaw`, `jit-approval-svc`)
+`ha-config-deploy`), the AppRole backend (roles `openclaw`, `jit-approval-svc`, `router-helpers`)
 and the `ssh-client-signer` SSH CA. It does not create the `homelab/` KV mount
 (step 3).
 
@@ -447,7 +450,8 @@ recoverable. Run the manual **`vault:rotate-approles`** pipeline job, which
 generates fresh secret_ids, verifies a login with each before adopting it, and
 writes the `openclaw` pair back into the GitLab CI variables
 `VAULT_APPROLE_ROLE_ID` / `VAULT_APPROLE_SECRET_ID` and the `jit-approval-svc`
-pair into Vault `homelab/docker/jit-approval-svc` (so the `homelab/` mount from
+pair into Vault `homelab/docker/jit-approval-svc`, and the `router-helpers`
+pair into `homelab/infrastructure/router-helpers` (so the `homelab/` mount from
 step 3 must exist first). It needs `APPROLE_ROTATION_PAT` set, or the rotation
 succeeds in Vault and fails to update CI.
 
@@ -648,7 +652,7 @@ restic backup --dry-run /persistent_data/application
 | `CLOUDFLARE_API_KEY` | DDNS updates | Ansible (cron job) |
 | `CLOUDFLARE_ZONE_ID` | DNS zone identifier | Ansible (cron job) |
 | `VAULT_UNSEAL_KEYS` | Unseal Vault (3 of 5, one per line) | Phase 4.5 (`bootstrap.yml`) |
-| `VAULT_TOKEN` | Vault root token — enable KV v2, apply Terraform | Phase 4.5, `vault:configure` |
+| Vault root token | Enable KV v2, first Terraform apply on a re-initialised Vault. Break-glass, not a CI variable (docs/VAULT.md) | Phase 4.5 |
 | `APPROLE_ROTATION_PAT` | Write rotated secret_ids back to CI variables; enforce resource group / deployment settings | `vault:rotate-approles`, `gitlab:settings` |
 
 ### Optional Secrets
@@ -662,7 +666,7 @@ restic backup --dry-run /persistent_data/application
 
 ⚠️ **All secrets currently live only on the router.** Service secrets are in
 Vault (`homelab/` KV v2); GitLab CI keeps only the bootstrap set
-(`VAULT_UNSEAL_KEYS`, `VAULT_TOKEN`, `VAULT_APPROLE_ROLE_ID`/`_SECRET_ID`,
+(`VAULT_UNSEAL_KEYS`, `VAULT_APPROLE_ROLE_ID`/`_SECRET_ID`,
 `APPROLE_ROTATION_PAT`, `ROUTER_PRIVATE_KEY_BASE64` and the runner/automation
 tokens). The old service-secret CI variables are renamed `DEPRECATED_*` and
 nothing reads them.
