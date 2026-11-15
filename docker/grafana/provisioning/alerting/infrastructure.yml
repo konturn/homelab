@@ -279,6 +279,51 @@ groups:
         labels:
           severity: critical
 
+      # The pids-controller counterpart of kernel-oom-kill. When a cgroup hits
+      # its task limit (systemd TasksMax, or a container's pids_limit) the
+      # kernel refuses fork/clone and logs this line, naming the cgroup.
+      #
+      # Added after 2026-11-14 07:46:47Z: libvirtd went from ~0 to ~33k threads
+      # in 25 minutes, hit its unit's TasksMax, and has failed every thread
+      # create since ("failed to create mdevctl thread: Resource temporarily
+      # unavailable", ~100k journal lines/h). Host threads went 6.5k -> 40k and
+      # nothing alerted for over 24h. No metric shows it: telegraf has no
+      # per-unit or per-container task count here, only processes.total_threads.
+      #
+      # The kernel prints this line once per cgroup, at the first rejected
+      # fork, not on every rejection. So the rule fires once and resolves by
+      # itself after the 15m window, while the unit stays stuck. Resolved does
+      # not mean fixed; restarting the unit gives it a new cgroup and re-arms
+      # the line. 30d of Loki history: exactly one match, the incident above.
+      - uid: pids-limit-fork-rejected
+        title: Fork Rejected by pids Limit (TasksMax / pids_limit)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({job="systemd-journal"} |= "fork rejected by pids controller" [15m]))'
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: replaceNN, replaceWithValue: 0}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: KeepLast
+        # for: 0s for the same reason as kernel-oom-kill: one journal line,
+        # printed once.
+        for: 0s
+        annotations:
+          summary: "A service or container hit its task (pids) limit and can no longer fork or start threads"
+          description: "The kernel names the cgroup: journalctl -k --since '20 minutes ago' | grep 'fork rejected by pids controller'. This fires once and auto-resolves; the service stays stuck until restarted. Compare the unit's tasks with its limit: systemctl show <unit> -p TasksCurrent -p TasksMax (containers: docker stats --no-stream). Usually a thread leak, so find out why before raising the limit."
+        labels:
+          severity: warning
+
       # Container OOM Kill above only fires *after* the kernel has already killed
       # the container. For anything that other services depend on, that is too
       # late: influxdb dying takes every alert in this file down with it, because
