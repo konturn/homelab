@@ -233,7 +233,7 @@ passed on the latest commit, no `freeze`, `security` or `major` label, and:
 - **Compose** (`docker/docker-compose.yml`, `docker/docker-compose-observability.yml`, `docker/docker-compose-zwave.yml`): the value of an existing `deploy.resources` memory/cpus limit or reservation, within 0.5x-2x of the old value; an existing `*LOG_LEVEL`/`*LOGLEVEL` env value, to a known level; comment lines without `{ }` outside block scalars. Not for anomaly-detector, chromium-browser, docker-socket-proxy, gitlab, iot_nginx, jit-approval-svc, lab_nginx, nginx, vault, init containers or any openclaw/moltbot service.
 - **Alert rules** (`docker/grafana/provisioning/alerting/infrastructure.yml`, `docker/grafana/provisioning/alerting/anomaly.yml`), existing rules only: `for`, summary/description, severity (critical/warning/info), threshold numbers. No rule added, removed or reordered.
 - **Dashboards** (`docker/grafana/provisioning/dashboards/json/*.json`): keep the uid, add no datasource.
-- **Docs** (`docs/*.md`, `docs/**/*.md`, `README.md`, `docs/**/README*.md`), except AUTOMERGE.md, DISASTER_RECOVERY.md, RENOVATE.md, DEPLOY.md, FIREWALL.md, SECRET_ROTATION.md, VAULT.md, GITLAB_SETTINGS.md, docker-proxy-architecture.md, jit-*, *security*, *SECURITY* under docs/.
+- **Docs** (`docs/*.md`, `docs/**/*.md`, `README.md`, `docs/**/README*.md`), except AUTOMERGE.md, DISASTER_RECOVERY.md, RENOVATE.md, DEPLOY.md, FIREWALL.md, SECRET_ROTATION.md, GITLAB_SETTINGS.md, docker-proxy-architecture.md, jit-*, *security*, *SECURITY* under docs/.
 
 Keep one concern per MR so it can qualify. If a change falls outside these
 rules, open the MR and leave it for Noah; never split or reshape a change to

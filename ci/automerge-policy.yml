@@ -197,7 +197,6 @@ bot_config:
     - docs/DEPLOY.md
     - docs/FIREWALL.md
     - docs/SECRET_ROTATION.md
-    - docs/VAULT.md
     - docs/GITLAB_SETTINGS.md
     - docs/docker-proxy-architecture.md
     - docs/jit-*
