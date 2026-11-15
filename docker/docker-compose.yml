@@ -1224,6 +1224,8 @@ services:
       - '{{ docker_persistent_data_path }}/gitlab/logs:/var/log/gitlab'
       - '{{ docker_persistent_data_path }}/gitlab/data:/var/opt/gitlab'
       - '{{ docker_persistent_data_path }}/gitlab/license_encryption_key.pub:/opt/gitlab/embedded/service/gitlab-rails/.license_encryption_key.pub:ro'
+      # LabKit SQL span name fix (issue #163), docker/gitlab/initializers/.
+      - '{{ docker_persistent_data_path }}/gitlab/rails-initializers/homelab_labkit_sql_span_name.rb:/opt/gitlab/embedded/service/gitlab-rails/config/initializers/homelab_labkit_sql_span_name.rb:ro'
     environment:
       MALLOC_CONF: 'dirty_decay_ms:1000,muzzy_decay_ms:1000'
     healthcheck:
