@@ -2255,6 +2255,42 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+  # Litter-Robot 4 broker (docs/litter-robot.md): mutual TLS on 8883 for the
+  # robots, ACL per robot, bridged to mosquitto for Home Assistant. Same image
+  # as mosquitto. Runs as the image's mosquitto user (1883) with no
+  # capabilities: the entrypoint only chowns /mosquitto/data when root, and
+  # there is no data (persistence off). Config, CA, server certificate and key
+  # are rendered from the repo and Vault (docker_config, mode 0400, uid 1883).
+  lr4-broker:
+    container_name: lr4-broker
+    image: eclipse-mosquitto:2.1.2-alpine@sha256:75d6662dee52c947dc9dd9c29f1d8d7ffef78ddaf38001caa09755681e8bbc98
+    user: "1883:1883"
+    security_opt:
+      - no-new-privileges=true
+    cap_drop:
+      - ALL
+    read_only: true
+    restart: unless-stopped
+    networks:
+      iot:
+        ipv4_address: {{ lr4_broker_address }}
+    extra_hosts:
+      - "mqtt.lab.nkontur.com:{{ mosquitto_address }}"
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    volumes:
+      - "{{ docker_persistent_data_path }}/lr4-broker:/mosquitto/config:ro"
+    # Listening socket on 8883 (0x22B3) in /proc/net/tcp{,6}, without
+    # connecting: a TCP probe of a TLS listener that demands a certificate
+    # logs a failed handshake every interval.
+    healthcheck:
+      test: ["CMD-SHELL", "grep -qs ':22B3 [0-9A-F]*:0000 0A' /proc/net/tcp /proc/net/tcp6"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
   amcrest2mqtt:
     container_name: amcrest2mqtt
     security_opt:

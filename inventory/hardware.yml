@@ -346,9 +346,9 @@ network_devices:
     mac_var: frame_tv_mac
     vlan: 6
   litter_robots:
-    desc: Litter-Robot 4 x2, litter_robot_{1,2}_address (cloud only)
+    desc: Litter-Robot 4 x2 (cloud only)
     vlan: 6
-    note: Whiskerless pending.
+    note: "Local plan: docs/litter-robot.md"
   petlibro_feeder:
     desc: PETLIBRO PLAF203 feeder (cloud only)
     address_var: petlibro_feeder_address

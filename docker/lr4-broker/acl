@@ -1,0 +1,13 @@
+# lr4-broker ACL (docs/litter-robot.md). Usernames are certificate CNs
+# (use_identity_as_username). Serials never appear here: they are only in the
+# robots' certificates.
+
+# Each Litter-Robot (CN = its serial): its own subtree only. It publishes
+# prod/LR4/<serial>/state and /activity and subscribes to /command.
+pattern readwrite prod/LR4/%u/#
+
+# The whiskerless CLI identity (Vault pki/whiskerless/cli), for status,
+# monitor and calibrate from a laptop. Commands still pass the CLI's own
+# safety guard.
+user whiskerless-cli
+topic readwrite prod/LR4/#

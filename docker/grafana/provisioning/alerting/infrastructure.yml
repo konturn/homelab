@@ -2995,3 +2995,57 @@ groups:
           description: "zwavejs2mqtt on the zwave Pi has logged no 'Value updated' line in 15 minutes (normally several a minute). Check the Pi is up and shipping logs (Host Metrics Stale), then the container (docker logs --tail 50 zwavejs2mqtt on zwave.lab.nkontur.com) and the Zooz stick (/dev/serial/by-id/usb-Silicon_Labs_Zooz_ZST10_700*). Deps: inventory/dependencies.yml."
         labels:
           severity: warning
+
+  # =========================================================================
+  # Litter-Robot 4 on lr4-broker (docs/litter-robot.md, "Monitoring")
+  # =========================================================================
+  # A robot's MQTT client can wedge: the broker drops the session on
+  # keepalive, the robot's reconnects abort mid-handshake and it stops trying
+  # while still answering ping. The robot keeps cycling normally, so this is
+  # about visibility, not safety. One wedge recovered by itself after ~90
+  # minutes, hence 2 hours. Only robots that have published here have a
+  # series (telegraf lr4_mqtt), so robots still on the cloud never alert.
+  # Routed like every alert to the event router (no email class).
+  - orgId: 1
+    name: litter-robot-alerts
+    folder: General Alerting
+    interval: 5m
+    rules:
+      - uid: lr4-mqtt-silent
+        title: Litter-Robot MQTT Silent (local robot off lr4-broker)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 604800, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -7d)
+                  |> filter(fn: (r) => r._measurement == "lr4_mqtt")
+                  |> filter(fn: (r) => r._field == "messages_count")
+                  |> group(columns: ["serial"])
+                  |> last()
+                  |> map(fn: (r) => ({
+                      serial: r.serial,
+                      _time: now(),
+                      _value: float(v: int(v: now()) - int(v: r._time)) / 3600000000000.0,
+                    }))
+                  |> keep(columns: ["_time", "_value", "serial"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: max, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [2]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        annotations:
+          summary: "Litter-Robot {{ $labels.serial }} has sent nothing over MQTT for {{ $values.B }} hours"
+          description: "A provisioned robot normally publishes every few seconds. If only this robot is silent: docker logs lr4-broker | grep <serial>. 'has exceeded timeout' followed by handshake errors and then nothing means its MQTT client wedged: power-cycle the robot (unplug ~10 s). If every local robot is silent at once, look at the path instead: lr4-broker running and its bridge connected (docker logs lr4-broker), the lr4-bridge and lr4-monitor users on mosquitto, telegraf. A robot moved back to the cloud on purpose keeps this firing for up to 7 days: silence it in Grafana by serial. docs/litter-robot.md."
+        labels:
+          severity: warning

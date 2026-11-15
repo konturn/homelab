@@ -633,6 +633,31 @@
     - { src: /usr/local/lib/ha-helpers/hews.py, dest: /root/hews.py }
   when: "'router' in inventory_hostname"
 
+### Litter-Robot 4 helpers (docs/litter-robot.md): lr4ctl for root (cert
+# bundles from Vault, broker status), and the laptop side (whiskerless-mac and
+# its hash-locked requirements) staged in /usr/local/share/lr4 for scp.
+- name: Litter-Robot laptop files directory
+  ansible.builtin.file:
+    path: /usr/local/share/lr4
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: "'router' in inventory_hostname"
+
+- name: Install the Litter-Robot helpers
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/scripts/litter-robot/{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - { src: lr4ctl, dest: /usr/local/sbin/lr4ctl, mode: "0700" }
+    - { src: whiskerless-mac, dest: /usr/local/share/lr4/whiskerless-mac, mode: "0755" }
+    - { src: requirements-macos.txt, dest: /usr/local/share/lr4/requirements-macos.txt, mode: "0644" }
+  when: "'router' in inventory_hostname"
+
 ### Edge quarantine + safe nginx reload (docker/nginx/edge-quarantine/README.md)
 # nginx-safe-reload: nginx -t, graceful reload, then fail if the master logged
 # [emerg] or started no new workers (it keeps serving the old config either
@@ -1192,6 +1217,36 @@
     PW: "{{ vault_airplay_mqtt_password }}"
   register: _airplay_mqtt_user
   changed_when: "'added' in _airplay_mqtt_user.stdout"
+  no_log: true
+  when: "'router' in inventory_hostname and not ansible_check_mode"
+
+### MQTT users for lr4-broker (docs/litter-robot.md), same pattern as the
+# anomaly-detector user above: lr4-bridge is lr4-broker's bridge into
+# mosquitto, lr4-monitor is telegraf's heartbeat subscriber (telegraf.conf).
+- name: Ensure the lr4-broker MQTT users exist
+  ansible.builtin.shell: |
+    set -euo pipefail
+    f={{ docker_persistent_data_path }}/mqtt/conf/mosquitto.passwd
+    if grep -q "^${MQTT_USER}:" "$f"; then echo present; exit 0; fi
+    [ -n "${PW:-}" ]
+    docker exec -e PW -e MQTT_USER mosquitto sh -c 'mosquitto_passwd -b /mosquitto/config/mosquitto.passwd "$MQTT_USER" "$PW"'
+    chown 1883:1883 "$f"
+    chmod 0700 "$f"
+    grep -q "^${MQTT_USER}:" "$f"
+    docker kill -s HUP mosquitto >/dev/null
+    echo added
+  args:
+    executable: /bin/bash
+  environment:
+    MQTT_USER: "{{ item.user }}"
+    PW: "{{ lookup('ansible.builtin.vars', item.var) }}"
+  loop:
+    - {user: lr4-bridge, var: vault_lr4_bridge_password}
+    - {user: lr4-monitor, var: vault_lr4_monitor_password}
+  loop_control:
+    label: "{{ item.user }}"
+  register: _lr4_mqtt_users
+  changed_when: "'added' in _lr4_mqtt_users.stdout"
   no_log: true
   when: "'router' in inventory_hostname and not ansible_check_mode"
 

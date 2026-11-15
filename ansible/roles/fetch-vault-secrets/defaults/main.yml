@@ -237,6 +237,19 @@ vault_secret_paths:
     fields:
       vault_mqtt_pass: "password"
 
+  # lr4-broker, the Litter-Robots' broker (docs/litter-robot.md): its CA
+  # certificate, server certificate and key (rendered into its config
+  # directory), and the passwords of its two users on mosquitto: the bridge
+  # and telegraf's heartbeat subscriber. The CA key and the robots'
+  # certificates (pki/whiskerless...) are not read by the deploy.
+  - path: "docker/lr4-broker"
+    fields:
+      vault_lr4_broker_ca_crt: "ca_crt"
+      vault_lr4_broker_server_crt: "server_crt"
+      vault_lr4_broker_server_key: "server_key"
+      vault_lr4_bridge_password: "bridge_password"
+      vault_lr4_monitor_password: "monitor_password"
+
   # Moltbot tokens
   - path: "openclaw/tokens"
     fields:
@@ -300,6 +313,13 @@ vault_secret_paths:
     fields:
       vault_ha_miele_lan_deploy_user: "deploy_token_username"
       vault_ha_miele_lan_deploy_token: "deploy_token"
+
+  # Read-only (read_repository) deploy token of root/ha-whiskerless, the
+  # pinned whiskerless integration (homeassistant_custom_components.yml)
+  - path: "gitlab/ha-whiskerless"
+    fields:
+      vault_ha_whiskerless_deploy_user: "deploy_token_username"
+      vault_ha_whiskerless_deploy_token: "deploy_token"
 
   # Read-only deploy token of root/hcpy, the pinned Home Connect bridge that
   # the deploy builds into a local image (hcpy.yml)

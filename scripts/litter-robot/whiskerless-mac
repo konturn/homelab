@@ -1,0 +1,126 @@
+#!/bin/bash
+# whiskerless-mac: the pinned whiskerless CLI on a Mac, for provisioning a
+# Litter-Robot 4 onto lr4-broker over Bluetooth (docs/litter-robot.md).
+#
+#   whiskerless-mac install                       pinned CLI into ~/.local/share/whiskerless-homelab
+#   whiskerless-mac setup                         CA + this laptop's identity (from Vault, via the router)
+#   whiskerless-mac provision <robot> [--dry-run] [more `whiskerless provision` options]
+#   whiskerless-mac status                        broker side: bridge, which robots publish (via the router)
+#   whiskerless-mac cli <args...>                 any whiskerless command against this store
+#
+# <robot>: movie-room or main (Vault homelab/pki/whiskerless/robots/<robot>).
+#
+# Certificates and keys come from Vault through `ssh root@10.4.0.1 lr4ctl
+# bundle ...` into a private temp dir that is deleted on exit. The signing
+# key never leaves Vault: the CLI runs in `--auth supplied` mode. After a
+# provision, whiskerless keeps the robot's certificate in its store
+# (~/.local/share/whiskerless-homelab/store, 0700), as it is designed to.
+#
+# Install from the router (files deployed to /usr/local/share/lr4/):
+#   mkdir -p ~/lr4 && scp 'root@10.4.0.1:/usr/local/share/lr4/*' ~/lr4/ && ~/lr4/whiskerless-mac install
+set -euo pipefail
+
+ROUTER=${LR4_ROUTER:-root@10.4.0.1}
+BASE=${WHISKERLESS_HOMELAB:-$HOME/.local/share/whiskerless-homelab}
+VENV=$BASE/venv
+WANT_VERSION=0.2.0-rc.76
+HERE=$(cd "$(dirname "$0")" && pwd)
+export WHISKERLESS_HOME=$BASE/store WHISKERLESS_NO_UPDATE_CHECK=1
+
+die() { echo "whiskerless-mac: $*" >&2; exit 1; }
+wl() { "$VENV/bin/whiskerless" "$@"; }
+
+need_install() {
+  [ -x "$VENV/bin/whiskerless" ] || die "not installed yet: run '$0 install'"
+  local v; v=$(wl --version 2>/dev/null | awk '{print $2}')
+  [ "$v" = "$WANT_VERSION" ] || die "installed CLI is '$v', want $WANT_VERSION: run '$0 install'"
+}
+
+# Fetch a bundle from the router into $TMPD (files ca.crt, id.crt, id.key,
+# and the robot's serial in $SERIAL, broker in $HOST).
+fetch() {
+  local who=$1 json
+  json=$(ssh -o BatchMode=yes -o ConnectTimeout=10 "$ROUTER" lr4ctl bundle "$who") \
+    || die "could not fetch '$who' from the router (ssh $ROUTER lr4ctl bundle $who)"
+  BUNDLE_JSON=$json "$VENV/bin/python" -I - "$TMPD" <<'EOF'
+import json, os, sys
+from pathlib import Path
+d = json.loads(os.environ["BUNDLE_JSON"]); t = Path(sys.argv[1])
+for name, key in (("ca.crt", "ca_crt"), ("id.crt", "crt"), ("id.key", "key")):
+    p = t / name
+    p.touch(mode=0o600)
+    p.write_text(d[key].strip() + "\n")
+(t / "host").write_text(d["host"])
+(t / "serial").write_text(d.get("serial", ""))
+EOF
+  HOST=$(cat "$TMPD/host"); SERIAL=$(cat "$TMPD/serial")
+}
+
+new_tmp() {
+  TMPD=$(mktemp -d "${TMPDIR:-/tmp}/lr4.XXXXXX")
+  chmod 0700 "$TMPD"
+  trap 'rm -rf "$TMPD"' EXIT
+}
+
+do_setup() {
+  need_install
+  new_tmp
+  fetch cli
+  echo "== whiskerless setup: broker $HOST, --auth supplied (CA and laptop identity from Vault)"
+  wl setup --auth supplied --host "$HOST" --ca "$TMPD/ca.crt" \
+    --client-cert "$TMPD/id.crt" --client-key "$TMPD/id.key"
+  rm -rf "$TMPD"; trap - EXIT
+}
+
+case "${1:-}" in
+  install)
+    py=""
+    for c in /opt/homebrew/bin/python3 /usr/local/bin/python3 python3; do
+      if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
+        py=$(command -v "$c"); break
+      fi
+    done
+    [ -n "$py" ] || die "need Python 3.11 or newer (brew install python)"
+    [ -f "$HERE/requirements-macos.txt" ] || die "requirements-macos.txt must be next to this script"
+    install -d -m 0700 "$BASE"
+    rm -rf "$VENV"
+    "$py" -m venv "$VENV"
+    "$VENV/bin/python" -m pip install -q --upgrade pip
+    "$VENV/bin/python" -m pip install -q --require-hashes --only-binary :all: --no-deps \
+      -r "$HERE/requirements-macos.txt"
+    need_install
+    echo "installed: $(wl --version) ($VENV, $("$VENV/bin/python" --version))"
+    ;;
+  setup)
+    do_setup
+    ;;
+  provision)
+    robot=${2:-}
+    case "$robot" in
+      movie-room) name="Movie Room" ;;
+      main) name="Main" ;;
+      *) die "usage: $0 provision movie-room|main [--dry-run] [...]" ;;
+    esac
+    shift 2
+    do_setup
+    new_tmp
+    fetch "$robot"
+    [[ $SERIAL =~ ^LR4C[0-9]+$ ]] || die "Vault has no LR4C serial for '$robot'"
+    echo "== $name: serial $SERIAL, broker $HOST"
+    echo "   Check the serial against the robot's label (unhyphenated LR4C... line)."
+    wl provision --serial "$SERIAL" --name "$name" \
+      --robot-cert "$TMPD/id.crt" --robot-key "$TMPD/id.key" "$@"
+    ;;
+  status)
+    ssh -o BatchMode=yes -o ConnectTimeout=10 "$ROUTER" lr4ctl status "${2:-20}"
+    ;;
+  cli)
+    need_install
+    shift
+    wl "$@"
+    ;;
+  *)
+    sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'
+    exit 2
+    ;;
+esac

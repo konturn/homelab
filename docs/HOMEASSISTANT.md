@@ -210,12 +210,13 @@ HACS in 2026.11):
 | frigate | `blakeblackshear/frigate-hass-integration` | **Not from the Marketplace**: copied by hand into `custom_components/frigate/` (v5.15.6), so the Marketplace does not track or upgrade it. See docs/frigate.md |
 | toyota_connected | private fork `root/ha-toyota-connected` (GitLab) | **Not from the Marketplace**: installed by the deploy, pinned to a commit. See below |
 | miele_lan | private fork `root/ha-miele-at-lan` (GitLab) of `tiehfood/ha-miele-at-lan` | **Not from the Marketplace**: pinned like toyota_connected. See "Miele" |
+| whiskerless | private fork `root/ha-whiskerless` (GitLab) of `SisyphusMD/whiskerless` | **Not from the Marketplace**: pinned like toyota_connected. Litter-Robot 4, local MQTT through lr4-broker. See "Litter-Robot 4" |
 
 So there are three ways a custom integration gets into `custom_components/`:
 
 - **Marketplace** (default): installed and upgraded in the UI; the
   Marketplace tracks the version and shows update notices.
-- **Pinned from a private fork** (toyota_connected, miele_lan): listed in
+- **Pinned from a private fork** (toyota_connected, miele_lan, whiskerless): listed in
   `homeassistant_pinned_integrations` and synced by every deploy (below).
   Use this for an integration that needs local patches or should only change
   through a reviewed MR.
@@ -320,6 +321,17 @@ by the appliance (SuperVision), with slow polling as a fallback. The cloud
   by default (fork patch). Status, program, phase and times are enabled.
 - **Do not** use MieleRESTServer or `tools/miele_lan_provision.py`: they
   re-commission the appliance, which breaks its cloud pairing and the app.
+
+## Litter-Robot 4 (cloud now, whiskerless when provisioned)
+
+Both robots are on the core `litterrobot` integration (Whisker cloud, set up
+in the UI) until each one is provisioned onto lr4-broker. The `whiskerless`
+integration is installed (pinned fork) but has **no config entry** yet. A
+provisioned robot shows up under *Discovered* (MQTT discovery on
+`prod/LR4/+/state`, bridged from lr4-broker into mosquitto), and is added
+there. Keep the cloud entry until both robots have moved; delete only the
+moved robot's device from it. The full procedure, rollback and monitoring are
+in docs/litter-robot.md.
 
 ## Thermador (Home Connect, local via hcpy)
 
