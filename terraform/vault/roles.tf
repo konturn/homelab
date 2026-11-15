@@ -64,6 +64,29 @@ resource "vault_approle_auth_backend_role" "jit_approval_svc" {
 }
 
 # =============================================================================
+# AppRole Role: router-helpers
+# =============================================================================
+# Root's helpers on the router (policy router-helpers). role_id and secret_id
+# live in Vault KV (homelab/infrastructure/router-helpers), the router deploy
+# writes them to a root-only file, and vault:rotate-approles rotates them.
+# Logins and tokens are bound to the router's address as Vault sees it.
+
+resource "vault_approle_auth_backend_role" "router_helpers" {
+  backend        = vault_auth_backend.approle.path
+  role_name      = "router-helpers"
+  token_policies = ["router-helpers"]
+  token_ttl      = 300
+  token_max_ttl  = 900
+
+  secret_id_bound_cidrs = ["10.3.0.2/32"]
+  token_bound_cidrs     = ["10.3.0.2/32"]
+
+  secret_id_ttl      = 0
+  token_num_uses     = 0
+  secret_id_num_uses = 0
+}
+
+# =============================================================================
 # JWT Role: vault-admin
 # =============================================================================
 # Scoped admin role for the vault:configure CI job. Grants the vault-admin

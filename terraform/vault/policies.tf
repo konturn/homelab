@@ -83,12 +83,34 @@ resource "vault_policy" "vault_admin" {
       capabilities = ["create", "read", "update", "delete", "list"]
     }
 
+    # Enable, tune and read auth methods (vault_auth_backend,
+    # vault_jwt_auth_backend). Enabling one requires sudo.
+    path "sys/auth" {
+      capabilities = ["read", "list", "sudo"]
+    }
+    path "sys/auth/*" {
+      capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+    }
+
     # Manage secret mounts
     path "sys/mounts/*" {
       capabilities = ["create", "read", "update", "delete", "list"]
     }
     path "sys/mounts" {
       capabilities = ["read", "list"]
+    }
+    # Auth mount tuning; Vault 2.2 requires sudo to read it
+    path "sys/mounts/auth/*" {
+      capabilities = ["create", "read", "update", "list", "sudo"]
+    }
+
+    # Audit devices (vault_audit): read and enable. Disabling one is left
+    # to the root token.
+    path "sys/audit" {
+      capabilities = ["read", "list", "sudo"]
+    }
+    path "sys/audit/*" {
+      capabilities = ["create", "update", "sudo"]
     }
 
     # Read health and seal status (monitoring, not control)
@@ -123,6 +145,42 @@ resource "vault_policy" "vault_admin" {
     }
     path "sys/generate-root*" {
       capabilities = ["deny"]
+    }
+  EOT
+}
+
+# =============================================================================
+# Policy: router-helpers
+# =============================================================================
+# Root's helpers on the router (scripts/vault-router-token, docs/VAULT.md):
+# haapi/hews, scripts/gitlab-settings.sh, scripts/set-deadman-ping-url.sh and
+# the hand-run amcrestctl/slzbctl. Exact paths only; AppRole in roles.tf.
+
+resource "vault_policy" "router_helpers" {
+  name = "router-helpers"
+
+  policy = <<-EOT
+    # haapi, hews: Home Assistant API token
+    path "homelab/data/docker/homeassistant" {
+      capabilities = ["read"]
+    }
+
+    # scripts/gitlab-settings.sh: gitlab_webhook_token
+    path "homelab/data/docker/event-router" {
+      capabilities = ["read"]
+    }
+
+    # networking/amcrest, networking/slzb (vault_path of their files)
+    path "homelab/data/cameras/rear" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/infrastructure/slzb" {
+      capabilities = ["read"]
+    }
+
+    # scripts/set-deadman-ping-url.sh writes the ping URL
+    path "homelab/data/monitoring/healthchecks" {
+      capabilities = ["create", "update", "read"]
     }
   EOT
 }
