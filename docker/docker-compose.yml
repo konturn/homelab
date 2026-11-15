@@ -978,6 +978,9 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD={{ vault_grafana_admin_password | trim | replace("$", "$$") }}
       - GF_SERVER_ROOT_URL=https://grafana.lab.nkontur.com
       - GF_USERS_ALLOW_SIGN_UP=false
+      # Grafana is only meant to be used through https://grafana.lab.nkontur.com;
+      # never send the session cookie over plain HTTP.
+      - GF_SECURITY_COOKIE_SECURE=true
       - INFLUXDB_TOKEN={{ vault_influxdb_grafana_read_token | trim | replace("$", "$$") }}
       # SMTP for email alerts
       - GF_SMTP_ENABLED=true
