@@ -108,6 +108,11 @@ denominator.
   reads the miniDSP units, measurement `minidsp`; see `docs/minidsp.md`)
 - Org: `homelab`, Bucket: `metrics`
 - ~117 input plugin instances covering Docker, system, SNMP, services, etc.
+- The router's Docker input skips GitLab CI job containers (`runner-*`). Each job
+  has a unique name, so its series are written once and never read; they were
+  about three quarters of all series in the `metrics` bucket, which keeps data
+  forever. Throwaway containers run without `--name` (random names, e.g. trivy
+  scans) are still collected.
 - Query via Grafana dashboards with Flux
 
 ### Traces + OTLP Metrics: otel-collector → Tempo / InfluxDB
