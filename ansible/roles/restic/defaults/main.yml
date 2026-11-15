@@ -90,6 +90,13 @@ restic_check_read_data_subset: "5%"
 # The daily backup holds the lock for hours, so with the restic default of
 # 0s an overlapping check fails immediately instead of waiting its turn.
 restic_check_retry_lock: "2h"
+# How long the nightly backup's own lock-taking steps (the pre-backup check,
+# each backup, forget) wait for the repository lock. frigate-backup-events
+# runs at :05 and :35 against the same repository, and since the Mac mini pull
+# (restic_backup_pre_units) pushes the backup start to about 03:05, the
+# pre-backup check can land on its lock; with restic's default of 0s it then
+# fails the whole unit (2026-11-10). An events run holds the lock for ~2 min.
+restic_backup_retry_lock: "30m"
 
 # Deletion resistance on Backblaze B2 (docs/backups.md, "Deletion resistance").
 # The design relies on two B2 properties: a key without deleteFiles can only
