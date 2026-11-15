@@ -23,9 +23,12 @@ log() { echo "frigate-backup[$mode]: $*"; }
 # are "activating", and `systemctl is-active` is true only for "active", so it
 # never sees them running (2026-11-14: events started during the pre-backup
 # check's exclusive lock). Compare ActiveState instead.
+# restic-check (weekly deep check) and restic-prune take an exclusive lock for
+# longer than restic's 10 min lock wait, so they count too (2026-11-15).
 main_backup_active() {
   local u state
-  for u in restic-backup.service restic-db-dumps.service restic-macmini-pull.service; do
+  for u in restic-backup.service restic-db-dumps.service restic-macmini-pull.service \
+           restic-check.service restic-prune.service; do
     state=$(systemctl show -p ActiveState --value "$u" 2>/dev/null || true)
     case "$state" in active|activating|reloading|deactivating) return 0 ;; esac
   done

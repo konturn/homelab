@@ -122,8 +122,10 @@ credentials are stored.
 - **Main backup window.** `restic-backup.service` runs `restic check` before
   and `restic forget` after its backups. Both take an exclusive lock without
   `--retry-lock`, so a Frigate job holding a lock would fail the main backup.
-  The events job skips 02:00-03:00 and every run while `restic-backup` or
-  `restic-db-dumps` is active. Its runs are capped at 25 min, so none can
+  The events job skips 02:00-03:00 and every run while `restic-backup`,
+  `restic-db-dumps`, `restic-macmini-pull`, the weekly `restic-check` or
+  `restic-prune` is active (the last two hold an exclusive lock for longer
+  than restic's 10 min lock wait). Its runs are capped at 25 min, so none can
   reach 03:00. The recordings job waits up to 3 h for a running main backup
   (which has run until 06:08).
 - Failures go through `restic-notify-failure@` (mail and journal), as for the
