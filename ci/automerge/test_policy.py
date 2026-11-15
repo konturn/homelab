@@ -343,5 +343,110 @@ class HeavyChangeTests(unittest.TestCase):
         self.assertFalse(v.heavy)
 
 
+class AnchoredImageTests(unittest.TestCase):
+    """An image shared through a top-level extension field (`x-airplay:
+    &airplay` + `<<: *airplay`, the AirPlay receivers): one edited line, one
+    ImageChange per service that takes it."""
+
+    ANCHORED = f"""x-recv: &recv
+  image: example/recv:5.5.2@{D1}
+  restart: unless-stopped
+  deploy:
+    resources:
+      limits:
+        memory: 96M
+services:
+  recv_a:
+    <<: *recv
+    container_name: recv_a
+  # second receiver
+  recv_b:
+    container_name: recv_b
+    <<: *recv  # shared
+  radarr:
+    image: linuxserver/radarr:6.0.4.10291-ls292@{D1}
+"""
+    OLD = f"recv:5.5.2@{D1}"
+
+    def run_eval(self, base, head, allow=None):
+        return policy.evaluate_mr(
+            author="moltbot", target_branch="main", labels=[],
+            files=[FileChange(path=policy.COMPOSE_PATH)],
+            base_compose=base, head_compose=head, allowlist=allow or ALLOW,
+            codeowners_text=CODEOWNERS, merger=None)
+
+    def test_minor_bump_changes_every_user(self):
+        head = edit(self.ANCHORED, self.OLD, f"recv:5.6.3@{D2}")
+        changes = policy.diff_compose(self.ANCHORED, head)
+        self.assertEqual([(c.service, c.kind, c.line) for c in changes],
+                         [("recv_a", "minor", 2), ("recv_b", "minor", 2)])
+        v = self.run_eval(self.ANCHORED, head)
+        self.assertTrue(v.eligible, v.reasons)
+        self.assertEqual(sorted(c.service for c in v.changes), ["recv_a", "recv_b"])
+
+    def test_digest_refresh_ok(self):
+        head = edit(self.ANCHORED, self.OLD, f"recv:5.5.2@{D2}")
+        self.assertEqual({c.kind for c in policy.diff_compose(self.ANCHORED, head)}, {"digest"})
+
+    def test_major_rejected(self):
+        head = edit(self.ANCHORED, self.OLD, f"recv:6.0.0@{D2}")
+        with self.assertRaises(policy.MajorVersionChange):
+            policy.diff_compose(self.ANCHORED, head)
+
+    def test_unpinned_or_renamed_rejected(self):
+        for new in ("recv:5.6.3", f"other:5.6.3@{D2}"):
+            head = edit(self.ANCHORED, self.OLD, new)
+            with self.assertRaises(PolicyError, msg=new):
+                policy.diff_compose(self.ANCHORED, head)
+
+    def test_other_anchor_lines_rejected(self):
+        head = edit(self.ANCHORED, "memory: 96M", "memory: 4G")
+        with self.assertRaisesRegex(PolicyError, "not a service image line"):
+            policy.diff_compose(self.ANCHORED, head)
+
+    def test_denylisted_user_blocks_all(self):
+        allow = dict(ALLOW, denylist={"services": {"recv_b": "test"}})
+        head = edit(self.ANCHORED, self.OLD, f"recv:5.6.3@{D2}")
+        v = self.run_eval(self.ANCHORED, head, allow)
+        self.assertFalse(v.eligible)
+        self.assertTrue(v.denied)
+
+    def test_profile_only_user_blocks_all(self):
+        base = edit(self.ANCHORED, "    container_name: recv_b\n", "    container_name: recv_b\n    profiles: [old]\n")
+        head = edit(base, self.OLD, f"recv:5.6.3@{D2}")
+        v = self.run_eval(base, head)
+        self.assertFalse(v.eligible)
+        self.assertIn("profile", " ".join(v.reasons))
+
+    def test_service_with_own_image_is_not_a_user(self):
+        base = edit(self.ANCHORED, "    container_name: recv_a\n",
+                    f"    container_name: recv_a\n    image: example/recv:5.5.2@{D1}\n")
+        head = edit(base, f"  image: example/{self.OLD}", f"  image: example/recv:5.6.3@{D2}")
+        self.assertEqual([c.service for c in policy.diff_compose(base, head)], ["recv_b"])
+
+    def test_unsafe_anchor_uses_are_not_eligible(self):
+        """Any use of the anchor other than a service's own `<<: *anchor`
+        leaves the anchored image line outside the policy."""
+        variants = {
+            "alias elsewhere": self.ANCHORED + "networks:\n  n: *recv\n",
+            "merge list": self.ANCHORED.replace("    <<: *recv  # shared", "    <<: [*recv]"),
+            "nested merge": self.ANCHORED.replace("    container_name: recv_a",
+                                                  "    container_name: recv_a\n    logging:\n      <<: *recv"),
+            "anchor redefined": self.ANCHORED + "x-other: &recv\n  restart: always\n",
+            "no users": self.ANCHORED.replace("<<: *recv", "restart: always"),
+            "not an extension field": self.ANCHORED.replace("x-recv: &recv", "defaults: &recv"),
+            "nested image": self.ANCHORED.replace("  image: example", "  build:\n    image: example"),
+        }
+        for name, base in variants.items():
+            head = base.replace(self.OLD, f"recv:5.6.3@{D2}", 1)
+            self.assertNotEqual(base, head, name)
+            with self.assertRaises(PolicyError, msg=name):
+                policy.diff_compose(base, head)
+
+    def test_compose_anchor_images(self):
+        self.assertEqual(policy.compose_anchor_images(self.ANCHORED), {1: ("x-recv", ["recv_a", "recv_b"])})
+        self.assertEqual(policy.compose_anchor_images(BASE), {})
+
+
 if __name__ == "__main__":
     unittest.main()

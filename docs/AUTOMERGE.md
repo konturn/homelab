@@ -100,6 +100,17 @@ these hold:
    - either only the digest changed (same tag; this includes pinning a digest),
      or the tag is a version upgrade within the same major version. See
      [Major versions](#major-versions).
+
+   A shared image counts as the `image:` line of every service that takes it:
+   an `image:` key directly under a top-level extension field with an anchor
+   (`x-airplay: &airplay`), used only as `<<: *airplay` directly under
+   services (the `airplay_*` receivers). Editing that one line is one change
+   per such service (a service with its own `image:` is not one), and rule 4
+   and the deploy apply to each: all are deployed, health-gated and
+   rolled back together, and one denylisted or profile-only user keeps the
+   whole MR manual. Any other use of the anchor (an alias outside a service's
+   own `<<:`, a merge list, a second anchor of that name, a nested `image:`)
+   leaves the line outside the policy.
 4. No changed service or image is on the denylist, no changed service has
    compose `profiles` (in either version of the file), and the update kind
    (`digest`, `patch` or `minor`) is one the service allows: all three unless
