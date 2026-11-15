@@ -82,6 +82,11 @@ ci_images:
 #     annotation whose only change is the version, plus a checksum next to it
 #     when the pin has one (a pin with a checksum that the MR leaves alone is
 #     refused, since the deploy would fail its check).
+#   - `pip_requirements`: the pip requirements files listed there, each with
+#     the service's own test job. Only in-place edits of plain `name==x.y.z`
+#     lines qualify; the test job (and the image's build-check, when the file
+#     is in a build context) must have passed in the MR pipeline, and the
+#     sweep watches that test job in the main pipeline of the merge too.
 # A changed file under an image's build context needs that image's
 # `<image>:build-check` job (from .gitlab-ci.yml) to have passed in the MR
 # pipeline. No other file may change (compose and CI files included: those
@@ -111,6 +116,20 @@ dependencies:
   pin_files:
     - ansible/roles/*/tasks/*.yml
     - ansible/roles/*/defaults/*.yml
+  # pip requirements file -> the service's own test job (.gitlab-ci.yml),
+  # required to pass in the MR pipeline. Patch and minor updates only (majors
+  # and 0.x minors never qualify). Exact files, no globs. Never listable
+  # (policy.PIP_NEVER, enforced in code): the event router's runtime
+  # requirements.txt (its image runs the executor), anything under
+  # docker/jit-approval-svc/, and anything OpenClaw/moltbot.
+  pip_requirements:
+    # Baked into the anomaly-detector image: the normal changed-only deploy
+    # rebuilds and restarts it (anomaly-detector:build, configure-homelab-services).
+    docker/anomaly-detector/requirements.txt: anomaly-detector:test
+    # Test-only (the image installs requirements.txt only): no deploy
+    # (ci/deploy-scope/scope.yml). The event-router/** never-list of
+    # bot_config is unchanged; this applies to Renovate MRs only.
+    docker/event-router/requirements-dev.txt: event-router:test
   # Packages whose routine releases are 0.x minors; their 0.x minors count
   # as minors here (majors and 1.x+ rules unchanged). Empty: none yet.
   zero_minor_is_minor: []

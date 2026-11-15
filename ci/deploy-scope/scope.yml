@@ -109,6 +109,10 @@ playbooks:
       roles: [configure-ollama-models]
     # The executor and the repo mode in config.yml are deployed by the
     # event-router role; the image by configure-homelab-services.
+    # Test-only dependencies (event-router:test); the image installs
+    # requirements.txt only, and no role reads this file.
+    - match: [docker/event-router/requirements-dev.txt]
+      roles: []
     - match: [docker/event-router/**]
       roles: [event-router, configure-homelab-services]
     # Correlation graph for the event router (the facts tools only read it).

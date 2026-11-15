@@ -151,6 +151,10 @@
 /docker/images/snapclient/Dockerfile     @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
 /ansible/roles/configure-homelab-services/tasks/main.yml @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
 /ansible/roles/configure-excel-vm/defaults/main.yml      @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+# pip requirements files (dependencies.pip_requirements): plain `name==version`
+# patch/minor edits gated on the service's own test job.
+/docker/anomaly-detector/requirements.txt  @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+/docker/event-router/requirements-dev.txt  @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
 
 # === SSL CERTS ===
 # Could intercept TLS traffic

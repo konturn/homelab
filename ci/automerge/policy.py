@@ -841,6 +841,21 @@ _HEX_TOKEN = re.compile(r"(?<![0-9a-fA-F])([0-9a-f]{64}|[0-9a-f]{128})(?![0-9a-f
 _FROM_RE = re.compile(r"^( *FROM +)((?:--[a-z][a-z-]*=[!-~]+ +)*)([!-~]+)( +AS +[A-Za-z0-9_.-]+)? *$", re.I | re.A)
 _EXACT_SEMVER = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 _DEP_SECTIONS = ("dependencies", "optionalDependencies", "devDependencies", "peerDependencies")
+# A pip requirements pin the class can read: `name==X.Y[.Z[.W]]` alone on its
+# line. No extras, environment markers, hashes, URLs, options or comments.
+_PIP_PIN = re.compile(r"^([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)==(\d+(?:\.\d+){1,3})$", re.A)
+_JOB_NAME = re.compile(r"^[A-Za-z0-9_.-]+(?::[A-Za-z0-9_.-]+)+$", re.A)
+# Requirements files the class must never cover, whatever the policy file
+# says: the event router's runtime dependencies (its image runs the executor,
+# which acts on the hosts), the JIT approval service (it issues credentials)
+# and OpenClaw/moltbot itself.
+PIP_NEVER = (
+    "docker/event-router/requirements.txt",
+    "docker/jit-approval-svc/**",
+    "docker/openclaw*/**",
+    "**openclaw**",
+    "**moltbot**",
+)
 
 
 def _glob_re(pattern: str) -> "re.Pattern[str]":
@@ -893,7 +908,8 @@ def dependencies_config(allowlist: dict) -> dict:
     malformed, so a typo fails closed."""
     sec = allowlist.get("dependencies")
     empty = {"enabled": False, "authors": [], "codeowner": "", "dockerfiles": [], "npm": {},
-             "pin_files": [], "zero_minor": set(), "denylist": {}, "critical_files": {}, "critical_jobs": {}}
+             "pin_files": [], "pip": {}, "zero_minor": set(), "denylist": {}, "critical_files": {},
+             "critical_jobs": {}}
     if sec is None:
         return empty
     if not isinstance(sec, dict):
@@ -919,6 +935,18 @@ def dependencies_config(allowlist: dict) -> dict:
     dockerfiles = _str_list(sec.get("dockerfiles"), "dependencies.dockerfiles")
     if any(not d.endswith("/Dockerfile") for d in dockerfiles):
         raise PolicyError("dependencies.dockerfiles entries must name Dockerfiles")
+    pip = sec.get("pip_requirements") or {}
+    if not isinstance(pip, dict):
+        raise PolicyError("dependencies.pip_requirements must be a mapping of file: test job")
+    for path, job in pip.items():
+        if not isinstance(path, str) or not _SAFE_PATH.match(path) or ".." in path.split("/") \
+                or not path.endswith(".txt"):
+            raise PolicyError(f"dependencies.pip_requirements: {path!r} is not a requirements file path")
+        if any(glob_match(pat, path) for pat in PIP_NEVER):
+            raise PolicyError(f"dependencies.pip_requirements: {path} may never be auto-merged")
+        if not isinstance(job, str) or not _JOB_NAME.match(job) or job.endswith(":build-check"):
+            raise PolicyError(f"dependencies.pip_requirements.{path}: the value must name the "
+                              "service's own test job (e.g. `<service>:test`)")
     return {
         "enabled": sec.get("enabled") is True,
         "authors": _str_list(sec.get("authors"), "dependencies.authors"),
@@ -926,6 +954,7 @@ def dependencies_config(allowlist: dict) -> dict:
         "dockerfiles": dockerfiles,
         "npm": dict(npm),
         "pin_files": _str_list(sec.get("pin_files"), "dependencies.pin_files"),
+        "pip": dict(pip),
         "zero_minor": set(_str_list(sec.get("zero_minor_is_minor"), "dependencies.zero_minor_is_minor")),
         "denylist": _reasons_map(sec.get("denylist"), "dependencies.denylist"),
         "critical_files": _reasons_map(crit.get("files"), "dependencies.security_critical.files"),
@@ -934,10 +963,12 @@ def dependencies_config(allowlist: dict) -> dict:
 
 
 def dependency_file_kind(path: str, cfg: dict) -> Optional[str]:
-    """'dockerfile' | 'package_json' | 'lockfile' | 'pins', or None when the
-    class does not cover the path (or the class is disabled)."""
+    """'dockerfile' | 'package_json' | 'lockfile' | 'pins' | 'pip', or None
+    when the class does not cover the path (or the class is disabled)."""
     if not cfg.get("enabled"):
         return None
+    if path in (cfg.get("pip") or {}):
+        return "pip"
     npm = cfg.get("npm") or {}
     if npm and path == npm.get("package_json"):
         return "package_json"
@@ -1143,6 +1174,35 @@ def _diff_from_line(path: str, i: int, bl: str, hl: str, cfg: dict) -> DepChange
     return DepChange(path, i + 1, new.name, str(old), str(new), kind, bl, hl)
 
 
+def _diff_requirements(path: str, base: str, head: str, cfg: dict) -> List[DepChange]:
+    """In-place version edits of `name==version` lines of a pip requirements
+    file. Every other line must be unchanged."""
+    b_lines, h_lines = base.split("\n"), head.split("\n")
+    if len(b_lines) != len(h_lines):
+        raise PolicyError(f"{path}: line count changed ({len(b_lines)} -> {len(h_lines)}); "
+                          "only in-place version edits qualify")
+    out: List[DepChange] = []
+    for i, (bl, hl) in enumerate(zip(b_lines, h_lines)):
+        if bl == hl:
+            continue
+        where = f"{path} line {i + 1}"
+        mb, mh = _PIP_PIN.match(bl), _PIP_PIN.match(hl)
+        if not mb or not mh:
+            raise PolicyError(f"{where}: not a plain `name==version` pin "
+                              "(extras, markers, hashes, options and comments are not read)")
+        if mb.group(1) != mh.group(1):
+            raise PolicyError(f"{where}: package changed ({mb.group(1)} -> {mh.group(1)})")
+        name, o, n = mb.group(1), mb.group(2), mh.group(2)
+        try:
+            kind = classify_tag_change(o, n, name in cfg["zero_minor"])
+        except MajorVersionChange as e:
+            raise MajorVersionChange(f"{where}: {name}: {e}", image=name)
+        except PolicyError as e:
+            raise PolicyError(f"{where}: {name}: {e}")
+        out.append(DepChange(path, i + 1, name, o, n, kind, bl, hl))
+    return out
+
+
 def _load_json(text: str, where: str):
     def no_dupes(pairs):
         keys = [k for k, _ in pairs]
@@ -1280,6 +1340,8 @@ def dependency_changes(paths: List[str], contents: Dict[str, "ComposePair"], all
                 found = _diff_pin_lines(path, base, head, cfg, jinja=False, kinds=h_kinds, from_ok=True)
             elif kinds[path] == "pins":
                 found = _diff_pin_lines(path, base, head, cfg, jinja=True)
+            elif kinds[path] == "pip":
+                found = _diff_requirements(path, base, head, cfg)
             elif kinds[path] == "package_json":
                 found, pkg_head = _diff_package_json(path, base, head, cfg)
             elif kinds[path] == "lockfile":
@@ -1318,14 +1380,22 @@ def dependency_changes(paths: List[str], contents: Dict[str, "ComposePair"], all
             contexts = None
             r.reasons.append(f"cannot read the build-check jobs: {str(e)[:80]}")
     for path in paths:
-        if kinds[path] not in ("dockerfile", "package_json", "lockfile"):
+        if kinds[path] not in ("dockerfile", "package_json", "lockfile", "pip"):
             continue
+        if kinds[path] == "pip":
+            # The service's own tests must pass with the new version.
+            test_job = cfg["pip"][path]
+            if test_job not in r.required_jobs:
+                r.required_jobs.append(test_job)
         if contexts is None:
             r.reasons.append(f"{path}: no CI file to find its build-check job in")
             continue
         job = next((j for ctx, j in contexts.items() if path.startswith(ctx + "/")), None)
         if job is None:
-            r.reasons.append(f"{path}: no <image>:build-check job builds it")
+            # A requirements file outside every build context (test-only) needs
+            # only its test job.
+            if kinds[path] != "pip":
+                r.reasons.append(f"{path}: no <image>:build-check job builds it")
         elif job not in r.required_jobs:
             r.required_jobs.append(job)
     r.names = sorted({c.name for c in r.changes if c.kind not in ("checksum", "lock")})
