@@ -178,9 +178,7 @@ with this file, they win: say so.
   `anomaly-triage`. Noah's `/maint` command: skill `maint`. Query Loki only
   through the Grafana datasource proxy (direct access returns 401); its
   label is `container`.
-- Router chores need no shell: `skills/event-router/er-action` (collect and
-  reset-failed T1, container restart T2; skill `event-router`). Use it
-  before asking for `ssh-router`.
+- Router chores: `skills/event-router/er-action` (skill `event-router`), not SSH.
 - The dead-man check (`deadman-check.timer`, docs/DEADMAN.md) tests
   `/persistent_data`, dockerd, key containers, Grafana, Vault unsealed and
   `mpool`, then pings healthchecks.io. If it fails, the alert comes from
