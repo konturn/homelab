@@ -240,7 +240,10 @@ variables:
 # the full host deploys; those stay available as manual jobs. CI image merges
 # (Automerge-Policy: ci-image) change only job image lines and deploy nothing;
 # bot-config merges (Automerge-Policy: bot-config) deploy through
-# <host>:deploy-service too, or not at all (docs only).
+# <host>:deploy-service too, or not at all (docs only). Runner image merges
+# (Automerge-Policy: runner-image) and dependency merges are not matched:
+# their host deploys run as for a reviewed merge (router:deploy templates the
+# runner config, then runner:default-image runs in the new default image).
 .automerged_commit_manual:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /Automerge-Policy: (image-update|ci-image|bot-config)/'
@@ -1081,6 +1084,27 @@ router:deploy:
     - !reference [.automerge_task_skip, rules]
     - !reference [.automerged_commit_manual, rules]
     - if: $CI_COMMIT_BRANCH == "main"
+
+# Canary for the runners' default image (base/gitlab-runner/config.toml). The
+# only job without an `image:` of its own, so it runs in the default image.
+# After router:deploy has templated a changed config.toml (gitlab-runner
+# reloads it on change), it shows the protected runner can pull and start
+# the new default image. The auto-merge sweep watches it, and checks that its
+# log names the new image, for runner image merges (docs/AUTOMERGE.md,
+# "Runner default image"). Nothing else depends on it.
+runner:default-image:
+  stage: deploy
+  needs:
+    - job: router:deploy
+  timeout: 10m
+  script:
+    - cat /etc/os-release
+    - /bin/sh -c 'echo default image OK'
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - base/gitlab-runner/config.toml
 
 zwave:deploy:
   extends: .ansible
@@ -2513,6 +2537,7 @@ automerge:test:
         - ansible/inventory.yml
         - ansible/roles/configure-homelab-services/**/*
         - docker/docker-compose*.yml
+        - base/gitlab-runner/config.toml
         - renovate.json
         - CODEOWNERS
         - .gitlab-ci.yml

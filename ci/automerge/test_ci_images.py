@@ -299,8 +299,9 @@ class FakeGitLab:
     def get_all(self, path, **params):
         if path.endswith("/merge_requests") and params.get("labels") == automerge.LABEL_CI_WATCH:
             return self.merged
-        if path.endswith("/merge_requests") and params.get("labels") == automerge.LABEL_DEP_WATCH:
-            return []           # dependency merges: test_dependency_class.py
+        if path.endswith("/merge_requests") and params.get("labels") in (automerge.LABEL_DEP_WATCH,
+                                                                          automerge.LABEL_RUNNER_WATCH):
+            return []           # dependency and runner image merges: their own test files
         if "/jobs" in path:
             return self.jobs
         if path.endswith("/labels"):

@@ -651,6 +651,150 @@ def ci_change_reasons(changes: List[ImageChange], allowlist: dict) -> List[str]:
 
 
 # ---------------------------------------------------------------------------
+# Runner default image (the "runner image" class)
+# ---------------------------------------------------------------------------
+# The default image of the GitLab runners (`image = "..."` directly in a
+# `[runners.docker]` table of base/gitlab-runner/config.toml). Only a job
+# without an `image:` of its own runs in it; every job in .gitlab-ci.yml sets
+# one except the `runner:default-image` canary, which runs after router:deploy
+# and which the sweep watches (automerge.py, `ci_watch`). The file is fixed
+# here, not configurable: nothing else in config.toml (runner tokens, networks,
+# volumes, `helper_image`, service images) is ever in scope.
+
+RUNNER_PATH = "base/gitlab-runner/config.toml"
+RUNNER_HOLD_JOB = "runner"
+# Digest refreshes of the same tag, and patch releases within one major.minor.
+RUNNER_KINDS = ("digest", "patch")
+_TOML_TABLE_RE = re.compile(r"^\s*\[\[?\s*([A-Za-z0-9_.-]+)\s*\]\]?\s*(#.*)?$")
+_TOML_RUNNER_NAME_RE = re.compile(r'^\s*name\s*=\s*"([^"\\]*)"\s*(#.*)?$')
+_RUNNER_IMAGE_RE = re.compile(r'^(\s*image\s*=\s*)"([^"\\]*)"(\s*)$')
+# A new value must be exactly name:tag@sha256:digest (no Jinja, no quotes).
+_RUNNER_REF_RE = re.compile(r"^[a-z0-9][a-z0-9._/-]*:[A-Za-z0-9_][A-Za-z0-9_.-]*@sha256:[0-9a-f]{64}$")
+
+
+def runner_image_lines(text: str) -> Dict[int, str]:
+    """0-based line index -> runner name, for every default image line of a
+    runner config: `image = "<ref>"` directly in a `[runners.docker]` table."""
+    out: Dict[int, str] = {}
+    table, runner = None, None
+    for i, line in enumerate(text.split("\n")):
+        t = _TOML_TABLE_RE.match(line)
+        if t:
+            table = t.group(1)
+            if line.strip().startswith("[[") and table == "runners":
+                runner = None
+            continue
+        n = _TOML_RUNNER_NAME_RE.match(line)
+        if n and table == "runners":
+            runner = n.group(1)
+        if table == "runners.docker" and _RUNNER_IMAGE_RE.match(line):
+            out[i] = runner or "?"
+    return out
+
+
+def diff_runner_images(base: str, head: str, path: str = RUNNER_PATH) -> List[ImageChange]:
+    """Every difference must be an in-place edit of a default image line
+    (`runner_image_lines`): same key and spacing, same image name, the new
+    reference `name:tag@sha256:...`, and a digest refresh of the same tag or
+    a patch release (RUNNER_KINDS). Each change's `service` is the runner name."""
+    b_lines, h_lines = base.split("\n"), head.split("\n")
+    if len(b_lines) != len(h_lines):
+        raise PolicyError(f"{path}: line count changed ({len(b_lines)} -> {len(h_lines)}); "
+                          "only in-place default image edits qualify")
+    if any(q in text for text in (base, head) for q in ('"""', "'''")):
+        raise PolicyError(f"{path}: multi-line strings are not supported by the line checks")
+    b_img, h_img = runner_image_lines(base), runner_image_lines(head)
+    changes: List[ImageChange] = []
+    for i, (bl, hl) in enumerate(zip(b_lines, h_lines)):
+        if bl == hl:
+            continue
+        where = f"{path} line {i + 1}"
+        if i not in b_img or i not in h_img:
+            raise PolicyError(f"{where} is not a runner default image line")
+        if b_img[i] != h_img[i]:
+            raise PolicyError(f"{where}: runner structure changed")
+        runner = h_img[i]
+        check_changed_line(hl, f"{where} ({runner})", jinja=True)
+        bm, hm = _RUNNER_IMAGE_RE.match(bl), _RUNNER_IMAGE_RE.match(hl)
+        if (bm.group(1), bm.group(3)) != (hm.group(1), hm.group(3)):
+            raise PolicyError(f"{where} ({runner}): key or spacing changed")
+        if not _RUNNER_REF_RE.match(hm.group(2)):
+            raise PolicyError(f"{where} ({runner}): new image is not name:tag@sha256:<digest>")
+        try:
+            old, new = parse_image_ref(bm.group(2)), parse_image_ref(hm.group(2))
+        except PolicyError as e:
+            raise PolicyError(f"{where} ({runner}): {e}")
+        if old.name != new.name:
+            raise PolicyError(f"{where} ({runner}): image name changed ({old.name} -> {new.name})")
+        if old.tag == new.tag:
+            if old.digest == new.digest:
+                raise PolicyError(f"{where} ({runner}): non-functional edit to image line")
+            kind = "digest"
+        else:
+            if old.tag is None:
+                raise PolicyError(f"{where} ({runner}): tag added")
+            try:
+                kind = classify_tag_change(old.tag, new.tag)
+            except MajorVersionChange as e:
+                raise MajorVersionChange(f"{where} ({runner}): {e}", service=runner, image=new.name)
+            except PolicyError as e:
+                raise PolicyError(f"{where} ({runner}): {e}")
+        if kind not in RUNNER_KINDS:
+            raise PolicyError(f"{where} ({runner}): {kind} update {old.tag} -> {new.tag}; the runner "
+                              f"default image takes {' and '.join(RUNNER_KINDS)} updates only")
+        changes.append(ImageChange(runner, i + 1, old, new, kind, bl, hl, path))
+    return changes
+
+
+def runner_images_config(allowlist: dict) -> dict:
+    """Validated `runner_images` section: {enabled, authors, codeowner, denylist}.
+    Raises PolicyError on anything malformed (fails closed)."""
+    sec = allowlist.get("runner_images")
+    if sec is None:
+        return {"enabled": False, "authors": [], "codeowner": "", "denylist": {}}
+    if not isinstance(sec, dict):
+        raise PolicyError("`runner_images` must be a mapping")
+    if "files" in sec:
+        raise PolicyError(f"runner_images: the file is fixed ({RUNNER_PATH}); `files` is not supported")
+    deny = {}
+    for name, reason in (sec.get("denylist") or {}).items():
+        if not isinstance(reason, str) or not reason.strip():
+            raise PolicyError(f"runner_images.denylist {name}: a reason is required")
+        deny[name] = " ".join(reason.split())
+    authors = sec.get("authors") or []
+    if not isinstance(authors, list):
+        raise PolicyError("runner_images.authors must be a list")
+    codeowner = sec.get("codeowner") or ""
+    if not isinstance(codeowner, str) or (codeowner and not codeowner.startswith("@")):
+        raise PolicyError("runner_images.codeowner must be a CODEOWNERS owner (@name)")
+    return {"enabled": sec.get("enabled") is True, "authors": list(authors),
+            "codeowner": codeowner, "denylist": deny}
+
+
+def runner_files(allowlist: dict) -> List[str]:
+    try:
+        cfg = runner_images_config(allowlist)
+    except PolicyError:
+        return []
+    return [RUNNER_PATH] if cfg["enabled"] else []
+
+
+def runner_change_reasons(changes: List[ImageChange], allowlist: dict) -> List[str]:
+    """Per-change checks of the runner image class: the global image denylist,
+    `ci_images.denylist` (an image too risky for a CI job is too risky as
+    the runner default) and `runner_images.denylist`."""
+    reasons = []
+    d = denylist(allowlist)["images"]
+    cd = ci_images_config(allowlist)["denylist"]
+    rd = runner_images_config(allowlist)["denylist"]
+    for c in changes:
+        why = d.get(c.new.name) or cd.get(c.new.name) or rd.get(c.new.name)
+        if why:
+            reasons.append(f"runner {c.service}: {DENIED_MARK} ({c.new.name}: {why})")
+    return reasons
+
+
+# ---------------------------------------------------------------------------
 # CODEOWNERS
 # ---------------------------------------------------------------------------
 
@@ -1559,6 +1703,8 @@ class Verdict:
     deploy_hosts: List[Deployment] = field(default_factory=list)
     ci_image: bool = False                             # CI image class (job images in a CI file)
     ci_images: List[str] = field(default_factory=list)     # image names it changes
+    runner_image: bool = False                         # runner image class (runner default image)
+    runner_images: List[str] = field(default_factory=list)  # image names it changes
     bot_config: bool = False                           # bot-config class (moltbot config MRs)
     bot_changes: list = field(default_factory=list)    # botconfig.ConfigChange
     shadow_playbook: bool = False                      # bot-config MR that adds new shadow playbooks
@@ -1583,6 +1729,7 @@ class Verdict:
 
     def as_dict(self) -> dict:
         return {"eligible": self.eligible, "fast_track": self.fast_track, "ci_image": self.ci_image,
+                "runner_image": self.runner_image,
                 "dependency": self.dependency, "dep_changes": [c.as_dict() for c in self.dep_changes],
                 "required_jobs": self.required_jobs,
                 "bot_config": self.bot_config, "shadow_playbook": self.shadow_playbook,
@@ -1738,7 +1885,8 @@ def _evaluate_images(*, author: str, target_branch: str, labels: List[str],
         deployments = default_deployments(allowlist)
 
     # A malformed policy section fails closed for every MR.
-    for check in (fast_track_config, denylist, pre_upgrade_config, ci_images_config, dependencies_config):
+    for check in (fast_track_config, denylist, pre_upgrade_config, ci_images_config, dependencies_config,
+                  runner_images_config):
         try:
             check(allowlist)
         except PolicyError as e:
@@ -1761,6 +1909,7 @@ def _evaluate_images(*, author: str, target_branch: str, labels: List[str],
 
     allowed = set(compose_files(allowlist))
     ci_allowed = set(ci_files(allowlist))
+    runner_allowed = set(runner_files(allowlist))
     paths = sorted({f.path for f in files} | {f.old_path for f in files if f.old_path})
     dep_allowed = set(dependency_paths(paths, allowlist))
     if not files:
@@ -1769,7 +1918,7 @@ def _evaluate_images(*, author: str, target_branch: str, labels: List[str],
         if f.new_file or f.deleted_file or f.renamed_file or f.mode_changed:
             v.reject(f"{f.path}: file added, deleted, renamed or mode-changed")
     for p in paths:
-        if p in allowed or p in ci_allowed or p in dep_allowed:
+        if p in allowed or p in ci_allowed or p in dep_allowed or p in runner_allowed:
             continue
         if COMPOSE_GLOB.match(p):
             if not deployments.get(p):
@@ -1780,16 +1929,22 @@ def _evaluate_images(*, author: str, target_branch: str, labels: List[str],
         else:
             v.reject(f"touches files outside the auto-merge scope: {p}")
 
-    # CODEOWNERS: the listed compose files and CI files are special-cased
-    # (allowed only for image-only diffs, verified below); any other
-    # code-owned path disqualifies.
-    owned = [p for p in protected_paths(paths, codeowners_text) if p not in allowed | ci_allowed | dep_allowed]
+    # CODEOWNERS: the listed compose files, CI files and the runner config
+    # are special-cased (allowed only for image-only diffs, verified below);
+    # any other code-owned path disqualifies.
+    owned = [p for p in protected_paths(paths, codeowners_text)
+             if p not in allowed | ci_allowed | dep_allowed | runner_allowed]
     if owned:
         v.reject("touches CODEOWNERS-protected paths: " + ", ".join(owned))
 
     if dep_allowed:
         _evaluate_dependencies(v, author, sorted(dep_allowed), [p for p in paths if p not in dep_allowed],
                                composes, allowlist, codeowners_text, ci_text)
+        return v
+    changed_runner = [p for p in paths if p in runner_allowed]
+    if changed_runner:
+        _evaluate_runner(v, author, [p for p in paths if p not in runner_allowed], composes,
+                         allowlist, codeowners_text)
         return v
     changed_ci = [p for p in paths if p in ci_allowed]
     if changed_ci:
@@ -1892,6 +2047,45 @@ def _evaluate_ci(v: Verdict, author: str, changed_ci: List[str], others: List[st
         v.reject("CI file changed but no image updates were found")
     if v.eligible:
         v.notes.append("class: CI image (nothing to deploy; the sweep watches the main pipeline)")
+
+
+def _evaluate_runner(v: Verdict, author: str, others: List[str], files: Dict[str, ComposePair],
+                     allowlist: dict, codeowners_text: str) -> None:
+    """The runner image class: default image lines of the runner config only,
+    by a runner-class author. The merge deploys like a reviewed one
+    (router:deploy templates config.toml), and the sweep watches the
+    `runner:default-image` canary that runs after it."""
+    cfg = runner_images_config(allowlist)
+    v.runner_image = True
+    if others:
+        v.reject("a runner image update must not change other files: " + ", ".join(others))
+    if author not in cfg["authors"]:
+        v.reject(f"author {author!r} may not auto-merge runner image updates (runner_images.authors)")
+    if not cfg["codeowner"] or cfg["codeowner"] not in codeowner_of(RUNNER_PATH, codeowners_text):
+        v.reject(f"CODEOWNERS does not list the auto-merge bot for {RUNNER_PATH}, so its approval would not count")
+    base, head = files.get(RUNNER_PATH, (None, None))
+    if base is None or head is None:
+        v.reject(f"could not read both versions of {RUNNER_PATH}")
+    else:
+        try:
+            v.changes += diff_runner_images(base, head)
+        except MajorVersionChange as e:
+            v.major = True
+            v.reject(f"runner: {e}")
+        except PolicyError as e:
+            v.reject(f"runner: {e}")
+    for r in runner_change_reasons(v.changes, allowlist):
+        v.reject(r)
+        v.denied = True
+    v.runner_images = sorted({c.new.name for c in v.changes})
+    v.hold_keys = [(RUNNER_HOLD_JOB, n) for n in v.runner_images]
+    for c in v.changes:
+        v.notes.append(f"runner {c.service}: {c.kind} update {c.old.tag or ''} -> {c.new.tag or ''}"
+                       f" ({(c.new.digest or '')[:19]}) [{c.file}]")
+    if v.eligible and not v.changes:
+        v.reject("runner config changed but no default image updates were found")
+    if v.eligible:
+        v.notes.append("class: runner image (router:deploy; the sweep watches runner:default-image)")
 
 
 def ci_critical_reasons(changes: List[ImageChange], allowlist: dict) -> List[str]:
@@ -2004,6 +2198,30 @@ _CI_RESERVED = {"stages", "variables", "default", "include", "workflow", "image"
 def ci_image_jobs(text: str, names: Collection[str]) -> List[str]:
     """Jobs of a CI file whose effective image (own `image`, else through
     `extends`, else `default.image`) is one of `names`. Needs PyYAML."""
+    out = []
+    for key, img in _ci_job_images(text).items():
+        if isinstance(img, dict):
+            img = img.get("name")
+        if not isinstance(img, str):
+            continue
+        try:
+            name = parse_image_ref(img).name
+        except PolicyError:
+            continue
+        if name in names:
+            out.append(key)
+    return out
+
+
+def default_image_jobs(text: str) -> List[str]:
+    """Jobs of a CI file with no image at all (own, through `extends`, or
+    `default.image`): they run in the runner's default image
+    (base/gitlab-runner/config.toml). Needs PyYAML."""
+    return [k for k, img in _ci_job_images(text).items() if img is None]
+
+
+def _ci_job_images(text: str) -> Dict[str, object]:
+    """Job name -> its effective `image` value (None when it has none)."""
     import yaml
 
     class _Loader(yaml.SafeLoader):
@@ -2027,21 +2245,12 @@ def ci_image_jobs(text: str, names: Collection[str]) -> List[str]:
         return None
 
     default = (doc.get("default") or {}).get("image") if isinstance(doc.get("default"), dict) else None
-    out = []
+    if default is None:
+        default = doc.get("image")          # deprecated top-level form of default.image
+    out: Dict[str, object] = {}
     for key, job in doc.items():
         if not isinstance(key, str) or key.startswith(".") or key in _CI_RESERVED or not isinstance(job, dict):
             continue
         img = own_image(key, frozenset())
-        if img is None:
-            img = default
-        if isinstance(img, dict):
-            img = img.get("name")
-        if not isinstance(img, str):
-            continue
-        try:
-            name = parse_image_ref(img).name
-        except PolicyError:
-            continue
-        if name in names:
-            out.append(key)
+        out[key] = default if img is None else img
     return out

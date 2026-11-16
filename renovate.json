@@ -258,6 +258,53 @@
       ]
     },
     {
+      "description": "Runner image class (docs/AUTOMERGE.md, \"Runner default image\"): digest refreshes and patch releases of the runners' default image in base/gitlab-runner/config.toml, which the auto-merge sweep merges on its own. Their own branches (runner-), so the MR changes nothing else, and outside the MR limits. Excludes the denylisted images and ci_images.denylist; keep in sync with ci/automerge-policy.yml (checked by ci/automerge/test_runner_image.py)",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchFileNames": [
+        "base/gitlab-runner/config.toml"
+      ],
+      "matchPackageNames": [
+        "/.+/",
+        "!gitlab/gitlab-ee",
+        "!gitlab/gitlab-ce",
+        "!gitlab/gitlab-runner",
+        "!hashicorp/vault",
+        "!tecnativa/docker-socket-proxy",
+        "!mikebrady/shairport-sync",
+        "!willhallonline/ansible"
+      ],
+      "matchUpdateTypes": [
+        "patch",
+        "digest",
+        "pinDigest"
+      ],
+      "additionalBranchPrefix": "runner-",
+      "separateMinorPatch": true,
+      "prConcurrentLimit": 0,
+      "branchConcurrentLimit": 0,
+      "prPriority": 5
+    },
+    {
+      "description": "Runner image class: a minor update of the runners' default image waits for a human (digest and patch only). Labelled so it stays visible",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchFileNames": [
+        "base/gitlab-runner/config.toml"
+      ],
+      "matchUpdateTypes": [
+        "minor"
+      ],
+      "addLabels": [
+        "automerge-manual"
+      ],
+      "prBodyNotes": [
+        "**Manual merge.** The runner image class (`runner_images` in `ci/automerge-policy.yml`) takes digest and patch updates of the runners' default image only."
+      ]
+    },
+    {
       "description": "Dependency class (docs/AUTOMERGE.md, \"Dependency updates\"): .gitlab-ci.yml job image updates get their own branches, so a CI job image bump never shares an MR with a Dockerfile base image bump of the same image (the auto-merge policy refuses mixed MRs)",
       "matchManagers": [
         "gitlabci"

@@ -65,6 +65,35 @@ ci_images:
     willhallonline/ansible: >-
       The .ansible image runs the sweep, plan-deploy and every deploy. A
       broken one takes down the jobs that would detect and revert it.
+    # willhallonline/ansible stays manual by Noah's decision (2026-11-16),
+    # in CI files and as a runner default image alike.
+
+# Runner image class (docs/AUTOMERGE.md, "Runner default image"): Renovate
+# MRs whose only change is the runners' default image lines in
+# base/gitlab-runner/config.toml (`image = "..."` directly in a
+# [runners.docker] table; the file is fixed in policy.py, not listed here),
+# edited in place: same image, new reference name:tag@sha256:<digest>, a
+# digest refresh of the same tag or a patch release. Minors, majors, every
+# other line of the file (tokens, networks, volumes, helper/service images)
+# and every other file stay manual. Only a job without its own `image:` runs
+# in the default image: today that is just the `runner:default-image` canary
+# in .gitlab-ci.yml. The merge is a normal merge (`Automerge-Policy:
+# runner-image`), so router:deploy templates the new config.toml; the sweep
+# watches router:deploy and the canary in the main pipeline of the merge,
+# and checks that the canary log names the new image. A failure opens a
+# revert MR and a rollback issue (job=runner) that holds further updates of
+# the image. Merges count against max_per_24h. The global `denylist.images`
+# and `ci_images.denylist` apply here too; `denylist` below adds
+# runner-only exceptions.
+runner_images:
+  enabled: true
+  authors:
+    # Renovate only.
+    - project_4_bot_af78a2ea227eba9e10006515fbde375e
+  # The automerge bot (AUTOMERGE_TOKEN user), as named in CODEOWNERS for
+  # base/gitlab-runner/config.toml.
+  codeowner: "@project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6"
+  denylist: {}
 
 # Dependency class (docs/AUTOMERGE.md, "Dependency updates"): Renovate MRs
 # that bump a version in our own build and deploy files, verified line by
