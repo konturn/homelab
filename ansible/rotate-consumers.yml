@@ -1,0 +1,80 @@
+# Consumers of a rotated proxied secret (secrets:rotate-proxied,
+# ci/rotate-proxied/rotate.py, docs/SECRET_ROTATION.md).
+#
+# Re-renders telegraf.conf and the compose file from Vault, exactly as the
+# router deploy does, and restarts or recreates ONLY the named consumers:
+#   rotate_telegraf: true      template /etc/telegraf/telegraf.conf, restart
+#                              telegraf if it changed
+#   rotate_services: [pihole]  recreate these compose services if their
+#                              rendered config changed (no dependencies, no
+#                              pulls, no orphan removal), then wait for health
+# Nothing else on the router is touched. rotate.py refuses to run when a
+# listed container is not on the image main declares, so no undeployed image
+# change rides along.
+- hosts: router.lab.nkontur.com
+  vars:
+    rotate_telegraf: false
+    rotate_services: []
+  roles:
+    - role: fetch-vault-secrets
+
+  tasks:
+    - name: Only known consumers
+      ansible.builtin.assert:
+        that:
+          - rotate_services | difference(['pihole', 'jit-approval-svc']) | length == 0
+        fail_msg: "rotate_services may list only pihole and jit-approval-svc"
+
+    - name: Render telegraf.conf
+      ansible.builtin.template:
+        src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/telegraf/telegraf.conf"
+        dest: /etc/telegraf/telegraf.conf
+        owner: root
+        group: telegraf
+        mode: "0640"
+      no_log: true
+      register: _rotate_telegraf_conf
+      when: rotate_telegraf | bool
+
+    - name: Restart telegraf
+      ansible.builtin.systemd:
+        name: telegraf
+        state: restarted
+      when:
+        - rotate_telegraf | bool
+        - _rotate_telegraf_conf is changed
+
+    - name: Render the compose file
+      ansible.builtin.include_role:
+        name: configure-homelab-services
+        tasks_from: render_compose
+      when: rotate_services | length > 0
+
+    - name: Recreate the consumers
+      community.docker.docker_compose_v2:
+        project_name: "{{ docker_compose_project_name | default('docker') }}"
+        project_src: "{{ docker_compose_dest_path }}/"
+        files: "{{ docker_compose_file_names }}"
+        services: "{{ rotate_services }}"
+        dependencies: false
+        remove_orphans: false
+        pull: never
+        state: present
+      timeout: 300
+      when: rotate_services | length > 0
+
+    - name: Wait for the consumers to become healthy
+      ansible.builtin.shell:
+        cmd: |
+          set -eu
+          for c in {{ rotate_services | map('quote') | join(' ') }}; do
+            for i in $(seq 1 60); do
+              s=$(docker inspect -f '{% raw %}{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}{% endraw %}' "$c")
+              case "$s" in healthy|running) echo "$c: $s"; break ;; esac
+              [ "$i" = 60 ] && { echo "$c: $s after 120s"; exit 1; }
+              sleep 2
+            done
+          done
+        executable: /bin/bash
+      changed_when: false
+      when: rotate_services | length > 0

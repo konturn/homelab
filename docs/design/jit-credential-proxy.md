@@ -65,7 +65,7 @@ As of 2026-11-16 (!1299, !1301, !1302 and the cutover MR):
 **Stay on the static backend:** MQTT and IPMI (not HTTP; 8.4, Q15), each with its own `jit-static-*` policy.
 
 **Open**
-- **One-time rotation (8.2)** of the nine secrets after cutover (as 8.2 describes), plus the scheduled `secrets:rotate-proxied` job. Rotation touches telegraf and the services' application databases, so each service is its own change.
+- **One-time rotation (8.2)** of the proxied secrets after cutover, one `secrets:rotate-proxied` run per service. The job exists (manual, one service per run, allowlist without plex; runbook in `docs/SECRET_ROTATION.md`, "Proxied services"); a schedule for it is not set up.
 - **Phase 3 Paperless** (needs the `jit-agent` Paperless user) and **phase 4 Gmail** (Q8). Both still use their dynamic backends.
 
 ## 1. Problem statement

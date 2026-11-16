@@ -57,6 +57,7 @@ shared:
     - networking/slzb/**
     - networking/ups/**
     - ci/ipmi/**
+    - ci/rotate-proxied/**
     - ci/revert-guard/**
     # Fact files and their tools (inventory/README.md). The files generated
     # from them (base/udev/..., base/disk/crypttab) are committed and carry
@@ -69,6 +70,7 @@ shared:
     - ansible/bootstrap.yml
     - ansible/os-patch-report.yml
     - ansible/service-update.yml
+    - ansible/rotate-consumers.yml
     - ansible/router.yml
     - ansible/zwave.yml
     - ansible/satellite-2.yml
