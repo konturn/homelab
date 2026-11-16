@@ -472,7 +472,7 @@ regenerated at each service.
 `jit-approval-svc` has `depends_on: vault: condition: service_healthy`, so it
 will not start until Vault is up — expect it to sit waiting, not to fail. Its
 entire environment (`VAULT_ROLE_ID`, `VAULT_SECRET_ID`, `TELEGRAM_BOT_TOKEN`,
-`TELEGRAM_WEBHOOK_SECRET`, `JIT_API_KEY`, `GITLAB_ADMIN_TOKEN`) is templated by
+`TELEGRAM_WEBHOOK_SECRET`, `JIT_REQUESTER_KEYS`, `GITLAB_ADMIN_TOKEN`) is templated by
 Ansible from Vault, so it must be redeployed **after** 4.5.4 step 3, not before:
 
 ```bash

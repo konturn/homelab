@@ -31,11 +31,6 @@ type Config struct {
 	// the broker identifies the caller by the key it presents.
 	RequesterKeys []RequesterKey
 
-	// JITAPIKey is the shared key from before per-requester keys
-	// (JIT_API_KEY, optional). It authenticates as LegacyRequester.
-	JITAPIKey       string
-	LegacyRequester string
-
 	// ApprovalMatrix decides, per requester and tier, whether a request is
 	// minted (auto, auto-fyi), sent for approval or denied
 	// (JIT_APPROVAL_MATRIX, default DefaultApprovalMatrix).
@@ -97,6 +92,12 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("invalid REQUEST_TIMEOUT: %w", err)
 	}
 
+	// The shared key is gone: refuse to start rather than silently ignore a
+	// deployment that still sets it.
+	if os.Getenv("JIT_API_KEY") != "" {
+		return nil, fmt.Errorf("JIT_API_KEY is no longer supported; use JIT_REQUESTER_KEYS")
+	}
+
 	requesterKeys, err := ParseRequesterKeys(os.Getenv("JIT_REQUESTER_KEYS"))
 	if err != nil {
 		return nil, fmt.Errorf("invalid JIT_REQUESTER_KEYS: %w", err)
@@ -119,10 +120,8 @@ func Load() (*Config, error) {
 		TelegramWebhookSecret: os.Getenv("TELEGRAM_WEBHOOK_SECRET"),
 		TelegramWebhookURL:    os.Getenv("TELEGRAM_WEBHOOK_URL"),
 
-		RequesterKeys:   requesterKeys,
-		JITAPIKey:       os.Getenv("JIT_API_KEY"),
-		LegacyRequester: getEnv("JIT_LEGACY_REQUESTER", LegacyRequester),
-		ApprovalMatrix:  matrix,
+		RequesterKeys:  requesterKeys,
+		ApprovalMatrix: matrix,
 
 		ActionsSocket: os.Getenv("ACTIONS_SOCKET"),
 
@@ -189,19 +188,8 @@ func (c *Config) Validate() error {
 	if c.TelegramWebhookSecret == "" {
 		return fmt.Errorf("TELEGRAM_WEBHOOK_SECRET is required")
 	}
-	if c.JITAPIKey == "" && len(c.RequesterKeys) == 0 {
-		return fmt.Errorf("JIT_REQUESTER_KEYS (or the legacy JIT_API_KEY) is required")
-	}
-	if c.JITAPIKey != "" {
-		h := HashKey(c.JITAPIKey)
-		for _, rk := range c.RequesterKeys {
-			if rk.Hash == h {
-				return fmt.Errorf("JIT_API_KEY is also %s's key", rk.Name)
-			}
-			if rk.Name == c.legacyRequester() {
-				return fmt.Errorf("requester %s has both a key and the shared JIT_API_KEY", rk.Name)
-			}
-		}
+	if len(c.RequesterKeys) == 0 {
+		return fmt.Errorf("JIT_REQUESTER_KEYS is required")
 	}
 	if err := ValidateApprovalMatrix(c.ApprovalMatrix); err != nil {
 		return err

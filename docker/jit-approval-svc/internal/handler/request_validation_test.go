@@ -23,7 +23,7 @@ func postRequest(h *Handler, raw []byte) *httptest.ResponseRecorder {
 // store; it used to be read in full and accepted.
 func TestHandleRequest_OversizedBodyRejected(t *testing.T) {
 	h := mockHandler()
-	raw, _ := json.Marshal(CreateRequestBody{Requester: "prometheus", Resource: "gitlab", Tier: 2,
+	raw, _ := json.Marshal(CreateRequestBody{Requester: "openclaw-ops", Resource: "gitlab", Tier: 2,
 		Reason: strings.Repeat("x", maxBodyBytes)})
 	w := postRequest(h, raw)
 	if w.Code != http.StatusRequestEntityTooLarge {
@@ -51,7 +51,7 @@ func TestTelegramWebhook_OversizedBodyRejected(t *testing.T) {
 func TestHandleRequest_InvalidTTLLeavesNoRecord(t *testing.T) {
 	h := mockHandler()
 	for i, ttl := range []string{"soon", "-5m", "0s", "1x"} {
-		raw, _ := json.Marshal(CreateRequestBody{Requester: "prometheus", Resource: "grafana", Tier: 1, Reason: "x", TTL: ttl})
+		raw, _ := json.Marshal(CreateRequestBody{Requester: "openclaw-ops", Resource: "grafana", Tier: 1, Reason: "x", TTL: ttl})
 		if w := postRequest(h, raw); w.Code != http.StatusBadRequest {
 			t.Fatalf("ttl %q: status %d", ttl, w.Code)
 		}
@@ -61,7 +61,7 @@ func TestHandleRequest_InvalidTTLLeavesNoRecord(t *testing.T) {
 	}
 	// Rate limit is 5/15min: the rejected requests above used no slots.
 	for i := 0; i < 5; i++ {
-		raw, _ := json.Marshal(CreateRequestBody{Requester: "prometheus", Resource: "grafana", Tier: 1, Reason: "x"})
+		raw, _ := json.Marshal(CreateRequestBody{Requester: "openclaw-ops", Resource: "grafana", Tier: 1, Reason: "x"})
 		if w := postRequest(h, raw); w.Code != http.StatusCreated {
 			t.Fatalf("valid request %d: status %d %s", i, w.Code, w.Body)
 		}
@@ -88,7 +88,7 @@ func TestHandleRequest_ProjectIDValidated(t *testing.T) {
 		{"group/..", http.StatusBadRequest},
 	} {
 		h := mockHandler()
-		raw, _ := json.Marshal(CreateRequestBody{Requester: "prometheus", Resource: "gitlab", Tier: 2, Reason: "mr", ProjectID: tc.id})
+		raw, _ := json.Marshal(CreateRequestBody{Requester: "openclaw-ops", Resource: "gitlab", Tier: 2, Reason: "mr", ProjectID: tc.id})
 		w := postRequest(h, raw)
 		if w.Code != tc.want {
 			t.Errorf("project_id %q: status %d, want %d (%s)", tc.id, w.Code, tc.want, w.Body)
@@ -121,7 +121,7 @@ func TestHandleRequest_GitLabScopesValidated(t *testing.T) {
 		{[]string{""}, http.StatusBadRequest},
 	} {
 		h := mockHandler()
-		raw, _ := json.Marshal(CreateRequestBody{Requester: "prometheus", Resource: "gitlab", Tier: 2, Reason: "mr", Scopes: tc.scopes})
+		raw, _ := json.Marshal(CreateRequestBody{Requester: "openclaw-ops", Resource: "gitlab", Tier: 2, Reason: "mr", Scopes: tc.scopes})
 		if w := postRequest(h, raw); w.Code != tc.want {
 			t.Errorf("scopes %q: status %d, want %d", tc.scopes, w.Code, tc.want)
 		}

@@ -65,7 +65,7 @@ func TestWebhookRoutesActionCallbacks(t *testing.T) {
 func TestWebhookJITCallbacksUnaffectedByActions(t *testing.T) {
 	h := mockHandler()
 	h.SetActions(actions.New(&nopMessenger{}))
-	req, _ := h.store.Create("prometheus", "gitlab", 2, "test", []string{"api"})
+	req, _ := h.store.Create("openclaw-ops", "gitlab", 2, "test", []string{"api"})
 	// deny path does not need Vault or Telegram (message ID 0)
 	if code := webhook(t, h, "test-secret", h.cfg.TelegramChatID, "jit:deny:"+req.ID); code != http.StatusOK {
 		t.Fatalf("webhook: %d", code)

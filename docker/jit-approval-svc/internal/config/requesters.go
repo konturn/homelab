@@ -42,24 +42,16 @@ func parseDecision(s string) (Decision, error) {
 // approval, for any requester (Validate refuses such a matrix).
 const MaxTier = 3
 
-// LegacyRequester is the requester name the shared JIT_API_KEY authenticates
-// as (JIT_LEGACY_REQUESTER overrides it). It exists for the switch to
-// per-requester keys and is removed once no client uses the shared key.
-const LegacyRequester = "prometheus"
-
 // DefaultApprovalMatrix is used when JIT_APPROVAL_MATRIX is not set. A
 // requester that is not in the matrix is denied everything.
 //
 //   - openclaw-noah: the agent bound to Noah's own Telegram DMs.
 //   - openclaw-ops: the agent that runs crons and the event-router hook, which
 //     read untrusted input (alerts, mail, web pages, MR text).
-//   - prometheus: the shared key from before the split, with the behaviour
-//     it had then (tier 1 auto, everything else approved).
 func DefaultApprovalMatrix() map[string]map[int]Decision {
 	return map[string]map[int]Decision{
 		"openclaw-noah": {1: DecisionAuto, 2: DecisionAutoFYI, 3: DecisionApprove},
 		"openclaw-ops":  {1: DecisionAuto, 2: DecisionApprove, 3: DecisionDeny},
-		LegacyRequester: {1: DecisionAuto, 2: DecisionApprove, 3: DecisionApprove},
 	}
 }
 
@@ -212,20 +204,10 @@ func (c *Config) Authenticate(key string) (string, bool) {
 			name, found = rk.Name, found+1
 		}
 	}
-	if c.JITAPIKey != "" && subtle.ConstantTimeCompare([]byte(key), []byte(c.JITAPIKey)) == 1 {
-		name, found = c.legacyRequester(), found+1
-	}
 	if found != 1 {
 		return "", false
 	}
 	return name, true
-}
-
-func (c *Config) legacyRequester() string {
-	if c.LegacyRequester != "" {
-		return c.LegacyRequester
-	}
-	return LegacyRequester
 }
 
 // Requesters lists the requesters that have a credential, sorted.
@@ -233,9 +215,6 @@ func (c *Config) Requesters() []string {
 	var out []string
 	for _, rk := range c.RequesterKeys {
 		out = append(out, rk.Name)
-	}
-	if c.JITAPIKey != "" {
-		out = append(out, c.legacyRequester()+" (shared key)")
 	}
 	sort.Strings(out)
 	return out

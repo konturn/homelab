@@ -56,10 +56,13 @@ func mockHandlerWithMinter(minter *mockVaultMinter) *Handler {
 	cfg := &config.Config{
 		TelegramChatID:        8531859108,
 		TelegramWebhookSecret: "test-secret",
-		JITAPIKey:             "test-api-key",
-		ListenAddr:            ":8080",
-		RequestTimeout:        5 * time.Minute,
-		ApprovalMatrix:        config.DefaultApprovalMatrix(),
+		RequesterKeys: []config.RequesterKey{
+			{Name: "openclaw-ops", Hash: config.HashKey("test-api-key")},
+			{Name: "openclaw-noah", Hash: config.HashKey("test-noah-key")},
+		},
+		ListenAddr:     ":8080",
+		RequestTimeout: 5 * time.Minute,
+		ApprovalMatrix: config.DefaultApprovalMatrix(),
 		Tiers: map[int]config.TierConfig{
 			1: {TTL: 15 * time.Minute, Description: "Services"},
 			2: {TTL: 30 * time.Minute, Description: "Infrastructure"},
@@ -96,17 +99,17 @@ func TestHandleRequest_Validation(t *testing.T) {
 		},
 		{
 			name:       "invalid tier",
-			body:       CreateRequestBody{Requester: "prometheus", Resource: "test", Tier: 99, Reason: "test"},
+			body:       CreateRequestBody{Requester: "openclaw-ops", Resource: "test", Tier: 99, Reason: "test"},
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name:       "missing resource",
-			body:       CreateRequestBody{Requester: "prometheus", Resource: "", Tier: 2, Reason: "test"},
+			body:       CreateRequestBody{Requester: "openclaw-ops", Resource: "", Tier: 2, Reason: "test"},
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name:       "missing reason",
-			body:       CreateRequestBody{Requester: "prometheus", Resource: "test", Tier: 2, Reason: ""},
+			body:       CreateRequestBody{Requester: "openclaw-ops", Resource: "test", Tier: 2, Reason: ""},
 			wantStatus: http.StatusBadRequest,
 		},
 	}
@@ -132,7 +135,7 @@ func TestHandleRequest_Tier2_CreatesPending(t *testing.T) {
 	h := mockHandler()
 
 	body, _ := json.Marshal(CreateRequestBody{
-		Requester: "prometheus",
+		Requester: "openclaw-ops",
 		Resource:  "gitlab",
 		Tier:      2,
 		Reason:    "MR review",
@@ -165,7 +168,7 @@ func TestHandleRequest_AutoApprove_WithStaticBackend(t *testing.T) {
 	h := mockHandler()
 
 	body, _ := json.Marshal(CreateRequestBody{
-		Requester: "prometheus",
+		Requester: "openclaw-ops",
 		Resource:  "radarr",
 		Tier:      1,
 		Reason:    "Check downloads",
@@ -223,7 +226,7 @@ func TestHandleRequest_AutoApprove_MintFailure(t *testing.T) {
 	h := mockHandlerWithMinter(minter)
 
 	body, _ := json.Marshal(CreateRequestBody{
-		Requester: "prometheus",
+		Requester: "openclaw-ops",
 		Resource:  "radarr",
 		Tier:      1,
 		Reason:    "Check downloads",
@@ -273,7 +276,7 @@ func TestHandleRequest_Tier2_StaysPendingOnMintFailure(t *testing.T) {
 	h := mockHandler()
 
 	body, _ := json.Marshal(CreateRequestBody{
-		Requester: "prometheus",
+		Requester: "openclaw-ops",
 		Resource:  "gitlab",
 		Tier:      2,
 		Reason:    "MR review",
@@ -301,7 +304,7 @@ func TestHandleRequest_MissingAPIKey(t *testing.T) {
 	h := mockHandler()
 
 	body, _ := json.Marshal(CreateRequestBody{
-		Requester: "prometheus",
+		Requester: "openclaw-ops",
 		Resource:  "gitlab",
 		Tier:      2,
 		Reason:    "MR review",
@@ -370,7 +373,7 @@ func TestHandleStatus_Pending(t *testing.T) {
 	h := mockHandler()
 
 	// Create a request directly in the store
-	storeReq, _ := h.store.Create("prometheus", "gitlab", 2, "test", nil)
+	storeReq, _ := h.store.Create("openclaw-ops", "gitlab", 2, "test", nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/status/"+storeReq.ID, nil)
 	req.Header.Set("X-JIT-API-Key", "test-api-key")
@@ -397,7 +400,7 @@ func TestHandleStatus_Pending(t *testing.T) {
 func TestHandleStatus_ApprovedClaims(t *testing.T) {
 	h := mockHandler()
 
-	storeReq, _ := h.store.Create("prometheus", "gitlab", 2, "test", nil)
+	storeReq, _ := h.store.Create("openclaw-ops", "gitlab", 2, "test", nil)
 	_ = h.store.Approve(storeReq.ID, &store.Credential{
 		Token:    "hvs.test-token",
 		LeaseTTL: 30 * time.Minute,
@@ -451,7 +454,7 @@ func TestHandleStatus_ApprovedClaims(t *testing.T) {
 func TestHandleStatus_CredentialMetadata(t *testing.T) {
 	h := mockHandler()
 
-	storeReq, _ := h.store.Create("prometheus", "grafana", 1, "check dashboards", nil)
+	storeReq, _ := h.store.Create("openclaw-ops", "grafana", 1, "check dashboards", nil)
 	_ = h.store.Approve(storeReq.ID, &store.Credential{
 		Token:    "glsa-test-token",
 		LeaseTTL: 15 * time.Minute,
@@ -569,11 +572,13 @@ func TestHandleTelegramWebhook_UnauthorizedUser(t *testing.T) {
 
 // A request below the resource's tier is raised to it (ssh-router is tier 3)
 // and, for the legacy requester, waits for approval.
+// A request below the resource's tier is raised to it (ssh-router is tier 3)
+// and, for the noah agent, waits for approval.
 func TestHandleRequest_RaisesSSHToItsTier(t *testing.T) {
 	h := mockHandler()
 
 	body, _ := json.Marshal(CreateRequestBody{
-		Requester: "prometheus",
+		Requester: "openclaw-noah",
 		Resource:  "ssh-router",
 		Tier:      1,
 		Reason:    "need shell access",
@@ -581,7 +586,7 @@ func TestHandleRequest_RaisesSSHToItsTier(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-JIT-API-Key", "test-api-key")
+	req.Header.Set("X-JIT-API-Key", "test-noah-key")
 	w := httptest.NewRecorder()
 
 	h.HandleRequest(w, req)
@@ -607,7 +612,7 @@ func TestHandleRequest_TTL_DefaultWhenNotSet(t *testing.T) {
 	}
 
 	body, _ := json.Marshal(CreateRequestBody{
-		Requester: "prometheus",
+		Requester: "openclaw-ops",
 		Resource:  "grafana",
 		Tier:      1,
 		Reason:    "dashboard access",
@@ -646,7 +651,7 @@ func TestHandleRequest_TTL_RequestedLessThanMax(t *testing.T) {
 	}
 
 	body, _ := json.Marshal(CreateRequestBody{
-		Requester: "prometheus",
+		Requester: "openclaw-ops",
 		Resource:  "grafana",
 		Tier:      1,
 		Reason:    "quick check",
@@ -686,7 +691,7 @@ func TestHandleRequest_TTL_RequestedGreaterThanMax(t *testing.T) {
 	}
 
 	body, _ := json.Marshal(CreateRequestBody{
-		Requester: "prometheus",
+		Requester: "openclaw-ops",
 		Resource:  "grafana",
 		Tier:      1,
 		Reason:    "long session",
@@ -723,7 +728,7 @@ func TestHandleRequest_TTL_InvalidString(t *testing.T) {
 	h := mockHandler()
 
 	body, _ := json.Marshal(CreateRequestBody{
-		Requester: "prometheus",
+		Requester: "openclaw-ops",
 		Resource:  "radarr",
 		Tier:      1,
 		Reason:    "test",
@@ -746,7 +751,7 @@ func TestHandleRequest_TTL_NegativeValue(t *testing.T) {
 	h := mockHandler()
 
 	body, _ := json.Marshal(CreateRequestBody{
-		Requester: "prometheus",
+		Requester: "openclaw-ops",
 		Resource:  "radarr",
 		Tier:      1,
 		Reason:    "test",
@@ -770,7 +775,7 @@ func TestHandleRequest_TTL_TierDefault(t *testing.T) {
 	// No resource overrides — uses tier TTL as max
 
 	body, _ := json.Marshal(CreateRequestBody{
-		Requester: "prometheus",
+		Requester: "openclaw-ops",
 		Resource:  "radarr",
 		Tier:      1,
 		Reason:    "quick check",
@@ -836,7 +841,7 @@ func TestHandleRequest_RateLimited(t *testing.T) {
 
 	makeReq := func() *httptest.ResponseRecorder {
 		body := CreateRequestBody{
-			Requester: "prometheus",
+			Requester: "openclaw-ops",
 			Resource:  "grafana",
 			Tier:      1,
 			Reason:    "test",

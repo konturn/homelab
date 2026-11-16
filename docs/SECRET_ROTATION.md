@@ -147,6 +147,7 @@ To rotate a secret:
 | `JIT_APPROLE_SECRET_ID` | `docker/jit-approval-svc` | `approle_secret_id` | jit-approval-svc |
 | `JIT_TELEGRAM_BOT_TOKEN` | `docker/jit-approval-svc` | `telegram_bot_token` | jit-approval-svc |
 | `JIT_TELEGRAM_WEBHOOK_SECRET` | `docker/jit-approval-svc` | `telegram_webhook_secret` | jit-approval-svc |
+| JIT requester keys (one per OpenClaw agent) | `agents/openclaw-noah`, `agents/openclaw-ops` | `api_key`; their SHA-256 in `docker/jit-approval-svc` field `requester_keys` (`name:hash,...`) | noah agent (reads Vault), ops agent (key file), jit-approval-svc. Rotate: new random key, update both places, deploy |
 | `BACKBLAZE_ACCESS_KEY_ID` | `backup/backblaze` | `access_key_id` | Restic backups |
 | `BACKBLAZE_SECRET_ACCESS_KEY` | `backup/backblaze` | `secret_access_key` | Restic backups |
 | `RESTIC_PASSWORD` | `backup/restic` | `password` | Restic backups |

@@ -72,7 +72,6 @@ vault_secret_paths:
       vault_jit_approle_secret_id: "approle_secret_id"
       vault_jit_telegram_bot_token: "telegram_bot_token"
       vault_jit_telegram_webhook_secret: "telegram_webhook_secret"
-      vault_jit_api_key: "jit_api_key"
       vault_jit_requester_keys: "requester_keys"
       vault_jit_gitlab_admin_token: "gitlab_admin_token"
 

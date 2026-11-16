@@ -123,29 +123,18 @@ func TestAuthenticate(t *testing.T) {
 			{Name: "openclaw-noah", Hash: HashKey("noah-key")},
 			{Name: "openclaw-ops", Hash: HashKey("ops-key")},
 		},
-		JITAPIKey: "shared-key",
 	}
 	for key, want := range map[string]string{
-		"noah-key":   "openclaw-noah",
-		"ops-key":    "openclaw-ops",
-		"shared-key": LegacyRequester,
+		"noah-key": "openclaw-noah",
+		"ops-key":  "openclaw-ops",
 	} {
 		if got, ok := cfg.Authenticate(key); !ok || got != want {
 			t.Errorf("Authenticate(%q) = %q,%v want %q", key, got, ok, want)
 		}
 	}
-	for _, key := range []string{"", "noah-key ", "NOAH-KEY", "ops", "x", hashHex("noah-key")} {
+	for _, key := range []string{"", "noah-key ", "NOAH-KEY", "ops", "x", hashHex("noah-key"), "shared-key"} {
 		if got, ok := cfg.Authenticate(key); ok {
 			t.Errorf("Authenticate(%q) = %q, want failure", key, got)
 		}
-	}
-	cfg.JITAPIKey = ""
-	if _, ok := cfg.Authenticate("shared-key"); ok {
-		t.Error("shared key accepted after removal")
-	}
-	cfg.LegacyRequester = "legacy"
-	cfg.JITAPIKey = "shared-key"
-	if got, _ := cfg.Authenticate("shared-key"); got != "legacy" {
-		t.Errorf("legacy name %q", got)
 	}
 }
