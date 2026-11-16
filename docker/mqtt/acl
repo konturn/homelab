@@ -1,0 +1,101 @@
+# Mosquitto ACL (docs/MQTT.md, "ACL"). Rendered by the deploy to
+# /persistent_data/application/mqtt/conf/acl; mosquitto.conf sets acl_file.
+#
+# Deny by default: a user may read or write only the topics listed under it,
+# and a user that is not listed may do nothing. "#" and "+" do not match
+# topics that start with "$" ($SYS/...). Subscribing to a filter needs a read
+# grant that covers that filter, not just the topics it would match.
+#
+# No user may publish a command topic of an hcpy device that is not in
+# hcpy_control_devices (the oven, the range): those topics are granted to
+# nobody, and hcpy does not subscribe to them.
+
+# Home Assistant, the integrator: reads everything, writes its birth/will
+# message and the command topics of the devices it controls.
+user mosquitto
+topic read #
+topic write homeassistant/status
+# zigbee2mqtt devices and groups (set, get, and set/<attribute>), bridge requests
+topic write zigbee2mqtt/+/set
+topic write zigbee2mqtt/+/set/+
+topic write zigbee2mqtt/+/get
+topic write zigbee2mqtt/+/get/+
+topic write zigbee2mqtt/bridge/request/#
+# Frigate integration: switches, numbers, camera on/off, motion, PTZ, profile
+topic write frigate/+/set
+topic write frigate/+/+/set
+topic write frigate/+/ptz
+# hcpy: only the devices that accept commands
+{% for d in hcpy_control_devices %}
+topic write homeconnect/{{ d }}/set
+topic write homeconnect/{{ d }}/activeProgram
+topic write homeconnect/{{ d }}/selectedProgram
+{% endfor %}
+# Litter-Robots (whiskerless), forwarded by lr4-bridge to lr4-broker
+topic write prod/LR4/+/command
+# Valetudo on the vacuum logs in as this user too (it is configured on the
+# robot): its own state and discovery, and Home Assistant's commands to it.
+topic write valetudo/#
+topic write homeassistant/+/Main/#
+
+# zigbee2mqtt: its own tree, and discovery (one node per device, named by
+# IEEE address, so not listable here). It reads homeassistant/# to clean up
+# stale discovery entries.
+user zigbee2mqtt
+topic readwrite zigbee2mqtt/#
+topic readwrite homeassistant/#
+
+# ambientweather (weather station): state and discovery under the station's
+# MAC address.
+user ambientweather
+topic write homeassistant/{{ weather_station_mac | replace(':', '') | upper }}
+topic write homeassistant/+/{{ weather_station_mac | replace(':', '') | upper }}/#
+
+# amcrest2mqtt (doorbell): its own tree, and discovery under
+# amcrest2mqtt-<serial>; the serial is not in the repo, so discovery is open.
+user amcrest2mqtt
+topic write amcrest2mqtt/#
+topic write homeassistant/#
+
+user frigate
+topic readwrite frigate/#
+
+# hcpy: state, events, availability and discovery. It reads only the command
+# topics of hcpy_control_devices and may publish no command topic.
+user hcpy
+topic write homeconnect/LWT
+topic write homeconnect/+/LWT
+topic write homeconnect/+/state/#
+topic write homeconnect/+/event/#
+topic write homeassistant/+/hcpy/#
+{% for d in hcpy_control_devices %}
+topic read homeconnect/{{ d }}/set
+topic read homeconnect/{{ d }}/activeProgram
+topic read homeconnect/{{ d }}/selectedProgram
+{% endfor %}
+
+# The AirPlay receivers (shairport-sync, topic shairport/<zone>; no remote
+# control topic). Discovery node: shairport-sync_<receiver MAC>.
+user airplay
+topic write shairport/#
+{% for r in airplay_receivers.values() | sort(attribute='mac') %}
+topic write homeassistant/+/shairport-sync_{{ r.mac | replace(':', '') | lower }}/#
+{% endfor %}
+
+user anomaly-detector
+topic write homelab/anomaly/#
+topic write homeassistant/+/anomaly_detector/#
+
+# lr4-broker's bridge (docs/litter-robot.md): robot state out, commands in,
+# and its connection state.
+user lr4-bridge
+topic write prod/LR4/+/state
+topic write prod/LR4/+/activity
+topic read prod/LR4/+/command
+topic write $SYS/broker/connection/lr4-bridge/state
+
+# telegraf's Litter-Robot heartbeat and lr4ctl status
+user lr4-monitor
+topic read prod/LR4/+/state
+topic read prod/LR4/+/activity
+topic read $SYS/broker/connection/lr4-bridge/state

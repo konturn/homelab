@@ -353,6 +353,16 @@
     mode: '0755'
   when: "'router' in inventory_hostname"
 
+# hcpy command topics exist only for hcpy_control_devices: the bridge
+# subscribes to no other device's, and the mosquitto ACL (docker/mqtt/acl,
+# rendered below) grants no other device's to anyone. The oven/range must
+# never be on the list.
+- name: hcpy_control_devices does not list the oven or the range
+  ansible.builtin.assert:
+    that: hcpy_control_devices | map('lower') | intersect(['oven', 'range']) | length == 0
+    fail_msg: "the oven/range must not accept commands (docs/MQTT.md, ACL)"
+    quiet: true
+
 # Change detection for the copy task below. The template module costs a
 # remote round trip per file even when nothing changed (~40 files, ~34s).
 # Instead: render every file on the controller and hash it, read the hash,
