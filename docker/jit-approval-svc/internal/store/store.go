@@ -58,6 +58,13 @@ type Request struct {
 	// resource/tier max, the effective TTL will be this value instead.
 	RequestedTTL time.Duration `json:"-"`
 
+	// CredentialType is "proxy_grant" for a credential-proxy grant
+	// (internal/proxygrant); empty for every other credential.
+	CredentialType string `json:"credential_type,omitempty"`
+	// RequesterKeySHA256 is the SHA-256 (hex) of the key the request was
+	// authenticated with. A proxy grant is bound to it.
+	RequesterKeySHA256 string `json:"-"`
+
 	// SSH host (for display/audit, not enforced by certificate)
 	SSHHost   string `json:"ssh_host,omitempty"`
 	ProjectID string `json:"project_id,omitempty"`

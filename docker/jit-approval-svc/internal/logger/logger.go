@@ -3,6 +3,7 @@ package logger
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"sync"
 	"time"
@@ -13,8 +14,15 @@ type Fields map[string]interface{}
 
 var (
 	mu  sync.Mutex
-	out = os.Stdout
+	out io.Writer = os.Stdout
 )
+
+// SetOutput redirects log output (tests).
+func SetOutput(w io.Writer) {
+	mu.Lock()
+	defer mu.Unlock()
+	out = w
+}
 
 // log writes a structured JSON log line to stdout.
 func log(level, event string, fields Fields) {

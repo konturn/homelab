@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +16,7 @@ import (
 	"github.com/nkontur/jit-approval-svc/internal/backend"
 	"github.com/nkontur/jit-approval-svc/internal/config"
 	"github.com/nkontur/jit-approval-svc/internal/logger"
+	"github.com/nkontur/jit-approval-svc/internal/proxygrant"
 	"github.com/nkontur/jit-approval-svc/internal/ratelimit"
 	"github.com/nkontur/jit-approval-svc/internal/store"
 	"github.com/nkontur/jit-approval-svc/internal/telegram"
@@ -33,6 +36,27 @@ type Handler struct {
 	// fyi sends an informational Telegram line (no buttons), for
 	// auto-fyi grants. nil disables it.
 	fyi func(text string) error
+	// proxy issues credential-proxy grants; nil disables them.
+	proxy ProxyGrants
+}
+
+// ProxyGrants issues credential-proxy grants (internal/proxygrant). nil
+// disables credential_type "proxy_grant".
+type ProxyGrants interface {
+	IsProxied(resource string) bool
+	Tier(resource string, templates []string) (int, error)
+	Describe(resource string, templates []string) string
+	Mint(m proxygrant.MintRequest) (*backend.Credential, error)
+}
+
+// SetProxy enables credential-proxy grants.
+func (h *Handler) SetProxy(p ProxyGrants) {
+	h.proxy = p
+}
+
+// Authenticate identifies the caller of a request (see authenticate).
+func (h *Handler) Authenticate(r *http.Request) (string, bool) {
+	return h.authenticate(r)
 }
 
 // SetActions enables routing of "act:" button callbacks to the action-prompt
@@ -108,6 +132,9 @@ type CreateRequestBody struct {
 	SSHHost    string             `json:"ssh_host,omitempty"`
 	ProjectID  string             `json:"project_id,omitempty"`
 	TTL        string             `json:"ttl,omitempty"` // Optional: requested TTL (e.g. "1h", "30m"). Capped at resource/tier max.
+	// CredentialType "proxy_grant" asks for a credential-proxy grant: the
+	// scopes are the proxy's template names for the resource.
+	CredentialType string `json:"credential_type,omitempty"`
 }
 
 // CreateRequestResponse is the JSON response for POST /request.
@@ -157,6 +184,8 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
+	// A proxy grant is bound to the key that authenticated this request.
+	keySum := sha256.Sum256([]byte(r.Header.Get("X-JIT-API-Key")))
 
 	var body CreateRequestBody
 	if !decodeBody(w, r, &body, "invalid request body") {
@@ -192,6 +221,41 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		})
 		body.Tier = minTier
 	}
+	// Credential-proxy grants: the scopes name the proxy's templates, and
+	// the tier is raised to the highest template's tier before the matrix
+	// decides. A resource that has moved to the proxy (no static path left)
+	// is refused for any other credential type.
+	switch {
+	case body.CredentialType == proxygrant.CredentialType:
+		if h.proxy == nil || !h.proxy.IsProxied(body.Resource) {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("%q is not served by the credential proxy", body.Resource))
+			return
+		}
+		if len(body.Scopes) == 0 {
+			body.Scopes = []string{"read"}
+		}
+		t, err := h.proxy.Tier(body.Resource, body.Scopes)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if t > body.Tier {
+			logger.Info("request_tier_raised", logger.Fields{
+				"requester": requester, "resource": body.Resource, "requested_tier": body.Tier,
+				"tier": t, "templates": body.Scopes,
+			})
+			body.Tier = t
+		}
+	case body.CredentialType != "":
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown credential_type %q", body.CredentialType))
+		return
+	case h.proxy != nil && !vault.IsStaticResource(body.Resource) && h.proxy.IsProxied(body.Resource):
+		writeError(w, http.StatusBadRequest, fmt.Sprintf(
+			"%s is served through the credential proxy only: request credential_type %q (jitcurl)",
+			body.Resource, proxygrant.CredentialType))
+		return
+	}
+
 	tierCfg, err := h.cfg.TierFor(body.Tier)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -310,6 +374,8 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.RequestedTTL = requestedTTL
+	req.CredentialType = body.CredentialType
+	req.RequesterKeySHA256 = hex.EncodeToString(keySum[:])
 
 	// Attach vault paths if present
 	if len(body.VaultPaths) > 0 {
@@ -596,7 +662,23 @@ type TelegramUser struct {
 // backend when one is registered, otherwise the static backend (a Vault token
 // limited to that resource's own secret). There is no fallback: if a dynamic
 // backend fails, its error is logged and returned.
-func (h *Handler) mintCredential(req *store.Request, ttl time.Duration) (*store.Credential, error) {
+//
+// approval is how the request was approved (proxygrant.ApprovalAuto or
+// ApprovalApproved); the credential proxy checks it against the matrix.
+func (h *Handler) mintCredential(req *store.Request, ttl time.Duration, approval string) (*store.Credential, error) {
+	if req.CredentialType == proxygrant.CredentialType {
+		if h.proxy == nil {
+			return nil, fmt.Errorf("credential proxy not configured")
+		}
+		cred, err := h.proxy.Mint(proxygrant.MintRequest{
+			RequestID: req.ID, Requester: req.Requester, RequesterKeySHA256: req.RequesterKeySHA256,
+			Resource: req.Resource, Templates: req.Scopes, Tier: req.Tier, Approval: approval, TTL: ttl,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return &store.Credential{Token: cred.Token, LeaseTTL: cred.LeaseTTL, Metadata: cred.Metadata}, nil
+	}
 	b := h.backends.For(req.Resource)
 	isDynamic := h.backends.IsDynamic(req.Resource)
 
@@ -654,7 +736,7 @@ func (h *Handler) autoApprove(req *store.Request, tierCfg config.TierConfig) (*s
 		"requested_ttl": req.RequestedTTL.String(),
 	})
 
-	cred, err := h.mintCredential(req, ttl)
+	cred, err := h.mintCredential(req, ttl, proxygrant.ApprovalAuto)
 	if err != nil {
 		logger.Error("auto_approve_mint_failed", logger.Fields{
 			"request_id": req.ID,
@@ -730,7 +812,7 @@ func (h *Handler) sendApprovalMessage(req *store.Request, tierCfg config.TierCon
 		})
 	}
 
-	reason := displayReason(req)
+	reason := displayReasonWith(req, h.proxy)
 
 	// Show requested TTL vs max if they differ
 	ttlStr := ttl.String()
@@ -837,7 +919,7 @@ func (h *Handler) handleApprove(req *store.Request) {
 		return
 	}
 
-	cred, err := h.mintCredential(req, ttl)
+	cred, err := h.mintCredential(req, ttl, proxygrant.ApprovalApproved)
 	if err != nil {
 		logger.Error("approve_mint_failed", logger.Fields{
 			"request_id": req.ID,
@@ -987,7 +1069,15 @@ func (h *Handler) buildDisplayInfo(req *store.Request, tierCfg config.TierConfig
 // displayReason is the reason shown in Telegram, with the SSH host and any
 // GitLab project override appended so the approver sees what is granted.
 func displayReason(req *store.Request) string {
+	return displayReasonWith(req, nil)
+}
+
+// displayReasonWith also names a proxy grant's templates and what they allow.
+func displayReasonWith(req *store.Request, p ProxyGrants) string {
 	reason := req.Reason
+	if req.CredentialType == proxygrant.CredentialType && p != nil {
+		reason = fmt.Sprintf("%s (proxy grant: %s)", reason, p.Describe(req.Resource, req.Scopes))
+	}
 	if req.SSHHost != "" {
 		reason = fmt.Sprintf("%s (host: %s)", reason, req.SSHHost)
 	}

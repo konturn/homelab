@@ -51,6 +51,74 @@ marker (written by an older version) is deleted only after the broker has run
 longer than the longest TTL it issues plus 5 minutes, since its token must
 then have expired.
 
+## Credential proxy
+
+For the services whose only credential is a long-lived key or password, the
+broker issues **proxy grants** instead of handing out the secret
+(`docs/design/jit-credential-proxy.md`). The proxy is a separate service,
+`docker/jit-proxy`. It holds those secrets, reading them from Vault with its
+own read-only AppRole `jit-proxy`, and the agent never sees them.
+
+```
+Agent --POST /request {credential_type: proxy_grant, scopes: [templates]}--> broker
+  broker: authenticate requester, raise tier to the templates' tier, matrix, rate limit, approval
+  broker --PUT /internal/grants/<id> {sha256(grant), sha256(requester key), templates, tier, approval, expiry}--> jit-proxy  (jit-proxy-ctl bridge)
+Agent <-- grant (jitp_..., once) -- broker
+Agent --GET /r/<resource>/<path>  Authorization: Bearer jitp_...  X-JIT-API-Key: <own key>--> jit-proxy  (openclaw-jitproxy bridge)
+  jit-proxy: grant + requester key, deny list, template rules, budget, then the real credential is added upstream
+```
+
+- **Templates** (`docker/jit-proxy/templates/<resource>.yml`) define what a grant
+  allows: method, path, query and JSON or JSON-RPC body rules. They also
+  define an always-deny list, a minimum tier, and single use for destructive
+  templates. A request names templates in `scopes` (default `read`).
+- **The tier** is the highest of the resource's tier, each template's tier and
+  the requested tier, and the approval matrix decides at that tier as for any
+  request. The proxy checks the same matrix again when the grant is
+  registered: a grant the matrix denies, or an auto-approved grant at a tier
+  that needs approval, is refused.
+- **A grant is bound to its requester.** The proxy stores only the SHA-256 of
+  the grant and of the requester's broker key, and every call must present
+  both.
+- **Lifetime.** A grant lives for the tier TTL or less (or until its single
+  use). The requester can end it early with `POST /grants/<id>/revoke`; the
+  broker revokes it on the proxy when it expires, and re-registers live
+  multi-use grants when the proxy restarts. Single-use grants are never
+  re-registered.
+- **Migration.** While a resource is still in `staticResourcePaths`, the old
+  static credential also works. Once it is removed there (and from
+  `jit-static-*`), only proxy grants are issued for it.
+- **The agent side** is `jitcurl` (`docker/openclaw/jitcurl.sh`, mounted
+  read-only at `/usr/local/bin/jitcurl`):
+  `jitcurl radarr read GET '/api/v3/movie/lookup?term=x'`.
+
+| Resource | Templates (tier; single use marked *) |
+|---|---|
+| radarr, sonarr | `read` 1, `health` 1, `write` 1, `replace-file`* 1, `queue-remove`* 1, `remove-title`* 2 |
+| prowlarr | `read` 1, `test-indexers` 1 |
+| plex | `read` 1, `refresh` 1 |
+| ombi | `read` 1, `requests` 1 |
+| tautulli | `read` 1 |
+| nzbget | `read` 1, `control` 1, `remove`* 1 |
+| deluge | `read` 1, `control` 1, `remove`* 1, `remove-data`* 2 |
+| pihole | `read` 2, `block-toggle` 2, `lists` 2 |
+
+The proxy enforces these invariants, each covered by tests in
+`docker/jit-proxy` (CI job `jit-proxy:test`):
+
+| # | Invariant | Tests |
+|---|---|---|
+| I1 | Nothing outside a grant's rules is forwarded, and what is forwarded is the canonical form that was matched | `FuzzProxyRequest`, `FuzzRuleDecisionCanonical`, `FuzzParseTarget`, `FuzzStrictObject`, `TestDenials`, golden tests per template |
+| I2 | No held secret (any encoding) or grant ever reaches a response | `FuzzScrub`, `TestKnownSecretsAllEncodings`, `TestSecretNeverReturned` |
+| I3 | Expired, revoked, spent or unknown grants are refused | `TestPropertyGrantLifecycle` (random operation sequences against a model), `TestExpiredAndRevokedGrantsRefused`, `TestSingleUseGrant` |
+| I4 | No secret in log lines | every proxy test checks its own log output (without the log scrubber); `TestLogScrubberLayer` |
+| I5 | Credentials the agent sends are never forwarded | `TestClientCredentialsNeverForwarded` |
+| | Grants are bound to their requester; the matrix is applied | `TestGrantBoundToRequester`, `TestRegisterValidation`, here `FuzzProxyGrantRequest`, `TestProxyGrantTierFromTemplates`, `TestProxyGrantApprovedByTelegram`, `internal/proxygrant` |
+
+MQTT and IPMI are not HTTP and stay on the static backend with their own
+`jit-static-*` policies (design 8.4, Q15). Paperless keeps its dynamic
+backend, and Gmail keeps its short-lived OAuth tokens (design phases 3 and 4).
+
 ## API
 
 ### `POST /request`
@@ -73,6 +141,13 @@ identifies the requester from it (401 if it matches none). `requester` in the
 body is optional: if present it must name the key's owner, or the request is
 refused (403). A `tier` below the resource's tier is raised to it. A request
 the approval matrix denies is refused with 403 and leaves nothing pending.
+
+For a credential-proxy grant, add `"credential_type": "proxy_grant"` and name
+the templates in `"scopes"` (see [Credential proxy](#credential-proxy)); the
+tier is then raised to the templates' tier. The credential has
+`metadata.type` `proxy_grant`, a `jitp_` token, `grant_id`, `base_url`,
+`templates`, `single_use`, `max_requests` and `expires_at`. A resource that
+has moved to the proxy is refused for any other credential type (400).
 
 Response:
 ```json
@@ -133,6 +208,11 @@ Response (approved, first poll — static backend):
   }
 }
 ```
+
+### `POST /grants/:id/revoke`
+
+Revokes a credential-proxy grant early. Only the grant's own requester (by
+its key) can revoke it; anyone else gets 404.
 
 ### `POST /webhook/refresh`
 
@@ -250,6 +330,9 @@ All configuration via environment variables:
 | `PAPERLESS_URL` | No | — | Paperless-ngx URL; enables the dynamic backend |
 | `SSH_VAULT_PATH` | No | `ssh-client-signer` | Vault SSH secrets engine mount |
 | `GOOGLE_TOKEN_URL` | No | `https://oauth2.googleapis.com/token` | Google token endpoint for the Gmail backends |
+| `JIT_PROXY_CTL_URL` | No | — | Credential proxy control plane (`http://<jit-proxy-ctl address>:8091`); enables proxy grants |
+| `JIT_PROXY_CTL_KEY` | With the above | — | Bearer key for the control plane (`homelab/docker/jit-proxy`, `ctl_key`) |
+| `JIT_PROXY_URL` | With the above | — | Data-plane URL returned to agents as `base_url` |
 
 ### Disabling Dynamic Backends
 

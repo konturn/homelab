@@ -70,3 +70,9 @@ useDefault = true
   description = "openssl rand base64 output (high-entropy string after command)"
   regex = '''openssl rand[^|]+\|\s*(?:tr|head|cut)[^\n]*\n([A-Za-z0-9]{20,})'''
   keywords = ["openssl rand"]
+
+[[rules]]
+  id = "jit-proxy-grant"
+  description = "JIT credential proxy grant (docker/jit-proxy)"
+  regex = '''jitp_[A-Za-z0-9_-]{43}'''
+  keywords = ["jitp_"]

@@ -13,6 +13,7 @@ import (
 	"github.com/nkontur/jit-approval-svc/internal/config"
 	"github.com/nkontur/jit-approval-svc/internal/handler"
 	"github.com/nkontur/jit-approval-svc/internal/logger"
+	"github.com/nkontur/jit-approval-svc/internal/proxygrant"
 	"github.com/nkontur/jit-approval-svc/internal/store"
 	"github.com/nkontur/jit-approval-svc/internal/telegram"
 	"github.com/nkontur/jit-approval-svc/internal/vault"
@@ -97,6 +98,14 @@ func main() {
 	// Initialize handler
 	h := handler.New(cfg, reqStore, vaultClient, tgClient, backends)
 
+	// Credential proxy grants (internal/proxygrant, docker/jit-proxy).
+	var proxyGrants *proxygrant.Client
+	if ctlURL := os.Getenv("JIT_PROXY_CTL_URL"); ctlURL != "" {
+		proxyGrants = proxygrant.New(ctlURL, os.Getenv("JIT_PROXY_CTL_KEY"), os.Getenv("JIT_PROXY_URL"))
+		h.SetProxy(proxyGrants)
+		logger.Info("credential_proxy_enabled", logger.Fields{"ctl_url": ctlURL, "public_url": os.Getenv("JIT_PROXY_URL")})
+	}
+
 	// Action prompts for host-side clients, on a Unix socket only
 	var actionsSrv *http.Server
 	if cfg.ActionsSocket != "" {
@@ -130,6 +139,9 @@ func main() {
 	mux.HandleFunc("/health", h.HandleHealth)
 	mux.HandleFunc("/telegram/webhook", h.HandleTelegramWebhook)
 	mux.HandleFunc("/webhook/refresh", h.HandleWebhookRefresh)
+	if proxyGrants != nil {
+		mux.HandleFunc("/grants/", proxyGrants.HandleRevoke(h.Authenticate))
+	}
 
 	server := &http.Server{
 		Addr:         cfg.ListenAddr,
@@ -143,6 +155,9 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go cleanupLoop(ctx, reqStore)
+	if proxyGrants != nil {
+		go proxyGrants.Run(ctx, 10*time.Second)
+	}
 	go vaultPolicyCleanupLoop(ctx, vaultClient, time.Now().Add(longestTTL(cfg)+backend.PolicyCleanupGrace))
 
 	// Graceful shutdown
