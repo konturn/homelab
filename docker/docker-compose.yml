@@ -927,10 +927,17 @@ services:
     # same day. Those are query spikes, not compaction (compactions in the same
     # windows took <1s). INFLUXD_QUERY_MEMORY_BYTES below bounds them rather than
     # raising the limit again.
+    # Memory (2026-11-16): the 2.9.1 upgrade (restart 2026-11-07 22:41Z) moved
+    # the baseline, with series cardinality flat (2286 -> 2477 per hour).
+    # active_anon median was 0.9-1.0G before it and has been 2.0-2.4G since. The
+    # query cap above was sized against a 0.8G baseline: 2.4G + 3.4G is the old
+    # 6G limit, and a kernel memcg OOM killed influxd at 6.2G anon on
+    # 2026-11-14 07:32Z. The 1-minute anon max is 3.0-3.9G on ordinary days.
+    # 8G restores the margin the cap was designed with.
     deploy:
       resources:
         limits:
-          memory: 6G
+          memory: 8G
         reservations:
           memory: 1G
     volumes:
