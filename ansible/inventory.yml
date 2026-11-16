@@ -310,9 +310,21 @@ all:
         - src: "docker/frigate/config.yml"
           dest: "{{ docker_persistent_data_path }}/frigate/config.yml"
           name: "frigate"
+        # mosquitto (docs/MQTT.md): owned by its user 1883 so that a SIGHUP
+        # (the deploy's user additions) can re-read the config and ACL after
+        # the broker has dropped root.
         - src: "docker/mqtt/mosquitto.conf"
           dest: "{{ docker_persistent_data_path }}/mqtt/conf/mosquitto.conf"
           name: "mosquitto"
+          owner: "1883"
+          group: "1883"
+          mode: "0600"
+        - src: "docker/mqtt/acl"
+          dest: "{{ docker_persistent_data_path }}/mqtt/conf/acl"
+          name: "mosquitto"
+          owner: "1883"
+          group: "1883"
+          mode: "0600"
         # lr4-broker (docs/litter-robot.md): runs as uid 1883, reads only.
         # The certificates and the bridge password come from Vault
         # (docker/lr4-broker).
