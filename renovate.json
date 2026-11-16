@@ -192,6 +192,7 @@
         "!gitlab/gitlab-runner",
         "!hashicorp/vault",
         "!tecnativa/docker-socket-proxy",
+        "!mikebrady/shairport-sync",
         "!nextcloud",
         "!vaultwarden/server"
       ],
@@ -224,6 +225,7 @@
         "!gitlab/gitlab-runner",
         "!hashicorp/vault",
         "!tecnativa/docker-socket-proxy",
+        "!mikebrady/shairport-sync",
         "!willhallonline/ansible"
       ],
       "matchUpdateTypes": [
@@ -310,6 +312,7 @@
         "!gitlab/gitlab-runner",
         "!hashicorp/vault",
         "!tecnativa/docker-socket-proxy",
+        "!mikebrady/shairport-sync",
         "!ghcr.io/openclaw/openclaw"
       ],
       "matchUpdateTypes": [
@@ -348,7 +351,8 @@
         "gitlab/gitlab-ce",
         "gitlab/gitlab-runner",
         "hashicorp/vault",
-        "tecnativa/docker-socket-proxy"
+        "tecnativa/docker-socket-proxy",
+        "mikebrady/shairport-sync"
       ],
       "addLabels": [
         "automerge-manual"
@@ -382,7 +386,7 @@
       "allowedVersions": "<3.6.0"
     },
     {
-      "description": "shairport-sync 5.6.1 to 5.6.3 exit when a classic AirPlay sender offers a format they cannot decode (pyatv sends L16), taking the receiver down; 5.6/5.6.0 untested and skipped too (docs/AUDIO.md)",
+      "description": "shairport-sync 5.6.1 to 5.6.3 exit when a classic AirPlay sender offers a format they cannot decode (pyatv sends L16), taking the receiver down; 5.6/5.6.0 untested and skipped too (docs/AUDIO.md). A crash skip keeps the image on the auto-merge denylist (ci/automerge-policy.yml), so every update of it is reviewed",
       "matchPackageNames": [
         "mikebrady/shairport-sync"
       ],
