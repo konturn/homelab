@@ -153,8 +153,8 @@ resource "vault_policy" "vault_admin" {
 # Policy: router-helpers
 # =============================================================================
 # Root's helpers on the router (scripts/vault-router-token, docs/SECRET_ROTATION.md, "Vault authentication details"):
-# haapi/hews, scripts/gitlab-settings.sh, scripts/set-deadman-ping-url.sh and
-# the hand-run amcrestctl/slzbctl. Exact paths only; AppRole in roles.tf.
+# haapi/hews, lr4ctl, scripts/gitlab-settings.sh, scripts/set-deadman-ping-url.sh
+# and the hand-run amcrestctl/slzbctl. Exact paths only; AppRole in roles.tf.
 
 resource "vault_policy" "router_helpers" {
   name = "router-helpers"
@@ -175,6 +175,21 @@ resource "vault_policy" "router_helpers" {
       capabilities = ["read"]
     }
     path "homelab/data/infrastructure/slzb" {
+      capabilities = ["read"]
+    }
+
+    # scripts/litter-robot/lr4ctl: lr4-broker CA, server certificate and
+    # lr4-monitor password; the whiskerless CLI and robot bundles
+    path "homelab/data/docker/lr4-broker" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/pki/whiskerless/cli" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/pki/whiskerless/robots/main" {
+      capabilities = ["read"]
+    }
+    path "homelab/data/pki/whiskerless/robots/movie-room" {
       capabilities = ["read"]
     }
 

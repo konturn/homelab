@@ -166,9 +166,11 @@ To rotate a secret:
 | `VAULT_APPROLE_SECRET_ID` | Circular dependency — needed to auth to Vault |
 | `VAULT_UNSEAL_KEYS` | Break-glass secret — must not depend on Vault |
 
-The Vault root token is in none of these: no job or helper uses it ("Vault authentication details", "Admin work by hand" below).
 | `ROUTER_PRIVATE_KEY_BASE64` | CI `before_script` writes the deploy key from this variable (a copy also sits in Vault `infrastructure/router`, read by nothing) |
 | `SMTP_PASSWORD` | Appears unused — candidate for deletion |
+
+The Vault root token is in none of these and no job or helper uses it
+("Vault authentication details", "Admin work by hand" below).
 
 ---
 
@@ -597,7 +599,7 @@ OpenClaw. Each consumer has its own role and policy.
 | `vault:validate` (MR, `terraform plan`) | JWT | `vault-read` | read auth/policy/mount config; no secrets; any branch |
 | Deploys (`*:deploy`, `*:deploy-service`, via `fetch-vault-secrets`), drift and report jobs (`netgear:*`, `aruba-*`, `amcrest:drift`, `slzb:drift`, `ups-card:drift`, `report:*`), `gitlab:settings` | JWT | `ci-deploy` | read `homelab/data/*`, write only `homelab/data/docker/zwave-js-ui`; 5 min |
 | Home Assistant config repo CI (`root/homeassistant`) | JWT | `ha-config-deploy` | HA token, its bot token, SSH cert for `ha-config` |
-| Root's helpers on the router (`haapi`, `hews`, `scripts/gitlab-settings.sh`, `scripts/set-deadman-ping-url.sh`, hand-run `amcrestctl.py`/`slzbctl.py`) | AppRole via `vault-router-token` | `router-helpers` | read the HA token, `docker/event-router`, `cameras/rear`, `infrastructure/slzb`; write `monitoring/healthchecks`; 5 min, bound to 10.3.0.2 |
+| Root's helpers on the router (`haapi`, `hews`, `lr4ctl`, `scripts/gitlab-settings.sh`, `scripts/set-deadman-ping-url.sh`, hand-run `amcrestctl.py`/`slzbctl.py`) | AppRole via `vault-router-token` | `router-helpers` | read the HA token, `docker/event-router`, `docker/lr4-broker`, `pki/whiskerless/{cli,robots/main,robots/movie-room}`, `cameras/rear`, `infrastructure/slzb`; write `monitoring/healthchecks`; 5 min, bound to 10.3.0.2 |
 | OpenClaw | AppRole (`VAULT_APPROLE_*` CI variables) | `openclaw` | `openclaw-ops`: its own config and the JIT API key; everything else through the JIT broker |
 | jit-approval-svc | AppRole (Vault KV `docker/jit-approval-svc`) | `jit-approval-svc` | mints scoped short-lived tokens (docs/jit-access-design.md) |
 
@@ -618,8 +620,16 @@ The repo's Python tools (`networking/*/…ctl.py`, `ci/reports/run_remote.py`)
 do this themselves when `VAULT_TOKEN` is unset, with `VAULT_JWT_ROLE`
 (default `ci-deploy`).
 
-There is no `VAULT_TOKEN` CI variable. A job that needs Vault must log in as
-above.
+There is no `VAULT_TOKEN` CI variable, and nothing on the router reads one
+through `glab variable get`. A job that needs Vault must log in as above. The
+Python tools and `scripts/gitlab-settings.sh` still use a `VAULT_TOKEN` that is
+set in the environment first (a hand run with a scoped token); in CI it is
+unset, so they log in with the job's JWT.
+
+`router:bootstrap` (ansible/bootstrap.yml, disaster recovery only) enables a
+KV mount only when `VAULT_TOKEN` is set in its environment. In CI it is not,
+and the step is skipped; on a rebuilt Vault the mounts come from
+`terraform/vault`, applied by hand with the new root token (below).
 
 ### Router helpers: `vault-router-token`
 
@@ -647,10 +657,13 @@ VAULT_TOKEN=$(vault-router-token) vault kv get -field=token homelab/docker/homea
 ### Admin work by hand
 
 Anything the scoped roles cannot do (disabling an audit device, unsealing
-by hand, a Vault rebuild) needs the root token. It is a break-glass secret,
-kept outside the repo, CI and the routine helper paths. After use, unset it
-from the shell. For a lost root token, generate a new one with a quorum of
-unseal keys (`vault operator generate-root`).
+by hand, a Vault rebuild) needs the root token. It is a break-glass secret:
+not in the repo, and given to no CI job, helper or service (where it is kept
+is deliberately not written here). Use it in one shell only: read it into a
+variable, never onto a command line or into shell history (`export
+VAULT_TOKEN=...` typed at a prompt lands in `~/.bash_history`), and unset it
+afterwards. For a lost root token, generate a new one with a quorum of unseal
+keys (`vault operator generate-root`).
 
 On a re-initialised Vault (DISASTER_RECOVERY.md, Phase 4.5 Case B) the JWT
 roles do not exist yet, so the first `terraform/vault` apply is run by hand
