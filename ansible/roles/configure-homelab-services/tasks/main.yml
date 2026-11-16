@@ -596,6 +596,37 @@
                                      + (['homeassistant'] if _ha_pinned_integrations is changed else [])) | unique | list }}"
     _nginx_container_names: "{{ nginx_config | default([]) | map(attribute='name') | list }}"
 
+### Vault credential of root's helpers on the router (docs/SECRET_ROTATION.md, "Vault authentication details"): the
+# router-helpers AppRole, read-only on the helpers' paths, and the script
+# that turns it into a 5-minute token.
+- name: Vault helper credential directory
+  ansible.builtin.file:
+    path: /etc/vault
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: "'router' in inventory_hostname"
+
+- name: Vault helper AppRole credential
+  ansible.builtin.copy:
+    content: "{{ {'approle_role_id': vault_router_helpers_role_id | trim, 'approle_secret_id': vault_router_helpers_secret_id | trim} | to_json }}\n"
+    dest: /etc/vault/router-helpers.json
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  when: "'router' in inventory_hostname"
+
+- name: Install vault-router-token
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/scripts/vault-router-token"
+    dest: /usr/local/sbin/vault-router-token
+    owner: root
+    group: root
+    mode: "0700"
+  when: "'router' in inventory_hostname"
+
 ### Home Assistant helpers for root (scripts/ha-helpers/README.md): haapi
 # (REST) and hews (websocket), token from Vault at run time. The /root
 # symlinks keep the paths they had when they were hand-made.

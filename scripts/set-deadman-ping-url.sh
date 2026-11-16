@@ -32,7 +32,8 @@ url="${url%/}"
     || { echo "that does not look like a ping URL (https://hc-ping.com/<uuid>)" >&2; exit 1; }
 
 if [ -z "${VAULT_TOKEN:-}" ]; then
-    VAULT_TOKEN=$(glab variable get VAULT_TOKEN)
+    # router-helpers may write exactly this path (docs/SECRET_ROTATION.md, "Vault authentication details")
+    VAULT_TOKEN=$(/usr/local/sbin/vault-router-token)
     export VAULT_TOKEN
 fi
 

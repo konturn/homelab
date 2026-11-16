@@ -34,9 +34,9 @@
 # 2 minutes): the project token cannot see project 14's hooks, and GitLab
 # never returns a hook's URL secret or token over the API. The webhook token
 # is read from Vault (homelab/docker/event-router, gitlab_webhook_token; CI:
-# JWT login with VAULT_ID_TOKEN, role ci-deploy; router: VAULT_TOKEN, or the
-# CI variable through glab) and handed to the runner on stdin, never on a
-# command line.
+# JWT login with VAULT_ID_TOKEN, role ci-deploy; router: VAULT_TOKEN, or a
+# router-helpers token from vault-router-token, docs/SECRET_ROTATION.md, "Vault authentication details") and handed to
+# the runner on stdin, never on a command line.
 #
 # Usage: scripts/gitlab-settings.sh [--check]
 #   --check   report drift only; exit 3 if anything differs
@@ -223,8 +223,8 @@ vault_get() {
       curl -sS "${k[@]}" --max-time 15 -X POST --data @- "${VAULT_ADDR}/v1/auth/jwt/login" |
       jq -r '.auth.client_token // empty') || vt=
   fi
-  if [ -z "$vt" ] && command -v glab >/dev/null 2>&1; then
-    vt=$(glab variable get VAULT_TOKEN 2>/dev/null) || vt=
+  if [ -z "$vt" ] && [ -x /usr/local/sbin/vault-router-token ]; then
+    vt=$(/usr/local/sbin/vault-router-token 2>/dev/null) || vt=
   fi
   [ -n "$vt" ] || return 1
   printf 'X-Vault-Token: %s\n' "$vt" |

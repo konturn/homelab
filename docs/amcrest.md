@@ -56,7 +56,7 @@ the environment, or `AMCREST_PASSWORD` set:
 
 ```sh
 cd networking/amcrest
-export VAULT_ADDR=https://vault.lab.nkontur.com:8200 VAULT_TOKEN=$(glab variable get VAULT_TOKEN)
+export VAULT_ADDR=https://vault.lab.nkontur.com:8200 VAULT_TOKEN=$(vault-router-token)
 python3 amcrestctl.py export             # rewrite back-camera.yaml from the camera
 python3 amcrestctl.py export -o -        # print instead of writing
 python3 amcrestctl.py drift              # exit 2 on drift

@@ -147,7 +147,7 @@ The script walks through 7 steps in order:
 4. **Configure CI/CD variables** in GitLab (Settings → CI/CD → Variables), only
    if GitLab came back without them. The project keeps just the bootstrap set:
    - `ROUTER_PRIVATE_KEY_BASE64`
-   - `VAULT_UNSEAL_KEYS`, `VAULT_TOKEN`, `VAULT_ADDR`
+   - `VAULT_UNSEAL_KEYS`, `VAULT_ADDR` (no root token: docs/SECRET_ROTATION.md, "Vault authentication details")
    - `VAULT_APPROLE_ROLE_ID`, `VAULT_APPROLE_SECRET_ID` (rewritten by `vault:rotate-approles`), `APPROLE_ROTATION_PAT`
    - `GITLAB_RUNNER_TOKEN`, `AUTOMERGE_TOKEN`, `RENOVATE_TOKEN`
 

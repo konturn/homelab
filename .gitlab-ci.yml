@@ -1136,20 +1136,35 @@ macmini:deploy:
 # =============================================================================
 # Vault Configuration - Terraform (main only, deploy stage)
 # =============================================================================
+# Authenticates with the vault-admin JWT role (docs/SECRET_ROTATION.md, "Vault authentication details"), not a root
+# token: the role is bound to protected main of this project, 15-minute token.
 vault:configure:
   stage: deploy
   image: alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
   environment: admin
   needs: []
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: https://vault.lab.nkontur.com:8200
   variables:
     TF_VERSION: "1.7.5"
     VAULT_ADDR: "https://vault.lab.nkontur.com:8200"
   before_script:
-    - apk add --no-cache wget unzip
+    - apk add --no-cache wget unzip curl jq
     - wget -q "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip"
     - unzip -o "terraform_${TF_VERSION}_linux_amd64.zip" -d /usr/local/bin/
     - chmod +x /usr/local/bin/terraform
   script:
+    - |
+      VAULT_TOKEN=$(jq -nc --arg j "$VAULT_ID_TOKEN" '{role: "vault-admin", jwt: $j}' |
+        curl -sk --max-time 15 -X POST --data @- "${VAULT_ADDR}/v1/auth/jwt/login" |
+        jq -r '.auth.client_token // empty')
+      if [ -z "$VAULT_TOKEN" ]; then
+        echo "ERROR: JWT login with the vault-admin role failed"
+        exit 1
+      fi
+      export VAULT_TOKEN
+      echo "JWT login succeeded (vault-admin)"
     - cd terraform/vault
     - |
       terraform init \
@@ -1373,6 +1388,28 @@ vault:rotate-approles:
       fi
 
       # -----------------------------------------------------------------
+      # 3. Rotate router-helpers AppRole (stored in Vault KV, docs/SECRET_ROTATION.md, "Vault authentication details")
+      # -----------------------------------------------------------------
+      if rotate_approle "router-helpers"; then
+        echo "=== Updating router-helpers credentials in Vault ==="
+        UPDATED=$(jq -n \
+          --arg rid "$_ROTATED_ROLE_ID" \
+          --arg sid "$_ROTATED_SECRET_ID" \
+          '{approle_role_id: $rid, approle_secret_id: $sid}')
+        WRITE_RESP=$(vault_api POST "homelab/data/infrastructure/router-helpers" \
+          "{\"data\": $UPDATED}")
+        if echo "$WRITE_RESP" | jq -e '.data.version' > /dev/null 2>&1; then
+          echo "  Vault KV updated (version: $(echo "$WRITE_RESP" | jq -r '.data.version')) ✓"
+        else
+          echo "  ERROR: Failed to update Vault KV"
+          echo "$WRITE_RESP" | jq -r '.errors[]' 2>/dev/null
+          FAILURES=$((FAILURES + 1))
+        fi
+      else
+        FAILURES=$((FAILURES + 1))
+      fi
+
+      # -----------------------------------------------------------------
       # Summary
       # -----------------------------------------------------------------
       echo ""
@@ -1381,6 +1418,7 @@ vault:rotate-approles:
         echo "All AppRoles rotated successfully ✓"
         echo "  - openclaw: next deploy picks up new role_id + secret_id from CI variables"
         echo "  - jit-approval-svc: next deploy picks up new credentials from Vault KV"
+        echo "  - router-helpers: next router deploy rewrites /etc/vault/router-helpers.json"
       else
         echo "WARNING: ${FAILURES} rotation(s) failed — check logs above"
         exit 1

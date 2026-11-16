@@ -1,0 +1,23 @@
+#!/bin/bash
+# vault-router-token: print a short-lived Vault token for root's helpers on
+# the router (AppRole router-helpers, policy router-helpers; docs/SECRET_ROTATION.md, "Vault authentication details").
+#
+#   T=$(vault-router-token)
+#   VAULT_TOKEN=$(vault-router-token) vault kv get homelab/docker/homeassistant
+#
+# The token can read only the paths in the router-helpers policy and lives 5
+# minutes. The AppRole credential is /etc/vault/router-helpers.json (root,
+# 0600), written by the router deploy from Vault KV
+# homelab/infrastructure/router-helpers and rotated by vault:rotate-approles.
+# The credential goes to curl on stdin, never on a command line. Print the
+# token only into a variable or another program, never to a terminal or log.
+#
+# Deployed by configure-homelab-services to /usr/local/sbin/vault-router-token.
+set -euo pipefail
+CRED=/etc/vault/router-helpers.json
+ADDR="${VAULT_ROUTER_ADDR:-https://10.3.32.6:8200}"
+[ -r "$CRED" ] || { echo "vault-router-token: $CRED missing (router deploy not run?)" >&2; exit 3; }
+jq -c '{role_id: .approle_role_id, secret_id: .approle_secret_id}' "$CRED" |
+  curl -sk --max-time 10 -X POST --data @- "$ADDR/v1/auth/approle/login" |
+  jq -er '.auth.client_token' 2>/dev/null ||
+  { echo "vault-router-token: AppRole login failed" >&2; exit 3; }

@@ -67,7 +67,7 @@ in the environment:
 
 ```sh
 cd networking/slzb
-export VAULT_ADDR=https://vault.lab.nkontur.com:8200 VAULT_TOKEN=$(glab variable get VAULT_TOKEN)
+export VAULT_ADDR=https://vault.lab.nkontur.com:8200 VAULT_TOKEN=$(vault-router-token)
 python3 slzbctl.py export          # rewrite slzb-mr1.yaml from the coordinator
 python3 slzbctl.py export -o -     # print instead of writing
 python3 slzbctl.py drift           # exit 2 on drift

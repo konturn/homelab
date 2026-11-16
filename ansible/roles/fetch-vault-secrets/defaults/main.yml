@@ -195,6 +195,12 @@ vault_secret_paths:
       vault_ipmi_password: "password"
       vault_ipmi_user: "user"
     optional_fields: [vault_ipmi_user]  # not referenced by any template
+  # AppRole credential of root's helpers on the router (docs/SECRET_ROTATION.md, "Vault authentication details"),
+  # written to /etc/vault/router-helpers.json
+  - path: "infrastructure/router-helpers"
+    fields:
+      vault_router_helpers_role_id: "approle_role_id"
+      vault_router_helpers_secret_id: "approle_secret_id"
   - path: "infrastructure/pihole"
     fields:
       vault_pihole_password: "password"
