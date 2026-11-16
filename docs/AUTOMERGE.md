@@ -198,6 +198,7 @@ never auto-merged, each with its reason:
 | `gitlab/gitlab-runner` | Runs every CI job. Today the runner is a host package (`configure-base`), not a compose service; the entry covers a future compose runner. |
 | `vault` (`hashicorp/vault`) | Every deploy job reads its secrets from Vault before it changes anything. A Vault that breaks after the health gate blocks every later deploy, the revert included. |
 | `docker-socket-proxy` (`tecnativa/docker-socket-proxy`) | CI image builds reach the Docker daemon through it. |
+| `mikebrady/shairport-sync` | Versions skipped in `renovate.json` for a crash that only some senders trigger, which the health gate cannot see. Any image with a crash skip is listed here. |
 
 Renovate labels updates of the denylisted images `automerge-manual` and adds a
 note to the MR body (`renovate.json`, rule "Auto-merge denylist").

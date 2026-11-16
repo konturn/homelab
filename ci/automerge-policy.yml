@@ -254,6 +254,10 @@ denylist:
     gitlab/gitlab-runner: runs every CI job, including the deploy and its rollback.
     hashicorp/vault: Vault (see the vault service).
     tecnativa/docker-socket-proxy: CI image builds (see the docker-socket-proxy service).
+    mikebrady/shairport-sync: >-
+      Versions are skipped in renovate.json because they crash on input from
+      some senders only, which the health gate cannot see. Any image with
+      such a crash skip belongs here, so its updates are always reviewed.
 
 # Stateful services and database images. A major-version upgrade of one of
 # these is a heavy change: it would need last night's backup to have succeeded
