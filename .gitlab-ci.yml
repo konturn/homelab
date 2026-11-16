@@ -13,6 +13,7 @@
 #   VALIDATE (parallel)
 #   ┌────────────────────────┬──────────────┬──────────────┬──────────────┬──────────────────┐
 #   router:val [id_tokens]  zwave:val  sat-2:val  vault:validate  jit-approval-svc:test
+#   jit-proxy:test
 #   anomaly-detector:test  revert-guard (MR only, ci/revert-guard/README.md)
 #   event-router:test
 #   canary (MR, on critical-service changes; docs/CANARY.md)  canary:test
@@ -21,7 +22,7 @@
 #   BUILD (parallel, path-triggered)
 #   ┌──────────────┬──────────────┬──────────────┬──────────────────────┐
 #   openclaw:build  amcrest2mqtt:build  snapcast:build  snapclient:build  jit-approval-svc:build
-#   anomaly-detector:build  nginx:build  event-router:build  petlibro-camera:build
+#   anomaly-detector:build  nginx:build  event-router:build  petlibro-camera:build  jit-proxy:build
 #   main: <image>:build builds and pushes :latest and :<sha> (protected runner)
 #   MRs:  <image>:build-check builds with kaniko, no push (unprotected runner)
 #
@@ -399,6 +400,31 @@ jit-approval-svc:test:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - docker/jit-approval-svc/**/*
+
+# JIT credential proxy (docker/jit-proxy): unit, property and fuzz-seed tests
+# of the security invariants (docker/jit-approval-svc/README.md, "Credential
+# proxy"), plus the template/Terraform policy sync check, which reads
+# terraform/vault/policies.tf.
+jit-proxy:test:
+  extends: .interruptible
+  stage: validate
+  image: golang:1.27-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280
+  needs: []
+  script:
+    - cd docker/jit-proxy
+    - test -z "$(gofmt -l .)" || { gofmt -l .; echo "gofmt needed"; exit 1; }
+    - go vet ./...
+    - go test -count=1 ./...
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - docker/jit-proxy/**/*
+        - terraform/vault/policies.tf
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - docker/jit-proxy/**/*
+        - terraform/vault/policies.tf
 
 # Unit tests (synthetic series: seasonality, spikes, stale, drift) plus a
 # strict parse of config.yml and suppressions.yml. See
@@ -806,6 +832,29 @@ jit-approval-svc:build-check:
       when: manual
       allow_failure: true
 
+jit-proxy:build:
+  extends: .docker_build
+  variables:
+    IMAGE_NAME: jit-proxy
+    BUILD_CONTEXT: docker/jit-proxy
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - docker/jit-proxy/**/*
+
+jit-proxy:build-check:
+  extends: .kaniko_check
+  variables:
+    BUILD_CONTEXT: docker/jit-proxy
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - docker/jit-proxy/**/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
+
 snapclient:build:
   extends: .docker_build
   variables:
@@ -1008,6 +1057,8 @@ router:deploy:
     - job: chromium-browser:build
       optional: true
     - job: jit-approval-svc:build
+      optional: true
+    - job: jit-proxy:build
       optional: true
     - job: nginx:build
       optional: true
@@ -1388,6 +1439,35 @@ vault:rotate-approles:
       fi
 
       # -----------------------------------------------------------------
+      # 2b. Rotate jit-proxy AppRole (stored in Vault KV, with the
+      #     control-plane key; the key is generated once and kept)
+      # -----------------------------------------------------------------
+      if rotate_approle "jit-proxy"; then
+        echo "=== Updating jit-proxy credentials in Vault ==="
+        EXISTING=$(vault_api GET "homelab/data/docker/jit-proxy")
+        CTL_KEY=$(echo "$EXISTING" | jq -r '.data.data.ctl_key // empty' 2>/dev/null)
+        if [ -z "$CTL_KEY" ]; then
+          echo "  No control-plane key yet: generating one"
+          CTL_KEY=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
+        fi
+        UPDATED=$(jq -n \
+          --arg rid "$_ROTATED_ROLE_ID" \
+          --arg sid "$_ROTATED_SECRET_ID" \
+          --arg ctl "$CTL_KEY" \
+          '{approle_role_id: $rid, approle_secret_id: $sid, ctl_key: $ctl}')
+        WRITE_RESP=$(vault_api POST "homelab/data/docker/jit-proxy" "{\"data\": $UPDATED}")
+        if echo "$WRITE_RESP" | jq -e '.data.version' > /dev/null 2>&1; then
+          echo "  Vault KV updated (version: $(echo "$WRITE_RESP" | jq -r '.data.version')) ✓"
+        else
+          echo "  ERROR: Failed to update Vault KV"
+          echo "$WRITE_RESP" | jq -r '.errors[]' 2>/dev/null
+          FAILURES=$((FAILURES + 1))
+        fi
+      else
+        FAILURES=$((FAILURES + 1))
+      fi
+
+      # -----------------------------------------------------------------
       # 3. Rotate router-helpers AppRole (stored in Vault KV, docs/SECRET_ROTATION.md, "Vault authentication details")
       # -----------------------------------------------------------------
       if rotate_approle "router-helpers"; then
@@ -1418,6 +1498,7 @@ vault:rotate-approles:
         echo "All AppRoles rotated successfully ✓"
         echo "  - openclaw: next deploy picks up new role_id + secret_id from CI variables"
         echo "  - jit-approval-svc: next deploy picks up new credentials from Vault KV"
+        echo "  - jit-proxy: next router deploy picks up new credentials from Vault KV"
         echo "  - router-helpers: next router deploy rewrites /etc/vault/router-helpers.json"
       else
         echo "WARNING: ${FAILURES} rotation(s) failed — check logs above"
@@ -2578,6 +2659,8 @@ router:deploy-service:
     - job: chromium-browser:build
       optional: true
     - job: jit-approval-svc:build
+      optional: true
+    - job: jit-proxy:build
       optional: true
     - job: nginx:build
       optional: true

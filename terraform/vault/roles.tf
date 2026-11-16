@@ -65,6 +65,30 @@ resource "vault_approle_auth_backend_role" "jit_approval_svc" {
 }
 
 # =============================================================================
+# AppRole Role: jit-proxy
+# =============================================================================
+# The JIT credential proxy (policy jit-proxy: read on the proxied services'
+# secrets only). role_id, secret_id and the control-plane key live in Vault KV
+# (homelab/docker/jit-proxy); vault:rotate-approles rotates the AppRole. Logins
+# and tokens are bound to the proxy's fixed address on the internal network
+# (jit_proxy_internal_ip in ansible/inventory.yml).
+
+resource "vault_approle_auth_backend_role" "jit_proxy" {
+  backend        = vault_auth_backend.approle.path
+  role_name      = "jit-proxy"
+  token_policies = ["jit-proxy"]
+  token_ttl      = 3600
+  token_max_ttl  = 86400
+
+  secret_id_bound_cidrs = ["10.3.32.17/32"]
+  token_bound_cidrs     = ["10.3.32.17/32"]
+
+  secret_id_ttl      = 0
+  token_num_uses     = 0
+  secret_id_num_uses = 0
+}
+
+# =============================================================================
 # AppRole Role: router-helpers
 # =============================================================================
 # Root's helpers on the router (policy router-helpers). role_id and secret_id

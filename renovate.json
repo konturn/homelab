@@ -266,7 +266,8 @@
       "description": "Dependency class, security-critical images (dependencies.security_critical.files in ci/automerge-policy.yml): their own branches, with patch releases apart from minors, since the sweep merges only their digest and patch updates. Keep in sync with the policy (checked by ci/automerge/test_dependency_class.py)",
       "matchFileNames": [
         "docker/event-router/Dockerfile",
-        "docker/jit-approval-svc/Dockerfile"
+        "docker/jit-approval-svc/Dockerfile",
+        "docker/jit-proxy/Dockerfile"
       ],
       "additionalBranchPrefix": "critical-",
       "separateMinorPatch": true
@@ -275,7 +276,8 @@
       "description": "Dependency class, security-critical images: a minor update waits for a human. Labelled so it stays visible",
       "matchFileNames": [
         "docker/event-router/Dockerfile",
-        "docker/jit-approval-svc/Dockerfile"
+        "docker/jit-approval-svc/Dockerfile",
+        "docker/jit-proxy/Dockerfile"
       ],
       "matchUpdateTypes": [
         "minor"

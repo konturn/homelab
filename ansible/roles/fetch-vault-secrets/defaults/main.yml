@@ -75,6 +75,16 @@ vault_secret_paths:
       vault_jit_requester_keys: "requester_keys"
       vault_jit_gitlab_admin_token: "gitlab_admin_token"
 
+  # JIT credential proxy (docker/jit-proxy): its AppRole and the control-plane
+  # key the broker presents. Written by vault:rotate-approles; optional until
+  # then (the compose service is not rendered without them).
+  - path: "docker/jit-proxy"
+    fields:
+      vault_jit_proxy_role_id: "approle_role_id"
+      vault_jit_proxy_secret_id: "approle_secret_id"
+      vault_jit_proxy_ctl_key: "ctl_key"
+    optional: true
+
   # Anomaly detector: Influx read (metrics, homeassistant) / write (metrics)
   # tokens and its MQTT user's password
   - path: "docker/anomaly-detector"

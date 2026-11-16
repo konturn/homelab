@@ -1,0 +1,82 @@
+# Radarr (design 6.1). Rules are default-deny: only what a template lists is
+# forwarded. The deny list below applies on top of every template.
+resource: radarr
+min_tier: 1
+upstream: https://radarr.lab.nkontur.com
+auth: {type: header, name: X-Api-Key, vault_path: homelab/data/docker/radarr, field: api_key}
+
+deny:
+  - {path: "/api/v3/config/**"}          # host config carries the API key and auth mode
+  - {path: "/api/v3/downloadclient/**"}  # download-client passwords
+  - {path: "/api/v3/indexer"}            # indexer definitions carry tracker/Prowlarr keys
+  - {path: "/api/v3/indexer/{id:int}"}
+  - {path: "/api/v3/indexer/schema/**"}
+  - {path: "/api/v3/notification/**"}    # webhook URLs, Plex token
+  - {path: "/api/v3/importlist/**"}      # third-party tokens
+  - {path: "/api/v3/system/backup/**"}
+  - {path: "/api/v3/system/restart"}
+  - {path: "/api/v3/system/shutdown"}
+  - {path: "/api/v3/update/**"}
+  - {path: "/api/v3/log/file/**"}
+  - {path: "/api/v3/customformat/**", method: POST}
+  - {path: "/api/v3/customformat/**", method: PUT}
+  - {path: "/api/v3/customformat/**", method: DELETE}
+  - {path: "/api/v3/qualityprofile/**", method: POST}
+  - {path: "/api/v3/qualityprofile/**", method: PUT}
+  - {path: "/api/v3/qualityprofile/**", method: DELETE}
+
+templates:
+  read:
+    min_tier: 1
+    description: "Read library entries, queue, history, calendar; search metadata"
+    allow:
+      - {method: GET, path: "/api/v3/movie", query: {tmdbId: int}, require: [tmdbId]}
+      - {method: GET, path: "/api/v3/movie/{id:int}"}
+      - {method: GET, path: "/api/v3/movie/lookup", query: {term: any}, require: [term]}
+      - {method: GET, path: "/api/v3/movie/lookup/tmdb", query: {tmdbId: int}, require: [tmdbId]}
+      - {method: GET, path: "/api/v3/moviefile", query: {movieId: int}, require: [movieId]}
+      - {method: GET, path: "/api/v3/moviefile/{id:int}"}
+      - {method: GET, path: "/api/v3/queue", query: {page: int, pageSize: {type: int, min: 1, max: 500}, includeMovie: bool, movieIds: int}}
+      - {method: GET, path: "/api/v3/history", query: {page: int, pageSize: {type: int, min: 1, max: 500}, movieIds: int, eventType: int, includeMovie: bool, sortKey: [date], sortDirection: [ascending, descending]}}
+      - {method: GET, path: "/api/v3/history/movie", query: {movieId: int, eventType: int}, require: [movieId]}
+      - {method: GET, path: "/api/v3/calendar", query: {start: date, end: date, unmonitored: bool}}
+      - {method: GET, path: "/api/v3/wanted/missing", query: {page: int, pageSize: {type: int, min: 1, max: 500}}}
+      - {method: GET, path: "/api/v3/rootfolder"}
+      - {method: GET, path: "/api/v3/qualityprofile"}
+      - {method: GET, path: "/api/v3/command/{id:int}"}
+      - {method: GET, path: "/api/v3/system/status"}
+      - {method: GET, path: "/api/v3/health"}
+  health:
+    min_tier: 1
+    description: "Health and indexer checks: test all indexers, indexer status"
+    allow:
+      - {method: GET, path: "/api/v3/health"}
+      - {method: GET, path: "/api/v3/indexerstatus"}
+      - {method: POST, path: "/api/v3/indexer/testall", body_max: 1024}
+  write:
+    min_tier: 1
+    description: "Add movies, trigger searches and rescans, list and grab releases"
+    includes: [read]
+    allow:
+      - {method: POST, path: "/api/v3/movie", body_max: 262144}
+      - {method: POST, path: "/api/v3/command", json: {name: [MoviesSearch, RefreshMovie, RescanMovie, DownloadedMoviesScan]}, body_max: 8192}
+      - {method: GET, path: "/api/v3/release", query: {movieId: int}, require: [movieId]}
+      - {method: POST, path: "/api/v3/release", json: {guid: any, indexerId: int}, body_max: 8192}
+  replace-file:
+    min_tier: 1
+    single_use: true
+    description: "Delete one movie file (to re-download a better release)"
+    allow:
+      - {method: DELETE, path: "/api/v3/moviefile/{id:int}"}
+  queue-remove:
+    min_tier: 1
+    single_use: true
+    description: "Remove one queue item, optionally blocklisting the release"
+    allow:
+      - {method: DELETE, path: "/api/v3/queue/{id:int}", query: {removeFromClient: bool, blocklist: bool}}
+  remove-title:
+    min_tier: 2
+    single_use: true
+    description: "Remove a movie from the library, keeping its files"
+    allow:
+      - {method: DELETE, path: "/api/v3/movie/{id:int}", query: {deleteFiles: [false], addImportExclusion: bool}}

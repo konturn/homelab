@@ -100,6 +100,22 @@ networks:
     ipam:
       config:
         - subnet: 172.30.2.0/24
+  # openclaw-gateway <-> jit-proxy (data plane: /r/<resource>/..., grants
+  # only). Only these two attach; the proxy listens on this address alone.
+  openclaw-jitproxy:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.6.0/24
+  # jit-approval-svc <-> jit-proxy (control plane: grant registration and
+  # revocation, plus a bearer key). Only these two attach.
+  jit-proxy-ctl:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.7.0/24
   proxy-internal:
     driver: bridge
     internal: true
@@ -1376,6 +1392,59 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  {% if vault_jit_proxy_role_id | length > 0 %}
+  # JIT credential proxy (docker/jit-proxy, docs/design/jit-credential-proxy.md).
+  # Holds the static secrets of the proxied services (read from Vault with its
+  # own AppRole, policy jit-proxy) and injects them into agent requests that
+  # carry a short-lived grant from jit-approval-svc. Listens only on its two
+  # bridges: openclaw-jitproxy (agent data plane) and jit-proxy-ctl (broker
+  # control plane). The internal leg is egress only (upstreams and Vault), at
+  # a fixed address that the AppRole is bound to. Not rendered until the
+  # AppRole credentials exist in Vault (vault:rotate-approles creates them).
+  jit-proxy:
+    image: gitlab-registry.lab.nkontur.com:443/root/homelab/jit-proxy:latest
+    container_name: jit-proxy
+    restart: unless-stopped
+    user: "65532:65532"
+    security_opt:
+      - no-new-privileges=true
+    read_only: true
+    cap_drop:
+      - ALL
+    dns:
+      - {{ pihole_ip | default("10.3.32.2") }}
+    networks:
+      internal:
+        ipv4_address: {{ jit_proxy_internal_ip }}
+      openclaw-jitproxy:
+        ipv4_address: {{ jit_proxy_ip }}
+      jit-proxy-ctl:
+        ipv4_address: {{ jit_proxy_ctl_ip }}
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          pids: 256
+    environment:
+      - VAULT_ADDR=https://vault.lab.nkontur.com:8200
+      - VAULT_ROLE_ID={{ vault_jit_proxy_role_id | replace("$", "$$") }}
+      - VAULT_SECRET_ID={{ vault_jit_proxy_secret_id | replace("$", "$$") }}
+      - CTL_KEY={{ vault_jit_proxy_ctl_key | replace("$", "$$") }}
+      - DATA_LISTEN={{ jit_proxy_ip }}:8090
+      - CTL_LISTEN={{ jit_proxy_ctl_ip }}:8091
+      - CLIENT_CIDR=172.30.6.0/24
+      - GOMEMLIMIT=200MiB
+    depends_on:
+      vault:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/jit-proxy", "-healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+  {% endif %}
 
   # Anomaly detector (docker/anomaly-detector): aggregate Flux queries against
   # metrics/homeassistant, writes the `anomaly` measurement to metrics, publishes
@@ -3010,6 +3079,7 @@ services:
       openclaw-nginx-bridge:
       openclaw-browser:
       openclaw-relay:
+      openclaw-jitproxy:
     extra_hosts:
       - "nkontur.com:172.30.0.10"
       - "www.nkontur.com:172.30.0.10"
@@ -3039,6 +3109,9 @@ services:
       - OPENAI_API_KEY={{ vault_openai_api_key | trim | replace("$", "$$") }}
       - OPENCLAW_GATEWAY_TOKEN={{ vault_openclaw_gateway_token | trim | replace("$", "$$") }}
       - TELEGRAM_BOT_TOKEN={{ vault_openclaw_telegram_token | trim | replace("$", "$$") }}
+      # JIT credential proxy: service APIs with a grant, never a stored key
+      # (docs/design/jit-credential-proxy.md)
+      - JIT_PROXY_URL=http://{{ jit_proxy_ip }}:8090
       # IPMI credentials removed — use JIT T2 (ipmi resource) instead
       # Web search
       - BRAVE_API_KEY={{ brave_api_key }}

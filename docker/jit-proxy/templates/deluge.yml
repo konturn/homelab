@@ -1,0 +1,32 @@
+# Deluge (design 6.4): web JSON-RPC at POST /json. The proxy owns the web
+# session (auth.login with the web password, web.connect to the daemon); the
+# agent never sees the session cookie, and any Cookie it sends is dropped.
+resource: deluge
+min_tier: 1
+upstream: https://deluge.lab.nkontur.com
+auth: {type: deluge, vault_path: homelab/data/docker/deluge, field: password}
+
+templates:
+  read:
+    min_tier: 1
+    description: "Torrent list and status, session stats, free space, labels"
+    allow:
+      - {method: POST, path: "/json", rpc: {methods: [web.update_ui, core.get_torrents_status, core.get_torrent_status, core.get_session_status, core.get_free_space, label.get_labels]}, body_max: 8192}
+  control:
+    min_tier: 1
+    description: "Pause, resume, recheck, reannounce, reorder and label torrents"
+    includes: [read]
+    allow:
+      - {method: POST, path: "/json", rpc: {methods: [core.pause_torrent, core.resume_torrent, core.force_recheck, core.force_reannounce, core.queue_top, core.queue_up, core.queue_down, core.queue_bottom, label.set_torrent]}, body_max: 16384}
+  remove:
+    min_tier: 1
+    single_use: true
+    description: "Remove one torrent, keeping its data"
+    allow:
+      - {method: POST, path: "/json", rpc: {methods: [core.remove_torrent], params: {0: hex, 1: [false]}}, body_max: 1024}
+  remove-data:
+    min_tier: 2
+    single_use: true
+    description: "Remove one torrent and delete its data"
+    allow:
+      - {method: POST, path: "/json", rpc: {methods: [core.remove_torrent], params: {0: hex, 1: [true]}}, body_max: 1024}

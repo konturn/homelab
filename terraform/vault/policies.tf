@@ -411,6 +411,37 @@ resource "vault_policy" "jit_static" {
 }
 
 # =============================================================================
+# Policy: jit-proxy
+# =============================================================================
+# The JIT credential proxy (docker/jit-proxy, docs/design/jit-credential-proxy.md)
+# injects these services' credentials into requests the agent makes with a
+# short-lived grant, so the agent never holds them. Read-only on exactly the
+# KV paths its templates name (docker/jit-proxy/templates/*.yml; a Go test
+# keeps the two in sync). No token creation, no policy writes, no SSH signing.
+
+locals {
+  jit_proxy_paths = [
+    "homelab/data/docker/deluge",
+    "homelab/data/docker/nzbget",
+    "homelab/data/docker/ombi",
+    "homelab/data/docker/plex",
+    "homelab/data/docker/prowlarr",
+    "homelab/data/docker/radarr",
+    "homelab/data/docker/sonarr",
+    "homelab/data/docker/tautulli",
+    "homelab/data/infrastructure/pihole",
+  ]
+}
+
+resource "vault_policy" "jit_proxy" {
+  name = "jit-proxy"
+
+  policy = join("\n", [
+    for path in local.jit_proxy_paths : "path \"${path}\" {\n  capabilities = [\"read\"]\n}\n"
+  ])
+}
+
+# =============================================================================
 # Policy: ha-config-deploy
 # =============================================================================
 # CI of the private Home Assistant config repo (JWT roles in roles.tf).
