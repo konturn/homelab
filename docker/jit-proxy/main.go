@@ -47,7 +47,7 @@ func env(k, def string) string {
 }
 
 func main() {
-	healthcheck := flag.Bool("healthcheck", false, "probe the data listener's /health and exit 0/1 (Docker healthcheck)")
+	healthcheck := flag.Bool("healthcheck", false, "probe /health on the control listener and exit 0/1 (Docker healthcheck)")
 	flag.Parse()
 
 	dataAddr := env("DATA_LISTEN", "127.0.0.1:8090")
@@ -55,7 +55,9 @@ func main() {
 
 	if *healthcheck {
 		c := &http.Client{Timeout: 3 * time.Second}
-		resp, err := c.Get("http://" + dataAddr + "/health")
+		// The control listener: the data listener accepts only CLIENT_CIDR
+		// (the gateway), not the proxy's own address. Same health function.
+		resp, err := c.Get("http://" + ctlAddr + "/health")
 		if err != nil || resp.StatusCode != http.StatusOK {
 			os.Exit(1)
 		}
