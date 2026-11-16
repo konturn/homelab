@@ -385,5 +385,27 @@ class ComposeImageTests(unittest.TestCase):
                 self.assertTrue(img and "{{" not in img, f"{name}: {c} image {img!r}")
 
 
+class ArrWarningsOnly(unittest.TestCase):
+    def _r(self, status, body):
+        return rotate.Response(status, json.dumps(body).encode())
+
+    def test_warning_only_400_passes(self):
+        r = self._r(400, [{"propertyName": "TvCategory", "errorMessage": "A category is recommended",
+                           "isWarning": True}])
+        self.assertEqual(rotate.arr_warnings_only(r), "TvCategory")
+
+    def test_error_400_fails(self):
+        r = self._r(400, [{"propertyName": "TvCategory", "isWarning": True},
+                          {"propertyName": "Password", "errorMessage": "Authentication failed",
+                           "isWarning": False}])
+        self.assertEqual(rotate.arr_warnings_only(r), "")
+
+    def test_other_status_or_body_fails(self):
+        self.assertEqual(rotate.arr_warnings_only(self._r(500, [{"isWarning": True}])), "")
+        self.assertEqual(rotate.arr_warnings_only(self._r(400, [])), "")
+        self.assertEqual(rotate.arr_warnings_only(self._r(400, {"message": "x"})), "")
+        self.assertEqual(rotate.arr_warnings_only(rotate.Response(400, b"<html>")), "")
+
+
 if __name__ == "__main__":
     unittest.main()

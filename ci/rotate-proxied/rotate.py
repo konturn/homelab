@@ -705,6 +705,24 @@ class Sonarr(ArrWithOmbi):
     telegraf = ["sonarr_status"]
 
 
+def arr_warnings_only(r: Response) -> str:
+    """A Radarr/Sonarr test answers 400 also when the only validation failures
+    are warnings (e.g. Sonarr's "TvCategory: A category is recommended" on an
+    NZBGet client without a category). Return the warnings' fields when every
+    failure is a warning (the connection itself worked), else ""."""
+    if r.status != 400:
+        return ""
+    try:
+        body = r.json()
+    except HttpError:
+        return ""
+    if not isinstance(body, list) or not body:
+        return ""
+    if not all(isinstance(f, dict) and f.get("isWarning") is True for f in body):
+        return ""
+    return ", ".join(str(f.get("propertyName") or "?") for f in body)
+
+
 def update_arr_download_clients(ctx: Ctx, implementation: str, host: str, fields: Dict[str, str]) -> None:
     """Set fields (password) on every Radarr/Sonarr download client of that
     implementation and host, save, and run the client's own test.
@@ -726,7 +744,11 @@ def update_arr_download_clients(ctx: Ctx, implementation: str, host: str, fields
             expect(ctx.http.request("PUT", f"{base}/{c['id']}?forceSave=true", headers={"X-Api-Key": key},
                                     json_body=c), (200, 202), f"{arr} save download client {c.get('name')}")
             r = ctx.http.request("POST", f"{base}/test", headers={"X-Api-Key": key}, json_body=c)
-            ctx.check(r.status == 200, f"{arr} download client '{c.get('name')}' test (HTTP {r.status})")
+            warnings = arr_warnings_only(r)
+            if warnings:
+                ctx.notes.append(f"{arr} download client '{c.get('name')}': test passed with warnings ({warnings})")
+            ctx.check(r.status == 200 or bool(warnings),
+                      f"{arr} download client '{c.get('name')}' test (HTTP {r.status})")
     if not found:
         ctx.notes.append(f"no Radarr/Sonarr download client uses {host}")
 
