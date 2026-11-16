@@ -43,9 +43,10 @@ firewall rule is involved (docs/FIREWALL.md). The robot is provisioned with
 the broker's **address**, not a name, so iot-dns does not matter. The robots
 keep their WAN access until [Later: cutting WAN](#later-cutting-wan).
 
-**Firmware:** keep each robot on the ESP build it was validated on (recorded
-in the confidential issue). Do not install a pending ESP update before or
-after going local. A local robot cannot receive Whisker OTA updates anyway.
+**Firmware:** both robots are LR4C units on ESP 1.1.75, the build whiskerless
+was validated on. Keep them there: do **not** install the pending ESP 1.1.84
+update (the cloud integration offers it as an update entity, and so does the
+Whisker app), before or after going local. A local robot cannot receive Whisker OTA updates anyway.
 Getting one would mean re-onboarding to the cloud, updating, and
 provisioning again, and a newer build may change how provisioning works.
 
@@ -90,7 +91,9 @@ for the robot you name and prints it. **Compare it with the label.**
    ```sh
    ~/lr4/whiskerless-mac provision movie-room --dry-run
    ```
-   It prints `Hold Connect on the robot now…` and starts scanning.
+   It fetches the certificates from the router, prints `Hold Connect on the
+   robot now until its light BLINKS YELLOW`, and scans over Bluetooth for 15
+   seconds.
 2. **Hold** the robot's **Connect** button for about **3 seconds**, until the
    light **blinks yellow**. Hold it, don't tap it: a short tap turns the
    robot's Wi-Fi off (the light goes white), and another short tap turns it
@@ -110,7 +113,10 @@ for the robot you name and prints it. **Compare it with the label.**
    ```sh
    ~/lr4/whiskerless-mac provision movie-room
    ```
-   Pick the same network, enter the passphrase, check the same summary, and
+   It prints *Hold Connect* again: the robot is already in pairing mode, so
+   don't press anything. (The Bluetooth scan gives up after 15 seconds; if it
+   says `no LR4 found advertising` while the light still blinks yellow, just
+   rerun.) Pick the same network, enter the passphrase, check the same summary, and
    type `yes`. The steps should end with `WiFi connected (ip=…)`,
    `CERT_AWS_ROOT_CERT written`, `CERT_DEVICE_CERT written`,
    `CERT_DEVICE_KEY written`, `APPLY_CONFIG committed`, `DEVICE_REBOOT`, and
