@@ -54,7 +54,7 @@ case "${1:-}" in
     case "$state" in 1) echo "bridge into mosquitto: connected" ;; 0) echo "bridge into mosquitto: DISCONNECTED" ;; *) echo "bridge into mosquitto: unknown (no state message)" ;; esac
     echo "robots publishing through the bridge (listening ${secs}s):"
     sub -t 'prod/LR4/+/state' -t 'prod/LR4/+/activity' -v -W "$secs" 2>/dev/null \
-      | awk '{split($1, t, "/"); n[t[3]]++} END {if (!length(n)) print "  none"; for (s in n) printf "  %s: %d messages\n", s, n[s]}' || true
+      | awk '{split($1, t, "/"); n[t[3]]++; k++} END {if (!k) print "  none"; else for (s in n) printf "  %s: %d messages\n", s, n[s]}' || true
     echo "lr4-broker connection log (last 10 robot lines):"
     docker logs --since 24h lr4-broker 2>&1 | grep -E "u'LR4|Client LR4|exceeded timeout|OpenSSL Error" | tail -10 | sed 's/^/  /' || true
     ;;
