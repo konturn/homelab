@@ -100,10 +100,14 @@
     enabled: true
     daemon_reload: "{{ _scanner_probe_units.changed }}"
 
+# Clone once, never re-fetch: a fetch on every deploy made satellite-2:deploy
+# fail whenever github.com timed out (11-15, push pipeline), with nothing to
+# update. To take a newer upstream, delete /root/sane-scan-pdf and redeploy.
 - name: Git checkout sane-scan-pdf
   ansible.builtin.git:
     repo: 'https://github.com/rocketraman/sane-scan-pdf.git'
     dest: /root/sane-scan-pdf
+    update: false
 
 - name: Template out scan scripts
   ansible.builtin.template:
