@@ -1382,13 +1382,13 @@ services:
       # Action prompts for host-side clients (internal/actions). The socket
       # dir is a host bind mount (uid 1000, 0700), not on any network.
       - ACTIONS_SOCKET=/run/actions/actions.sock
-  {% if vault_jit_proxy_ctl_key | length > 0 %}
+{% if vault_jit_proxy_ctl_key | length > 0 %}
       # Credential proxy grants (internal/proxygrant): register and revoke
       # them on the proxy's control bridge; agents call JIT_PROXY_URL.
       - JIT_PROXY_CTL_URL=http://{{ jit_proxy_ctl_ip }}:8091
       - JIT_PROXY_CTL_KEY={{ vault_jit_proxy_ctl_key | replace("$", "$$") }}
       - JIT_PROXY_URL=http://{{ jit_proxy_ip }}:8090
-  {% endif %}
+{% endif %}
     volumes:
       - {{ docker_persistent_data_path }}/jit-approval-svc/actions:/run/actions
     depends_on:
