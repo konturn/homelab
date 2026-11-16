@@ -33,7 +33,7 @@ stale, drift, threshold), `series`, `label`, `severity`, `value`, `baseline`,
 Recent deploys and pipelines (GitLab, project 4):
 
 ```bash
-source /home/node/.openclaw/workspace/tools/jit-lib.sh 2>/dev/null
+source ~/.openclaw/workspace/tools/jit-lib.sh 2>/dev/null
 curl -s -H "PRIVATE-TOKEN: $(gitlab_token)" \
   "https://gitlab.lab.nkontur.com/api/v4/projects/4/deployments?order_by=created_at&sort=desc&per_page=5" \
   | jq -r '.[] | "\(.created_at) \(.environment.name) \(.status) \(.deployable.commit.title)"'

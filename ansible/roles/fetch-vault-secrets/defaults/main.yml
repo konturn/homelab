@@ -58,6 +58,13 @@ vault_secret_paths:
       vault_paperless_ai_api_key: "api_key"
       vault_paperless_ai_jwt_secret: "jwt_secret"
 
+  # The ops OpenClaw agent's own JIT key, deployed as a file only that agent's
+  # OS user can read (docs/design/openclaw-identities.md). The noah agent
+  # reads its key (agents/openclaw-noah) from Vault itself.
+  - path: "agents/openclaw-ops"
+    fields:
+      vault_openclaw_ops_jit_key: "api_key"
+
   # JIT Approval Service secrets
   - path: "docker/jit-approval-svc"
     fields:

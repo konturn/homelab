@@ -15,9 +15,17 @@
 #
 # Used by git-credential-gitlab and by gitlab_token() in tools/jit-lib.sh.
 # Prints the token on stdout; never logs it. Exit 1 on failure.
+#
+# Identity (docs/design/openclaw-identities.md): the broker identifies the
+# requester from the key. The ops agent's environment (ops-launch) points
+# JIT_API_KEY_FILE at its own key file and JIT_GITLAB_CACHE_DIR at its own
+# cache; the gateway's agent reads its key from Vault with the gateway's
+# AppRole (JIT_API_KEY_VAULT_PATH, set in docker-compose.yml).
 set -eu
 
 CACHE_DIR=${JIT_GITLAB_CACHE_DIR:-/home/node/.openclaw/credentials}
+KEY_PATH=${JIT_API_KEY_VAULT_PATH:-homelab/data/agents/jit-api-key}
+REQUESTER=${JIT_REQUESTER:-prometheus}
 CACHE=$CACHE_DIR/jit-gitlab.json
 LOCK=$CACHE_DIR/jit-gitlab.lock
 JIT_URL=${JIT_URL:-https://jit.lab.nkontur.com}
@@ -37,7 +45,12 @@ cached() {
   printf '%s\n' "$tok"
 }
 
-fetch() {
+# api_key: this agent's own JIT key, from its key file or from Vault.
+api_key() {
+  if [ -n "${JIT_API_KEY_FILE:-}" ]; then
+    tr -d '\n' < "$JIT_API_KEY_FILE"
+    return
+  fi
   : "${VAULT_ADDR:?VAULT_ADDR unset}"
   : "${VAULT_APPROLE_ROLE_ID:?VAULT_APPROLE_ROLE_ID unset}"
   : "${VAULT_APPROLE_SECRET_ID:?VAULT_APPROLE_SECRET_ID unset}"
@@ -46,16 +59,21 @@ fetch() {
        | curl -sf --max-time 10 -X POST --data @- "$VAULT_ADDR/v1/auth/approle/login" \
        | jq -r '.auth.client_token // empty')
   [ -n "$vt" ] || { echo "jit-gitlab-token: vault login failed" >&2; return 1; }
-  key=$(printf 'X-Vault-Token: %s\n' "$vt" \
-        | curl -sf --max-time 10 -H @- "$VAULT_ADDR/v1/homelab/data/agents/jit-api-key" \
-        | jq -r '.data.data.api_key // empty')
+  printf 'X-Vault-Token: %s\n' "$vt" \
+    | curl -sf --max-time 10 -H @- "$VAULT_ADDR/v1/$KEY_PATH" \
+    | jq -r '.data.data.api_key // empty'
   printf 'X-Vault-Token: %s\n' "$vt" \
     | curl -sf --max-time 10 -X POST -H @- -o /dev/null "$VAULT_ADDR/v1/auth/token/revoke-self" || true
+}
+
+fetch() {
+  key=$(api_key) || key=
   [ -n "$key" ] || { echo "jit-gitlab-token: no JIT API key" >&2; return 1; }
 
   start=$(date +%s)
   body=$(jq -n --arg reason "$REASON" \
-           '{resource: "gitlab-moltbot", requester: "prometheus", tier: 1, reason: $reason, ttl: "1h"}')
+           --arg requester "$REQUESTER" \
+           '{resource: "gitlab-moltbot", requester: $requester, tier: 1, reason: $reason, ttl: "1h"}')
   resp=$(printf 'X-JIT-API-Key: %s\n' "$key" \
          | curl -s --max-time 30 -H @- -H 'Content-Type: application/json' \
              --data "$body" "$JIT_URL/request")

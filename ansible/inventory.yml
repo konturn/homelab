@@ -391,7 +391,7 @@ all:
           name: "openclaw-gateway"
           mode: "0755"
         - src: "docker/openclaw/agents/main/agent/auth-profiles.json"
-          dest: "{{ docker_persistent_data_path }}/openclaw/data/agents/main/agent/auth-profiles.json"
+          dest: "{{ docker_persistent_data_path }}/openclaw/data/agents/noah/agent/auth-profiles.json"
           name: "openclaw-gateway"
           mode: "0644"
           owner: "1000"

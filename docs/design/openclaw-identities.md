@@ -117,10 +117,18 @@ backend: every turn runs the Claude Code CLI, and the CLI's built-in tools
 - `ops` does not get OpenClaw's gateway tools over the loopback MCP bridge.
   Those tools run inside the gateway as `node`, so giving them to `ops` would
   undo the separation. The `ops` agent works with the CLI's own tools, as
-  `ops`.
+  `ops`. Its OpenClaw tool policy denies the gateway tools as well, except
+  `exec`: cron trigger scripts run with the job's agent policy, and the
+  `imessage-check` trigger (written through the `noah` agent's `cron` tool;
+  `ops` has none) runs a node-owned check script with it.
 - No other setuid or setgid file is left in the image, so `node` can only
   ever step down to `ops`, and `ops` (with no-new-privileges) cannot step
   anywhere.
+- The direction of trust is one way. `node` may read and write `ops`'s
+  workspace (it is the more trusted side), but nothing running as `node`
+  executes a file `ops` can write: the noah agent, the cron trigger and the
+  llm-shadow trial run their own (node-owned) copies of shared scripts and
+  only read `ops`'s data files.
 
 Both agents use the same GitLab identity (`moltbot`, tier 1), so both can
 open MRs. What can merge without review is decided by the bot-config rules on
@@ -139,6 +147,23 @@ it says so in its reply as a visible request: what it needs, why, and the
 exact command or request it would make. Noah decides and, if he agrees, asks
 his own agent to do it. It never retries with a different resource or tier to
 get around a refusal.
+
+## Shared state
+
+Some state moves with the jobs that write it, into the `ops` workspace:
+
+- `skills/imessage-plex/state.json` and the iMessage checkpoint. Noah's
+  "approve <title>" replies still go to `noah`, whose copies of the Plex
+  scripts point at that state file.
+- the job-hunting queues, `memory/main-pipeline-state.json`,
+  `memory/major-research-state.json`, `memory/routing-review-latest.md`, the
+  red-team reports.
+- `reports/updates/` (host-written reports) is mounted into both
+  workspaces; the vulnwatch outbox and context live in `ops`'s workspace
+  (host override in `/etc/vulnwatch/local.yml`).
+- The llm-shadow trial reads the job's state and transcripts from `ops`'s
+  home and still executes the node-owned scripts; it writes a copy of its
+  summary for `ops`'s digest.
 
 ## Crons
 

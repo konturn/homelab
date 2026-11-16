@@ -9,8 +9,10 @@ Type=oneshot
 Environment=SHADOW_DIR={{ llm_shadow_data_dir }}
 Environment=OC_DATA={{ llm_shadow_openclaw_dir }}/data
 Environment=OC_WS={{ llm_shadow_openclaw_dir }}/workspace
-Environment=OC_CLAUDE_PROJECT={{ llm_shadow_openclaw_dir }}/claude/projects/-home-node--openclaw-workspace
+Environment=OC_STATE_WS={{ llm_shadow_openclaw_dir }}/ops-home/.openclaw/workspace
+Environment=OC_CLAUDE_PROJECT={{ llm_shadow_openclaw_dir }}/ops-home/.claude/projects/-home-ops--openclaw-workspace
 Environment=SHADOW_SUMMARY_OUT={{ llm_shadow_openclaw_dir }}/data/llm-shadow/summary.json
+Environment=SHADOW_SUMMARY_COPY={{ llm_shadow_openclaw_dir }}/ops-home/.openclaw/llm-shadow/summary.json
 Environment=SHADOW_MODEL={{ llm_shadow_model }}
 Environment=SHADOW_NUM_CTX={{ llm_shadow_num_ctx }}
 Environment=SHADOW_NUM_CTX_MAX={{ llm_shadow_num_ctx_max }}

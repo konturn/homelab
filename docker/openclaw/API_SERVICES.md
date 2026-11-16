@@ -20,6 +20,24 @@ Telegram, Brave, Claude OAuth, gateway token) and the Vault AppRole used to log
 in for JIT. Ansible's `fetch-vault-secrets` role reads those from Vault and
 renders them into `docker-compose.yml`.
 
+### Two agents, two JIT identities
+
+OpenClaw runs two agents (`docs/design/openclaw-identities.md`): `noah`,
+bound to Noah's Telegram DMs, and `ops`, which runs the crons and the
+event-router hook. Each has its own JIT key and the broker identifies the
+requester from it:
+
+| Agent | Runs as | Key | Requester | T1 | T2 | T3 |
+|---|---|---|---|---|---|---|
+| `noah` | `node` | Vault `homelab/agents/openclaw-noah`, read with the AppRole | `openclaw-noah` | auto | auto + FYI line | tap |
+| `ops` | `ops` (uid 2480) | `/home/ops/.config/openclaw/jit-api-key` (0400) | `openclaw-ops` | auto | tap | refused |
+
+`tools/jit-lib.sh` and `jit-gitlab-token` pick the key from
+`JIT_API_KEY_FILE` (set for ops by `ops-launch`) or from
+`JIT_API_KEY_VAULT_PATH` (set for node in compose). The ops agent's
+environment is rebuilt by `openclaw-claude`, so the AppRole, gateway and hook
+tokens never reach it.
+
 ### To add a new service key
 
 1. Store the key in Vault under `homelab/data/docker/<service>` (field `api_key`).

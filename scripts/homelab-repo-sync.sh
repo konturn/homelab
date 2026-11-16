@@ -3,15 +3,16 @@
 # (configure-homelab-services); runs from root's crontab every 5 minutes,
 # output goes to syslog under the tag homelab-sync.
 #
-# Two checkouts, two policies:
-#   - OpenClaw workspace: a disposable clone the agent reads. Hard reset to
-#     origin/main and drop untracked files, as before.
+# Two kinds of checkout, two policies:
+#   - OpenClaw workspaces (WORKSPACE, one path or several separated by
+#     whitespace: the noah and ops agents each have one): disposable clones
+#     the agents read. Hard reset to origin/main and drop untracked files.
 #   - Router checkout (/root/repos/homelab): where people and agents work and
 #     run scripts/approve-root-mr.sh from. Fast-forward only, and only when it
 #     is on main with no tracked changes. Untracked files, stashes, other
 #     branches and worktrees are never touched.
 #
-# When both checkouts contain origin/main afterwards, STATE_DIR/last_ok gets
+# When every checkout contains origin/main afterwards, STATE_DIR/last_ok gets
 # the current UTC time. telegraf reads it (measurement homelab_repo_sync) and
 # the anomaly detector's homelab_repo_sync signal flags it once it is stale,
 # so a failing sync or a checkout left behind main shows up within the hour.
@@ -28,16 +29,18 @@ flock -n 9 || { log "previous run still active; skipped"; exit 0; }
 
 ok=1
 
-# Disposable workspace clone: reset to origin/main.
-if cd "$WORKSPACE" \
-    && git fetch --quiet origin main \
-    && git reset --hard --quiet origin/main \
-    && git clean -fd --quiet; then
-    :
-else
-    log "ERROR: could not sync $WORKSPACE"
-    ok=0
-fi
+# Disposable workspace clones: reset to origin/main.
+for ws in $WORKSPACE; do
+    if cd "$ws" \
+        && git fetch --quiet origin main \
+        && git reset --hard --quiet origin/main \
+        && git clean -fd --quiet; then
+        :
+    else
+        log "ERROR: could not sync $ws"
+        ok=0
+    fi
+done
 
 # Router checkout: fast-forward only, never discard anything.
 if cd "$ROUTER_REPO" && git fetch --quiet origin; then
