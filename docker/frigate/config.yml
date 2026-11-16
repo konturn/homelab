@@ -146,6 +146,12 @@ snapshots:
   retain:
     default: 30
 
+# Object detection on for every camera. Frigate 0.18 defaults detect.enabled
+# to false, so without this no camera ran detection (no events, alerts or
+# person occupancy) from fab825f4 until this was added.
+detect:
+  enabled: true
+
 objects:
   track:
     - person
