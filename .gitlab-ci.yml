@@ -15,7 +15,7 @@
 #   router:val [id_tokens]  zwave:val  sat-2:val  vault:validate  jit-approval-svc:test
 #   jit-proxy:test
 #   anomaly-detector:test  revert-guard (MR only, ci/revert-guard/README.md)
-#   event-router:test
+#   event-router:test  rotate-proxied:test
 #   canary (MR, on critical-service changes; docs/CANARY.md)  canary:test
 #   event-router:tlc (TLA+ model, on docs/design/tla changes + weekly schedule)
 #
@@ -30,6 +30,7 @@
 #   ┌──────────────────────────┬──────────────┬──────────────┬──────────────────────────┐
 #   router:deploy [id_tokens]  zwave:deploy [id_tokens]  sat-2:deploy [id_tokens]  vault:configure  vault:rotate [manual]
 #   (router:deploy needs vault:configure and the image builds; see the job)
+#   secrets:rotate-proxied [manual; SCHEDULED_TASK=rotate-proxied ROTATE_SERVICE=<name>]
 #
 #   NETGEAR SWITCHES (see networking/switches/netgear/README.md)
 #   netgear:test (MR + main, offline) -> netgear:apply (main, on changes)
@@ -1546,6 +1547,59 @@ vault:rotate-approles:
   rules:
     - !reference [.automerge_task_skip, rules]
     - if: $CI_COMMIT_BRANCH == "main"
+
+# =============================================================================
+# Proxied secret rotation (docs/SECRET_ROTATION.md, "Proxied services")
+# =============================================================================
+# One service per run. Start a pipeline on main with
+#   SCHEDULED_TASK=rotate-proxied  ROTATE_SERVICE=<service>
+# (web or API), then play the manual job. The allowlist is in
+# ci/rotate-proxied/rotate.py; plex is refused. vault-admin JWT role (protected
+# main only), SSH to the router for the service-side steps and the consumer
+# deploy (ansible/rotate-consumers.yml). Values are never printed: no
+# `set -x`, every line of output goes through the job's masking.
+secrets:rotate-proxied:
+  extends: .ansible
+  stage: deploy
+  environment: admin
+  resource_group: deploy-router
+  needs: []
+  timeout: 45m
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: https://vault.lab.nkontur.com:8200
+  variables:
+    VAULT_ADDR: "https://vault.lab.nkontur.com:8200"
+    ROTATE_SERVICE:
+      value: ""
+      description: "Service to rotate (tautulli, prowlarr, ombi, radarr, sonarr, nzbget, deluge, pihole, gitlab-admin-token); never plex"
+  script:
+    - set +x
+    - python3 ci/rotate-proxied/rotate.py check "$ROTATE_SERVICE"
+    - python3 ci/rotate-proxied/rotate.py run --service "$ROTATE_SERVICE" --private-key tmp
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_REF_PROTECTED == "true" && $SCHEDULED_TASK == "rotate-proxied" && $ROTATE_SERVICE && ($CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api")
+      when: manual
+      allow_failure: false
+
+rotate-proxied:test:
+  extends: .interruptible
+  stage: validate
+  image: python:3.14-alpine3.22@sha256:6b91e66ab2a880ce9ca5a1b91c70f45963ff71ff68268df056336e1a657d5efd
+  needs: []
+  script:
+    - python3 -m unittest discover -s ci/rotate-proxied -p "test_*.py" -v
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - ci/rotate-proxied/**/*
+        - ansible/rotate-consumers.yml
+        - docker/docker-compose.yml
+        - .gitlab-ci.yml
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - ci/rotate-proxied/**/*
 
 vault:validate:
   extends: .interruptible

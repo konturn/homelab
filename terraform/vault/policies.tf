@@ -121,9 +121,10 @@ resource "vault_policy" "vault_admin" {
       capabilities = ["read"]
     }
 
-    # Full access to the homelab secrets engine
+    # Full access to the homelab secrets engine (patch: KV v2 merge patches,
+    # used by secrets:rotate-proxied to change one field and keep the rest)
     path "homelab/*" {
-      capabilities = ["create", "read", "update", "delete", "list"]
+      capabilities = ["create", "read", "update", "patch", "delete", "list"]
     }
 
     # SSH secrets engine management
