@@ -214,6 +214,11 @@ def expect(resp: Response, ok, what: str) -> Response:
 # Vault (KV v2 under homelab/), vault-admin JWT role
 # --------------------------------------------------------------------------
 
+# Vault fields that are not secrets and stay readable in the log (the NZBGet
+# username is the service's name).
+NOT_SECRET_FIELDS = {"username"}
+
+
 class Vault:
     def __init__(self, jwt: str, role: str = "vault-admin", addr: str = VAULT_ADDR, http: Optional[Http] = None):
         self.jwt, self.role, self.addr = jwt, role, addr.rstrip("/")
@@ -245,8 +250,9 @@ class Vault:
         if r.status != 200:
             fail(f"Vault read {path}: HTTP {r.status}")
         data = (r.json() or {}).get("data", {}).get("data") or {}
-        for v in data.values():
-            secret(v)
+        for k, v in data.items():
+            if k not in NOT_SECRET_FIELDS:
+                secret(v)
         return data
 
     def patch(self, path: str, fields: Dict[str, Optional[str]], tries: int = 5, sleep=time.sleep) -> int:
@@ -705,6 +711,32 @@ class Sonarr(ArrWithOmbi):
     telegraf = ["sonarr_status"]
 
 
+# A download client test also validates settings that have nothing to do with
+# the credentials (Sonarr fails it when no category is set). Failures on only
+# these properties mean the connection and the login worked.
+CLIENT_TEST_UNRELATED = {"tvcategory", "moviecategory", "musiccategory", "category",
+                         "tvimportedcategory", "movieimportedcategory", "recenttvpriority",
+                         "oldertvpriority", "recentmoviepriority", "oldermoviepriority"}
+
+
+def client_test_result(r: Response):
+    """(passed, detail) for an *arr download client test response."""
+    if r.status == 200:
+        return True, "HTTP 200"
+    if r.status != 400:
+        return False, f"HTTP {r.status}"
+    try:
+        failures = r.json() or []
+    except RotationError:
+        return False, "HTTP 400"
+    if not isinstance(failures, list) or not failures:
+        return False, "HTTP 400"
+    props = [str(f.get("propertyName") or "") for f in failures if isinstance(f, dict)]
+    if props and all(p.lower() in CLIENT_TEST_UNRELATED for p in props):
+        return True, "connected; only unrelated settings flagged: " + ", ".join(sorted(set(props)))
+    return False, "HTTP 400: " + ", ".join(sorted(set(p or "(connection)" for p in props)))
+
+
 def update_arr_download_clients(ctx: Ctx, implementation: str, host: str, fields: Dict[str, str]) -> None:
     """Set fields (password) on every Radarr/Sonarr download client of that
     implementation and host, save, and run the client's own test.
@@ -726,7 +758,8 @@ def update_arr_download_clients(ctx: Ctx, implementation: str, host: str, fields
             expect(ctx.http.request("PUT", f"{base}/{c['id']}?forceSave=true", headers={"X-Api-Key": key},
                                     json_body=c), (200, 202), f"{arr} save download client {c.get('name')}")
             r = ctx.http.request("POST", f"{base}/test", headers={"X-Api-Key": key}, json_body=c)
-            ctx.check(r.status == 200, f"{arr} download client '{c.get('name')}' test (HTTP {r.status})")
+            ok, detail = client_test_result(r)
+            ctx.check(ok, f"{arr} download client '{c.get('name')}' test ({detail})")
     if not found:
         ctx.notes.append(f"no Radarr/Sonarr download client uses {host}")
 

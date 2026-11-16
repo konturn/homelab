@@ -377,6 +377,41 @@ def _rc_quiet(fn, *a):
     return run_quiet(lambda: _rc(fn, *a))
 
 
+class ClientTestResultTests(unittest.TestCase):
+    def r(self, status, body):
+        return rotate.Response(status, json.dumps(body).encode())
+
+    def test_ok(self):
+        self.assertTrue(rotate.client_test_result(self.r(200, {}))[0])
+
+    def test_unrelated_setting_only_passes(self):
+        ok, detail = rotate.client_test_result(self.r(400, [{"propertyName": "TvCategory",
+                                                              "errorMessage": "A category is recommended"}]))
+        self.assertTrue(ok)
+        self.assertIn("TvCategory", detail)
+
+    def test_connection_or_login_failure_fails(self):
+        for body in ([{"propertyName": "Username", "errorMessage": "Authentication failed"}],
+                     [{"propertyName": "", "errorMessage": "Unable to connect"}],
+                     [{"propertyName": "TvCategory"}, {"propertyName": "Password"}],
+                     [], {"message": "x"}):
+            self.assertFalse(rotate.client_test_result(self.r(400, body))[0], body)
+        self.assertFalse(rotate.client_test_result(self.r(500, {}))[0])
+
+
+class VaultReadMaskTests(unittest.TestCase):
+    def test_username_readable_password_masked(self):
+        class H:
+            def request(self, method, url, **kw):
+                if url.endswith("/auth/jwt/login"):
+                    return rotate.Response(200, b'{"auth": {"client_token": "tok-0123456789"}}')
+                return rotate.Response(200, json.dumps({"data": {"data": {
+                    "username": "svcuser-name", "password": "pw-secret-0123456789"}}}).encode())
+        rotate.Vault("jwt-0123456789", http=H()).read("docker/x")
+        self.assertEqual(rotate.MASK.scrub("svcuser-name"), "svcuser-name")
+        self.assertEqual(rotate.MASK.scrub("pw-secret-0123456789"), "[MASKED]")
+
+
 class ComposeImageTests(unittest.TestCase):
     def test_compose_consumers_have_literal_images(self):
         for name, cls in rotate.SERVICES.items():
