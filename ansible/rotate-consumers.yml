@@ -19,6 +19,13 @@
     - role: fetch-vault-secrets
 
   tasks:
+    # telegraf.conf uses the role defaults of configure-homelab-services
+    # (UPS dates); the full deploy has them because it runs that role.
+    - name: Load the defaults telegraf.conf needs
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/roles/configure-homelab-services/defaults/main.yml"
+      when: rotate_telegraf | bool
+
     - name: Only known consumers
       ansible.builtin.assert:
         that:
