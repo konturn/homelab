@@ -1345,6 +1345,7 @@ services:
       internal:
         ipv4_address: {{ jit_approval_svc_ip }}
       jit-bridge:
+      jit-proxy-ctl:
     deploy:
       resources:
         limits:
@@ -1363,7 +1364,7 @@ services:
       # request body. Requester x tier -> auto | auto-fyi | approve | deny;
       # unknown requesters are denied. docs/design/openclaw-identities.md
       - JIT_REQUESTER_KEYS={{ vault_jit_requester_keys | replace("$", "$$") }}
-      - JIT_APPROVAL_MATRIX=openclaw-noah=auto,auto-fyi,approve;openclaw-ops=auto,approve,deny
+      - JIT_APPROVAL_MATRIX={{ jit_approval_matrix }}
       # Requests per resource per requester per 15 min. Twice the busiest
       # resource's observed peak (Grafana/InfluxDB checks in agent bursts).
       - JIT_RATE_LIMIT_MAX=72
@@ -1381,6 +1382,13 @@ services:
       # Action prompts for host-side clients (internal/actions). The socket
       # dir is a host bind mount (uid 1000, 0700), not on any network.
       - ACTIONS_SOCKET=/run/actions/actions.sock
+  {% if vault_jit_proxy_ctl_key | length > 0 %}
+      # Credential proxy grants (internal/proxygrant): register and revoke
+      # them on the proxy's control bridge; agents call JIT_PROXY_URL.
+      - JIT_PROXY_CTL_URL=http://{{ jit_proxy_ctl_ip }}:8091
+      - JIT_PROXY_CTL_KEY={{ vault_jit_proxy_ctl_key | replace("$", "$$") }}
+      - JIT_PROXY_URL=http://{{ jit_proxy_ip }}:8090
+  {% endif %}
     volumes:
       - {{ docker_persistent_data_path }}/jit-approval-svc/actions:/run/actions
     depends_on:
@@ -1434,6 +1442,8 @@ services:
       - DATA_LISTEN={{ jit_proxy_ip }}:8090
       - CTL_LISTEN={{ jit_proxy_ctl_ip }}:8091
       - CLIENT_CIDR=172.30.6.0/24
+      # The broker's matrix: a grant it should not have issued is refused.
+      - JIT_APPROVAL_MATRIX={{ jit_approval_matrix }}
       - GOMEMLIMIT=200MiB
     depends_on:
       vault:
@@ -3149,5 +3159,6 @@ services:
       - {{ docker_persistent_data_path }}/openclaw/entrypoint-wrapper.sh:/usr/local/bin/entrypoint-wrapper.sh:ro
       - {{ docker_persistent_data_path }}/openclaw/git-credential-gitlab:/usr/local/bin/git-credential-gitlab:ro
       - {{ docker_persistent_data_path }}/openclaw/jit-gitlab-token:/usr/local/bin/jit-gitlab-token:ro
+      - {{ docker_persistent_data_path }}/openclaw/jitcurl:/usr/local/bin/jitcurl:ro
     entrypoint: ["entrypoint-wrapper.sh"]
     command: ["node", "/app/dist/index.js", "gateway", "--port", "18789"]

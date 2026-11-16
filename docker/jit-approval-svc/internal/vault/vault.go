@@ -399,6 +399,13 @@ var staticResourcePaths = map[string][]string{
 	"ipmi":     {"homelab/data/infrastructure/ipmi"},
 }
 
+// IsStaticResource reports whether a resource is served by the static
+// backend (a Vault token for its own secret).
+func IsStaticResource(resource string) bool {
+	_, ok := staticResourcePaths[resource]
+	return ok
+}
+
 // StaticPolicyPrefix is the prefix of the per-resource static policies.
 const StaticPolicyPrefix = "jit-static-"
 
