@@ -2327,8 +2327,8 @@ services:
       AMCREST_PASSWORD: {{ vault_doorbell_pass | trim | replace("$", "$$") }}
       MQTT_HOST: "mqtt.lab.nkontur.com"
       MQTT_PORT: "8883"
-      MQTT_USERNAME: mosquitto
-      MQTT_PASSWORD: {{ vault_mqtt_pass | trim | replace("$", "$$") }}
+      MQTT_USERNAME: amcrest2mqtt
+      MQTT_PASSWORD: {{ vault_amcrest2mqtt_mqtt_password | trim | replace("$", "$$") }}
       HOME_ASSISTANT: "true"
       MQTT_TLS_ENABLED: "true"
       MQTT_TLS_CA_CERT: "/etc/ssl/certs/ca-certificates.crt"
@@ -2403,8 +2403,8 @@ services:
       MQTT_SERVER: "mqtts://mqtt.lab.nkontur.com:8883"
       TZ: America/New_York
       PORT: 8080
-      MQTT_USERNAME: mosquitto
-      MQTT_PASSWORD: {{ vault_mqtt_pass | trim | replace("$", "$$") }}
+      MQTT_USERNAME: ambientweather
+      MQTT_PASSWORD: {{ vault_ambientweather_mqtt_password | trim | replace("$", "$$") }}
       MQTT_REJECT_UNAUTHORIZED: "true"
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/data/ || exit 1"]

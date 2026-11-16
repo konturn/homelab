@@ -5,8 +5,8 @@ frontend:
 mqtt:
   base_topic: zigbee2mqtt
   server: mqtts://mqtt.lab.nkontur.com:8883
-  user: mosquitto
-  password: {{ vault_mqtt_pass | trim }}
+  user: zigbee2mqtt
+  password: {{ vault_zigbee2mqtt_mqtt_password | trim }}
   keepalive: 60
   reject_unauthorized: true
   version: 4

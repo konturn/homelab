@@ -1202,6 +1202,36 @@
   when: not ansible_check_mode
   ignore_errors: yes
 
+### Per-service MQTT users (docs/MQTT.md), same pattern as the users below:
+# add when missing, never touch other users. Passwords: Vault mqtt/<user>.
+- name: Ensure the per-service MQTT users exist
+  ansible.builtin.shell: |
+    set -euo pipefail
+    f={{ docker_persistent_data_path }}/mqtt/conf/mosquitto.passwd
+    if grep -q "^${MQTT_USER}:" "$f"; then echo present; exit 0; fi
+    [ -n "${PW:-}" ]
+    docker exec -e PW -e MQTT_USER mosquitto sh -c 'mosquitto_passwd -b /mosquitto/config/mosquitto.passwd "$MQTT_USER" "$PW"'
+    chown 1883:1883 "$f"
+    chmod 0700 "$f"
+    grep -q "^${MQTT_USER}:" "$f"
+    docker kill -s HUP mosquitto >/dev/null
+    echo added
+  args:
+    executable: /bin/bash
+  environment:
+    PW: "{{ lookup('ansible.builtin.vars', item.var) }}"
+    MQTT_USER: "{{ item.user }}"
+  loop:
+    - {user: zigbee2mqtt, var: vault_zigbee2mqtt_mqtt_password}
+    - {user: ambientweather, var: vault_ambientweather_mqtt_password}
+    - {user: amcrest2mqtt, var: vault_amcrest2mqtt_mqtt_password}
+  loop_control:
+    label: "{{ item.user }}"
+  register: _service_mqtt_users
+  changed_when: "'added' in _service_mqtt_users.stdout"
+  no_log: true
+  when: "'router' in inventory_hostname and not ansible_check_mode"
+
 ### MQTT user for the anomaly detector
 # mosquitto.passwd is host state, not in the repo. Add the detector's user when
 # it is missing (mosquitto_passwd inside the container, password from Vault via
