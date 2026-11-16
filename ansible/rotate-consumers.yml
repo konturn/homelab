@@ -44,8 +44,12 @@
         - rotate_telegraf | bool
         - _rotate_telegraf_conf is changed
 
+    # import_role (static), not include_role: it exposes the role's defaults
+    # to the whole play at parse time, and telegraf.conf above needs them
+    # (ups_battery_install_date, ups_manufacture_date) exactly as the router
+    # deploy renders it. The `when` still applies to every imported task.
     - name: Render the compose file
-      ansible.builtin.include_role:
+      ansible.builtin.import_role:
         name: configure-homelab-services
         tasks_from: render_compose
       when: rotate_services | length > 0
