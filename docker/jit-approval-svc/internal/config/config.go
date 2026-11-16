@@ -8,10 +8,11 @@ import (
 	"time"
 )
 
-// TierConfig holds the configuration for a given tier level.
+// TierConfig holds the configuration for a given tier level. Whether a
+// request at a tier is minted, approved or denied depends on who asks
+// (ApprovalMatrix), not on the tier alone.
 type TierConfig struct {
 	TTL         time.Duration
-	AutoApprove bool
 	Description string
 }
 
@@ -26,7 +27,19 @@ type Config struct {
 	TelegramWebhookSecret string
 	TelegramWebhookURL    string
 
-	JITAPIKey string
+	// RequesterKeys are the per-requester credentials (JIT_REQUESTER_KEYS):
+	// the broker identifies the caller by the key it presents.
+	RequesterKeys []RequesterKey
+
+	// JITAPIKey is the shared key from before per-requester keys
+	// (JIT_API_KEY, optional). It authenticates as LegacyRequester.
+	JITAPIKey       string
+	LegacyRequester string
+
+	// ApprovalMatrix decides, per requester and tier, whether a request is
+	// minted (auto, auto-fyi), sent for approval or denied
+	// (JIT_APPROVAL_MATRIX, default DefaultApprovalMatrix).
+	ApprovalMatrix map[string]map[int]Decision
 
 	// ActionsSocket, when set, serves the action-prompt API (internal/actions)
 	// on this Unix socket. Host-side clients reach it through a bind mount.
@@ -34,8 +47,6 @@ type Config struct {
 
 	ListenAddr     string
 	RequestTimeout time.Duration
-
-	AllowedRequesters []string
 
 	Tiers map[int]TierConfig
 
@@ -86,9 +97,16 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("invalid REQUEST_TIMEOUT: %w", err)
 	}
 
-	requesters := strings.Split(getEnv("ALLOWED_REQUESTERS", "prometheus"), ",")
-	for i := range requesters {
-		requesters[i] = strings.TrimSpace(requesters[i])
+	requesterKeys, err := ParseRequesterKeys(os.Getenv("JIT_REQUESTER_KEYS"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid JIT_REQUESTER_KEYS: %w", err)
+	}
+
+	matrix := DefaultApprovalMatrix()
+	if v := os.Getenv("JIT_APPROVAL_MATRIX"); v != "" {
+		if matrix, err = ParseApprovalMatrix(v); err != nil {
+			return nil, fmt.Errorf("invalid JIT_APPROVAL_MATRIX: %w", err)
+		}
 	}
 
 	cfg := &Config{
@@ -101,19 +119,22 @@ func Load() (*Config, error) {
 		TelegramWebhookSecret: os.Getenv("TELEGRAM_WEBHOOK_SECRET"),
 		TelegramWebhookURL:    os.Getenv("TELEGRAM_WEBHOOK_URL"),
 
-		JITAPIKey: os.Getenv("JIT_API_KEY"),
+		RequesterKeys:   requesterKeys,
+		JITAPIKey:       os.Getenv("JIT_API_KEY"),
+		LegacyRequester: getEnv("JIT_LEGACY_REQUESTER", LegacyRequester),
+		ApprovalMatrix:  matrix,
 
 		ActionsSocket: os.Getenv("ACTIONS_SOCKET"),
 
 		ListenAddr:     getEnv("LISTEN_ADDR", ":8080"),
 		RequestTimeout: time.Duration(timeoutSec) * time.Second,
 
-		AllowedRequesters: requesters,
-
+		// Tier 3 (router shell, elevated SSH, IPMI) keeps the 30 minutes
+		// those resources had as tier 2.
 		Tiers: map[int]TierConfig{
-			1: {TTL: 15 * time.Minute, AutoApprove: true, Description: "Auto-approve services"},
-			2: {TTL: 30 * time.Minute, AutoApprove: false, Description: "Infrastructure"},
-			3: {TTL: 60 * time.Minute, AutoApprove: false, Description: "Critical"},
+			1: {TTL: 15 * time.Minute, Description: "Services"},
+			2: {TTL: 30 * time.Minute, Description: "Infrastructure"},
+			3: {TTL: 30 * time.Minute, Description: "Critical"},
 		},
 
 		// Backend URLs: empty string means fall back to static/Vault
@@ -168,8 +189,27 @@ func (c *Config) Validate() error {
 	if c.TelegramWebhookSecret == "" {
 		return fmt.Errorf("TELEGRAM_WEBHOOK_SECRET is required")
 	}
-	if c.JITAPIKey == "" {
-		return fmt.Errorf("JIT_API_KEY is required")
+	if c.JITAPIKey == "" && len(c.RequesterKeys) == 0 {
+		return fmt.Errorf("JIT_REQUESTER_KEYS (or the legacy JIT_API_KEY) is required")
+	}
+	if c.JITAPIKey != "" {
+		h := HashKey(c.JITAPIKey)
+		for _, rk := range c.RequesterKeys {
+			if rk.Hash == h {
+				return fmt.Errorf("JIT_API_KEY is also %s's key", rk.Name)
+			}
+			if rk.Name == c.legacyRequester() {
+				return fmt.Errorf("requester %s has both a key and the shared JIT_API_KEY", rk.Name)
+			}
+		}
+	}
+	if err := ValidateApprovalMatrix(c.ApprovalMatrix); err != nil {
+		return err
+	}
+	for tier := 1; tier <= MaxTier; tier++ {
+		if _, ok := c.Tiers[tier]; !ok {
+			return fmt.Errorf("tier %d has no TTL", tier)
+		}
 	}
 	return nil
 }
@@ -195,16 +235,6 @@ func (c *Config) TTLFor(resource string, tier int) (time.Duration, error) {
 		return 0, err
 	}
 	return tc.TTL, nil
-}
-
-// IsRequesterAllowed checks if the given requester ID is in the allowlist.
-func (c *Config) IsRequesterAllowed(requester string) bool {
-	for _, r := range c.AllowedRequesters {
-		if r == requester {
-			return true
-		}
-	}
-	return false
 }
 
 func getEnv(key, fallback string) string {

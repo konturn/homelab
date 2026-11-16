@@ -1,13 +1,14 @@
 # JIT Approval Service
 
-A Go HTTP service that brokers JIT (Just-In-Time) credential access between the Prometheus agent and HashiCorp Vault, with human-in-the-loop approval via Telegram inline buttons.
+A Go HTTP service that brokers JIT (Just-In-Time) credential access between the OpenClaw agents and HashiCorp Vault, with human-in-the-loop approval via Telegram inline buttons. Each agent has its own key; the broker decides per requester and tier (see [Approval matrix](#approval-matrix) and `docs/design/openclaw-identities.md`).
 
 ## Architecture
 
 ```
-Agent → POST /request → Approval Service → Telegram inline buttons → Noah approves/denies
-Agent → GET /status/:id → polls for result
-On approve (or immediately, for tier 1) → Backend Registry → Dynamic backend or Vault → mint credential → return to agent
+Agent → POST /request (its own key) → requester × tier → auto | auto-fyi | approve | deny
+  approve → Telegram inline buttons → Noah approves/denies
+Agent → GET /status/:id → polls for result (only its own requests)
+On approve, or immediately for auto / auto-fyi → Backend Registry → Dynamic backend or Vault → mint credential → return to agent
 ```
 
 ### Dynamic vs Static Backends
@@ -61,14 +62,17 @@ curl -X POST http://jit-approval-svc:8080/request \
   -H "Content-Type: application/json" \
   -H "X-JIT-API-Key: $JIT_API_KEY" \
   -d '{
-    "requester": "prometheus",
     "resource": "homeassistant",
     "tier": 2,
     "reason": "Check sensor readings"
   }'
 ```
 
-Requires `X-JIT-API-Key` header matching the configured `JIT_API_KEY`. Returns 401 if missing or invalid.
+Requires an `X-JIT-API-Key` header holding one requester's key; the broker
+identifies the requester from it (401 if it matches none). `requester` in the
+body is optional: if present it must name the key's owner, or the request is
+refused (403). A `tier` below the resource's tier is raised to it. A request
+the approval matrix denies is refused with 403 and leaves nothing pending.
 
 Response:
 ```json
@@ -82,7 +86,7 @@ Response:
 
 Poll for approval status. Credential is returned exactly once (claimed on first poll after approval).
 
-Requires `X-JIT-API-Key` header (same as `/request`). Returns 401 if missing or invalid.
+Requires `X-JIT-API-Key` header (same as `/request`). Returns 401 if missing or invalid, and 404 for a request another requester made.
 
 ```bash
 curl http://jit-approval-svc:8080/status/req-a1b2c3d4e5f6 \
@@ -182,15 +186,37 @@ longer active" and the client re-sends what it still needs.
 
 ## Tier System
 
-| Tier | TTL | Approval | Resources |
-|------|-----|----------|-----------|
-| 1 | 15 min | Auto | grafana, influxdb, plex, radarr, sonarr, prowlarr, ombi, nzbget, deluge, tautulli, mqtt, gmail-read, ssh-macmini, gitlab-moltbot (1 h) |
-| 2 | 30 min | Manual (Telegram) | gitlab, homeassistant, paperless, gmail-send, tailscale, pihole, vault, ipmi, ssh-router, ssh-satellite, ssh-zwave, ssh-nkontur/konoahko/konturn (8 h), `ssh-*-elevated` |
-| 3 | 60 min | Manual (Telegram) | Critical (reserved) |
+| Tier | TTL | Resources |
+|------|-----|-----------|
+| 1 | 15 min | grafana, influxdb, plex, radarr, sonarr, prowlarr, ombi, nzbget, deluge, tautulli, mqtt, gmail-read, ssh-macmini, gitlab-moltbot (1 h) |
+| 2 | 30 min | gitlab, homeassistant, paperless, gmail-send, tailscale, pihole, vault (scoped paths), ssh-satellite, ssh-zwave, ssh-nkontur/konoahko/konturn (8 h) |
+| 3 | 30 min | ssh-router, every `ssh-*-elevated`, ipmi |
 
-The resource-to-tier map is `resourceTier` in `internal/vault/vault.go`; a request below a resource's minimum tier is rejected. Per-resource TTL overrides are in `internal/config/config.go`. Requests are rate limited per resource per requester: `JIT_RATE_LIMIT_MAX` per `JIT_RATE_LIMIT_WINDOW_MIN` minutes (code defaults 50 per 15; the deployment sets 72).
+Tiers are resource-based: the resource-to-tier map is `resourceTier` in `internal/vault/vault.go`, and a request below a resource's tier is raised to it. No Vault admin or policy path is reachable at any tier: the `vault` resource only grants read/list/create/update under `homelab/data/`, never a broker-only path. Per-resource TTL overrides are in `internal/config/config.go`. Requests are rate limited per resource per requester: `JIT_RATE_LIMIT_MAX` per `JIT_RATE_LIMIT_WINDOW_MIN` minutes (code defaults 50 per 15; the deployment sets 72).
 
 Tiers represent **approval trust level**, not backend type. Dynamic vs static credential backends are orthogonal to the tier system.
+
+### Approval matrix
+
+Who gets what without a tap depends on the requester (`JIT_APPROVAL_MATRIX`, default `config.DefaultApprovalMatrix`):
+
+| Requester | Tier 1 | Tier 2 | Tier 3 |
+|---|---|---|---|
+| `openclaw-noah` | auto | auto-fyi | approve |
+| `openclaw-ops` | auto | approve | deny |
+| `prometheus` (shared key, transition only) | auto | approve | approve |
+| anyone else | deny | deny | deny |
+
+- **auto**: minted at once.
+- **auto-fyi**: minted at once, plus one informational Telegram line (no buttons) per grant.
+- **approve**: Telegram approve/deny buttons; nothing is minted until Noah taps Approve.
+- **deny**: refused with 403; nothing is stored, so there is nothing to approve.
+
+The config refuses a matrix in which tier 3 is auto or auto-fyi for anyone.
+
+### Requester keys
+
+Each requester has its own random key. The broker holds only SHA-256 hashes (`JIT_REQUESTER_KEYS`, from Vault `homelab/docker/jit-approval-svc` field `requester_keys`); the keys are in `homelab/agents/openclaw-<name>` and each is readable only by its own agent's process. Those paths, and the old shared one, are broker-only for the `vault` resource, so no grant can hand one agent another's key.
 
 ## Configuration
 
@@ -204,11 +230,12 @@ All configuration via environment variables:
 | `TELEGRAM_BOT_TOKEN` | Yes | — | Telegram bot token for approval messages |
 | `TELEGRAM_CHAT_ID` | No | `8531859108` | Noah's Telegram chat ID |
 | `TELEGRAM_WEBHOOK_SECRET` | Yes | — | Secret for webhook verification |
-| `JIT_API_KEY` | Yes | — | API key for `/request` endpoint auth (passed as `X-JIT-API-Key` header) |
+| `JIT_REQUESTER_KEYS` | Yes* | — | `name:<sha256 hex of key>,...`, one per requester (*or the legacy `JIT_API_KEY`) |
+| `JIT_APPROVAL_MATRIX` | No | see [Approval matrix](#approval-matrix) | `name=<t1>,<t2>,<t3>;...` with `auto`, `auto-fyi`, `approve` or `deny` |
+| `JIT_API_KEY` | No | — | Legacy shared key; authenticates as `JIT_LEGACY_REQUESTER` (default `prometheus`) |
 | `TELEGRAM_WEBHOOK_URL` | No | — | If set, the webhook is registered with Telegram at startup |
 | `LISTEN_ADDR` | No | `:8080` | HTTP listen address |
 | `REQUEST_TIMEOUT` | No | `1800` | Seconds before pending requests auto-timeout (deployed with `300`) |
-| `ALLOWED_REQUESTERS` | No | `prometheus` | Comma-separated requester allowlist |
 | `JIT_RATE_LIMIT_MAX` | No | `50` | Requests per resource per requester per window (deployment: 72) |
 | `JIT_RATE_LIMIT_WINDOW_MIN` | No | `15` | Rate-limit window in minutes |
 | `ACTIONS_SOCKET` | No | — | Unix socket path for the action-prompt API |
@@ -269,12 +296,14 @@ security boundaries:
 
 | Package | Fuzz/property tests | Property |
 |---|---|---|
-| handler | `FuzzHandleRequest`, `FuzzHandleRequestFields`, `TestAutoApprovalMatrix`, `TestRequestedTTLNeverExceedsMax` | no panic/500 on any body; nothing is minted without approval except tier 1 on tier-1 resources (in the GitLab family only `gitlab-<agent>`); minted TTL <= resource/tier max |
+| handler | `FuzzHandleRequest`, `FuzzHandleRequestFields`, `TestAutoApprovalMatrix`, `TestRequestedTTLNeverExceedsMax` | no panic/500 on any body or key; for each requester nothing is minted without approval unless its matrix cell at the resource's tier is auto/auto-fyi (one FYI line each for auto-fyi), never at tier 3; minted TTL <= resource/tier max |
+| handler | `TestOpsNeverGetsTier3`, `TestUnknownRequesterAlwaysDenied`, `TestRequesterFieldCannotImpersonate`, `TestStatusOnlyForOwnRequests` | ops is refused every tier-3 resource with nothing left to approve; unknown keys/requesters get nothing; the body cannot change the requester; one requester cannot poll or claim another's request |
+| config | `FuzzApprovalMatrix`, `TestAuthenticate` | no valid matrix (and no `DecisionFor` result) mints tier 3; unknown requesters and tiers are denied; a key maps to exactly one requester |
 | handler | `FuzzTelegramWebhook` | only `jit:approve:<id>` from the configured chat with the webhook secret approves |
 | backend | `FuzzRegistryFor` | the agent backend serves exactly `gitlab-<configured user>` (no case/unicode/whitespace variants) |
 | backend | `FuzzGitLabAgentScopes`, `FuzzGitLabAgentIdentity`, `FuzzGitLabAgentTTL`, `FuzzExpiryFromName`, `TestGitLabAgentSweepOnlyRevokesExpiredJITTokens` | scopes within the allowlist, never widened; impersonates only the configured username; TTL exact and recoverable by the sweeper |
 | backend | `FuzzValidateVaultPaths`, `TestInfluxDBTierPermissions` | dynamic Vault policies stay under `homelab/data/` with allowed capabilities and no HCL injection; tier 1 InfluxDB tokens are read-only |
-| vault, config | `FuzzPoliciesForResource`, `TestPrivilegedResourcesNeverTier1`, `FuzzTTLFor` | static fallback fails closed for unknown resources/tiers; infra resources never tier 1 |
+| vault, config | `FuzzPoliciesForResource`, `TestPrivilegedResourcesNeverTier1`, `TestTier3Resources`, `FuzzTTLFor` | static fallback fails closed for unknown resources/tiers; infra resources never tier 1; router shell, elevated SSH and IPMI are tier 3 |
 | actions | `FuzzHandleCallback`, `FuzzPromptAPI` | only exact `act:<action>:<id>` decides a prompt; socket API validates input |
 
 To fuzz for real (one target per run; a crasher is written to
@@ -301,13 +330,13 @@ All output is structured JSON to stdout, designed for the Docker Loki log driver
 {"ts":"2026-02-06T14:30:00Z","level":"info","event":"backend_credential_minted","backend":"grafana","resource":"grafana","tier":0,"ttl":"5m0s"}
 ```
 
-Events logged include: `request_received`, `approval_sent`, `auto_approve`, `approved`, `denied`, `timeout`, `token_issued`, `backend_credential_minted`, `credential_claimed`, `dynamic_backend_failed`, `request_rate_limited`, `backend_registered`, `influxdb_cleanup_start`, `influxdb_cleanup_success`, `http_request`.
+Events logged include: `request_received`, `request_tier_raised`, `request_denied_by_policy`, `request_rejected_requester_mismatch`, `approval_sent`, `auto_approve`, `fyi_sent`, `approved`, `denied`, `timeout`, `token_issued`, `backend_credential_minted`, `credential_claimed`, `dynamic_backend_failed`, `request_rate_limited`, `backend_registered`, `influxdb_cleanup_start`, `influxdb_cleanup_success`, `http_request`.
 
 ## Security
 
 - Webhook endpoint validates Telegram secret token (required)
-- `/request` and `/status/:id` endpoints require `X-JIT-API-Key` header authentication
-- Only configured requesters can submit requests
+- `/request` and `/status/:id` endpoints require `X-JIT-API-Key` header authentication; the key identifies the requester
+- Unknown requesters are denied everything; a requester sees only its own requests
 - Only callbacks from configured Telegram chat ID are processed
 - Credentials returned exactly once (claim-on-first-poll)
 - No credential data in logs (request_id and resource only, never tokens)

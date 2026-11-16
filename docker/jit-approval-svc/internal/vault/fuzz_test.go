@@ -62,10 +62,30 @@ func TestPrivilegedResourcesNeverTier1(t *testing.T) {
 			t.Errorf("%s: tier 1 policy %v", res, p)
 		}
 	}
-	// Every *-elevated resource needs approval, including future ones.
+	// Every *-elevated resource is tier 3, including future ones.
 	for res, tier := range resourceTier {
-		if strings.HasSuffix(res, "-elevated") && tier < 2 {
+		if strings.HasSuffix(res, "-elevated") && tier != 3 {
+			t.Errorf("%s is tier %d, want 3", res, tier)
+		}
+	}
+}
+
+// TestTier3Resources pins tier 3: a root shell on the router, elevated SSH
+// anywhere and IPMI. These are never minted without a tap and are refused
+// to the ops agent (config.DefaultApprovalMatrix).
+func TestTier3Resources(t *testing.T) {
+	want := map[string]bool{
+		"ssh-router": true, "ssh-router-elevated": true, "ssh-zwave-elevated": true,
+		"ssh-satellite-elevated": true, "ssh-macmini-elevated": true, "ipmi": true,
+	}
+	for res, tier := range resourceTier {
+		if (tier == 3) != want[res] {
 			t.Errorf("%s is tier %d", res, tier)
+		}
+	}
+	for res := range want {
+		if MinTierForResource(res) != 3 {
+			t.Errorf("%s: minimum tier %d, want 3", res, MinTierForResource(res))
 		}
 	}
 }

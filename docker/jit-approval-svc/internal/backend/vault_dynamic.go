@@ -40,6 +40,12 @@ var BrokerOnlyPaths = []string{
 	"homelab/data/docker/jit-approval-svc",
 	"homelab/data/infrastructure/tailscale",
 	"homelab/data/email/google-oauth",
+	// Requester credentials (docs/design/openclaw-identities.md): each is
+	// read only by its own agent, never through the vault resource, so one
+	// agent cannot obtain another's identity with a tier-2 grant.
+	"homelab/data/agents/openclaw-noah",
+	"homelab/data/agents/openclaw-ops",
+	"homelab/data/agents/jit-api-key",
 }
 
 // isBrokerOnly reports whether path is one of BrokerOnlyPaths.
