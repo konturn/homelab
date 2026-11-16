@@ -43,6 +43,12 @@ You have no Vault login. What you get:
   and logs are in Loki (labels `container`, `syslog_identifier`) and
   InfluxDB (`docker_container_*`, `systemd_units`, `zfs*`). Never ask for a
   shell just to look.
+- On the router, the event router's executor does the rest without a
+  shell (skill `event-router`, "Executor actions"; client
+  `skills/event-router/er-action`, your own identity): `collect` (inspect,
+  logs, unit status, `zpool status -x`, df) and `reset-failed` of an
+  allowlisted unit at once; `restart` of an allowlisted container only on
+  Noah's tap. Use them before any hand-off for `ssh-router`.
 - A tier-2 request Noah does not approve within 5 minutes expires. Do not
   re-ask in a loop: once per run at most, and only when the job cannot be
   done any other way (T1 data, Loki, InfluxDB, the event router API).

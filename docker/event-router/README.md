@@ -95,6 +95,77 @@ whose alert Grafana keeps re-sending goes to OpenClaw again after
 within `stale.firing_within`, so a lost resolve never pages, and is held while
 the node is in a maintenance window.
 
+## Agent actions
+
+Three fixed actions the OpenClaw agents (`noah`, `ops`) may ask for, so that
+diagnosis and the common fixes need no router shell
+(docs/design/openclaw-identities.md). Client: `er-action` in the
+event-router skill directory of each agent's workspace.
+
+```
+agent ──POST /agent/<action> {target, reason, incident?, approval?}──▶ router
+          Authorization: Bearer <agent token>, from the gateway's address
+router: token -> requester (hash list in /config/agent-tokens.json), shape, decision log
+router ──{"agent": {..., token}}──▶ executor: token again, allowlists, tier, guards, acts
+```
+
+| Action | Tier | `openclaw-noah` | `openclaw-ops` | What it does |
+|---|---|---|---|---|
+| `collect` | 1 | at once | at once | read only: `host` (docker ps, `zpool status -x`, df, failed units), `container:<name>` (inspect without env values, labels or addresses; last 200 log lines), `unit:<unit>` (`systemctl show`/`status`) |
+| `reset_failed` | 1 | at once | at once | `systemctl reset-failed` of a failed allowlisted unit; never starts or restarts it |
+| `restart_container` | 2 | at once, FYI to Noah | Noah's tap | `docker restart` of an allowlisted container; FYI to Noah after every restart |
+
+- **Identity.** Each agent's token is `sha256hex(<its JIT key>:event-router-agent-v1)`,
+  so there is no new secret and the router never sees a JIT key. The router
+  and the executor each hold only the SHA-256 of each token (rendered at
+  deploy time from the agents' keys in Vault), and the requester is whoever
+  owns the token: the body has no requester field, and an unknown field is
+  refused. The source address must also be an allowed client.
+- **Tiers** are fixed in the executor; the decision per requester and tier
+  is the JIT broker's own matrix (`jit_approval_matrix` in
+  `ansible/inventory.yml`, rendered into `executor.json`). `auto_approve`
+  in `config.yml` can let a requester restart named containers without a
+  tap; it is empty.
+- **The tap.** A restart that needs one returns 202 with an approval id; the
+  executor posts Approve/Deny on the JIT bot and keeps the request in its
+  state file. `event-router-control` records the press (or the expiry after
+  `approval_ttl`, 10 min). The agent then asks again with the approval id
+  (`er-action` waits and does that), and the executor checks that the
+  approval is this requester's, for this target, unused and unexpired, and
+  runs every guard. An approval is used once.
+- **Allowlists** are `agent_actions` in `config.yml` (validated in CI: no
+  denied container, no glob that reaches one, no VM unit). The executor
+  also hard-denies its own lists whatever the config says:
+  `AGENT_RESTART_DENIED` (the playbook hard-deny list, mosquitto, the JIT
+  broker and proxy, the OpenClaw gateway, Home Assistant, the nginx front
+  ends, iot-dns, Vaultwarden, the Litter-Robot broker, the socket proxies),
+  `COLLECT_DENIED` (Vault, Vaultwarden, the JIT broker and proxy, the
+  gateway) and `UNIT_DENIED` (libvirt, QEMU, Xen and VM units). Only
+  containers of the compose project are ever restarted; VMs are not
+  containers.
+- **Guards.** A restart goes through everything a playbook's does: the
+  restart denylist, kill switch, maintenance windows, dependencies, deploy
+  lock, `recent_deploy` (2h), once per incident, the shared per-target (2 per
+  6h) and global (6 per hour) limits, plus a per-container cooldown (30m),
+  daily caps (3 per container, 8 in all) and at most 2 waiting taps per
+  requester. `reset_failed` checks the kill switch, windows, the deploy lock,
+  that the unit is failed, its cooldown and caps. `collect` is read-only:
+  allowlist and a rate limit (30 per hour per requester); the kill switch
+  does not stop it.
+- **Commands** are fixed argument vectors; the target reaches them only
+  after it matched the allowlist and a strict name pattern, after `--`
+  where the tool takes options.
+- **Redaction.** Collected text has the container's own environment values
+  replaced, then token, password, key, URL-credential and JWT patterns, then
+  whatever gitleaks (the transcript scrubber's rules) still finds. Output is
+  at most 64 KiB (logs: the newest 40 KiB).
+- **Audit.** The router logs `decision: agent_action` (requester, action,
+  target, result) to Loki and its decision log; the executor logs each
+  request to the journal (no token, no output) and appends a point
+  `event_router_agent_action` (tags requester, action, target, result) to
+  `/var/lib/event-router-agent/actions.influx`, which telegraf writes to
+  InfluxDB.
+
 ## Residue to OpenClaw (phase 3)
 
 What reaches OpenClaw, through its `/hooks/event-router` mapping

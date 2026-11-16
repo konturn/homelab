@@ -27,7 +27,8 @@ CI_ACTIONS = ("cancel_ci_job", "retry_ci_job")
 # including types no playbook can use yet, so the agent can say "this would
 # have been a restart_systemd_unit" and the review can propose the executor
 # support for it.
-OUTCOME_FIX_ACTIONS = ALLOWED_ACTIONS + ("restart_systemd_unit", "run_pipeline_schedule", "collect")
+OUTCOME_FIX_ACTIONS = ALLOWED_ACTIONS + ("restart_systemd_unit", "run_pipeline_schedule", "collect",
+                                         "reset_failed")
 
 # Hard-denied (4.5): not expressible, whatever the data says. Kept in code,
 # not in config, so no learned change can touch them (8.3).
@@ -48,6 +49,20 @@ HARD_DENIED_TARGETS = ("gitlab", "vault", "pihole", "event-router", "docker-sock
 # containers. Restarting one is meaningless at best and can wedge a CI job.
 # Glob patterns; the executor has the same list.
 EPHEMERAL_TARGETS = ("runner-*", "canary-*", "e2e-*")
+
+# Agent actions (README "Agent actions"): never restarted on an agent's
+# request, never collected, units never touched. Same lists as the
+# executor's AGENT_RESTART_DENIED, COLLECT_DENIED and UNIT_DENIED
+# (tests/test_agent_actions.py checks); config cannot list them.
+AGENT_RESTART_DENIED = HARD_DENIED_TARGETS + (
+    "mosquitto", "jit-approval-svc", "jit-proxy", "openclaw-gateway", "homeassistant",
+    "nginx", "lab_nginx", "iot_nginx", "iot-dns", "bitwarden", "lr4-broker",
+    "docker-socket-proxy-ro", "docker-socket-proxy-tls")
+COLLECT_DENIED = ("vault", "bitwarden", "jit-approval-svc", "jit-proxy", "openclaw-gateway")
+UNIT_DENIED = ("libvirt*", "virt*", "qemu*", "xen*", "*excel*")
+AGENT_REQUESTERS = ("openclaw-noah", "openclaw-ops")
+_GLOB = re.compile(r"^[a-z0-9*][a-z0-9_.*-]{0,62}$")
+_UNIT_GLOB = re.compile(r"^[A-Za-z0-9*][A-Za-z0-9@_.:*-]{0,95}\.(service|timer|socket|mount|path)$")
 
 TARGET_LABELS = ("container_name", "container")   # labels a target may come from
 SOURCES = ("grafana", "reconciler", "gitlab")
@@ -94,7 +109,7 @@ def parse_config(raw):
     known = {"mode", "limits", "correlation", "maintenance", "quiet_hours",
              "reconcile_interval", "step_interval", "restart_denylist",
              "page_classes", "ci_orphan", "deploy_jobs", "verify_grace",
-             "openclaw", "gitlab_events", "digest_only", "deferred", "stale"}
+             "openclaw", "gitlab_events", "digest_only", "deferred", "stale", "agent_actions"}
     unknown = set(raw) - known
     if unknown:
         raise ConfigError(f"config: unknown keys {sorted(unknown)}")
@@ -122,6 +137,7 @@ def parse_config(raw):
     cfg["gitlab_events"] = _gitlab_events(raw.get("gitlab_events") or {})
     cfg["deferred"] = _deferred(raw.get("deferred") or {})
     cfg["stale"] = _stale(raw.get("stale") or {})
+    cfg["agent_actions"] = _agent_actions(raw.get("agent_actions") or {}, cfg["restart_denylist"])
     cfg["digest_only"] = [_selector(r, f"digest_only[{i}]", extra={"reason"})
                           for i, r in enumerate(raw.get("digest_only") or [])]
     for i, r in enumerate(cfg["digest_only"]):
@@ -191,6 +207,81 @@ def _stale(raw):
     for u in out["user_facing"]:
         if not isinstance(u, str) or not re.match(r"^[a-z0-9_.*:-]{1,64}$", u):
             raise ConfigError(f"stale.user_facing: {u!r} is not a container name or glob")
+    return out
+
+
+def _agent_actions(raw, restart_denylist):
+    """What the agents may ask the executor for (rendered into executor.json).
+    Rejects anything on the hard-deny lists, globs that could reach them,
+    and auto-approval for an unknown requester."""
+    if set(raw) - {"approval_ttl", "max_pending", "collect", "restart_container", "reset_failed"}:
+        raise ConfigError(f"agent_actions: unknown keys {sorted(set(raw) - {'approval_ttl', 'max_pending', 'collect', 'restart_container', 'reset_failed'})}")
+    out = {"approval_ttl": _dur(raw.get("approval_ttl", "10m"), "agent_actions.approval_ttl"),
+           "max_pending": int(raw.get("max_pending", 2))}
+    if not 60 <= out["approval_ttl"] <= 3600:
+        raise ConfigError("agent_actions.approval_ttl must be 1m to 1h")
+    shapes = {"collect": {"max_per_hour", "containers", "units"},
+              "restart_container": {"cooldown", "max_per_day", "max_per_day_total", "no_deploy_touching",
+                                    "containers", "auto_approve"},
+              "reset_failed": {"cooldown", "max_per_day", "max_per_day_total", "units"}}
+    for name, keys in shapes.items():
+        part = raw.get(name) or {}
+        if set(part) - keys:
+            raise ConfigError(f"agent_actions.{name}: unknown keys {sorted(set(part) - keys)}")
+        p = {"containers": list(part.get("containers") or []), "units": list(part.get("units") or [])}
+        for k in ("cooldown", "no_deploy_touching"):
+            if k in part:
+                p[k] = _dur(part[k], f"agent_actions.{name}.{k}")
+        for k in ("max_per_hour", "max_per_day", "max_per_day_total"):
+            if k in part:
+                v = part[k]
+                if not isinstance(v, int) or isinstance(v, bool) or not 0 <= v <= 100:
+                    raise ConfigError(f"agent_actions.{name}.{k} must be an integer from 0 to 100")
+                p[k] = v
+        for c in p["containers"]:
+            if not isinstance(c, str) or not _GLOB.match(c):
+                raise ConfigError(f"agent_actions.{name}: {c!r} is not a container name or glob")
+        for u in p["units"]:
+            if not isinstance(u, str) or not _UNIT_GLOB.match(u):
+                raise ConfigError(f"agent_actions.{name}: {u!r} is not a unit name or glob")
+            samples = [d.replace("*", "d") + ".service" for d in UNIT_DENIED]
+            if any(fnmatch.fnmatchcase(u, d) for d in UNIT_DENIED) or any(fnmatch.fnmatchcase(x, u) for x in samples):
+                raise ConfigError(f"agent_actions.{name}: {u!r} can name a virtual machine unit")
+        out[name] = p
+    rc = out["restart_container"]
+    for k in ("cooldown", "max_per_day", "max_per_day_total"):
+        if rc["containers"] and not rc.get(k):
+            raise ConfigError(f"agent_actions.restart_container.{k} is required and nonzero")
+    denied = set(AGENT_RESTART_DENIED) | set(restart_denylist)
+    for c in rc["containers"]:
+        bad = sorted(d for d in denied if fnmatch.fnmatchcase(d, c))
+        if bad or c == "*":
+            raise ConfigError(f"agent_actions.restart_container: {c!r} names denied containers {bad}")
+        if ephemeral(c.replace("*", "x")):
+            raise ConfigError(f"agent_actions.restart_container: {c!r} is ephemeral")
+    for c in out["collect"]["containers"]:
+        bad = sorted(d for d in COLLECT_DENIED if fnmatch.fnmatchcase(d, c))
+        if bad or c == "*":
+            raise ConfigError(f"agent_actions.collect: {c!r} names never-collected containers {bad}")
+    if rc["units"] or out["reset_failed"]["containers"]:
+        raise ConfigError("agent_actions: restart_container takes containers, reset_failed units")
+    aa = raw.get("restart_container", {}).get("auto_approve") or {}
+    if not isinstance(aa, dict):
+        raise ConfigError("agent_actions.restart_container.auto_approve maps requesters to containers")
+    for who, names in aa.items():
+        if who not in AGENT_REQUESTERS or not isinstance(names, list):
+            raise ConfigError(f"agent_actions.restart_container.auto_approve: unknown requester {who!r}")
+        for c in names:
+            if not isinstance(c, str) or "*" in c or c not in rc["containers"]:
+                raise ConfigError(f"agent_actions.restart_container.auto_approve: {c!r} must be an exact "
+                                  "name on the restart list")
+    rc["auto_approve"] = {k: list(v) for k, v in aa.items()}
+    rf = out["reset_failed"]
+    for k in ("cooldown", "max_per_day", "max_per_day_total"):
+        if rf["units"] and not rf.get(k):
+            raise ConfigError(f"agent_actions.reset_failed.{k} is required and nonzero")
+    if (out["collect"]["containers"] or out["collect"]["units"]) and not out["collect"].get("max_per_hour"):
+        raise ConfigError("agent_actions.collect.max_per_hour is required and nonzero")
     return out
 
 
@@ -463,6 +554,12 @@ def validate(cfg, pbs, graph, rules=None, services=None):
                 errs.append(f"{where}: target {p.target} is on the restart denylist")
             if services is not None and p.target not in services:
                 errs.append(f"{where}: target {p.target} is not a compose service")
+    if services is not None:
+        aa = cfg.get("agent_actions") or {}
+        for part in ("collect", "restart_container"):
+            for c in (aa.get(part) or {}).get("containers") or []:
+                if "*" not in c and c not in services:
+                    errs.append(f"agent_actions.{part}: {c} is not a compose service")
     for i, a in enumerate(pbs):
         for b in pbs[i + 1:]:
             if _overlap(a, b):

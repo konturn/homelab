@@ -328,6 +328,13 @@ changes, firewall changes, deleting data of any kind (volumes, snapshots,
 restic locks or snapshots, ZFS datasets, CI artifacts), `zpool` writes,
 unsealing Vault, undoing a security control (e.g. clearing an HA ban).
 
+**On an agent's request** (2026-11-16; `docker/event-router/README.md`,
+"Agent actions", and [openclaw-identities.md](./openclaw-identities.md)):
+`collect`, `restart_container` and `reset_failed` (clear a failed unit's
+state) through `POST /agent/<action>`, with allowlists in `config.yml`
+(`agent_actions`), the requester's tier from the JIT broker's matrix, and the
+same executor checks as a playbook.
+
 ### 4.6 Executor and privilege split
 
 - **Receiver/matcher** runs as a container on the router with no Docker socket and no host access. It owns the incident state (small SQLite file under `/persistent_data/event-router/`).

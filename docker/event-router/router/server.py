@@ -17,6 +17,9 @@
   POST /maint/text     {"text": "/maint zwave_js 2h kernel update"} from Telegram,
                        parsed strictly here (router/maint_text.py)
   GET  /healthz        worker alive and database readable
+  POST /agent/<action> collect | restart_container | reset_failed, from an
+                       OpenClaw agent: its own agent token (Bearer) and an
+                       ALLOWED_CLIENTS address (router/agent_api.py)
 
 Events are written to the SQLite inbox before the reply, so a restart never
 loses an accepted event; the worker thread makes every decision.
@@ -31,6 +34,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
+from . import agent_api
 from .events import BadPayload, from_gitlab, from_grafana
 from .maint_text import BadCommand
 from .outcomes import BadOutcome
@@ -40,8 +44,10 @@ MAX_BODY = 1 << 20
 
 
 class State:
-    def __init__(self, engine, grafana_token, control_token, allowed_clients=(), gitlab_token=""):
+    def __init__(self, engine, grafana_token, control_token, allowed_clients=(), gitlab_token="",
+                 agent_tokens=None):
         self.engine = engine
+        self.agent_tokens = agent_tokens or agent_api.Tokens("/nonexistent")
         self.grafana_token = grafana_token or ""
         self.control_token = control_token or ""
         self.gitlab_token = gitlab_token or ""
@@ -147,6 +153,15 @@ def make_handler(state):
                     if events:
                         eng.store.inbox_put(time.time(), [e.to_dict() for e in events])
                     return self._send(200, {"accepted": len(events)})
+                m = re.match(r"^/agent/([a-z_]{1,32})$", u.path)
+                if m:
+                    # Both: an allowed address and the agent's own token.
+                    if not self._client_allowed():
+                        return self._send(401, {"error": "unauthorized"})
+                    code, reply = agent_api.handle(eng, state.agent_tokens,
+                                                   self.headers.get("Authorization", ""),
+                                                   m.group(1), self._body())
+                    return self._send(code, reply)
                 if u.path in ("/outcome", "/maint/text"):
                     if not (self._control() or self._client_allowed()):
                         return self._send(401, {"error": "unauthorized"})

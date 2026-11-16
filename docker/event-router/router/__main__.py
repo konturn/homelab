@@ -67,9 +67,11 @@ def cmd_serve(_args):
     from .server import State, serve
     p = _paths()
     eng = build_engine(p)
+    from .agent_api import Tokens
     state = State(eng, ENV("GRAFANA_TOKEN"), ENV("CONTROL_TOKEN"),
                   [c.strip() for c in (ENV("ALLOWED_CLIENTS") or "").split(",")],
-                  gitlab_token=ENV("GITLAB_WEBHOOK_TOKEN"))
+                  gitlab_token=ENV("GITLAB_WEBHOOK_TOKEN"),
+                  agent_tokens=Tokens(ENV("AGENT_TOKENS", "/config/agent-tokens.json")))
     serve(state, int(ENV("PORT", "8080")))
     eng._log({"decision": "started", "executor": bool(eng.executor), "gitlab": bool(eng.gitlab),
               "openclaw": bool(eng.openclaw), "forwarding": eng.forwarding,

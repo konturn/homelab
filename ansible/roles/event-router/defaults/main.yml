@@ -9,3 +9,14 @@ event_router_gid: 2470
 
 event_router_data_dir: "{{ docker_persistent_data_path }}/event-router"
 event_router_etc: /etc/event-router
+
+# Agent actions (docker/event-router/README.md, "Agent actions"). Each agent's
+# token is derived from its own JIT key: sha256hex(key + ":" + label), so
+# no new secret exists and the router never sees a JIT key. The router and
+# the executor hold only the SHA-256 of each token.
+event_router_agent_token_label: "event-router-agent-v1"
+event_router_agent_keys:
+  openclaw-noah: "{{ vault_openclaw_noah_jit_key | default('') }}"
+  openclaw-ops: "{{ vault_openclaw_ops_jit_key | default('') }}"
+# Line protocol for telegraf's file input (InfluxDB audit of agent actions).
+event_router_agent_metrics_dir: /var/lib/event-router-agent

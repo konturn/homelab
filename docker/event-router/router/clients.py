@@ -20,8 +20,16 @@ class ExecutorClient:
         self.timeout = timeout
 
     def execute(self, action_type, target, incident_id, playbook):
-        req = json.dumps({"action_type": action_type, "target": target,
-                          "incident_id": incident_id, "playbook": playbook}).encode() + b"\n"
+        return self._send({"action_type": action_type, "target": target,
+                           "incident_id": incident_id, "playbook": playbook})
+
+    def agent(self, request):
+        """An agent's request ({action, target, token, reason, incident,
+        approval}); the executor authenticates the token itself."""
+        return self._send({"agent": request})
+
+    def _send(self, obj):
+        req = json.dumps(obj).encode() + b"\n"
         sent = False
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:

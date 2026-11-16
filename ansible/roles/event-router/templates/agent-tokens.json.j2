@@ -1,0 +1,7 @@
+{#- Agent token hashes (defaults/main.yml): {requester: sha256hex(token)},
+    token = sha256hex(JIT key + ":" + label). Also embedded in executor.json. -#}
+{%- set out = {} -%}
+{%- for name, key in event_router_agent_keys.items() if key | trim | length > 0 -%}
+{%-   set _ = out.update({name: ((key | trim) ~ ':' ~ event_router_agent_token_label) | hash('sha256') | hash('sha256')}) -%}
+{%- endfor -%}
+{{ out | to_nice_json }}
