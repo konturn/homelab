@@ -281,10 +281,19 @@
         "pinDigest"
       ],
       "additionalBranchPrefix": "runner-",
-      "separateMinorPatch": true,
       "prConcurrentLimit": 0,
       "branchConcurrentLimit": 0,
       "prPriority": 5
+    },
+    {
+      "description": "Runner image class: a patch release of the runners' default image gets its own MR even when a minor is also available, so it does not wait behind the manual minor",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchFileNames": [
+        "base/gitlab-runner/config.toml"
+      ],
+      "separateMinorPatch": true
     },
     {
       "description": "Runner image class: a minor update of the runners' default image waits for a human (digest and patch only). Labelled so it stays visible",
