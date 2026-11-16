@@ -1,0 +1,37 @@
+# NZBGet (design 6.3): JSON-RPC over POST /jsonrpc with basic auth. Only a
+# single call per request (no batches), method from the list, and for
+# editqueue the command (first param) from the list. config, saveconfig,
+# reload, shutdown, scan, append (fetches agent-chosen URLs), log and
+# writelog are never listed.
+resource: nzbget
+min_tier: 1
+upstream: https://nzbget.lab.nkontur.com
+auth: {type: basic, vault_path: homelab/data/docker/nzbget, field: password, username_field: username}
+
+deny:
+  - {path: "/jsonrpc/*/**"}  # GET-style /jsonrpc/<method> calls (not /jsonrpc itself)
+  - {path: "/xmlrpc/**"}
+  - {path: "/xmlrpc"}
+  - {path: "/jsonprpc"}         # JSONP variant
+  - {path: "/jsonprpc/**"}
+
+templates:
+  read:
+    min_tier: 1
+    description: "Status, queue, history, files of a download, version"
+    allow:
+      - {method: POST, path: "/jsonrpc", rpc: {methods: [status, listgroups, listfiles, version, servervolumes]}, body_max: 4096}
+      - {method: POST, path: "/jsonrpc", rpc: {methods: [history], params: {0: [false]}}, body_max: 4096}
+  control:
+    min_tier: 1
+    description: "Pause/resume downloading; pause, resume, reorder, redownload items"
+    includes: [read]
+    allow:
+      - {method: POST, path: "/jsonrpc", rpc: {methods: [pausedownload, resumedownload]}, body_max: 4096}
+      - {method: POST, path: "/jsonrpc", rpc: {methods: [editqueue], params: {0: [GroupPause, GroupResume, GroupMoveTop, GroupMoveBottom, HistoryRedownload, HistoryReturn]}}, body_max: 16384}
+  remove:
+    min_tier: 1
+    single_use: true
+    description: "Delete queue or history items"
+    allow:
+      - {method: POST, path: "/jsonrpc", rpc: {methods: [editqueue], params: {0: [GroupDelete, GroupFinalDelete, HistoryDelete]}}, body_max: 16384}

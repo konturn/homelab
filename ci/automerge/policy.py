@@ -985,6 +985,7 @@ _JOB_NAME = re.compile(r"^[A-Za-z0-9_.-]+(?::[A-Za-z0-9_.-]+)+$", re.A)
 PIP_NEVER = (
     "docker/event-router/requirements.txt",
     "docker/jit-approval-svc/**",
+    "docker/jit-proxy/**",
     "docker/openclaw*/**",
     "**openclaw**",
     "**moltbot**",

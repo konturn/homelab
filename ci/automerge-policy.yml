@@ -121,7 +121,8 @@ dependencies:
   # and 0.x minors never qualify). Exact files, no globs. Never listable
   # (policy.PIP_NEVER, enforced in code): the event router's runtime
   # requirements.txt (its image runs the executor), anything under
-  # docker/jit-approval-svc/, and anything OpenClaw/moltbot.
+  # docker/jit-approval-svc/ and docker/jit-proxy/, and anything
+  # OpenClaw/moltbot.
   pip_requirements:
     # Baked into the anomaly-detector image: the normal changed-only deploy
     # rebuilds and restarts it (anomaly-detector:build, configure-homelab-services).
@@ -147,12 +148,15 @@ dependencies:
     files:
       docker/jit-approval-svc/Dockerfile: >-
         The JIT approval service issues credentials to the agents.
+      docker/jit-proxy/Dockerfile: >-
+        The JIT credential proxy holds the proxied services' secrets.
       docker/event-router/Dockerfile: >-
         The event-router image carries the executor, which runs remediation
         actions on the hosts.
     ci_jobs:
       "vault:*": Vault configuration and AppRole rotation run with Vault admin credentials.
       "jit-approval-svc:*": The JIT approval service issues credentials to the agents.
+      "jit-proxy:*": The JIT credential proxy holds the proxied services' secrets.
       "gitlab:settings": Runs with the Maintainer token that also rotates AppRole secrets.
 
 # Bot-config class (docs/AUTOMERGE.md, "Bot-config class"): moltbot's own
@@ -209,6 +213,7 @@ bot_config:
     - lab_nginx
     - iot_nginx
     - jit-approval-svc
+    - jit-proxy
     - anomaly-detector
     - chromium-browser
   never:

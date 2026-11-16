@@ -1,0 +1,55 @@
+# Plex (design 6.6). The stored credential is Noah's Plex account token; it
+# is injected as a header (never a query parameter) and only towards the
+# local server. plex.tv is never an upstream. Plex's own TLS certificate is
+# issued for *.plex.direct, so the server is reached over plain HTTP on the
+# internal network (as the skills did before), never from outside it.
+resource: plex
+min_tier: 1
+upstream: http://plex:32400
+plain_http_on_internal: true
+auth: {type: header, name: X-Plex-Token, vault_path: homelab/data/docker/plex, field: token}
+
+deny:
+  - {path: "/:/**"}            # /:/prefs (server settings, tokens), timeline, scrobble
+  - {path: "/myplex/**"}
+  - {path: "/accounts/**"}
+  - {path: "/security/**"}     # token exchange
+  - {path: "/system/**"}
+  - {path: "/servers/**"}
+  - {path: "/clients/**"}
+  - {path: "/player/**"}       # remote control
+  - {path: "/devices/**"}
+  - {path: "/butler/**"}
+  - {path: "/updater/**"}
+  - {path: "/diagnostics/**"}
+  - {path: "/transcode/**"}    # transcoder URLs carry tokens
+  - {path: "/video/**"}
+  - {path: "/photo/**"}
+  - {path: "/sync/**"}
+  - {path: "/playlists/**", method: POST}
+  - {path: "/playlists/**", method: PUT}
+  - {path: "/playlists/**", method: DELETE}
+
+templates:
+  read:
+    min_tier: 1
+    description: "Browse libraries, search, recently added, on deck, now playing"
+    allow:
+      - {method: GET, path: "/identity"}
+      - {method: GET, path: "/library/sections"}
+      - {method: GET, path: "/library/sections/{id:int}/all", query: {type: int, title: any, sort: any, X-Plex-Container-Start: int, X-Plex-Container-Size: {type: int, min: 1, max: 500}}}
+      - {method: GET, path: "/library/sections/{id:int}/recentlyAdded", query: {X-Plex-Container-Start: int, X-Plex-Container-Size: {type: int, min: 1, max: 500}}}
+      - {method: GET, path: "/library/metadata/{id:int}"}
+      - {method: GET, path: "/library/metadata/{id:int}/children"}
+      - {method: GET, path: "/library/recentlyAdded", query: {X-Plex-Container-Start: int, X-Plex-Container-Size: {type: int, min: 1, max: 500}}}
+      - {method: GET, path: "/library/onDeck"}
+      - {method: GET, path: "/hubs/search", query: {query: any, limit: {type: int, min: 1, max: 100}, sectionId: int}, require: [query]}
+      - {method: GET, path: "/search", query: {query: any, type: int, limit: {type: int, min: 1, max: 100}}, require: [query]}
+      - {method: GET, path: "/status/sessions"}
+  refresh:
+    min_tier: 1
+    description: "Refresh or analyze a library section or item"
+    allow:
+      - {method: GET, path: "/library/sections/{id:int}/refresh", query: {force: [0, 1]}}
+      - {method: PUT, path: "/library/metadata/{id:int}/refresh"}
+      - {method: PUT, path: "/library/sections/{id:int}/analyze"}

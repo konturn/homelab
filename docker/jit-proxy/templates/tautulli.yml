@@ -1,0 +1,40 @@
+# Tautulli (design 6.8). One endpoint, GET /api/v2?cmd=...; the proxy adds
+# apikey upstream and only listed read commands pass. The audit log records
+# query keys, never values, so the key in the upstream URL is never logged.
+resource: tautulli
+min_tier: 1
+upstream: https://tautulli.lab.nkontur.com
+auth: {type: query, name: apikey, vault_path: homelab/data/docker/tautulli, field: api_key}
+
+templates:
+  read:
+    min_tier: 1
+    description: "Activity, history, libraries, recently added, watch statistics"
+    allow:
+      - method: GET
+        path: /api/v2
+        require: [cmd]
+        query:
+          cmd: [get_activity, get_history, get_home_stats, get_libraries, get_library_media_info,
+                get_recently_added, get_user_watch_time_stats, get_plays_by_date, get_plays_by_dayofweek,
+                get_plays_by_hourofday, get_plays_by_top_10_platforms, get_plays_by_top_10_users,
+                get_plays_per_month, get_server_info, get_users_table, get_item_watch_time_stats]
+          length: {type: int, min: 1, max: 500}
+          start: int
+          count: {type: int, min: 1, max: 500}
+          user: any
+          user_id: int
+          section_id: int
+          rating_key: int
+          stat_id: any
+          stats_count: {type: int, min: 1, max: 100}
+          time_range: {type: int, min: 1, max: 3650}
+          order_column: any
+          order_dir: [asc, desc]
+          search: any
+          media_type: [movie, episode, track, live, show, season, artist, album]
+          y_axis: [plays, duration]
+          after: date
+          before: date
+          grouping: [0, 1]
+          query_days: any

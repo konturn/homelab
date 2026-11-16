@@ -1,0 +1,38 @@
+# Prowlarr (design 6.2). Indexer definitions and application entries carry
+# tracker credentials and the Radarr/Sonarr keys, so they are never reachable.
+resource: prowlarr
+min_tier: 1
+upstream: https://prowlarr.lab.nkontur.com
+auth: {type: header, name: X-Api-Key, vault_path: homelab/data/docker/prowlarr, field: api_key}
+
+deny:
+  - {path: "/api/v1/indexer"}
+  - {path: "/api/v1/indexer/{id:int}"}
+  - {path: "/api/v1/indexer/schema/**"}
+  - {path: "/api/v1/applications/**"}
+  - {path: "/api/v1/downloadclient/**"}
+  - {path: "/api/v1/notification/**"}
+  - {path: "/api/v1/indexerproxy/**"}
+  - {path: "/api/v1/config/**"}
+  - {path: "/api/v1/system/backup/**"}
+  - {path: "/api/v1/system/restart"}
+  - {path: "/api/v1/system/shutdown"}
+  - {path: "/api/v1/update/**"}
+  - {path: "/api/v1/log/file/**"}
+
+templates:
+  read:
+    min_tier: 1
+    description: "Search indexers; indexer stats, health, status, history"
+    allow:
+      - {method: GET, path: "/api/v1/search", query: {query: any, type: [search, tvsearch, movie, music, book], indexerIds: int, categories: int, limit: {type: int, min: 1, max: 500}, offset: int}, require: [query]}
+      - {method: GET, path: "/api/v1/indexerstats"}
+      - {method: GET, path: "/api/v1/indexerstatus"}
+      - {method: GET, path: "/api/v1/health"}
+      - {method: GET, path: "/api/v1/system/status"}
+      - {method: GET, path: "/api/v1/history", query: {page: int, pageSize: {type: int, min: 1, max: 500}}}
+  test-indexers:
+    min_tier: 1
+    description: "Test all indexers (results are scrubbed)"
+    allow:
+      - {method: POST, path: "/api/v1/indexer/testall", body_max: 1024}

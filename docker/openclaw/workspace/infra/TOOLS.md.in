@@ -172,5 +172,4 @@ passed on the latest commit, no `freeze`, `security` or `major` label, and:
 
 Keep one concern per MR so it can qualify. If a change falls outside these
 rules, open the MR and leave it for Noah; never split or reshape a change to
-get past the rules. This section is rendered from `ci/automerge-policy.yml`
-through the sweep's own `botconfig.config()`, so the two cannot disagree.
+get past the rules.

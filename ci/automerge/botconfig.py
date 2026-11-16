@@ -54,7 +54,7 @@ HARD_NEVER = [
     "networking/**", "**/iptables*", "**/nftables*", "ansible/**", ".gitlab-ci.yml", "ci/**",
     "renovate.json", "CODEOWNERS", "CLAUDE.md", "**/CLAUDE.md", "docker/vault/**", "terraform/**",
     "docker/openclaw*", "docker/openclaw*/**", "**/*openclaw*", "**/*moltbot*",
-    "docker/jit-approval-svc/**", "docker/nginx/**", "docker/promtail/**", "docker/telegraf/**",
+    "docker/jit-approval-svc/**", "docker/jit-proxy/**", "docker/nginx/**", "docker/promtail/**", "docker/telegraf/**",
     "base/**", "scripts/**", "**/*.env", "**/*.env.*", "**/.env*", "**/*secret*", "**/*vault*",
     "**/*.j2", "docker/grafana/provisioning/alerting/contactpoints*",
     "docker/grafana/provisioning/alerting/policies*", "docker/grafana/provisioning/datasources/**",

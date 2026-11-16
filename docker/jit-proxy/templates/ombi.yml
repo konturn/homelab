@@ -1,0 +1,50 @@
+# Ombi (design 6.7). Ombi's ApiKey acts as the admin, so the deny list is the
+# main control here: settings hold the Plex token and the Radarr/Sonarr keys.
+# Ombi has no lab vhost; it is reached over plain HTTP on the internal network.
+resource: ombi
+min_tier: 1
+upstream: http://ombi:3579
+plain_http_on_internal: true
+auth: {type: header, name: ApiKey, vault_path: homelab/data/docker/ombi, field: api_key}
+
+deny:
+  - {path: "/api/v1/Settings/**"}
+  - {path: "/api/v2/Settings/**"}
+  - {path: "/api/v1/Identity/**"}
+  - {path: "/api/v1/Token/**"}
+  - {path: "/api/v1/Notifications/**"}
+  - {path: "/api/v1/Job/**"}
+  - {path: "/api/v1/Logging/**"}
+  - {path: "/api/v1/Update/**"}
+  - {path: "/api/v1/Plex/**"}
+  - {path: "/api/v1/Emby/**"}
+  - {path: "/api/v1/Jellyfin/**"}
+  - {path: "/api/v1/Radarr/**"}
+  - {path: "/api/v1/Sonarr/**"}
+  - {path: "/api/v1/Lidarr/**"}
+  - {path: "/api/v1/Tester/**"}
+
+templates:
+  read:
+    min_tier: 1
+    description: "List and count movie and TV requests; search movies and shows"
+    allow:
+      - {method: GET, path: "/api/v1/Status"}
+      - {method: GET, path: "/api/v1/Request/count"}
+      - {method: GET, path: "/api/v1/Request/movie", query: {count: {type: int, min: 1, max: 500}, position: int, statusFilter: int}}
+      - {method: GET, path: "/api/v1/Request/movie/{id:int}"}
+      - {method: GET, path: "/api/v1/Request/tv", query: {count: {type: int, min: 1, max: 500}, position: int, statusFilter: int}}
+      - {method: GET, path: "/api/v1/Request/tv/{id:int}"}
+      - {method: GET, path: "/api/v1/Search/movie/{term}"}
+      - {method: GET, path: "/api/v1/Search/tv/{term}"}
+  requests:
+    min_tier: 1
+    description: "Create movie and TV requests on Noah's behalf; approve or deny requests"
+    includes: [read]
+    allow:
+      - {method: POST, path: "/api/v1/Request/movie", json: {theMovieDbId: int}, body_max: 8192}
+      - {method: POST, path: "/api/v1/Request/tv", json: {tvDbId: int}, body_max: 65536}
+      - {method: POST, path: "/api/v1/Request/movie/approve", json: {id: int}, body_max: 1024}
+      - {method: POST, path: "/api/v1/Request/tv/approve", json: {id: int}, body_max: 1024}
+      - {method: PUT, path: "/api/v1/Request/movie/deny", json: {id: int}, body_max: 4096}
+      - {method: PUT, path: "/api/v1/Request/tv/deny", json: {id: int}, body_max: 4096}

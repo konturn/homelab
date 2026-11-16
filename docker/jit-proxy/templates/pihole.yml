@@ -1,0 +1,55 @@
+# Pi-hole v6 (design 6.10). The proxy logs in with the app password and holds
+# the session (X-FTL-SID). Pi-hole stays tier 2 as before (the design's
+# tier-1 read is not adopted: it would loosen approval).
+resource: pihole
+min_tier: 2
+upstream: https://pihole.lab.nkontur.com
+auth: {type: pihole, vault_path: homelab/data/infrastructure/pihole, field: api_token}
+
+deny:
+  - {path: "/api/auth"}
+  - {path: "/api/auth/**"}
+  - {path: "/api/config"}
+  - {path: "/api/config/**"}
+  - {path: "/api/teleporter"}
+  - {path: "/api/teleporter/**"}
+  - {path: "/api/action/**"}
+  - {path: "/api/network/**", method: POST}
+  - {path: "/api/network/**", method: PUT}
+  - {path: "/api/network/**", method: PATCH}
+  - {path: "/api/network/**", method: DELETE}
+  - {path: "/api/logs/**"}
+  - {path: "/api/docs/**"}
+
+templates:
+  read:
+    min_tier: 2
+    description: "Statistics, recent queries, blocking status, version and system info"
+    allow:
+      - {method: GET, path: "/api/stats/summary"}
+      - {method: GET, path: "/api/stats/upstreams"}
+      - {method: GET, path: "/api/stats/query_types"}
+      - {method: GET, path: "/api/stats/top_domains", query: {count: {type: int, min: 1, max: 100}, blocked: bool}}
+      - {method: GET, path: "/api/stats/top_clients", query: {count: {type: int, min: 1, max: 100}, blocked: bool}}
+      - {method: GET, path: "/api/stats/recent_blocked", query: {count: {type: int, min: 1, max: 100}}}
+      - {method: GET, path: "/api/history"}
+      - {method: GET, path: "/api/history/clients"}
+      - {method: GET, path: "/api/queries", query: {length: {type: int, min: 1, max: 1000}, start: int, cursor: int, from: int, until: int, domain: any, client_ip: any, upstream: any, type: any, status: any, reply: any}}
+      - {method: GET, path: "/api/dns/blocking"}
+      - {method: GET, path: "/api/info/version"}
+      - {method: GET, path: "/api/info/system"}
+      - {method: GET, path: "/api/info/ftl"}
+      - {method: GET, path: "/api/domains/{type:allow|deny}/{kind:exact|regex}"}
+  block-toggle:
+    min_tier: 2
+    description: "Enable or pause ad blocking, for at most 30 minutes"
+    includes: [read]
+    allow:
+      - {method: POST, path: "/api/dns/blocking", json: {blocking: [true, false], timer: {type: int, min: 1, max: 1800}}, body_max: 1024}
+  lists:
+    min_tier: 2
+    description: "Add or remove one allow/deny domain"
+    includes: [read]
+    allow:
+      - {method: POST, path: "/api/domains/{type:allow|deny}/{kind:exact|regex}", json: {domain: any}, body_max: 4096}
+      - {method: DELETE, path: "/api/domains/{type:allow|deny}/{kind:exact|regex}/{domain}"}

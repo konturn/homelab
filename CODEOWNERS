@@ -121,6 +121,7 @@
 # Could access or redirect secret storage
 /docker/vault/                           @root
 /docker/jit-approval-svc/                @root
+/docker/jit-proxy/                       @root
 # Anomaly detector signals and suppressions: the OpenClaw agent proposes
 # suppressions by MR; Noah approves them.
 /docker/anomaly-detector/                @root
@@ -139,6 +140,7 @@
 /docker/chromium-browser/Dockerfile      @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
 /docker/event-router/Dockerfile          @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
 /docker/jit-approval-svc/Dockerfile      @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
+/docker/jit-proxy/Dockerfile             @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
 /docker/novnc/Dockerfile                 @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
 /docker/openclaw/Dockerfile              @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
 /docker/openclaw/tools/package.json      @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
