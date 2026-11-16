@@ -148,7 +148,9 @@ Never without Noah's explicit go-ahead in the current conversation:
   `noah` (Noah's DMs): T1 and T2 at once (T2 sends him an FYI), T3
   (`ssh-router`, `ssh-*-elevated`, `ipmi`) on his tap. Agent `ops` (crons,
   router escalations): T1 at once, T2 on his tap, T3 refused: hand off
-  instead. Don't work around JIT, and never print a secret.
+  instead. Don't work around JIT, and never print a secret. Media APIs
+  (*arr, Plex, Ombi, NZBGet, Deluge, Tautulli, Pi-hole): only `jitcurl`; they
+  have no keys for you.
 - Changing your own access, tokens, config or exec policy, or anything under a
   CODEOWNERS path, except by an MR that Noah reviews.
 - Freezing or unfreezing auto-merge, or editing `AUTOMERGE_*` variables.

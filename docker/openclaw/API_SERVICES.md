@@ -9,8 +9,12 @@ Vault and Moltbot obtains them on demand through the JIT approval service
 (`docker/jit-approval-svc`), using the helpers in the workspace's
 `tools/jit-lib.sh`:
 
-- `jit_service_key <service>`: tier 1 (auto-approved) scoped Vault token, then
-  reads the key from `homelab/data/docker/<service>`.
+- `jitcurl <service> <template> <METHOD> <path>`: calls a media or download
+  service through the JIT credential proxy with a short-lived grant; the
+  service's key is never handed out (see "Services behind the credential
+  proxy" below).
+- `jit_service_key <service>`: only for the remaining static resources (MQTT,
+  IPMI); it refuses the proxied services.
 - `jit_grafana_token`, `jit_influxdb_token`: tier 1 dynamic tokens.
 - `gitlab_token`: tier 1 short-lived GitLab token for the moltbot user
   (resource `gitlab-moltbot`); there is no static GitLab token.
@@ -38,31 +42,49 @@ requester from it:
 environment is rebuilt by `openclaw-claude`, so the AppRole, gateway and hook
 tokens never reach it.
 
-### To add a new service key
+### Services behind the credential proxy
 
-1. Store the key in Vault under `homelab/data/docker/<service>` (field `api_key`).
-2. Add the resource to `resourceTier` in
-   `docker/jit-approval-svc/internal/vault/vault.go` and make sure the tier's
-   Vault policy (`terraform/vault/policies.tf`) covers the path.
+Radarr, Sonarr, Prowlarr, Plex, Ombi, NZBGet, Deluge, Tautulli and Pi-hole
+are only reachable through the JIT credential proxy (`docker/jit-proxy`,
+`docs/design/jit-credential-proxy.md`). Neither agent ever receives their
+keys:
+
+```bash
+jitcurl <resource> <template[,template]> <METHOD> <path> [curl args]
+jitcurl radarr read GET '/api/v3/movie/lookup?term=inception'
+```
+
+`jitcurl` gets a short-lived grant from the broker for the named templates.
+Approval follows the tier, as for any JIT request, and the proxy adds the
+real credential. Templates and what they allow are listed in
+`docker/jit-approval-svc/README.md` ("Credential proxy") and in each skill.
+
+### To add a new HTTP service
+
+1. Store its key in Vault under `homelab/data/docker/<service>`.
+2. Add a template file `docker/jit-proxy/templates/<service>.yml` (upstream,
+   auth, deny list, templates) and the path to `local.jit_proxy_paths` in
+   `terraform/vault/policies.tf`. A Go test keeps the two in sync.
+3. Add the resource to `resourceTier` in
+   `docker/jit-approval-svc/internal/vault/vault.go` (its minimum tier). Do
+   not give it a static path.
 
 ## Services
 
-### Media Management (arr stack)
+### Media and download clients (credential proxy)
 
-| Service | Container URL | JIT resource (tier) | How to Get |
-|---------|---------------|---------------------|------------|
-| **Radarr** | http://radarr:7878 | `radarr` (1) | Settings > General > API Key |
-| **Sonarr** | http://sonarr:8989 | `sonarr` (1) | Settings > General > API Key |
-| **Prowlarr** | http://prowlarr:9696 | `prowlarr` (1) | Settings > General > API Key |
-| **Plex** | http://plex:32400 | `plex` (1) | [Get X-Plex-Token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/) |
-| **Ombi** | http://ombi:3579 | `ombi` (1) | Settings > Ombi > API Key |
+| Service | JIT resource (tier) | Templates |
+|---------|---------------------|-----------|
+| **Radarr**, **Sonarr** | `radarr`, `sonarr` (1) | `read`, `health`, `write`, `replace-file`*, `queue-remove`*, `remove-title`* (2) |
+| **Prowlarr** | `prowlarr` (1) | `read`, `test-indexers` |
+| **Plex** | `plex` (1) | `read`, `refresh` |
+| **Ombi** | `ombi` (1) | `read`, `requests` |
+| **Tautulli** | `tautulli` (1) | `read` |
+| **NZBGet** | `nzbget` (1) | `read`, `control`, `remove`* |
+| **Deluge** | `deluge` (1) | `read`, `control`, `remove`*, `remove-data`* (2) |
+| **Pi-hole** | `pihole` (2) | `read`, `block-toggle`, `lists` |
 
-### Download Clients
-
-| Service | Container URL | JIT resource (tier) | How to Get |
-|---------|---------------|---------------------|------------|
-| **NZBGet** | http://nzbget:6789 | `nzbget` (1) | Settings > Security |
-| **Deluge** | http://deluge:8112 | `deluge` (1) | WebUI password |
+\* single use: one request per grant.
 
 ### Document Management
 
@@ -82,19 +104,11 @@ tokens never reach it.
 source ~/.openclaw/workspace/tools/jit-lib.sh
 ```
 
-### Radarr — Search for Movies
+### Radarr, Sonarr, Plex — through the proxy
 ```bash
-curl -H "X-Api-Key: $(jit_service_key radarr)" "http://radarr:7878/api/v3/movie"
-```
-
-### Sonarr — Search for TV Shows
-```bash
-curl -H "X-Api-Key: $(jit_service_key sonarr)" "http://sonarr:8989/api/v3/series"
-```
-
-### Plex — Get Libraries
-```bash
-curl "http://plex:32400/library/sections?X-Plex-Token=$(jit_service_key plex)"
+jitcurl radarr read GET '/api/v3/movie/lookup?term=inception'
+jitcurl sonarr read GET '/api/v3/series/lookup?term=breaking%20bad'
+jitcurl plex read GET /library/sections -H 'Accept: application/json'
 ```
 
 ### Paperless — List Documents

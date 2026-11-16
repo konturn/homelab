@@ -1,6 +1,6 @@
 # JIT Credential Proxy: Grants Instead of Static Secrets — Design Document
 
-> **Status:** Draft, for review
+> **Status:** Implemented for the HTTP static resources (2026-11-16; see [Implementation status](#implementation-status)). Rotation, Paperless and Gmail remain open.
 > **Author:** Claude (on Noah's direction)
 > **Date:** 2026-11-07
 > **Stakeholder:** Noah Kontur
@@ -38,6 +38,35 @@ outside the grant's rules, scrubs secrets from responses and logs every call.
 6. Prove the three invariants (never forward outside a grant's rules, never return a known secret, never accept an expired grant) with property and fuzz tests in the style the JIT service is getting now.
 
 ---
+
+## Implementation status
+
+As of 2026-11-16 (!1299, !1301, !1302 and the cutover MR):
+
+**Live**
+- `docker/jit-proxy` runs as a separate service (option B, Q1).
+  - It has its own AppRole `jit-proxy`, read-only on exactly the nine KV paths, with logins bound to its fixed `internal` address.
+  - The data plane listens on `openclaw-jitproxy` and accepts only the gateway's address. The control plane listens on `jit-proxy-ctl` and needs a bearer key.
+  - The image is distroless and non-root, with a read-only root filesystem and no capabilities.
+- The broker issues `proxy_grant` credentials (`internal/proxygrant`). Registration on the control bridge happens before issuance (Q3). Grants are revoked at expiry or by their requester, and live multi-use grants are re-registered after a proxy restart.
+- The agent uses `jitcurl` (`/usr/local/bin/jitcurl`). The skills of both agents (`noah` and `ops`) use it, and `jit_service_key` refuses these services.
+- Proxied, with static issuance removed (`staticResourcePaths` and `jit-static-*`): **radarr, sonarr, prowlarr, plex, ombi, nzbget, deluge, tautulli, pihole**. Each was verified with real calls through the proxy. Live checks also showed that deny lists and template boundaries refuse, and that a grant used with another requester's key is refused.
+
+**Decisions taken where this document left a choice, or where later work changed the premise**
+- **Requester identity (5.3, Q2).** A grant is bound to the SHA-256 of the requester's broker key, which comes from the identity split's per-requester keys (`docs/design/openclaw-identities.md`), not to Vault-token lookup. Both agents share the gateway container, so a per-network `client_net` could not tell them apart.
+- **Approval matrix.** The proxy re-checks the same requester x tier matrix (`jit_approval_matrix`) when a grant is registered: denied requesters and tiers are refused, and a tier that needs a human must arrive approved. Template tiers raise the request tier before the broker's decision.
+- **No log-only week (Q16).** Templates were written from the skills' real calls and enforce from day one; golden tests cover them.
+- **Responses** are buffered (16 MiB cap) and scrubbed whole, not streamed. No template allows binary types.
+- **Upstreams.** Plex and Ombi are reached over plain HTTP on `internal` (Plex's certificate is for `*.plex.direct`, and Ombi has no vhost). The other seven use the lab HTTPS vhosts.
+- **Pi-hole stays tier 2 for reads**, so approval is not loosened.
+- **NZBGet uses its existing user** with a strict JSON-RPC allowlist; a restricted user is a follow-up.
+- **Not built yet:** the Telegram Revoke button and `/metrics` with alerts. The kill switch is `docker stop jit-proxy` (fail closed). `/summary` and the audit log exist.
+
+**Stay on the static backend:** MQTT and IPMI (not HTTP; 8.4, Q15), each with its own `jit-static-*` policy.
+
+**Open**
+- **One-time rotation (8.2)** of the nine secrets after cutover (as 8.2 describes), plus the scheduled `secrets:rotate-proxied` job. Rotation touches telegraf and the services' application databases, so each service is its own change.
+- **Phase 3 Paperless** (needs the `jit-agent` Paperless user) and **phase 4 Gmail** (Q8). Both still use their dynamic backends.
 
 ## 1. Problem statement
 

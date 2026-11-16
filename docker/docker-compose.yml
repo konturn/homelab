@@ -1440,7 +1440,8 @@ services:
       - CTL_KEY={{ vault_jit_proxy_ctl_key | replace("$", "$$") }}
       - DATA_LISTEN={{ jit_proxy_ip }}:8090
       - CTL_LISTEN={{ jit_proxy_ctl_ip }}:8091
-      - CLIENT_CIDR=172.30.6.0/24
+      # Only the gateway's address: the bridge's host side (.1) is refused too.
+      - CLIENT_CIDR={{ openclaw_gateway_jitproxy_ip }}/32
       # The broker's matrix: a grant it should not have issued is refused.
       - JIT_APPROVAL_MATRIX={{ jit_approval_matrix }}
       - GOMEMLIMIT=200MiB
@@ -3089,6 +3090,7 @@ services:
       openclaw-browser:
       openclaw-relay:
       openclaw-jitproxy:
+        ipv4_address: {{ openclaw_gateway_jitproxy_ip }}
     extra_hosts:
       - "nkontur.com:172.30.0.10"
       - "www.nkontur.com:172.30.0.10"
