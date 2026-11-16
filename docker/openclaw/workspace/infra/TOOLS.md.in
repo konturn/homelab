@@ -58,11 +58,10 @@ with this file, they win: say so.
 
 ## Home Assistant facts
 
-- Movie room receiver: `media_player.denon`. The Apple TV input is
-  `Apple TV`. The Apple TV is paired:
-  `media_player.apple_tv`, `remote.apple_tv`.
-- Siri works through the HomeKit bridge "HASS Bridge", advertised on both the
-  internal and the IoT network.
+- Movie room receiver: `media_player.denon`. Apple TV input
+  `Apple TV`; paired as `media_player.apple_tv`, `remote.apple_tv`.
+- Siri works through the HomeKit bridge "HASS Bridge", advertised on the
+  internal and IoT networks.
 - Adaptive Lighting sleep mode follows `input_boolean.night_mode`.
 - Automations, scripts and scenes live in the private repo `root/homeassistant`.
   Packages live in this repo (`docker/homeassistant/packages/`).
@@ -117,9 +116,8 @@ with this file, they win: say so.
   one the router did not take (it may be down). Grafana emails Noah only
   page classes. The anomaly detector's alerts still follow skill
   `anomaly-triage`. Noah's `/maint` command: skill `maint`. Query Loki only
-  through the Grafana datasource proxy (direct access returns 401); its
-  label is `container`.
-- Router chores: `skills/event-router/er-action` (skill `event-router`), not SSH.
+  via the Grafana datasource proxy; label `container`.
+- Router chores: `skills/event-router/er-action`, not SSH.
 - The dead-man check (`deadman-check.timer`, docs/DEADMAN.md) tests
   `/persistent_data`, dockerd, key containers, Grafana, Vault unsealed and
   `mpool`, then pings healthchecks.io. If it fails, the alert comes from
