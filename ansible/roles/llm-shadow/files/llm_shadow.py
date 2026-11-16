@@ -57,6 +57,13 @@ OC_USER = ENV("OC_USER", "node")
 OC_HOME_WS = "/home/node/.openclaw/workspace"  # workspace path inside the container
 JOB_NAME = ENV("SHADOW_JOB_NAME", "imessage-check")
 SUMMARY_OUT = ENV("SHADOW_SUMMARY_OUT", os.path.join(OC_DATA, "llm-shadow", "summary.json"))
+# The job runs as the ops agent (docs/design/openclaw-identities.md): its
+# state and checkpoint live in that agent's workspace (OC_STATE_WS), while
+# the scripts the shadow executes still come from OC_WS, whose files belong
+# to the container's node user. A copy of the summary goes to the ops
+# agent's home for its digest (SHADOW_SUMMARY_COPY, owned like its parent).
+OC_STATE_WS = ENV("OC_STATE_WS", OC_WS)
+SUMMARY_COPY = ENV("SHADOW_SUMMARY_COPY", "")
 
 OLLAMA_CONTAINER = ENV("OLLAMA_CONTAINER", "ollama")
 OLLAMA_NETWORK = ENV("OLLAMA_NETWORK", "docker_llm-backend")
@@ -76,8 +83,8 @@ TRIAL_END = ENV("SHADOW_TRIAL_END", "2026-12-08T23:59:59-05:00")
 TZ = ZoneInfo(ENV("SHADOW_TZ", "America/New_York"))
 TOOL_RESULT_MAX = 6000
 
-STATE_FILE = os.path.join(OC_WS, "skills/imessage-plex/state.json")
-CHECKPOINT_FILE = os.path.join(OC_WS, "skills/imessage/.bb-checkpoint")
+STATE_FILE = os.path.join(OC_STATE_WS, "skills/imessage-plex/state.json")
+CHECKPOINT_FILE = os.path.join(OC_STATE_WS, "skills/imessage/.bb-checkpoint")
 SKILL_FILE = os.path.join(OC_WS, "skills/imessage-plex/SKILL.md")
 FETCH_SCRIPT = os.path.join(OC_WS, "skills/imessage/scripts/fetch-messages-bb.sh")
 CHECK_DOWNLOADS_SCRIPT = os.path.join(OC_WS, "skills/imessage-plex/scripts/check-downloads.sh")
@@ -86,7 +93,8 @@ STATE_DB = os.path.join(OC_DATA, "state/openclaw.sqlite")
 # can put symlinks anywhere below it. This service runs as root on the host,
 # so every path under OC_BASE is opened with agent_open()/write_agent_json(),
 # which never follow a symlink below OC_BASE.
-OC_BASE = os.path.commonpath([OC_DATA, OC_WS, OC_CLAUDE_PROJECT, os.path.dirname(SUMMARY_OUT)])
+OC_BASE = os.path.commonpath([OC_DATA, OC_WS, OC_STATE_WS, OC_CLAUDE_PROJECT, os.path.dirname(SUMMARY_OUT)]
+                             + ([os.path.dirname(SUMMARY_COPY)] if SUMMARY_COPY else []))
 
 SKILLS = OC_HOME_WS + "/skills"
 # The only scripts the shadow ever executes. All of them only read.
@@ -1374,6 +1382,9 @@ def summarize(args):
     }
     st = os.stat(OC_DATA)
     write_agent_json(SUMMARY_OUT, summary, st.st_uid, st.st_gid)
+    if SUMMARY_COPY:
+        home = os.stat(os.path.dirname(os.path.dirname(SUMMARY_COPY)))
+        write_agent_json(SUMMARY_COPY, summary, home.st_uid, home.st_gid)
     write_json_atomic(os.path.join(SHADOW_DIR, "summary.json"), summary)
     if args is not None:
         t = summary["total"]

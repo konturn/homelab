@@ -87,7 +87,9 @@ graph LR
   `severity: critical`, `source: anomaly-detector`) and
   `anomaly-detector-down`.
 
-**OpenClaw hooks** (`docker/openclaw/openclaw.json.j2`, `hooks` section):
+**OpenClaw hooks** (`docker/openclaw/openclaw.json.j2`, `hooks` section;
+since the identity split every hook runs as the `ops` agent, `allowedAgentIds`
+`["ops"]`, see [openclaw-identities.md](./openclaw-identities.md)):
 hooks enabled at path `/hooks`, transforms from
 `/home/node/.openclaw/hooks/transforms`, one mapping `grafana` with
 `action: agent`, `deliver: true` to Telegram, transform

@@ -152,4 +152,24 @@ RUN cd /app/extensions/diagnostics-otel \
 # Ensure node user can access installed tools
 RUN chmod -R a+rx /usr/local/bin
 
+# Second OS user for the `ops` agent (docs/design/openclaw-identities.md).
+# The gateway (node) starts the ops agent's Claude CLI as `ops` through
+# openclaw-claude -> setpriv-ops -> ops-launch, so ops cannot read node's
+# files, process environments or credentials. The compose service therefore
+# runs without no-new-privileges; instead every setuid/setgid bit in the image
+# is removed first, and the only one added back is setpriv-ops: setuid and
+# setgid to ops (not root); running it can only become ops. With all
+# capabilities dropped, node can step down to ops and nothing can step up.
+RUN groupadd -g 2480 ops \
+    && useradd -u 2480 -g 2480 -d /home/ops -M -s /bin/bash ops \
+    && find / -xdev -type f \( -perm -4000 -o -perm -2000 \) -exec chmod ug-s {} + \
+    && install -d -m 0755 /usr/local/libexec/openclaw \
+    && install -o ops -g ops -m 6751 /usr/bin/setpriv /usr/local/libexec/openclaw/setpriv-ops \
+    && install -d -o ops -g node -m 2770 /home/ops \
+    && chmod 0700 /home/node
+COPY openclaw-claude.sh /usr/local/bin/openclaw-claude
+COPY ops-launch.sh /usr/local/libexec/openclaw/ops-launch
+RUN chmod 0755 /usr/local/bin/openclaw-claude /usr/local/libexec/openclaw/ops-launch \
+    && test "$(find / -xdev -type f \( -perm -4000 -o -perm -2000 \) | tr '\n' ' ')" = "/usr/local/libexec/openclaw/setpriv-ops "
+
 USER node

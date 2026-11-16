@@ -2997,8 +2997,11 @@ services:
     image: gitlab-registry.lab.nkontur.com:443/root/homelab/openclaw:{{ openclaw_image_tag | default('latest') }}
     container_name: openclaw-gateway
     init: true
-    security_opt:
-      - no-new-privileges=true
+    # No no-new-privileges here: the gateway starts the ops agent's CLI as the
+    # separate user `ops` through a setuid-ops helper (docs/design/
+    # openclaw-identities.md). The image has no other setuid/setgid file, and
+    # with every capability dropped that helper can only step down to ops;
+    # the ops side runs with no-new-privileges itself (setpriv --nnp).
     cap_drop:
       - ALL
     restart: unless-stopped
@@ -3044,10 +3047,15 @@ services:
       - BRAVE_API_KEY={{ brave_api_key }}
       # Agent platforms
       - ACLAWDEMY_API_KEY={{ vault_aclawdemy_api_key | trim | replace("$", "$$") }}
-      # Vault AppRole credentials (for openclaw runtime Vault access & JIT)
+      # Vault AppRole credentials (for openclaw runtime Vault access & JIT).
+      # The ops agent never sees them (openclaw-claude rebuilds its env).
       - VAULT_ADDR=https://vault.lab.nkontur.com:8200
       - VAULT_APPROLE_ROLE_ID={{ lookup('env', 'VAULT_APPROLE_ROLE_ID') }}
       - VAULT_APPROLE_SECRET_ID={{ lookup('env', 'VAULT_APPROLE_SECRET_ID') }}
+      # JIT identity of the noah agent (and anything else running as node):
+      # its own key in Vault; the broker derives the requester from the key.
+      - JIT_REQUESTER=openclaw-noah
+      - JIT_API_KEY_VAULT_PATH=homelab/data/agents/openclaw-noah
       # OpenTelemetry — uses native diagnostics-otel plugin (configured in openclaw.json)
       # See: https://docs.openclaw.ai/logging#export-to-opentelemetry
       # Claude subscription auth for the claude-cli backend (see openclaw.json.j2)
@@ -3060,6 +3068,11 @@ services:
       - {{ docker_persistent_data_path }}/openclaw/data:/home/node/.openclaw
       - {{ docker_persistent_data_path }}/openclaw/mcporter:/home/node/.mcporter
       - {{ docker_persistent_data_path }}/openclaw/workspace:/home/node/.openclaw/workspace
+      # The ops agent's home and workspace (owner ops, group node, 2770), and
+      # the host-written report dirs it shares with the noah workspace.
+      - {{ docker_persistent_data_path }}/openclaw/ops-home:/home/ops
+      - {{ docker_persistent_data_path }}/openclaw/workspace/reports:/home/ops/.openclaw/workspace/reports
+      - {{ docker_persistent_data_path }}/openclaw/workspace/skills/advisory-watch:/home/ops/.openclaw/workspace/skills/advisory-watch:ro
       - {{ docker_persistent_data_path }}/openclaw/claude:/home/node/.claude
       - {{ docker_persistent_data_path }}/openclaw/claude.json:/home/node/.claude.json
       - {{ docker_persistent_data_path }}/chromium-browser/uploads:/uploads

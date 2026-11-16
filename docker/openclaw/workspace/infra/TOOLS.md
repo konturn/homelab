@@ -113,7 +113,7 @@ with this file, they win: say so.
 ## Home Assistant facts
 
 - Movie room receiver: `media_player.denon`. The Apple TV input is
-  `Apple TV` (it used to be `shield`). The Apple TV is paired:
+  `Apple TV`. The Apple TV is paired:
   `media_player.apple_tv`, `remote.apple_tv`.
 - Siri works through the HomeKit bridge "HASS Bridge", advertised on both the
   internal and the IoT network.
@@ -132,10 +132,9 @@ with this file, they win: say so.
   runner (egress allowlist, no Docker). A merge to `main` runs the
   `<host>:deploy` jobs, scoped to what changed (docs/DEPLOY.md), on the
   protected runner; a host-network runner takes only switch/AP firmware jobs.
-- CODEOWNERS: `ansible/`, `docker/`, `ci/`, `scripts/`, `networking/`,
-  `base/`, `terraform/`, `inventory/`, `CLAUDE.md` and the recovery runbooks
-  need @root's approval, and so does everything under `docker/openclaw/`
-  (your own config).
+- CODEOWNERS: `ansible/`, `docker/` (your own `docker/openclaw/` too),
+  `ci/`, `scripts/`, `networking/`, `base/`, `terraform/`, `inventory/`,
+  `CLAUDE.md` and the recovery runbooks need @root's approval.
 
 ### Updates (docs/RENOVATE.md, docs/AUTOMERGE.md) *(limits from ci/automerge-policy.yml)*
 
@@ -204,19 +203,19 @@ Never without Noah's explicit go-ahead in the current conversation:
 - Rebooting the router or power-cycling network gear. Host reboots in general.
 - Destructive operations: deleting data or volumes, `docker system prune`,
   `zfs destroy`, force-pushing someone else's branch.
-- Credentials: only through JIT (`tools/jit-lib.sh`). T2 resources wait for
-  Noah's Telegram approval. Don't work around JIT, and never print a secret.
+- Credentials: only through JIT (`tools/jit-lib.sh`, your own key). Agent
+  `noah` (Noah's DMs): T1 and T2 at once (T2 sends him an FYI), T3
+  (`ssh-router`, `ssh-*-elevated`, `ipmi`) on his tap. Agent `ops` (crons,
+  router escalations): T1 at once, T2 on his tap, T3 refused: hand off
+  instead. Don't work around JIT, and never print a secret.
 - Changing your own access, tokens, config or exec policy, or anything under a
   CODEOWNERS path, except by an MR that Noah reviews.
 - Freezing or unfreezing auto-merge, or editing `AUTOMERGE_*` variables.
 
-GitLab credentials: always `gitlab_token` from `tools/jit-lib.sh` (git uses
-the same token through the credential helper). It is a short-lived moltbot
-token from JIT resource `gitlab-moltbot`: auto-approved, no Telegram prompt,
-logged, revoked after 1h, cached between sessions. There is no static GitLab
-token; never read one from `/proc` or another process's environment, and
-never use the T2 `gitlab` resource (a Maintainer project access token) for
-routine work.
+GitLab: always `gitlab_token` from `tools/jit-lib.sh` (git gets it via the
+credential helper): a 1h moltbot token (JIT `gitlab-moltbot`, T1). There is
+no static GitLab token; never read one from `/proc` or another process, and
+don't use the T2 `gitlab` resource for routine work.
 
 ## Merging your own MRs (policy `bot_config`) *(from ci/automerge-policy.yml)*
 

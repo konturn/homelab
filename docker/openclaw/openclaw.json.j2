@@ -20,7 +20,7 @@
       },
       "cliBackends": {
         "claude-cli": {
-          "command": "/usr/local/bin/claude"
+          "command": "/usr/local/bin/openclaw-claude"
         }
       },
       "models": {
@@ -116,10 +116,6 @@
           "systemPrompt": "Session nearing compaction. Store durable memories now."
         }
       },
-      "heartbeat": {
-        "every": "1h",
-        "model": "claude-cli/claude-opus-5-5"
-      },
       "timeoutSeconds": 300,
       "maxConcurrent": 4,
       "subagents": {
@@ -131,8 +127,56 @@
           "enabled": false
         }
       }
-    }
+    },
+    "list": [
+      {
+        "id": "noah",
+        "default": true,
+        "workspace": "/home/node/.openclaw/workspace",
+        "heartbeat": {
+          "every": "1h",
+          "model": "claude-cli/claude-opus-5-5"
+        }
+      },
+      {
+        "id": "ops",
+        "workspace": "/home/ops/.openclaw/workspace",
+        "subagents": {
+          "allowAgents": ["ops"]
+        },
+        "tools": {
+          "deny": [
+            "group:fs",
+            "group:ui",
+            "group:automation",
+            "group:nodes",
+            "group:sessions",
+            "group:messaging",
+            "group:agents",
+            "group:media",
+            "group:plugins"
+          ]
+        }
+      }
+    ]
   },
+  "bindings": [
+    {
+      "agentId": "noah",
+      "match": {
+        "channel": "telegram",
+        "accountId": "*",
+        "peer": { "kind": "direct", "id": "8531859108" }
+      }
+    },
+    {
+      "agentId": "ops",
+      "match": {
+        "channel": "telegram",
+        "accountId": "*"
+      }
+    }
+  ],
   "tools": {},
   "cron": {
     "triggers": {
@@ -154,6 +198,7 @@
     "path": "/hooks",
     "token": "{{ vault_openclaw_hooks_token }}",
     "transformsDir": "/home/node/.openclaw/hooks/transforms",
+    "allowedAgentIds": ["ops"],
     "internal": {
       "enabled": true,
       "entries": {
@@ -171,6 +216,7 @@
       {
         "action": "agent",
         "name": "event-router",
+        "agentId": "ops",
         "match": { "path": "event-router" },
         "deliver": true,
         "channel": "telegram",
@@ -182,6 +228,7 @@
       {
         "action": "agent",
         "name": "grafana",
+        "agentId": "ops",
         "deliver": true,
         "channel": "telegram",
         "to": "8531859108",

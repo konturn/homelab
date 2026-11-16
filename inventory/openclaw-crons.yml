@@ -13,11 +13,17 @@
 # workspace repo's config/cron-jobs.json snapshot), not here.
 #
 # A cron changed on purpose in OpenClaw: update its entry here in an MR.
+#
+# Agents (docs/design/openclaw-identities.md): every agent cron runs as
+# "ops" except the ones that only work on the noah agent's own memory and
+# state (identity notes, knowledge base, MEMORY.md, its skills, the
+# gateway's cron store), which stay on "noah". schedule-failures is a command
+# job with no agent.
 crons:
   - name: "job-apply"
     enabled: true
     schedule: "cron */30 * * * * America/New_York"
-    agent: "main"
+    agent: "ops"
     session: "isolated"
     wake: "next-heartbeat"
     delivery: "none telegram 8531859108"
@@ -26,7 +32,7 @@ crons:
   - name: "nightly-meditation"
     enabled: true
     schedule: "cron 0 23 * * * America/New_York"
-    agent: "main"
+    agent: "noah"
     session: "isolated"
     wake: "now"
     delivery: "none"
@@ -35,7 +41,7 @@ crons:
   - name: "imessage-check"
     enabled: true
     schedule: "every 1800000ms"
-    agent: ""
+    agent: "ops"
     session: "isolated"
     wake: "now"
     delivery: "none last"
@@ -44,7 +50,7 @@ crons:
   - name: "main-pipeline-fix"
     enabled: true
     schedule: "cron 0 */6 * * * America/New_York stagger 300000ms"
-    agent: "main"
+    agent: "ops"
     session: "isolated"
     wake: "next-heartbeat"
     delivery: "announce telegram 8531859108"
@@ -53,7 +59,7 @@ crons:
   - name: "cron-config-sync"
     enabled: true
     schedule: "cron 0 */6 * * * America/New_York stagger 300000ms"
-    agent: "main"
+    agent: "noah"
     session: "isolated"
     wake: "now"
     delivery: "none"
@@ -62,7 +68,7 @@ crons:
   - name: "nightly-redteam"
     enabled: true
     schedule: "cron 0 1 * * * America/New_York"
-    agent: "main"
+    agent: "ops"
     session: "isolated"
     wake: "now"
     delivery: "none last"
@@ -71,16 +77,16 @@ crons:
   - name: "job-scout"
     enabled: true
     schedule: "cron 0 2 * * * America/New_York"
-    agent: "main"
+    agent: "ops"
     session: "isolated"
     wake: "next-heartbeat"
-    delivery: "none telegram 8531859108"
+    delivery: "announce telegram 8531859108"
     payload: {kind: "agentTurn", model: "claude-cli/claude-opus-5", timeout: 1500}
     trigger: false
   - name: "MR Health Check"
     enabled: true
     schedule: "cron 0 3 * * * America/New_York"
-    agent: "main"
+    agent: "ops"
     session: "isolated"
     wake: "next-heartbeat"
     delivery: "none"
@@ -89,7 +95,7 @@ crons:
   - name: "job-retry-nightly"
     enabled: true
     schedule: "cron 0 3 * * * America/New_York"
-    agent: "main"
+    agent: "ops"
     session: "isolated"
     wake: "next-heartbeat"
     delivery: "announce telegram 8531859108"
@@ -98,7 +104,7 @@ crons:
   - name: "image-update-check"
     enabled: true
     schedule: "cron 30 3 * * * America/New_York"
-    agent: "main"
+    agent: "ops"
     session: "isolated"
     wake: "next-heartbeat"
     delivery: "none"
@@ -107,7 +113,7 @@ crons:
   - name: "Infrastructure Audit"
     enabled: true
     schedule: "cron 0 4 * * * America/New_York"
-    agent: "main"
+    agent: "ops"
     session: "isolated"
     wake: "next-heartbeat"
     delivery: "none"
@@ -116,7 +122,7 @@ crons:
   - name: "routing-review"
     enabled: true
     schedule: "cron 0 5 * * 1 America/New_York"
-    agent: "main"
+    agent: "ops"
     session: "isolated"
     wake: "now"
     delivery: "announce telegram 8531859108"
@@ -125,7 +131,7 @@ crons:
   - name: "fact-extraction"
     enabled: true
     schedule: "cron 0 6 * * * America/New_York"
-    agent: "main"
+    agent: "noah"
     session: "isolated"
     wake: "now"
     delivery: "none"
@@ -134,7 +140,7 @@ crons:
   - name: "advisory-watch"
     enabled: true
     schedule: "cron 30 6 * * * America/New_York stagger 0ms"
-    agent: "main"
+    agent: "ops"
     session: "isolated"
     wake: "now"
     delivery: "none last"
@@ -143,7 +149,7 @@ crons:
   - name: "anomaly-digest"
     enabled: true
     schedule: "cron 0 8 * * * America/New_York stagger 0ms"
-    agent: "main"
+    agent: "ops"
     session: "isolated"
     wake: "now"
     delivery: "announce telegram 8531859108"
@@ -161,7 +167,7 @@ crons:
   - name: "email-check"
     enabled: true
     schedule: "cron 0 9,13,17 * * * America/New_York"
-    agent: "main"
+    agent: "ops"
     session: "isolated"
     wake: "now"
     delivery: "announce telegram 8531859108"
@@ -170,7 +176,7 @@ crons:
   - name: "Morning Digest"
     enabled: true
     schedule: "cron 0 9 * * * America/New_York"
-    agent: "main"
+    agent: "ops"
     session: "isolated"
     wake: "next-heartbeat"
     delivery: "announce telegram 8531859108"
@@ -179,7 +185,7 @@ crons:
   - name: "skill-review"
     enabled: true
     schedule: "cron 0 2 * * 3 America/New_York"
-    agent: "main"
+    agent: "noah"
     session: "isolated"
     wake: "now"
     delivery: "none"
@@ -188,7 +194,7 @@ crons:
   - name: "weekly-knowledge-synthesis"
     enabled: true
     schedule: "cron 0 10 * * 0 America/New_York"
-    agent: "main"
+    agent: "noah"
     session: "isolated"
     wake: "next-heartbeat"
     delivery: "none"
@@ -197,7 +203,7 @@ crons:
   - name: "llm-shadow-report"
     enabled: true
     schedule: "at 2026-12-08T14:30:00.000Z"
-    agent: "main"
+    agent: "ops"
     session: "isolated"
     wake: "now"
     delivery: "announce telegram 8531859108"

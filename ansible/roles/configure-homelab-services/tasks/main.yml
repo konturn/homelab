@@ -1556,6 +1556,90 @@
   loop: [anomaly-triage, event-router, maint]
   when: "'router' in inventory_hostname"
 
+### OpenClaw ops agent (docs/design/openclaw-identities.md)
+# Home and workspace of the `ops` agent, whose Claude CLI runs as uid 2480 in
+# the gateway container. Owner ops, group node (1000) with setgid, so the
+# gateway can read the workspace (bootstrap files, memory index) while ops
+# cannot read anything of node's. The JIT key and git config are ops's own;
+# the reference files (lessons, infra/TOOLS.md, repo-managed skills, ops's
+# AGENTS.md) are root-owned like the noah copies, so they change only by MR.
+- name: Ensure OpenClaw ops agent directories exist
+  ansible.builtin.file:
+    path: "{{ docker_persistent_data_path }}/openclaw/ops-home/{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('2480') }}"
+    group: "{{ item.group | default('1000') }}"
+    mode: "{{ item.mode | default('2770') }}"
+  loop:
+    - {path: ""}
+    - {path: ".openclaw"}
+    - {path: ".openclaw/workspace"}
+    - {path: ".openclaw/workspace/memory"}
+    - {path: ".openclaw/workspace/skills"}
+    - {path: ".openclaw/workspace/lessons", owner: "root", group: "root", mode: "0755"}
+    - {path: ".openclaw/workspace/infra", owner: "root", group: "root", mode: "0755"}
+    - {path: ".openclaw/workspace/skills/anomaly-triage", owner: "root", group: "root", mode: "0755"}
+    - {path: ".openclaw/workspace/skills/event-router", owner: "root", group: "root", mode: "0755"}
+    - {path: ".openclaw/workspace/skills/maint", owner: "root", group: "root", mode: "0755"}
+    - {path: ".config", group: "2480", mode: "0700"}
+    - {path: ".config/openclaw", group: "2480", mode: "0700"}
+  when: "'router' in inventory_hostname"
+
+# Host-written reports both agents read (bind-mounted into the ops
+# workspace); the ops agent's MR health check writes stale-mrs.* here.
+- name: Let the OpenClaw ops agent write the shared update reports
+  ansible.builtin.file:
+    path: "{{ docker_persistent_data_path }}/openclaw/workspace/reports/updates"
+    state: directory
+    group: "2480"
+    mode: "2775"
+  when: "'router' in inventory_hostname"
+
+- name: Deploy the OpenClaw ops agent's JIT key
+  ansible.builtin.copy:
+    content: "{{ vault_openclaw_ops_jit_key }}"
+    dest: "{{ docker_persistent_data_path }}/openclaw/ops-home/.config/openclaw/jit-api-key"
+    owner: "2480"
+    group: "2480"
+    mode: "0400"
+  no_log: true
+  when: "'router' in inventory_hostname"
+
+# Root-owned so a run cannot re-enable git hooks or swap the credential
+# helper for later runs (the noah side sets the same in entrypoint-wrapper.sh).
+- name: Deploy the OpenClaw ops agent's git config
+  ansible.builtin.copy:
+    dest: "{{ docker_persistent_data_path }}/openclaw/ops-home/.gitconfig"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [core]
+          hooksPath = /dev/null
+      [credential "https://gitlab.lab.nkontur.com"]
+          helper = /usr/local/bin/git-credential-gitlab
+          useHttpPath = true
+      [user]
+          name = moltbot
+          email = moltbot@lab.nkontur.com
+  when: "'router' in inventory_hostname"
+
+- name: Deploy OpenClaw ops agent reference files
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/{{ item.src }}"
+    dest: "{{ docker_persistent_data_path }}/openclaw/ops-home/.openclaw/workspace/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - {src: "docker/openclaw/workspace-ops/AGENTS.md", dest: "AGENTS.md"}
+    - {src: "docker/openclaw/workspace/lessons/AGENTS.md", dest: "lessons/AGENTS.md"}
+    - {src: "docker/openclaw/workspace/infra/TOOLS.md", dest: "infra/TOOLS.md"}
+    - {src: "docker/openclaw/workspace/skills/anomaly-triage/SKILL.md", dest: "skills/anomaly-triage/SKILL.md"}
+    - {src: "docker/openclaw/workspace/skills/event-router/SKILL.md", dest: "skills/event-router/SKILL.md"}
+    - {src: "docker/openclaw/workspace/skills/maint/SKILL.md", dest: "skills/maint/SKILL.md"}
+  when: "'router' in inventory_hostname"
+
 ### Transcript credential scrubbing cron
 # Uses gitleaks (~160 rules) to detect and redact secrets from OpenClaw
 # session transcripts. Also purges archived sub-agent transcripts older
@@ -1610,7 +1694,8 @@
     name: "Scrub credentials from openclaw transcripts"
     minute: "*/10"
     job: >-
-      /usr/local/bin/scrub-transcripts.sh {{ docker_persistent_data_path }}/openclaw/data/agents/main/sessions 2>&1 | logger -t scrub-transcripts
+      for d in {{ docker_persistent_data_path }}/openclaw/data/agents/*/sessions; do
+      /usr/local/bin/scrub-transcripts.sh "$d"; done 2>&1 | logger -t scrub-transcripts
 
 # The moltbot -> openclaw rename changed this task's name, and
 # ansible.builtin.cron keys entries on name, so the pre-rename entry was left
@@ -1664,16 +1749,21 @@
     force: false
 
 - name: Mark homelab repo as safe directory for git
-  ansible.builtin.command:
-    cmd: git config --global --add safe.directory {{ docker_persistent_data_path }}/openclaw/workspace/homelab
+  ansible.builtin.shell: |
+    for d in {{ docker_persistent_data_path }}/openclaw/workspace/homelab \
+             {{ docker_persistent_data_path }}/openclaw/ops-home/.openclaw/workspace/homelab; do
+      git config --global --get-all safe.directory | grep -qxF "$d" || git config --global --add safe.directory "$d"
+    done
   changed_when: false
 
+# One read-only clone per agent workspace (noah and ops).
 - name: Sync homelab repo to latest main every 5 minutes
   ansible.builtin.cron:
     name: "Sync homelab repo for openclaw agent"
     minute: "*/5"
     job: >-
-      WORKSPACE={{ docker_persistent_data_path }}/openclaw/workspace/homelab
+      WORKSPACE="{{ docker_persistent_data_path }}/openclaw/workspace/homelab
+      {{ docker_persistent_data_path }}/openclaw/ops-home/.openclaw/workspace/homelab"
       ROUTER_REPO=/root/repos/homelab
       /usr/local/bin/homelab-repo-sync.sh 2>&1 | logger -t homelab-sync
 
