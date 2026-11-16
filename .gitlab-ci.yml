@@ -2672,7 +2672,7 @@ gitlab:settings:
 # ever available to main's copy of this job. Renovate reads the repository
 # through the API/git; it does not execute repository code.
 .renovate_image: &renovate_image
-  name: renovate/renovate:44.243.0@sha256:e65979921468ec6ac3f695bd396a439f5b74764f108496d8dff129062db49caf
+  name: renovate/renovate:44.243.2@sha256:764e87d3fa11e461973096a4fc251c43800e52fb56d7e44ec96199f9c460d1b7
   entrypoint: [""]
 
 renovate:
