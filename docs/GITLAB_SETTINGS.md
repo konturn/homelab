@@ -65,7 +65,7 @@ the value is never printed). Other hooks on the projects are left alone; two
 hooks with that URL is an `ERROR`.
 
 The token comes from Vault: in CI by JWT login (`VAULT_ID_TOKEN`, role
-`ci-deploy`), on the router from `VAULT_TOKEN` or a `router-helpers` token
+`ci-deploy`), on the router from a `router-helpers` token
 from `vault-router-token` (docs/SECRET_ROTATION.md, "Vault authentication details"). It reaches the runner on stdin, never on a command line. If
 Vault cannot be read, the job reports an `ERROR` and checks everything but
 the token.

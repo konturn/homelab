@@ -14,14 +14,15 @@
 # the server certificate lr4-broker serves, so it is always the address the
 # robots must be provisioned with.
 #
-# Vault access: the VAULT_TOKEN CI variable through glab in the repo checkout
-# (same as haapi). Deployed by configure-homelab-services to
+# Vault access: a router-helpers token from vault-router-token (same as haapi;
+# docs/SECRET_ROTATION.md, "Vault authentication details"), which may read
+# exactly the paths used here. Deployed by configure-homelab-services to
 # /usr/local/sbin/lr4ctl.
 set -euo pipefail
 
 export VAULT_ADDR=https://10.3.32.6:8200 VAULT_SKIP_VERIFY=1
-VAULT_TOKEN=$(cd /root/repos/homelab && glab variable get VAULT_TOKEN 2>/dev/null) || VAULT_TOKEN=
-[ -n "$VAULT_TOKEN" ] || { echo "lr4ctl: no Vault token (GitLab down?)" >&2; exit 3; }
+VAULT_TOKEN=$(/usr/local/sbin/vault-router-token) || VAULT_TOKEN=
+[ -n "$VAULT_TOKEN" ] || { echo "lr4ctl: no Vault token (Vault down?)" >&2; exit 3; }
 export VAULT_TOKEN
 
 kv() { vault kv get -format=json "homelab/$1" | jq -c .data.data; }
