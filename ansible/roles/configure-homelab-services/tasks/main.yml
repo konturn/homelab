@@ -1835,6 +1835,7 @@
     - gdm3.service
     - pulseaudio.service
     - cups.service
+    - cups-browsed.service
     - snapd.service
   failed_when: false
   when: "'router' in inventory_hostname"
