@@ -198,22 +198,41 @@ triage:
 | Clear a failed systemd unit (`reset-failed`) | 1 | executor action |
 | One-off host edits (stray cron entry, emergency nginx 503) | 2 | stay tier 3 |
 
-Done now: `ops`'s `AGENTS.md` says reading is tier 1 and where to read.
+Done: `ops`'s `AGENTS.md` says reading is tier 1 and where to read; and
+the three executor actions below are built (2026-11-16).
 
-Proposed, not built (each is a new path from an agent into the root
-executor and wants its own reviewed design, `docs/design/event-routing.md`
-4.5 already lists the types):
+### Executor actions
 
-1. `collect` on request: `POST /collect {incident, target}` on the event
-   router, allowed clients only, runs fixed read-only commands through the
-   executor (container state and health without the environment, last 200
-   log lines, `zpool status`, `systemctl status` of an allowlisted unit) and
-   returns the text. Covers about 20 of the 28.
-2. `restart_container` on request: the same endpoint, same executor
-   re-checks as a playbook (denylist, once per incident, rate limit, deploy
-   lock), tied to an open incident. Covers the restarts.
-3. `reset_failed_unit` for an allowlist of units (`nut-driver@*`,
-   `snapclient@*`).
+`POST /agent/<action>` on the event router, through the root executor
+(`docker/event-router/README.md`, "Agent actions"; client `er-action` in the
+event-router skill):
+
+| Action | Tier | `openclaw-noah` | `openclaw-ops` |
+|---|---|---|---|
+| `collect` (read-only: container state and health without env values, last 200 log lines, unit status, `zpool status -x`, df; redacted, 64 KiB) | 1 | auto | auto |
+| `reset_failed` (allowlisted units; clears the failed state, never starts) | 1 | auto | auto |
+| `restart_container` (allowlisted containers) | 2 | auto, FYI | approve (tap) |
+
+- **Who asked.** Each agent presents a token derived from its own JIT key
+  (`sha256hex(key:event-router-agent-v1)`); the router and the executor
+  each hold only the tokens' hashes, rendered at deploy time. The source
+  address alone (shared by both agents) is not trusted, the body cannot
+  name a requester, and the router never sees a JIT key.
+- **The matrix** is the broker's own (`jit_approval_matrix`), read by the
+  executor, so a change to it changes both. `auto_approve` (ops restarts of
+  named containers without a tap) exists and is empty.
+- **The tap** is the JIT bot's Approve/Deny, recorded by
+  `event-router-control`; the agent then asks again with the approval id,
+  and the executor runs every check before acting. One use, 10 minutes.
+- **Guards:** everything a playbook's restart goes through (denylists,
+  kill switch, windows, dependencies, deploy lock, `recent_deploy`, once per
+  incident, shared rate limits) plus a per-container cooldown, daily caps
+  and an FYI to Noah after every restart. Never: GitLab, Vault, Pi-hole,
+  mosquitto, the JIT services, the gateway, Home Assistant, the front ends,
+  data stores, VMs.
+
+What stays tier 3: one-off host edits and anything the allowlists do not
+cover.
 
 ## Rollout
 

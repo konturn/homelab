@@ -25,11 +25,21 @@ Re-checked here, independently of the router (doc 12.6):
     the target needs
   - its own rate limits, and never twice for one incident (S8)
 
+It also accepts {"agent": {...}}: an OpenClaw agent's request (collect,
+restart_container, reset_failed) that the router authenticated and passed
+on. The executor checks the agent's token itself, decides by requester and
+tier, and runs the same checks; see "Agent actions" below and
+docker/event-router/README.md.
+
 Python standard library plus PyYAML (python3-yaml on the host).
 """
 
 import fcntl
 import fnmatch
+import hashlib
+import hmac
+import html
+import http.client
 import json
 import os
 import re
@@ -247,6 +257,8 @@ def load_state(f):
     st.setdefault("incidents", {})
     st.setdefault("history", [])
     st.setdefault("retried", {})
+    st.setdefault("approvals", {})     # agent requests waiting for (or given) Noah's tap
+    st.setdefault("collects", [])      # agent collect requests, for their rate limit
     return st
 
 
@@ -254,6 +266,8 @@ def save_state(f, st, now):
     st["history"] = [h for h in st["history"] if now - h["ts"] < 7 * 86400]
     st["incidents"] = {k: v for k, v in st["incidents"].items() if now - v < 30 * 86400}
     st["retried"] = {k: v for k, v in st["retried"].items() if now - v < 30 * 86400}
+    st["approvals"] = {k: v for k, v in st["approvals"].items() if now - v.get("created", 0) < 86400}
+    st["collects"] = [c for c in st["collects"] if now - c["ts"] < 86400]
     f.seek(0)
     f.truncate()
     f.write(json.dumps(st, sort_keys=True))
@@ -446,6 +460,551 @@ def check_retry(cfg, target):
     return job
 
 
+# ---- Agent actions -------------------------------------------------------------------
+# Requests from the OpenClaw agents (docs/design/openclaw-identities.md), passed
+# on by the router as {"agent": {...}}. The router authenticates the caller; the
+# executor checks the same token again against its own list (executor.json,
+# rendered at deploy time), so the router cannot name a requester by itself.
+# The requester comes from the token only, never from a field.
+AGENT_ACTIONS = ("collect", "restart_container", "reset_failed")
+# Tiers as at the JIT broker; the decision per requester and tier comes from
+# the broker's own matrix (executor.json approval_matrix, rendered from the
+# same inventory variable). Not configurable here.
+AGENT_TIERS = {"collect": 1, "reset_failed": 1, "restart_container": 2}
+DECISIONS = ("auto", "auto-fyi", "approve", "deny")
+AGENT_KEYS = {"action", "target", "token", "reason", "incident", "approval"}
+# Never restarted on an agent's request, whatever executor.json says: the
+# playbook hard-deny list plus everything a restart would make unsafe or cut
+# off (the message broker, the JIT broker and proxy, the agent's own
+# gateway, the front ends, DNS, Home Assistant, the password vault, the
+# Litter-Robot broker).
+AGENT_RESTART_DENIED = HARD_DENIED_TARGETS + (
+    "mosquitto", "jit-approval-svc", "jit-proxy", "openclaw-gateway", "homeassistant",
+    "nginx", "lab_nginx", "iot_nginx", "iot-dns", "bitwarden", "lr4-broker",
+    "docker-socket-proxy-ro", "docker-socket-proxy-tls")
+# Never collected: they hold or broker secrets, or carry the agents' own
+# conversations.
+COLLECT_DENIED = ("vault", "bitwarden", "jit-approval-svc", "jit-proxy", "openclaw-gateway")
+# Units never touched or read, whatever the allowlist says: virtual machines.
+UNIT_DENIED = ("libvirt*", "virt*", "qemu*", "xen*", "*excel*")
+UNIT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9@_.:-]{0,95}\.(service|timer|socket|mount|path)$")
+APPROVAL = re.compile(r"^apr-[0-9a-f]{12}$")
+SAFE_TAG = re.compile(r"^[A-Za-z0-9@_.:-]{1,100}$")
+MAX_OUTPUT = 64 * 1024           # collect: whole reply text
+LOG_TAIL = 200                   # collect: docker logs lines
+LOG_BYTES = 40 * 1024            # collect: docker logs bytes (the newest kept)
+LINE_MAX = 1000
+REDACTED = "<redacted>"
+GITLEAKS = "/usr/local/bin/gitleaks"
+GITLEAKS_CONFIG = "/etc/scrub-transcripts/gitleaks-transcripts.toml"
+
+
+def parse_matrix(text):
+    """The broker's JIT_APPROVAL_MATRIX format: name=t1,t2,t3;... A cell
+    that is not a known decision, and tier 3 auto, read as deny."""
+    out = {}
+    for row in (text or "").split(";"):
+        name, _, cells = row.strip().partition("=")
+        cells = [c.strip() for c in cells.split(",")]
+        if not name or len(cells) != 3:
+            continue
+        cells = [c if c in DECISIONS else "deny" for c in cells]
+        if cells[2] in ("auto", "auto-fyi"):
+            cells[2] = "deny"
+        out[name.strip()] = cells
+    return out
+
+
+def agent_requester(cfg, token):
+    """The requester whose token this is (SHA-256 compared in constant time), or Refused."""
+    if not isinstance(token, str) or not 32 <= len(token) <= 256:
+        raise Refused("auth", "missing or malformed agent token")
+    digest = hashlib.sha256(token.encode()).hexdigest()
+    found = None
+    for name, want in sorted((cfg.get("agent_tokens") or {}).items()):
+        if isinstance(want, str) and len(want) == 64 and hmac.compare_digest(digest, want):
+            found = name
+    if found is None:
+        raise Refused("auth", "unknown agent token")
+    return found
+
+
+def agent_decision(cfg, requester, action, target):
+    ac = cfg["agent_actions"]
+    cells = parse_matrix(cfg.get("approval_matrix")).get(requester) or ["deny"] * 3
+    d = cells[AGENT_TIERS[action] - 1]
+    if d == "approve" and action == "restart_container" and \
+            any(fnmatch.fnmatchcase(target, p) for p in (ac["restart_container"].get("auto_approve") or {})
+                .get(requester) or []):
+        d = "auto-fyi"
+    return d
+
+
+def matches(name, patterns):
+    return any(fnmatch.fnmatchcase(name, p) for p in patterns or [])
+
+
+def clean_text(v, n):
+    return "".join(c if c.isprintable() else " " for c in str(v or ""))[:n].strip()
+
+
+def check_agent_request(req):
+    if not isinstance(req, dict) or set(req) - AGENT_KEYS or not {"action", "target", "token"} <= set(req):
+        raise Refused("not_allowed", f"agent request takes {sorted(AGENT_KEYS)} (action, target, token required)")
+    for k in AGENT_KEYS - {"token"}:
+        if req.get(k) is not None and not isinstance(req[k], str):
+            raise Refused("not_allowed", f"{k} must be a string")
+    action, target = req["action"], req["target"]
+    if action not in AGENT_ACTIONS:
+        raise Refused("not_allowed", f"action {action!r} is not an agent action")
+    if not isinstance(target, str) or not 1 <= len(target) <= 110:
+        raise Refused("not_allowed", "bad target")
+    inc = req.get("incident") or None
+    if inc is not None and not INCIDENT.match(inc):
+        raise Refused("not_allowed", "bad incident id")
+    approval = req.get("approval") or None
+    if approval is not None and (action != "restart_container" or not APPROVAL.match(approval)):
+        raise Refused("not_allowed", "bad approval id")
+    return action, target, clean_text(req.get("reason"), 300), inc, approval
+
+
+# -- collect: fixed read-only commands, redacted, bounded --------------------------------
+SECRET_PATTERNS = [
+    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(-----END [A-Z ]*PRIVATE KEY-----|\Z)", re.S), REDACTED),
+    (re.compile(r"(?i)\b(bearer|basic|token)(\s+)[A-Za-z0-9._~+/=-]{8,}"), r"\1\2" + REDACTED),
+    (re.compile(r"(?i)([a-z][a-z0-9+.-]*://)[^/\s:@]+:[^/\s@]+@"), r"\1" + REDACTED + "@"),
+    (re.compile(r"(?i)([a-z0-9_.-]*(?:token|secret|passw(?:or)?d|passwd|pass|api[_-]?key|apikey|auth"
+                r"|credential|session|cookie|private[_-]?key|signature|sig)[a-z0-9_.-]*)"
+                r"(\"?'?\s*[:=]\s*\"?'?)([^\s\"'&,;}]{3,})"), r"\1\2" + REDACTED),
+    (re.compile(r"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}"), REDACTED),
+    (re.compile(r"\b(?:hvs|hvb|hvr|s)\.[A-Za-z0-9_-]{20,}"), REDACTED),
+    (re.compile(r"\b(?:glpat|gldt|glrt|glptt|glsoat|glcbt|glft|glimt|glagent|glwt)-[A-Za-z0-9_-]{16,}"), REDACTED),
+    (re.compile(r"\bglsa_[A-Za-z0-9_]{16,}"), REDACTED),
+    (re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}"), REDACTED),
+    (re.compile(r"\bsk-[A-Za-z0-9_-]{20,}"), REDACTED),
+    (re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}"), REDACTED),
+    (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), REDACTED),
+    (re.compile(r"\bjitp_[A-Za-z0-9_-]{10,}"), REDACTED),
+]
+
+
+def gitleaks_secrets(text):
+    """The secrets gitleaks finds in text (the transcript scrubber's rules), or []."""
+    if not os.path.exists(GITLEAKS):
+        return []
+    args = [GITLEAKS, "stdin", "--no-banner", "--report-format", "json", "--report-path", "-",
+            "--exit-code", "0", "--log-level", "error"]
+    if os.path.exists(GITLEAKS_CONFIG):
+        args += ["--config", GITLEAKS_CONFIG]
+    try:
+        r = subprocess.run(args, input=text, capture_output=True, text=True, timeout=30)
+        found = json.loads(r.stdout or "[]")
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return []
+    return [f.get("Secret") for f in found if isinstance(f, dict) and len(f.get("Secret") or "") >= 6]
+
+
+def redact(text, known=()):
+    """Known values first (the container's own environment), then the
+    patterns, then whatever gitleaks still finds."""
+    for v in sorted({k for k in known if isinstance(k, str) and len(k) >= 6}, key=len, reverse=True):
+        text = text.replace(v, REDACTED)
+    for pat, repl in SECRET_PATTERNS:
+        text = pat.sub(repl, text)
+    for s in sorted(set(gitleaks_secrets(text)), key=len, reverse=True):
+        text = text.replace(s, REDACTED)
+    return text
+
+
+def run_ro(args, timeout=30):
+    """One fixed read-only command; stdout and stderr together, never raises."""
+    try:
+        r = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
+        out = r.stdout.decode("utf-8", "replace")
+    except (OSError, subprocess.SubprocessError) as e:
+        out = f"({e.__class__.__name__})"
+    return "\n".join(line[:LINE_MAX] for line in out.splitlines())
+
+
+def inspect_summary(name):
+    """docker inspect without the environment values, labels or network
+    addresses. Returns (text, env values for redaction)."""
+    r = docker("inspect", name)
+    try:
+        d = json.loads(r.stdout)[0]
+    except (ValueError, IndexError, TypeError):
+        return f"docker inspect failed: {r.stderr.strip()[:200]}", []
+    cfg, state = d.get("Config") or {}, d.get("State") or {}
+    env = [e for e in cfg.get("Env") or [] if isinstance(e, str)]
+    values = [e.split("=", 1)[1] for e in env if "=" in e]
+    health = state.get("Health") or {}
+    out = {
+        "name": (d.get("Name") or "").lstrip("/"), "image": cfg.get("Image"), "created": d.get("Created"),
+        "restart_count": d.get("RestartCount"),
+        "restart_policy": ((d.get("HostConfig") or {}).get("RestartPolicy") or {}).get("Name"),
+        "state": {k: state.get(k) for k in ("Status", "Running", "Restarting", "OOMKilled", "Dead",
+                                             "ExitCode", "Error", "StartedAt", "FinishedAt")},
+        "health": {"status": health.get("Status"), "failing_streak": health.get("FailingStreak"),
+                   "last": [{"start": h.get("Start"), "exit": h.get("ExitCode"),
+                             "output": str(h.get("Output") or "")[:500]}
+                            for h in (health.get("Log") or [])[-3:]]} if health else None,
+        "env": sorted(e.split("=", 1)[0] + "=" + REDACTED for e in env),
+        "mounts": [{"destination": m.get("Destination"), "rw": m.get("RW")} for m in d.get("Mounts") or []],
+        "compose": {k.rsplit(".", 1)[-1]: v for k, v in (cfg.get("Labels") or {}).items()
+                    if k in ("com.docker.compose.service", "com.docker.compose.project")},
+    }
+    return json.dumps(out, indent=1, default=str), values
+
+
+def docker_logs(name):
+    try:
+        r = subprocess.run(["docker", "logs", "--tail", str(LOG_TAIL), "--timestamps", name],
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=30)
+        raw = r.stdout[-LOG_BYTES:].decode("utf-8", "replace")
+    except (OSError, subprocess.SubprocessError) as e:
+        return f"({e.__class__.__name__})"
+    return "\n".join(line[:LINE_MAX] for line in raw.splitlines())
+
+
+def check_collect_target(cfg, target):
+    ac = cfg["agent_actions"]
+    kind, _, name = target.partition(":")
+    if target == "host":
+        return
+    if kind == "container":
+        allowed = ac["collect"]["containers"] + ac["restart_container"]["containers"]
+        if not NAME.match(name) or name in COLLECT_DENIED or not matches(name, allowed):
+            raise Refused("not_allowed", f"container {name!r} is not on the collect allowlist")
+    elif kind == "unit":
+        allowed = ac["collect"]["units"] + ac["reset_failed"]["units"]
+        if not UNIT.match(name) or matches(name, UNIT_DENIED) or not matches(name, allowed):
+            raise Refused("not_allowed", f"unit {name!r} is not on the collect allowlist")
+    else:
+        raise Refused("not_allowed", "collect target is host, container:<name> or unit:<unit>")
+
+
+def collect_text(cfg, target):
+    check_collect_target(cfg, target)
+    kind, _, name = target.partition(":")
+    known = []
+    if target == "host":
+        sections = [
+            ("docker ps", run_ro(["docker", "ps", "-a", "--format", "{{.Names}}\t{{.Status}}\t{{.Image}}"])),
+            ("zpool status -x", run_ro(["zpool", "status", "-x"])),
+            ("df", run_ro(["df", "-hT", "-x", "tmpfs", "-x", "devtmpfs", "-x", "overlay",
+                           "-x", "squashfs", "-x", "efivarfs"])),
+            ("failed units", run_ro(["systemctl", "--failed", "--no-legend", "--plain", "--no-pager"])),
+        ]
+    elif kind == "container":
+        r = docker("inspect", "-f", '{{index .Config.Labels "com.docker.compose.project"}}', name)
+        if r.returncode != 0 or r.stdout.strip() != cfg["compose_project"]:
+            raise Refused("not_allowed", f"{name} is not a {cfg['compose_project']} compose container")
+        summary, known = inspect_summary(name)
+        sections = [("docker inspect (summary)", summary),
+                    (f"docker logs (last {LOG_TAIL} lines)", docker_logs(name))]
+    else:
+        sections = [
+            ("systemctl show", run_ro(["systemctl", "show", "--no-pager", "-p",
+                                       "Id,LoadState,ActiveState,SubState,Result,NRestarts,ExecMainStatus,"
+                                       "ActiveEnterTimestamp,InactiveEnterTimestamp,StateChangeTimestamp",
+                                       "--", name])),
+            ("systemctl status", run_ro(["systemctl", "status", "--no-pager", "--full", "--lines=40", "--", name])),
+        ]
+    text = "\n\n".join(f"== {title} ==\n{body}" for title, body in sections)
+    text = redact(text, known)
+    truncated = len(text.encode()) > MAX_OUTPUT
+    if truncated:
+        text = text.encode()[:MAX_OUTPUT].decode("utf-8", "ignore") + "\n[truncated]"
+    return text, truncated
+
+
+# -- notifications and prompts through the JIT bot (event-router-control's socket) -------
+class UnixHTTP(http.client.HTTPConnection):
+    def __init__(self, path, timeout=15):
+        super().__init__("localhost", timeout=timeout)
+        self.unix_path = path
+
+    def connect(self):
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.sock.settimeout(self.timeout)
+        self.sock.connect(self.unix_path)
+
+
+def jit(cfg, method, path, body):
+    c = UnixHTTP(cfg["jit_socket"])
+    try:
+        c.request(method, path, body=json.dumps(body), headers={"Content-Type": "application/json"})
+        r = c.getresponse()
+        r.read()
+        return r.status
+    finally:
+        c.close()
+
+
+def notify(cfg, text):
+    """Best effort: an FYI that cannot be sent never undoes the action."""
+    try:
+        return jit(cfg, "POST", "/v1/notify", {"text": text}) in (200, 201)
+    except (OSError, http.client.HTTPException):
+        return False
+
+
+def prompt_approval(cfg, apr, rec, ttl):
+    text = (f"<b>Restart request</b> from <b>{html.escape(rec['requester'])}</b>: "
+            f"restart container <b>{html.escape(rec['target'])}</b>"
+            + (f" (incident {html.escape(rec['incident'])})" if rec.get("incident") else "")
+            + f"\nReason: {html.escape(rec['reason'] or '(none given)')}"
+            + f"\nExpires in {ttl // 60} min. Approve lets the agent run it once, "
+              "through every executor check.")
+    try:
+        code = jit(cfg, "POST", "/v1/prompts", {"id": apr, "text": text, "ttl_seconds": ttl,
+                                                "buttons": [{"action": "approve", "label": "Approve"},
+                                                            {"action": "deny", "label": "Deny"}]})
+    except (OSError, http.client.HTTPException):
+        return False
+    return code in (200, 201)
+
+
+# -- metrics (InfluxDB through telegraf's file input) ------------------------------------
+def tag(v):
+    v = str(v or "none")
+    return v if SAFE_TAG.match(v) else "invalid"
+
+
+def audit_metric(cfg, requester, action, target, result, duration):
+    """Appends one point to the line-protocol file telegraf reads (last 500
+    lines kept; each line has its own timestamp, so re-reading writes the
+    same points again). Never fails the request."""
+    path = cfg.get("agent_metrics_file")
+    if not path:
+        return
+    line = (f"event_router_agent_action,requester={tag(requester)},action={tag(action)},"
+            f"target={tag(target)},result={tag(result)} count=1i,duration_s={float(duration):.2f} "
+            f"{time.time_ns()}\n")
+    try:
+        with open(path + ".lock", "a") as lk:
+            fcntl.flock(lk, fcntl.LOCK_EX)
+            try:
+                with open(path) as f:
+                    lines = f.readlines()[-499:]
+            except FileNotFoundError:
+                lines = []
+            tmp = path + ".tmp"
+            with open(tmp, "w") as f:
+                f.writelines(lines + [line])
+            os.chmod(tmp, 0o644)
+            os.replace(tmp, path)
+    except OSError:
+        pass
+
+
+# -- the actions ---------------------------------------------------------------------------
+def limit_check(st, ac_one, action, target, now):
+    """Per-target cooldown and daily cap, and the daily cap over all targets,
+    for agent-requested runs of one action (playbook runs count too: the
+    history is shared)."""
+    runs = [h for h in st["history"] if h["action"] == action and now - h["ts"] < 86400]
+    mine = [h for h in runs if h["target"] == target]
+    if mine and now - max(h["ts"] for h in mine) < ac_one["cooldown"]:
+        left = int(ac_one["cooldown"] - (now - max(h["ts"] for h in mine)))
+        raise Refused("cooldown", f"{action} on {target} ran {int(now - max(h['ts'] for h in mine)) // 60}m ago "
+                                  f"(cooldown {ac_one['cooldown'] // 60}m)", retry_after=left + 1)
+    if len(mine) >= ac_one["max_per_day"]:
+        raise Refused("rate_limit", f"{len(mine)} {action} on {target} in 24h (cap {ac_one['max_per_day']})")
+    if len(runs) >= ac_one["max_per_day_total"]:
+        raise Refused("rate_limit", f"{len(runs)} {action} in 24h (cap {ac_one['max_per_day_total']})")
+
+
+def unit_failed(unit):
+    return subprocess.run(["systemctl", "is-failed", "--quiet", "--", unit], timeout=10).returncode == 0
+
+
+def node_for_unit(cfg, unit):
+    for name, node in cfg["dependencies"].items():
+        if (node.get("probe") or {}).get("systemd") in (unit, unit.removesuffix(".service")):
+            return name
+    return f"systemd:{unit}"
+
+
+def host_guards(cfg, node, now):
+    """The playbook path's checks that apply to an agent's action: kill
+    switch, maintenance windows, dependencies, the deploy lock."""
+    mode = effective_mode(cfg)
+    if mode != "active":
+        raise Refused("kill_switch", f"mode is {mode}")
+    w = in_window(cfg, node, now, None)
+    if w:
+        raise Refused("maintenance", f"{node} is in maintenance window {w}")
+    down = deps_down(cfg, node)
+    if down:
+        raise Refused("dependency", "down: " + ", ".join(down))
+    running = deploy_running(cfg)
+    if running:
+        raise Refused("deploy", "running: " + ", ".join(running))
+
+
+def approval_state(cfg, st, apr, requester, target, now):
+    """Status of an approval this requester holds for this target:
+    pending, approved, or Refused."""
+    a = st["approvals"].get(apr)
+    if not a or a.get("requester") != requester or a.get("action") != "restart_container" \
+            or a.get("target") != target:
+        raise Refused("not_allowed", f"no approval {apr} for this requester and target")
+    ttl = cfg["agent_actions"]["approval_ttl"]
+    status = a.get("status")
+    if status == "pending" and now > a.get("expires", 0):
+        status = "expired"
+    if status == "approved" and now - a.get("decided", 0) > ttl:
+        status = "expired"
+    if status in ("pending", "approved"):
+        return status
+    raise Refused("approval", f"approval {apr} is {status}")
+
+
+def agent_restart(cfg, requester, target, reason, inc, apr, decision, now):
+    ac = cfg["agent_actions"]
+    rc = ac["restart_container"]
+    if apr is not None and decision != "approve":
+        raise Refused("not_allowed", f"{requester} needs no approval for this; ask without one")
+    if not NAME.match(target) or target in AGENT_RESTART_DENIED or target in cfg["restart_denylist"] \
+            or any(fnmatch.fnmatchcase(target, p) for p in EPHEMERAL_TARGETS) \
+            or not matches(target, rc["containers"]):
+        raise Refused("not_allowed", f"container {target!r} is not on the restart allowlist")
+    r = docker("inspect", "-f", '{{index .Config.Labels "com.docker.compose.project"}}', target)
+    if r.returncode != 0 or r.stdout.strip() != cfg["compose_project"]:
+        raise Refused("not_allowed", f"{target} is not a {cfg['compose_project']} compose container")
+    with open(cfg["state_file"], "a+") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        st = load_state(f)
+        limit_check(st, rc, "restart_container", target, now)
+        if inc and inc in st["incidents"]:
+            raise Refused("duplicate", f"incident {inc} was already acted on")
+        if decision == "approve":
+            if apr is None:
+                pending = [a for a in st["approvals"].values() if a.get("requester") == requester
+                           and a.get("status") == "pending" and a.get("expires", 0) > now]
+                if len(pending) >= ac["max_pending"]:
+                    raise Refused("rate_limit", f"{len(pending)} requests already wait for Noah")
+                apr = "apr-" + os.urandom(6).hex()
+                rec = {"requester": requester, "action": "restart_container", "target": target,
+                       "reason": reason, "incident": inc, "created": now,
+                       "expires": now + ac["approval_ttl"], "status": "pending"}
+                if not prompt_approval(cfg, apr, rec, ac["approval_ttl"]):
+                    raise Refused("unavailable", "could not ask Noah (JIT bot unreachable)")
+                st["approvals"][apr] = rec
+                save_state(f, st, now)
+                return {"pending": True, "approval": apr,
+                        "detail": f"waiting for Noah's tap (expires in {ac['approval_ttl'] // 60} min)"}
+            if approval_state(cfg, st, apr, requester, target, now) == "pending":
+                return {"pending": True, "approval": apr, "detail": "still waiting for Noah's tap"}
+
+    # The playbook path's guards, then recent_deploy.
+    host_guards(cfg, node_for(cfg, "restart_container", target), now)
+    within = rc.get("no_deploy_touching")
+    if within:
+        created = container_created(target)
+        if created is None:
+            raise Refused("recent_deploy", f"cannot read {target}'s creation time")
+        if now - created < within:
+            raise Refused("recent_deploy", f"{target} was (re)created {int((now - created) // 60)}m ago "
+                                           f"by a deploy: a revert, not a restart, until the "
+                                           f"{int(within // 60)}m guard expires",
+                          retry_after=int(within - (now - created)) + 1)
+
+    lim = cfg["limits"]
+    with open(cfg["state_file"], "a+") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        st = load_state(f)
+        limit_check(st, rc, "restart_container", target, now)
+        if inc and inc in st["incidents"]:
+            raise Refused("duplicate", f"incident {inc} was already acted on")
+        same = [h for h in st["history"] if h["action"] == "restart_container" and h["target"] == target
+                and now - h["ts"] < lim["per_target_window"]]
+        if len(same) >= lim["per_target_max"]:
+            raise Refused("rate_limit", f"{len(same)} restart_container on {target} in the window")
+        hour = [h for h in st["history"] if now - h["ts"] < 3600]
+        if len(hour) >= lim["global_per_hour"]:
+            raise Refused("rate_limit", f"{len(hour)} actions in the last hour")
+        if decision == "approve":
+            if approval_state(cfg, st, apr, requester, target, now) != "approved":
+                raise Refused("approval", f"approval {apr} is not approved")
+            st["approvals"][apr].update(status="used", used=now)
+        if inc:
+            st["incidents"][inc] = now
+        st["history"].append({"action": "restart_container", "target": target, "ts": now,
+                              "incident": inc, "requester": requester})
+        save_state(f, st, now)
+
+    r = docker("restart", "--time", "30", target, timeout=150)
+    ok = r.returncode == 0
+    notify(cfg, f"FYI: <b>{html.escape(requester)}</b> restarted <b>{html.escape(target)}</b> "
+                f"through the event-router executor"
+                + (" (approved by you)" if decision == "approve" else "")
+                + (f".\nReason: {html.escape(reason)}" if reason else ".")
+                + ("" if ok else "\nThe restart FAILED: " + html.escape(r.stderr.strip()[:200])))
+    if not ok:
+        raise RuntimeError(f"docker restart failed: {r.stderr.strip()[:200]}")
+    return {"detail": f"restarted {target}"}
+
+
+def agent_reset_failed(cfg, requester, unit, now):
+    rf = cfg["agent_actions"]["reset_failed"]
+    if not UNIT.match(unit) or matches(unit, UNIT_DENIED) or not matches(unit, rf["units"]):
+        raise Refused("not_allowed", f"unit {unit!r} is not on the reset-failed allowlist")
+    host_guards(cfg, node_for_unit(cfg, unit), now)
+    if not unit_failed(unit):
+        raise Refused("not_failed", f"{unit} is not in the failed state")
+    with open(cfg["state_file"], "a+") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        st = load_state(f)
+        limit_check(st, rf, "reset_failed", unit, now)
+        hour = [h for h in st["history"] if now - h["ts"] < 3600]
+        if len(hour) >= cfg["limits"]["global_per_hour"]:
+            raise Refused("rate_limit", f"{len(hour)} actions in the last hour")
+        st["history"].append({"action": "reset_failed", "target": unit, "ts": now, "requester": requester})
+        save_state(f, st, now)
+    # Clears the failed state only: reset-failed never starts or restarts a unit.
+    r = subprocess.run(["systemctl", "reset-failed", "--", unit], capture_output=True, text=True, timeout=30)
+    if r.returncode != 0:
+        raise RuntimeError(f"reset-failed failed: {r.stderr.strip()[:200]}")
+    return {"detail": f"cleared the failed state of {unit}"}
+
+
+def agent_collect(cfg, requester, target, now):
+    ac = cfg["agent_actions"]["collect"]
+    check_collect_target(cfg, target)
+    with open(cfg["state_file"], "a+") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        st = load_state(f)
+        n = len([c for c in st["collects"] if c["requester"] == requester and now - c["ts"] < 3600])
+        if n >= ac["max_per_hour"]:
+            raise Refused("rate_limit", f"{n} collects in the last hour (cap {ac['max_per_hour']})")
+        st["collects"].append({"requester": requester, "ts": now})
+        save_state(f, st, now)
+    text, truncated = collect_text(cfg, target)
+    return {"detail": f"collected {target}", "output": text, "truncated": truncated}
+
+
+def handle_agent(cfg, req, now, rec):
+    """An agent's request. rec (the journal record) gets the requester and
+    the request without its token."""
+    action, target, reason, inc, apr = check_agent_request(req)
+    rec.update(action=action, target=target, reason=reason, incident=inc, approval=apr)
+    requester = agent_requester(cfg, req.get("token"))
+    rec["requester"] = requester
+    decision = agent_decision(cfg, requester, action, target)
+    rec["decision"] = decision
+    if decision == "deny":
+        raise Refused("tier", f"{requester} may not {action} (tier {AGENT_TIERS[action]})")
+    if action == "collect":
+        return agent_collect(cfg, requester, target, now)
+    if action == "reset_failed":
+        if decision == "approve":
+            raise Refused("tier", f"{requester} may not reset_failed without approval, and it has none")
+        return agent_reset_failed(cfg, requester, target, now)
+    return agent_restart(cfg, requester, target, reason, inc, apr, decision, now)
+
+
 def peer_uid(sock):
     creds = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
     pid, uid, gid = struct.unpack("3i", creds)
@@ -489,7 +1048,46 @@ def load_config(path=CONFIG):
     cfg["dependencies"] = {name: {"kind": (n or {}).get("kind"), "needs": list((n or {}).get("needs") or []),
                                   "probe": subst((n or {}).get("probe") or {})}
                            for name, n in nodes.items()}
+    cfg["agent_actions"] = agent_config(cfg.get("agent_actions") or {})
     return cfg
+
+
+def agent_config(raw):
+    """executor.json agent_actions (rendered from config.yml), durations in
+    seconds, every list present. Missing means nothing is allowed."""
+    def part(name, extra=()):
+        p = dict(raw.get(name) or {})
+        for k in ("cooldown", "no_deploy_touching"):
+            if p.get(k):
+                p[k] = seconds(p[k])
+        p.setdefault("cooldown", 0)
+        for k in ("containers", "units") + tuple(extra):
+            p[k] = list(p.get(k) or [])
+        p.setdefault("max_per_day", 0)
+        p.setdefault("max_per_day_total", 0)
+        return p
+    out = {"approval_ttl": seconds(raw.get("approval_ttl") or "10m"),
+           "max_pending": int(raw.get("max_pending") or 2),
+           "collect": part("collect"),
+           "restart_container": part("restart_container"),
+           "reset_failed": part("reset_failed")}
+    out["collect"]["max_per_hour"] = int(out["collect"].get("max_per_hour") or 0)
+    out["restart_container"]["auto_approve"] = dict(out["restart_container"].get("auto_approve") or {})
+    return out
+
+
+def dispatch(cfg, req, now, rec):
+    """The request is either a playbook's (exactly the four keys) or an
+    agent's ({"agent": {...}}); the journal record never holds a token or
+    collected output."""
+    if isinstance(req, dict) and set(req) == {"agent"}:
+        rec["request"] = {"agent": True}
+        reply = handle_agent(cfg, req["agent"], now, rec)
+        if reply.get("pending"):
+            return dict(reply, ok=False)
+        return dict(reply, ok=True)
+    rec["request"] = req
+    return dict(handle(cfg, req, now), ok=True)
 
 
 def main():
@@ -511,9 +1109,8 @@ def main():
                 break
             buf += chunk
         req = json.loads(buf.split(b"\n", 1)[0].decode() or "null")
-        rec["request"] = req
         sock.settimeout(None)
-        reply = dict(handle(cfg, req, now), ok=True)
+        reply = dispatch(cfg, req, now, rec)
     except Refused as e:
         reply = {"ok": False, "refused": e.why, "detail": e.detail}
         if e.retry_after is not None:
@@ -522,8 +1119,12 @@ def main():
         reply = {"ok": False, "refused": "not_allowed", "detail": f"bad request: {e}"}
     except Exception as e:     # the action itself failed
         reply = {"ok": False, "error": f"{e.__class__.__name__}: {e}"[:300]}
-    rec["reply"] = reply
+    rec["reply"] = {k: v for k, v in reply.items() if k != "output"}
     rec["duration_s"] = round(time.time() - now, 2)
+    if "requester" in rec or rec.get("request") == {"agent": True}:
+        result = ("ok" if reply.get("ok") else "pending" if reply.get("pending")
+                  else reply.get("refused") or "error")
+        audit_metric(cfg, rec.get("requester"), rec.get("action"), rec.get("target"), result, rec["duration_s"])
     log(rec)
     try:
         sock.sendall(json.dumps(reply).encode() + b"\n")

@@ -1640,6 +1640,21 @@
     - {src: "docker/openclaw/workspace/skills/maint/SKILL.md", dest: "skills/maint/SKILL.md"}
   when: "'router' in inventory_hostname"
 
+# er-action: the agents' client for the event router's agent actions
+# (docker/event-router/README.md). Root-owned in each workspace; each agent
+# runs its own copy.
+- name: Deploy the event router agent-action client
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') }}/docker/openclaw/workspace/skills/event-router/er-action.sh"
+    dest: "{{ item }}/skills/event-router/er-action"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ docker_persistent_data_path }}/openclaw/workspace"
+    - "{{ docker_persistent_data_path }}/openclaw/ops-home/.openclaw/workspace"
+  when: "'router' in inventory_hostname"
+
 ### Transcript credential scrubbing cron
 # Uses gitleaks (~160 rules) to detect and redact secrets from OpenClaw
 # session transcripts. Also purges archived sub-agent transcripts older

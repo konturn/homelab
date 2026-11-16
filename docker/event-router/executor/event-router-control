@@ -13,17 +13,24 @@ prompts"). Decision 13:
     (button, SSH, deploy, automation storm), and again every 24h while an
     override is set;
   - sends the messages the router queued in its outbox (they are already
-    held back for quiet hours by the router).
+    held back for quiet hours by the router);
+  - records Noah's Approve/Deny on an agent's restart request (the executor
+    posts the prompt, id apr-<hex>, and keeps the request in its state
+    file), and closes the prompt once the request expires. It never acts on
+    a request itself: the agent asks the executor again, which checks the
+    approval and everything else.
 
 It works while the event-router container is down: the override file is what
 both the router and the executor read. Python standard library only.
 """
 
+import fcntl
 import glob
 import html
 import http.client
 import json
 import os
+import re
 import socket
 import sys
 import tempfile
@@ -149,6 +156,72 @@ def describe(cfg):
 
 
 BUTTONS = [{"action": "stop", "label": "Stop automation"}, {"action": "resume", "label": "Resume"}]
+APPROVAL = re.compile(r"^apr-[0-9a-f]{12}$")
+
+
+def approvals(cfg, fn):
+    """fn(approvals dict) under the executor's state-file lock; saved if it returns True."""
+    with open(cfg["state_file"], "a+") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        f.seek(0)
+        try:
+            st = json.loads(f.read() or "{}")
+        except ValueError:
+            return
+        if not isinstance(st, dict) or not isinstance(st.get("approvals"), dict) or not fn(st["approvals"]):
+            return
+        f.seek(0)
+        f.truncate()
+        f.write(json.dumps(st, sort_keys=True))
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def approval_text(a, outcome):
+    return (f"<b>Restart request</b> from <b>{html.escape(str(a.get('requester')))}</b>: "
+            f"container <b>{html.escape(str(a.get('target')))}</b>\n{outcome}")
+
+
+def decide_approval(cfg, d, now):
+    """A press on an executor approval prompt: only Approve or Deny, only
+    while the request is pending and unexpired."""
+    out = []
+
+    def fn(apps):
+        a = apps.get(d.get("id"))
+        if not a or a.get("status") != "pending" or d.get("action") not in ("approve", "deny"):
+            return False
+        if now > a.get("expires", 0):
+            a.update(status="expired")
+            out.append((a, "Expired before the tap."))
+            return True
+        a.update(status="approved" if d["action"] == "approve" else "denied", decided=now)
+        out.append((a, "Approved: the agent may run it once, through every executor check."
+                    if d["action"] == "approve" else "Denied."))
+        return True
+    approvals(cfg, fn)
+    for a, outcome in out:
+        jit(cfg, "POST", f"/v1/prompts/{d['id']}", {"text": approval_text(a, outcome), "buttons": []})
+        log(event="approval", id=d["id"], status=a.get("status"), requester=a.get("requester"),
+            target=a.get("target"))
+
+
+def expire_approvals(cfg, now):
+    out = []
+
+    def fn(apps):
+        changed = False
+        for aid, a in apps.items():
+            if a.get("status") == "pending" and now > a.get("expires", 0):
+                a["status"] = "expired"
+                out.append((aid, a))
+                changed = True
+        return changed
+    approvals(cfg, fn)
+    for aid, a in out:
+        if APPROVAL.match(aid):
+            jit(cfg, "POST", f"/v1/prompts/{aid}", {"text": approval_text(a, "Expired (no tap)."), "buttons": []})
+        log(event="approval", id=aid, status="expired", requester=a.get("requester"), target=a.get("target"))
 
 
 def ensure_prompt(cfg, st, now, force_text=False):
@@ -181,6 +254,9 @@ def loop_once(cfg, st, now):
     code, body = jit(cfg, "GET", "/v1/decisions?wait=25")
     if code == 200:
         for d in body.get("decisions") or []:
+            if APPROVAL.match(str(d.get("id") or "")):
+                decide_approval(cfg, d, time.time())
+                continue
             if d.get("id") != st.get("prompt_id"):
                 continue
             if d.get("action") == "stop":
@@ -218,7 +294,10 @@ def loop_once(cfg, st, now):
                            f"{int((now - since) // 3600)}h. Effective mode: {mode}."):
                 st[key] = now
 
-    # 4. The router's outbox.
+    # 4. Agent restart requests nobody tapped.
+    expire_approvals(cfg, now)
+
+    # 5. The router's outbox.
     for path in sorted(glob.glob(os.path.join(cfg["shared_dir"], "outbox", "*.json"))):
         try:
             with open(path) as f:

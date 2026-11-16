@@ -112,6 +112,118 @@ restart_denylist:
   - jit-approval-svc
   - openclaw-gateway
 
+# Agent actions (README "Agent actions"): what the OpenClaw agents may ask the
+# executor for through POST /agent/<action>. Rendered into executor.json; the
+# executor also hard-denies its own lists (event-router-executor
+# AGENT_RESTART_DENIED, COLLECT_DENIED, UNIT_DENIED) and the restart_denylist
+# above. Tiers are fixed (collect 1, reset_failed 1, restart_container 2);
+# the decision per requester and tier is the JIT broker's matrix
+# (jit_approval_matrix in ansible/inventory.yml).
+agent_actions:
+  approval_ttl: 10m        # an unanswered tap expires; an approval is good for this long
+  max_pending: 2           # per requester
+  collect:                 # read-only: inspect (no env values), logs, unit status, zpool, df
+    max_per_hour: 30       # per requester
+    # Containers beyond the restart list below (which can also be collected).
+    containers:
+      - gitlab
+      - pihole
+      - iot-dns
+      - homeassistant
+      - mosquitto
+      - lr4-broker
+      - nginx
+      - lab_nginx
+      - iot_nginx
+      - influxdb
+      - loki
+      - promtail
+      - nextcloud
+      - nextcloud_database
+      - paperless-ngx
+      - paperless-redis
+      - frigate
+      - amcrest2mqtt
+      - petlibro-camera
+      - event-router
+      - docker-socket-proxy
+      - docker-socket-proxy-ro
+    # Units beyond the reset_failed list below.
+    units:
+      - docker.service
+      - containerd.service
+      - telegraf.service
+      - deadman-check.service
+      - event-router-control.service
+      - gitlab-runner.service
+      - nut-monitor.service
+      - nut-server.service
+      - restic-*.service
+      - frigate-backup-*.service
+      - zwave-backup.service
+      - zpool-scrub.service
+      - zfs-zed.service
+      - smartmontools.service
+      - tailscaled.service
+      - ipmi-metrics.service
+      - llm-shadow.service
+      - vulnwatchd.service
+      - vulnwatch-scan.service
+      - homelab-canary.service
+      - wan-bypass-update.service
+      - isc-dhcp-server.service
+      - ntpsec.service
+  restart_container:
+    cooldown: 30m          # per container
+    max_per_day: 3         # per container (the playbooks' 2 per 6h applies as well)
+    max_per_day_total: 8
+    no_deploy_touching: 2h # recent_deploy, as for restart-once
+    # Containers only. Never: anything in restart_denylist or the executor's
+    # AGENT_RESTART_DENIED (brokers, proxies, DNS, Home Assistant, the
+    # agent's own gateway, password vault), data stores, cameras, the
+    # Litter-Robot broker, libvirt VMs (not containers at all).
+    containers:
+      - plex
+      - tautulli
+      - radarr
+      - sonarr
+      - lidarr
+      - prowlarr
+      - jackett
+      - ombi
+      - nzbget
+      - deluge
+      - navidrome
+      - audioserve
+      - mopidy
+      - snapserver
+      - snapclient_*
+      - airplay_*
+      - zigbee2mqtt
+      - ambientweather
+      - hcpy
+      - anomaly-detector
+      - paperless-ai
+      - ollama
+      - grafana
+      - chromium-browser
+      - bluebubbles-relay
+      - otel-collector
+      - tempo
+      - diagram
+      - iperf3
+    # Restarts a requester may run without a tap although its matrix cell
+    # says approve. Off: empty for everyone.
+    auto_approve: {}
+  reset_failed:            # systemctl reset-failed only: never starts or restarts a unit
+    cooldown: 10m
+    max_per_day: 3
+    max_per_day_total: 12
+    units:
+      - nut-driver@*.service
+      - restic-notify-failure@*.service
+      - er-selftest-*.service    # transient units the post-deploy check creates
+
 # Always-page classes (section 6.3, decision 5), by Grafana rule uid. The
 # router never runs a playbook for them (S9, S11) and hands each to OpenClaw
 # as a page (Telegram; the JIT bot when OpenClaw is down). Grafana mails the

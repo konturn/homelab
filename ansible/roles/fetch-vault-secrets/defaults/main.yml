@@ -64,6 +64,11 @@ vault_secret_paths:
   - path: "agents/openclaw-ops"
     fields:
       vault_openclaw_ops_jit_key: "api_key"
+  # The noah agent's key: used here only to derive the hash of its event
+  # router agent token (ansible/roles/event-router); never deployed.
+  - path: "agents/openclaw-noah"
+    fields:
+      vault_openclaw_noah_jit_key: "api_key"
 
   # JIT Approval Service secrets
   - path: "docker/jit-approval-svc"

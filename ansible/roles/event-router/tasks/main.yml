@@ -80,6 +80,35 @@
     - event-router-control
   notify: Restart event-router-control
 
+# Read by the router container (/config, read-only) on every agent request:
+# the hash of each agent's derived token (defaults/main.yml). An agent
+# without a key in Vault gets no entry, so it cannot authenticate.
+- name: Agent token hashes for the router
+  ansible.builtin.template:
+    src: agent-tokens.json.j2
+    dest: "{{ event_router_data_dir }}/config/agent-tokens.json"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Agent action metrics directory (telegraf reads it)
+  ansible.builtin.file:
+    path: "{{ event_router_agent_metrics_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# Present from the start, so telegraf's file input never reports a missing file.
+- name: Agent action metrics file
+  ansible.builtin.copy:
+    dest: "{{ event_router_agent_metrics_dir }}/actions.influx"
+    content: ""
+    force: false
+    owner: root
+    group: root
+    mode: "0644"
+
 - name: Executor configuration
   ansible.builtin.template:
     src: executor.json.j2
