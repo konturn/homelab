@@ -7,7 +7,7 @@
 # as one JSON line (ok, error, result; cut at 1500 characters). The client
 # (hews.py) runs inside the homeassistant container, which has aiohttp, against
 # 127.0.0.1:8123. The token comes from Vault (homelab/docker/homeassistant,
-# token; router-helpers token from vault-router-token, docs/VAULT.md) and is
+# token; router-helpers token from vault-router-token, docs/SECRET_ROTATION.md, "Vault authentication details") and is
 # passed in the environment, never printed.
 #
 # Deployed by configure-homelab-services to /usr/local/sbin/hews (client:

@@ -596,7 +596,7 @@
                                      + (['homeassistant'] if _ha_pinned_integrations is changed else [])) | unique | list }}"
     _nginx_container_names: "{{ nginx_config | default([]) | map(attribute='name') | list }}"
 
-### Vault credential of root's helpers on the router (docs/VAULT.md): the
+### Vault credential of root's helpers on the router (docs/SECRET_ROTATION.md, "Vault authentication details"): the
 # router-helpers AppRole, read-only on the helpers' paths, and the script
 # that turns it into a 5-minute token.
 - name: Vault helper credential directory

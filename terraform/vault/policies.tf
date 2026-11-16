@@ -152,7 +152,7 @@ resource "vault_policy" "vault_admin" {
 # =============================================================================
 # Policy: router-helpers
 # =============================================================================
-# Root's helpers on the router (scripts/vault-router-token, docs/VAULT.md):
+# Root's helpers on the router (scripts/vault-router-token, docs/SECRET_ROTATION.md, "Vault authentication details"):
 # haapi/hews, scripts/gitlab-settings.sh, scripts/set-deadman-ping-url.sh and
 # the hand-run amcrestctl/slzbctl. Exact paths only; AppRole in roles.tf.
 

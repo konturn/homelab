@@ -35,7 +35,7 @@
 # never returns a hook's URL secret or token over the API. The webhook token
 # is read from Vault (homelab/docker/event-router, gitlab_webhook_token; CI:
 # JWT login with VAULT_ID_TOKEN, role ci-deploy; router: VAULT_TOKEN, or a
-# router-helpers token from vault-router-token, docs/VAULT.md) and handed to
+# router-helpers token from vault-router-token, docs/SECRET_ROTATION.md, "Vault authentication details") and handed to
 # the runner on stdin, never on a command line.
 #
 # Usage: scripts/gitlab-settings.sh [--check]

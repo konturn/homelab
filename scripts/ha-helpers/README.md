@@ -3,7 +3,7 @@
 Small helpers root uses on the router to talk to Home Assistant by hand or from
 an agent session. Both read HA's long-lived token from Vault
 (`homelab/docker/homeassistant`) with a short-lived `router-helpers` token
-from `vault-router-token` (docs/VAULT.md), and never print it.
+from `vault-router-token` (docs/SECRET_ROTATION.md, "Vault authentication details"), and never print it.
 
 | File | Installed as | Use |
 |---|---|---|

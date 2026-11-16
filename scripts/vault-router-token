@@ -1,6 +1,6 @@
 #!/bin/bash
 # vault-router-token: print a short-lived Vault token for root's helpers on
-# the router (AppRole router-helpers, policy router-helpers; docs/VAULT.md).
+# the router (AppRole router-helpers, policy router-helpers; docs/SECRET_ROTATION.md, "Vault authentication details").
 #
 #   T=$(vault-router-token)
 #   VAULT_TOKEN=$(vault-router-token) vault kv get homelab/docker/homeassistant

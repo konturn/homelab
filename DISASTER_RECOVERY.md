@@ -417,7 +417,7 @@ Stop here if sealed=false. Everything below is Case B.
 
 Then paste the new keys into the `VAULT_UNSEAL_KEYS` CI/CD variable (protected),
 or every future pipeline re-seals on restart. Keep the root token as a
-break-glass secret off-box; do not put it in a CI variable (docs/VAULT.md).
+break-glass secret off-box; do not put it in a CI variable (docs/SECRET_ROTATION.md, "Vault authentication details").
 
 Everything in Vault is now gone, so it has to be rebuilt in this order:
 
@@ -652,7 +652,7 @@ restic backup --dry-run /persistent_data/application
 | `CLOUDFLARE_API_KEY` | DDNS updates | Ansible (cron job) |
 | `CLOUDFLARE_ZONE_ID` | DNS zone identifier | Ansible (cron job) |
 | `VAULT_UNSEAL_KEYS` | Unseal Vault (3 of 5, one per line) | Phase 4.5 (`bootstrap.yml`) |
-| Vault root token | Enable KV v2, first Terraform apply on a re-initialised Vault. Break-glass, not a CI variable (docs/VAULT.md) | Phase 4.5 |
+| Vault root token | Enable KV v2, first Terraform apply on a re-initialised Vault. Break-glass, not a CI variable (docs/SECRET_ROTATION.md, "Vault authentication details") | Phase 4.5 |
 | `APPROLE_ROTATION_PAT` | Write rotated secret_ids back to CI variables; enforce resource group / deployment settings | `vault:rotate-approles`, `gitlab:settings` |
 
 ### Optional Secrets

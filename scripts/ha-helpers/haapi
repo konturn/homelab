@@ -7,7 +7,7 @@
 #
 # The long-lived token is read from Vault (homelab/docker/homeassistant, the
 # first field whose name contains "token") with a router-helpers token from
-# vault-router-token (docs/VAULT.md). It is never printed. Refuses to call HA
+# vault-router-token (docs/SECRET_ROTATION.md, "Vault authentication details"). It is never printed. Refuses to call HA
 # without a token: unauthenticated calls count as failed logins and HA bans
 # the source IP (the router, 10.3.0.2) after 5.
 #

@@ -1136,7 +1136,7 @@ macmini:deploy:
 # =============================================================================
 # Vault Configuration - Terraform (main only, deploy stage)
 # =============================================================================
-# Authenticates with the vault-admin JWT role (docs/VAULT.md), not a root
+# Authenticates with the vault-admin JWT role (docs/SECRET_ROTATION.md, "Vault authentication details"), not a root
 # token: the role is bound to protected main of this project, 15-minute token.
 vault:configure:
   stage: deploy
@@ -1388,7 +1388,7 @@ vault:rotate-approles:
       fi
 
       # -----------------------------------------------------------------
-      # 3. Rotate router-helpers AppRole (stored in Vault KV, docs/VAULT.md)
+      # 3. Rotate router-helpers AppRole (stored in Vault KV, docs/SECRET_ROTATION.md, "Vault authentication details")
       # -----------------------------------------------------------------
       if rotate_approle "router-helpers"; then
         echo "=== Updating router-helpers credentials in Vault ==="
