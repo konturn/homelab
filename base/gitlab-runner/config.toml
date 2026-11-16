@@ -21,8 +21,10 @@
 # (configure-base).
 #
 # Default image: only used by a job that sets no image of its own (every job
-# in this repo sets one). Pinned by digest; Renovate updates it
-# (customManagers in renovate.json).
+# in this repo sets one, except the runner:default-image canary). Pinned by
+# digest; Renovate updates it (customManagers in renovate.json), and digest
+# and patch updates auto-merge under the runner image class
+# (docs/AUTOMERGE.md, "Runner default image").
 # 6 protected + 6 unprotected + 1 firmware. Deploys stay serial per host
 # through resource groups (.gitlab-ci.yml); this only lets validate, test,
 # build-check and scheduled jobs run side by side.

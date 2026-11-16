@@ -66,6 +66,7 @@
 # router (configure-base). Sets the executor options, volumes and environment
 # for every CI job.
 /base/gitlab-runner/                     @root
+/base/gitlab-runner/config.toml          @root @project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6
 
 # === TELEGRAF ===
 # Exec plugins run arbitrary scripts on the host as telegraf user

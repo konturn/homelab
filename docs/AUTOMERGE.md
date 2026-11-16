@@ -32,7 +32,7 @@ What stays with a human:
 The sweep labels such MRs `automerge-manual` and notes the reason on the MR
 (see [Visibility](#visibility-of-manual-updates)).
 
-Five classes share the policy:
+Six classes share the policy:
 
 - **General**: any eligible update. While the sweep schedule carries
   `AUTOMERGE_DRY_RUN=1` this class only logs what it would do.
@@ -44,6 +44,12 @@ Five classes share the policy:
   by Renovate. Nothing is deployed; the sweep watches the main pipeline of
   the merge and reverts on a failure in a job that runs the image. Counts
   against the general budget and follows its dry run. See [CI images](#ci-images).
+- **Runner image**: digest refreshes and patch releases of the GitLab
+  runners' default image (`ubuntu:24.04`) in `base/gitlab-runner/config.toml`,
+  opened by Renovate. `router:deploy` deploys the config; the sweep watches
+  it and the `runner:default-image` canary and reverts on a failure. Counts
+  against the general budget and follows its dry run. See
+  [Runner default image](#runner-default-image).
 - **Dependency**: non-major version bumps in our own build and deploy files,
   opened by Renovate: Dockerfile base images and pinned tool versions, the
   OpenClaw tool npm dependencies, annotated version pins in ansible
@@ -651,6 +657,84 @@ are triggered by a `.gitlab-ci.yml` change in MR pipelines (the linters,
 neither (the kaniko image of the build jobs, which run when their image
 directory changes) is first exercised by a later pipeline; a failure there is
 not attributed to the update automatically.
+
+## Runner default image
+
+Renovate updates the runners' default image in
+`base/gitlab-runner/config.toml` (`image = "ubuntu:24.04@sha256:..."` in each
+runner's `[runners.docker]` table; `customManagers` in `renovate.json`), on
+its own `renovate/runner-*` branch. The runner image class (`runner_images`
+in the policy, `_evaluate_runner` in `ci/automerge/policy.py`) merges those
+without review. An MR qualifies only if, on top of the general checks that
+apply (author list, target, freeze and `major` labels, MR pipeline passed on
+the head commit, not a draft, no conflicts, the general daily budget):
+
+1. the author is listed under `runner_images.authors` (Renovate only);
+2. the only changed file is `base/gitlab-runner/config.toml` (fixed in code,
+   not configurable). Mixing it with any other file disqualifies;
+3. every changed line is a default image line (`image = "<ref>"` directly in
+   a `[runners.docker]` table), edited in place with the same key and
+   spacing. Every other line of the file disqualifies: runner tokens,
+   `network_mode`, `privileged`, volumes, resource limits, `helper_image`,
+   service images, comments, and any added or removed line;
+4. per line: the same image name, the new value exactly
+   `name:tag@sha256:<digest>` (no Jinja: the file is an Ansible template),
+   and a digest refresh of the same tag or a patch release. Minor updates
+   (24.04 to 24.10) and majors (24.04 to 26.04) wait for a human; Renovate
+   labels a minor `automerge-manual` and a major `major`;
+5. the image is on none of `denylist.images`, `ci_images.denylist` and
+   `runner_images.denylist`. `willhallonline/ansible` stays manual by Noah's
+   decision, in CI files and as a runner default image alike;
+6. the automerge bot is a code owner of the file (`CODEOWNERS` lists it for
+   `base/gitlab-runner/config.toml` only; the rest of `base/gitlab-runner/`
+   stays with root);
+7. no open rollback issue holds the image (scope `job=runner`), and no CI
+   image, runner image or dependency merge is still waiting for its main
+   pipeline.
+
+The merge commit carries `Automerge-Class: runner-image` and
+`Automerge-Policy: runner-image`. Unlike the CI image trailer, it does not
+match `.automerged_commit_manual`: the merge deploys like a reviewed one,
+so `router:deploy` runs `configure-base` (the only role whose inputs
+changed, `ci/deploy-scope`), which templates `/etc/gitlab-runner/config.toml`;
+gitlab-runner reloads a changed config on its own. The MR gets the labels
+`automerged`, `automerge-runner-image` and `automerge-runner-watch`.
+
+**What the watch checks.** Only a job without an `image:` of its own (own,
+through `extends`, or `default.image`) runs in the default image, and every
+job in `.gitlab-ci.yml` sets one except `runner:default-image`, a canary
+that exists for this check (`test_only_the_canary_runs_in_the_default_image`
+keeps it that way). On `main` push pipelines that change the runner config,
+the canary runs after `router:deploy`, so the protected runner pulls and
+starts the new default image. Every sweep run checks the main pipeline of
+each merged MR still labelled `automerge-runner-watch`, like the
+[CI image](#ci-images) watch:
+
+- still running: nothing yet;
+- `router:deploy` or the canary failed: a revert MR
+  (`automerge-revert/<iid>`, the previous image lines put back on main), an
+  `automerge-rollback` issue with the scope `job=runner services=<image>`,
+  the MR labelled `automerge-rollback`, a note and mail to root. While the
+  issue is open, the next update of the image in the runner config waits
+  for a human;
+- both passed: the sweep also reads the canary's job log, which must name
+  the new reference (the runner logs the image it starts). A canary that ran
+  in the old image (it started before gitlab-runner reloaded the config), or
+  did not run, leaves a note that the change was not verified, and no
+  revert;
+- only other jobs failed: a note, no revert.
+
+**Why a broken image is recoverable.** The revert path never runs in the
+default image: the sweep (`automerge:sweep`), the MR pipeline of the revert
+MR, `router:deploy` and the per-service deploys all set their own image
+(`.ansible`, `willhallonline/ansible`), and the gitlab-runner process and its
+helper image do not use it. The runners also serve `root/homeassistant`
+(`default.image`) and `root/ha-toyota-connected` (an image per job), whose
+jobs set their own image too (checked 2026-11-16; keep it that way when
+adding jobs there). A bad default image fails the canary only;
+merging the revert MR redeploys the previous image line through
+`router:deploy`. The class only ever changes the image string, so the TOML
+stays valid and the runners keep starting.
 
 ## Dependency updates
 
