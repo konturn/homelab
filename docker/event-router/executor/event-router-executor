@@ -263,9 +263,9 @@ def save_state(f, st, now):
 
 # ---- the request ---------------------------------------------------------------------
 class Refused(Exception):
-    def __init__(self, why, detail=""):
+    def __init__(self, why, detail="", retry_after=None):
         super().__init__(detail)
-        self.why, self.detail = why, detail
+        self.why, self.detail, self.retry_after = why, detail, retry_after
 
 
 REQUEST_KEYS = {"action_type", "target", "incident_id", "playbook"}
@@ -351,8 +351,12 @@ def handle(cfg, req, now):
             if created is None:
                 raise Refused("recent_deploy", f"cannot read {target}'s creation time")
             if now - created < within:
+                # retry_after: seconds until the guard expires; the router
+                # defers the action until then (not yet, rather than never).
                 raise Refused("recent_deploy", f"{target} was (re)created {int((now - created) // 60)}m ago "
-                                               f"by a deploy: a revert, not a restart")
+                                               f"by a deploy: a revert, not a restart, until the "
+                                               f"{int(within // 60)}m guard expires",
+                              retry_after=int(within - (now - created)) + 1)
     elif action == "retry_ci_job":
         job = check_retry(cfg, target)
     else:
@@ -512,6 +516,8 @@ def main():
         reply = dict(handle(cfg, req, now), ok=True)
     except Refused as e:
         reply = {"ok": False, "refused": e.why, "detail": e.detail}
+        if e.retry_after is not None:
+            reply["retry_after"] = e.retry_after
     except (ValueError, UnicodeDecodeError) as e:
         reply = {"ok": False, "refused": "not_allowed", "detail": f"bad request: {e}"}
     except Exception as e:     # the action itself failed

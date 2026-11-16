@@ -28,19 +28,23 @@ time; the script exits non-zero if any check fails.
 
 | cfg | Profile | Instance | Checks | Must |
 |---|---|---|---|---|
-| `ci-safety.cfg` | ci | 4 alerts (`mqtt`, `zig` which needs it, `app` and `appdup` sharing one container), one delivery each | S1–S12 | pass |
-| `ci-pages.cfg` | ci | `mqtt`, `zig` and page-class `sec`, a suppression matching `zig` and `sec` | S1–S12 | pass |
-| `ci-liveness.cfg` | ci | 2 alerts (`mqtt` without a playbook, `app` with one); OpenClaw may stay down for good | S1–S12 and L1, L3, L5, L7, L8 | pass |
-| `ci-fallback.cfg` | ci | the same 2 alerts with Grafana's fallback route modelled; OpenClaw outages end | S1–S12 and L1, L3, L4, L5 | pass |
-| `ci-suppress.cfg` | ci | `app` under a suppression | S1–S12 and L1, L3, L5, L6, L7, L8 | pass |
-| `safety.cfg` | full | 5 alerts (`ci-safety` plus `sec`), `app` delivered up to twice, suppression on `app` and `sec`, fallback on both | S1–S12 | pass |
-| `liveness.cfg` | full | 3 alerts (`mqtt`, `zig`, `app`) | S1–S12 and L1, L3, L5, L7, L8 | pass |
+| `ci-safety.cfg` | ci | 4 alerts (`mqtt`, `zig` which needs it, `app` and `appdup` sharing one container), one delivery each | S1–S13 | pass |
+| `ci-pages.cfg` | ci | `mqtt`, `zig` and page-class `sec`, a suppression matching `zig` and `sec` | S1–S13 | pass |
+| `ci-liveness.cfg` | ci | 2 alerts (`mqtt` without a playbook, `app` with one); OpenClaw may stay down for good | S1–S13 and L1, L3, L5, L7, L8 | pass |
+| `ci-fallback.cfg` | ci | the same 2 alerts with Grafana's fallback route modelled; OpenClaw outages end | S1–S13 and L1, L3, L4, L5 | pass |
+| `ci-suppress.cfg` | ci | `app` under a suppression | S1–S13 and L1, L3, L5, L6, L7, L8 | pass |
+| `ci-deferred.cfg` | ci | `app` (user-facing) with the recent-deploy guard, recreated up to twice; deferred retry and re-escalation | S1–S13 and L5, L7, L8, L9, L10 | pass |
+| `ci-deferred-handoff.cfg` | ci | the same with the forward queue (OpenClaw may stay down for good), no re-escalation | S1–S13 and L1, L3, L5 | pass |
+| `ci-stale.cfg` | ci | `mqtt` (no playbook, not user-facing) re-escalated while it fires | S1–S13 and L1, L3, L10 | pass |
+| `safety.cfg` | full | 5 alerts (`ci-safety` plus `sec`), `app` delivered up to twice, suppression on `app` and `sec`, fallback on both | S1–S13 | pass |
+| `liveness.cfg` | full | 3 alerts (`mqtt`, `zig`, `app`) | S1–S13 and L1, L3, L5, L7, L8 | pass |
 | `mutations/*.cfg` | both | a seed instance; re-delivery bugs use a one-alert instance | the one property named on the `\* expect:` line | fail |
 
 All instances share: 1 run per playbook per rate-limit window, and an
 environment budget of one each of: kill-switch flip, OpenClaw outage, router
 restart, deploy, maintenance window (quiet or assist), rate-window reset,
-suppression and spontaneous alert resolution. Router, executor, forward-queue,
+suppression and spontaneous alert resolution (and, where `GuardFps` is set,
+two recreations of the target by a deploy). Router, executor, forward-queue,
 JIT-bot and Grafana steps are weakly fair; deploys end, the router comes back
 after a restart, windows and suppressions expire. Three constants select the
 phase-3 parts per instance, to keep the state space small:
@@ -51,9 +55,13 @@ phase-3 parts per instance, to keep the state space small:
 - `SuppFps`: the alerts a suppression matches (`{}`: no suppressions).
 - `FallbackFps`: the alerts whose Grafana fallback route to OpenClaw (the
   OpenClaw transform asking the router's `/ack`) is modelled.
+- `GuardFps`: the alerts whose target the recent-deploy guard
+  (`no_deploy_touching`) can cover (doc section 16).
+- `StaleFps`, `UserFacing`: the alerts whose re-escalation is modelled, and
+  those of them that page at the second level.
 
 Liveness is checked on smaller instances because TLC's liveness checking
-grows with states times fairness conditions (11 per alert plus 5 here). Safety on the larger
+grows with states times fairness conditions (13 per alert plus 6 here). Safety on the larger
 ones covers lock contention and re-delivery. Numbers from the last run are
 in section 12.6 of the doc.
 
@@ -74,6 +82,8 @@ events: a quiescent end state is expected, not a bug.
 | `VerifyOk`, `VerifyFail`, `Escalate` | 4.4, 7.4 |
 | `RouterUp` (state persisted) | 4.6 |
 | `MaintClose` (recovery check) | 13.3 |
+| `Refuse` (in `Execute`), `Retry`, `GuardOn`/`GuardOff` (deferred retry) | 16 |
+| `ReEscalate` (stale incidents: re-forward, page if user-facing) | 16 |
 
 Safety properties over actions (S1–S3, S5–S7, S10, S12) are evaluated when
 the action happens and recorded in `viol`; in a correct design `viol`
@@ -113,3 +123,10 @@ before trusting a passing base run.
 | NoLockRelease | lock never released | L5 |
 | NoRecovery | no recovery check when a window closes | L8 (and L1) |
 | NoExpiry | windows never expire | L7 |
+| IgnoreGuard | the executor ignores `no_deploy_touching` | S13 |
+| DeferOnLostReply | a lost reply (the action may have run) is deferred and retried | S8 |
+| RetryPreApproved | a deferred retry goes straight to the executor, which waves it through | S3 |
+| NoRetryNoStale | a time-bounded refusal is handed off and never looked at again (2026-11-14) | L9 |
+| DeferForever | the deferred retry's timer is lost | L9 |
+| NoReEscalation | a handed-off incident that keeps firing is deduped forever | L10 |
+| StaleNoPage | a user-facing service that stays broken is never paged | L10 |

@@ -10,7 +10,9 @@ import sqlite3
 import threading
 import uuid
 
-ACTIVE = ("open", "symptom", "acting", "verifying", "maint")
+# "deferred": the executor refused for a time-bounded reason (a deploy
+# recreated the target recently); the router looks again at `retry_at`.
+ACTIVE = ("open", "symptom", "acting", "verifying", "maint", "deferred")
 TERMINAL = ("resolved", "escalated", "paged", "shadowed", "suppressed", "digest")
 # Terminal states whose alert may still be firing: the root cause is still
 # open for correlation (doc 12.6 e). Everything terminal except "resolved".
@@ -26,7 +28,8 @@ CREATE TABLE IF NOT EXISTS incidents (
   opened_at REAL NOT NULL, updated_at REAL NOT NULL, closed_at REAL,
   deliveries INTEGER NOT NULL DEFAULT 1, exec_count INTEGER NOT NULL DEFAULT 0,
   exec_started_at REAL, verify_deadline REAL, root TEXT, waiting TEXT, note TEXT,
-  summary TEXT, verify_ref TEXT, retry_at REAL, retried INTEGER NOT NULL DEFAULT 0);
+  summary TEXT, verify_ref TEXT, retry_at REAL, retried INTEGER NOT NULL DEFAULT 0,
+  last_seen REAL, stale_level INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS incidents_fp ON incidents(fp, opened_at);
 CREATE INDEX IF NOT EXISTS incidents_status ON incidents(status);
 CREATE TABLE IF NOT EXISTS locks (
@@ -79,7 +82,8 @@ class Store:
     # Columns added after a database was created (phase 3). SQLite has no
     # ADD COLUMN IF NOT EXISTS.
     MIGRATIONS = {"incidents": {"summary": "TEXT", "verify_ref": "TEXT", "retry_at": "REAL",
-                                "retried": "INTEGER NOT NULL DEFAULT 0"}}
+                                "retried": "INTEGER NOT NULL DEFAULT 0", "last_seen": "REAL",
+                                "stale_level": "INTEGER NOT NULL DEFAULT 0"}}
 
     def _migrate(self):
         for table, cols in self.MIGRATIONS.items():
@@ -193,7 +197,7 @@ class Store:
         return [self._inc(r) for r in rows]
 
     def retries_due(self, now):
-        """Incidents with a deferred retry (recent-deploy guard) that is due."""
+        """Incidents with a deferred retry (a time-bounded refusal) that is due."""
         rows = self.conn.execute(
             "SELECT * FROM incidents WHERE retry_at IS NOT NULL AND retry_at <= ? ORDER BY retry_at, rowid",
             (now,)).fetchall()

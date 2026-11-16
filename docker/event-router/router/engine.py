@@ -13,8 +13,9 @@ action, so a reviewer can hold the two side by side:
   _execute      Execute           re-check, then call the executor
   _verify       VerifyOk/Fail     release the lock; resolve or escalate
   _close_windows MaintClose        recovery check after a window
-  _retry_deferred (not in the spec) one re-evaluation after the
-                                  recent-deploy guard, if still firing
+  _execute      Execute           a time-bounded refusal: "deferred"
+  _retry_deferred Retry           deferred -> open once the guard expired
+  _reescalate   ReEscalate        handed off, still firing: re-forward, page
 
 Hand-off (phase 3, `openclaw.forward: true`): "escalated" and "paged"
 incidents are queued for OpenClaw's /hooks/event-router with what the router
@@ -39,7 +40,7 @@ from datetime import datetime, timedelta
 
 from . import maint_text, modes, outcomes
 from . import suppressions as supp
-from .config import CI_ACTIONS, digest_only, ephemeral, match_playbook, page_class
+from .config import CI_ACTIONS, digest_only, ephemeral, match_playbook, page_class, user_facing
 from .events import Event
 from .shared import SharedState
 from .store import ACTIVE, TERMINAL
@@ -50,7 +51,15 @@ DEPLOY_EXEMPT = CI_ACTIONS         # S7: CI actions free the lock or queue behin
 FORWARD_BACKOFF_MAX = 300
 PAGE_REFUSALS = ("rate_limit", "dependency")   # the rest of the refusals are residue
 DECISIONS_IN_PAYLOAD = 12
-RETRY_GRACE = 60                   # past the end of the recent-deploy window
+# Executor refusals that only mean "not yet": the guard behind them expires
+# on its own (doc 16, deferred retry). recent_deploy: the target was
+# (re)created by a deploy less than `no_deploy_touching` ago. The other
+# time-bounded guards are handled where they are checked: a running deploy
+# keeps the incident waiting ("deploy"), a maintenance window parks it until
+# the recovery check ("maintenance"). Rate limits, cooldowns and breakers are
+# not deferred: hitting one means a remediation did not hold, and it pages.
+DEFERRABLE = ("recent_deploy",)
+STALE_STATUSES = ("escalated", "paged", "shadowed")   # handed off; not suppressed or digest
 
 
 def _pb_version(pb):
@@ -213,7 +222,7 @@ class Engine:
             if inc.get("retry_at"):
                 self._set(inc, retry_at=None)
                 self._log({"decision": "retry_cancelled", "reason": "alert resolved before the retry", **ids}, inc)
-            if inc["status"] in ("open", "symptom", "maint"):           # AlertResolves
+            if inc["status"] in ("open", "symptom", "maint", "deferred"):   # AlertResolves
                 self._close(inc, "resolved", note="alert resolved before any action")
                 self._log({"decision": "resolved", "reason": "alert resolved", **ids}, inc)
             elif inc["status"] in TERMINAL and inc["closed_at"] is None:
@@ -222,7 +231,7 @@ class Engine:
 
         if inc is not None and (inc["status"] in ACTIVE or (
                 inc["alert_state"] == "firing" and now - inc["opened_at"] < DEDUPE_TERMINAL_FOR)):
-            self._set(inc, deliveries=inc["deliveries"] + 1)            # same incident
+            self._set(inc, deliveries=inc["deliveries"] + 1, last_seen=now)   # same incident
             self._log({"decision": "deduped", "deliveries": inc["deliveries"], **ids}, inc)
             return
 
@@ -233,7 +242,8 @@ class Engine:
         fields = dict(fp=ev.fp, source=ev.source, kind=ev.kind, rule_uid=ev.rule_uid,
                       alertname=ev.alertname, node=node, labels=ev.labels,
                       playbook=pb.id if pb else None, target=target,
-                      alert_state="firing", page_class=pcls, status="open", summary=ev.summary or None)
+                      alert_state="firing", page_class=pcls, status="open", summary=ev.summary or None,
+                      last_seen=now)
         inc_id = self.store.new_incident(now, **fields)
         inc = self.store.get(inc_id)
         extra = dict({"summary": ev.summary} if ev.summary else {}, **ids)
@@ -286,6 +296,7 @@ class Engine:
         takes at most one transition per pass."""
         self._close_windows()
         self._retry_deferred()
+        self._reescalate()
         for inc in self.store.active():
             inc = self.store.get(inc["id"])
             if inc["status"] not in ACTIVE:
@@ -303,26 +314,110 @@ class Engine:
             # "maint" leaves only through _close_windows (recovery check).
 
     def _retry_deferred(self):
-        """An action the executor refused only because a deploy (re)created
-        the container recently (`no_deploy_touching`) gets one more look
-        once that window is over, if the same alert still fires. Without
-        it, dedupe keeps a still-firing alert one incident for 24h and the
-        playbook never runs. The incident goes back to "open" and takes
-        every guard and limit again (_open, _start, the executor); it is
-        never scheduled a second time."""
+        """Retry: a "deferred" incident (the executor refused for a
+        time-bounded reason, see DEFERRABLE) goes back to "open" once the
+        guard has expired, if its alert still fires, and takes every guard
+        and limit again (_open, _start, the executor): kill switch,
+        maintenance, correlation, breaker, rate limits, the target lock. The
+        refused attempt did not count as a run, so restart-once still means
+        one action per incident. Without this, dedupe keeps a still-firing
+        alert one incident for 24h and the playbook never runs (2026-11-14,
+        plex). Rows of the first version (status "escalated" with a
+        retry_at) are handled the same way."""
         now = self.clock.now()
         for inc in self.store.retries_due(now):
             self._set(inc, retry_at=None)
             latest = self.store.latest_for_fp(inc["fp"])
-            if (inc["status"] != "escalated" or inc["alert_state"] != "firing"
+            if (inc["status"] not in ("deferred", "escalated") or inc["alert_state"] != "firing"
                     or latest is None or latest["id"] != inc["id"]):
+                if inc["status"] == "deferred":
+                    self._close(inc, "resolved" if inc["alert_state"] != "firing" else "escalated")
                 self._log({"decision": "retry_cancelled",
                            "reason": "alert no longer firing" if inc["alert_state"] != "firing"
                            else "incident superseded"}, inc)
                 continue
-            self._set(inc, status="open", closed_at=None, waiting=None, exec_started_at=None,
-                      retried=1)
-            self._log({"decision": "retry", "reason": "recent-deploy window over, alert still firing"}, inc)
+            self._set(inc, status="open", closed_at=None, waiting=None, exec_started_at=None)
+            self._log({"decision": "retry", "deferral": inc["retried"],
+                       "reason": "the guard that refused the action has expired, alert still firing"}, inc)
+
+    def _reescalate(self):
+        """ReEscalate: an incident handed to OpenClaw or Noah (escalated,
+        paged, shadowed) whose alert Grafana keeps re-sending is not deduped
+        into silence. After `stale.reforward_after` it goes to OpenClaw again
+        marked still failing; after `stale.page_after` it goes again, as a
+        page (class still_failing, non-urgent: quiet hours apply) when the
+        service is user-facing. Evidence that it still fires: a delivery
+        within `stale.firing_within` (Grafana repeats every 4h), so a lost
+        resolve never pages. Not inside a maintenance window (the recovery
+        check owns those), never for suppressed or digest-only incidents,
+        and at most once per level."""
+        st = self.cfg["stale"]
+        now = self.clock.now()
+        for inc in self.store.handed_off_firing(now - DEDUPE_TERMINAL_FOR):
+            if inc["status"] not in STALE_STATUSES or inc["source"] != "grafana":
+                continue
+            age = now - inc["opened_at"]
+            want = 2 if age >= st["page_after"] else 1 if age >= st["reforward_after"] else 0
+            if want <= (inc.get("stale_level") or 0):
+                continue
+            if now - (inc.get("last_seen") or inc["opened_at"]) > st["firing_within"]:
+                continue
+            latest = self.store.latest_for_fp(inc["fp"])
+            if latest is None or latest["id"] != inc["id"] or self.in_maint(inc):
+                continue
+            uf = user_facing(self.cfg, inc)
+            page = want == 2 and uf
+            hours = int(age // 3600)
+            name = inc["alertname"] or inc["fp"]
+            reason = (f"still failing after {hours}h: {name} was handed off ({inc['status']}) and "
+                      f"Grafana still re-sends it ({inc['deliveries']} deliveries)")
+            stale = {"level": want, "age_s": int(age), "user_facing": uf, "deliveries": inc["deliveries"]}
+            self._set(inc, stale_level=want)
+            self._log({"decision": "stale_paged" if page else "stale_reforwarded", "reason": reason,
+                       "stale_level": want, "user_facing": uf, "delivery": self._delivery(inc)}, inc)
+            if page:
+                if self.forwarding:
+                    self._handoff(inc, "page", reason, urgent=False, page_cls="still_failing", stale=stale)
+                else:
+                    self._notify(f"Event router: {name}{(' on ' + inc['node']) if inc['node'] else ''} "
+                                 f"still failing after {hours}h (incident {inc['id']}).", urgent=False)
+            elif self.forwarding:
+                self._handoff(inc, "residue", reason, stale=stale)
+
+    def _defer_until(self, refused, res, pb, now):
+        """When a refusal's guard expires (plus a margin), or None if the
+        refusal is not time-bounded. recent_deploy: the executor says how
+        long the guard has left (`retry_after`); an older executor does not,
+        and then the whole window is assumed."""
+        if refused not in DEFERRABLE:
+            return None
+        window = self._deploy_window(pb)
+        if not window:
+            return None
+        left = res.get("retry_after")
+        if isinstance(left, bool) or not isinstance(left, (int, float)) or not 0 <= left <= window:
+            left = window
+        return now + left + self.cfg["deferred"]["grace"]
+
+    def _defer(self, inc, pb, action, refused, reason, text, due):
+        """Not yet, rather than never: record a "deferred" decision with its
+        due time and keep the incident active (re-deliveries dedupe into it,
+        a resolve closes it). The refused attempt did not run, so it does
+        not count against the rate limit. OpenClaw still gets the residue
+        now, with the due time, so it can diagnose (or revert) meanwhile."""
+        now = self.clock.now()
+        n = (inc.get("retried") or 0) + 1
+        at = datetime.fromtimestamp(due).astimezone()
+        self.store.drop_runs(pb.id, inc["id"])
+        self._set(inc, status="deferred", retry_at=due, retried=n, waiting=None)
+        self._log({"decision": "deferred", "action": action, "refused": refused, "deferral": n,
+                   "reason": f"{reason}; the router retries at {at:%H:%M} if the alert still fires",
+                   "retry_at": at.isoformat(timespec="seconds"), "retry_in_s": int(due - now),
+                   "delivery": self._delivery(inc)}, inc)
+        self._handoff(inc, "residue", f"deferred ({refused}): the router retries {action} at "
+                                      f"{at:%H:%M} if the alert still fires")
+        if not self.forwarding:
+            self._notify(f"{text} The router retries at {at:%H:%M} if it still fires.", urgent=False)
 
     def _deploy_window(self, pb):
         for k, v in pb.preconditions:
@@ -534,19 +629,9 @@ class Engine:
         reason = f"executor {('refused: ' + refused) if refused else 'error'}: {res.get('detail') or res.get('error', '')}".strip()
         text = (f"Event router: {action} for {inc['alertname'] or inc['fp']} was not done ({reason}). "
                 f"OpenClaw has the alert.")
-        if refused == "recent_deploy" and not inc.get("retried") and self._deploy_window(pb):
-            # Refused before anything ran: the run does not count, and the
-            # router looks again once the window is over (_retry_deferred).
-            # OpenClaw still gets the residue now, as before.
-            retry_at = now + self._deploy_window(pb) + RETRY_GRACE
-            self.store.drop_runs(pb.id, inc["id"])
-            self._forward(inc, "denied", reason=f"{reason}; the router retries once at "
-                          f"{datetime.fromtimestamp(retry_at).astimezone():%H:%M} if the alert still fires",
-                          action=action, refused=refused, retry_in_s=int(retry_at - now))
-            self._set(inc, retry_at=retry_at)
-            if not self.forwarding:
-                self._notify(text, urgent=False)
-            return
+        due = self._defer_until(refused, res, pb, now)
+        if due is not None and (inc.get("retried") or 0) < self.cfg["deferred"]["max_per_incident"]:
+            return self._defer(inc, pb, action, refused, reason, text, due)
         if refused and refused not in PAGE_REFUSALS:
             # A precondition that did not hold (a deploy touched the
             # container, the job is not orphaned or was superseded): nothing
@@ -766,7 +851,7 @@ class Engine:
     def _urgent(self, pcls):
         return bool((self.cfg["page_classes"].get(pcls) or {}).get("urgent"))
 
-    def _handoff(self, inc, kind, reason, urgent=False, page_cls=None):
+    def _handoff(self, inc, kind, reason, urgent=False, page_cls=None, stale=None):
         """Queue the incident for OpenClaw (residue or page). A no-op without
         forwarding (phases 1-2: Grafana delivers to OpenClaw itself)."""
         if not self.forwarding:
@@ -777,15 +862,15 @@ class Engine:
         if kind == "page" and not urgent:
             due = self.quiet_until(now)                  # decision 6
             held = due > now
-        payload = self._payload(inc, kind, reason, urgent, page_cls or inc.get("page_class"), held)
+        payload = self._payload(inc, kind, reason, urgent, page_cls or inc.get("page_class"), held, stale)
         fid = self.store.add_forward(inc["id"], kind, urgent, now, due, payload)
         self._log({"decision": "queued", "forward": fid, "kind": kind, "urgent": urgent,
                    "due_in_s": int(due - now)}, inc)
 
-    def _payload(self, inc, kind, reason, urgent, pcls, held):
+    def _payload(self, inc, kind, reason, urgent, pcls, held, stale=None):
         pb = self.playbooks.get(inc["playbook"]) if inc.get("playbook") else None
         decisions = [{k: d[k] for k in ("ts", "decision", "reason", "action", "result", "detail",
-                                        "root", "root_node", "mode", "refused") if k in d}
+                                        "root", "root_node", "mode", "refused", "retry_at") if k in d}
                      for d in self.store.decisions_for(inc["id"])][-DECISIONS_IN_PAYLOAD:]
         quiet = self.quiet_until(self.clock.now()) > self.clock.now()
         return {
@@ -802,9 +887,11 @@ class Engine:
             "decisions": decisions,
             "dependencies": sorted(self.graph.ancestors(inc["node"]))[:20] if inc["node"] else [],
             "page": ({"class": pcls, "urgent": urgent, "held_for_quiet_hours": held,
-                      "email": inc["source"] == "grafana" and pcls not in (None, "failed_remediation")}
+                      "email": inc["source"] == "grafana"
+                               and pcls not in (None, "failed_remediation", "still_failing")}
                      if kind == "page" else None),
             "quiet_hours": quiet,
+            "stale": stale,
             "outcome": {"url": "http://event-router:8080/outcome", "incident": inc["id"]},
         }
 
@@ -820,7 +907,9 @@ class Engine:
         for f in self.store.pending_forwards():
             now = self.clock.now()
             inc = self.store.get(f["incident"])
-            expired = now - f["created"] > oc["max_age"]
+            # Counted from when the item became due: a page held for quiet
+            # hours must not expire the moment it may go out.
+            expired = now - max(f["created"], f["due_at"]) > oc["max_age"]
             if f["due_at"] > now and not expired:
                 continue
             if (f["kind"] == "page" and f["due_at"] > f["created"] and inc["alert_state"] == "resolved"
@@ -960,7 +1049,7 @@ class Engine:
                 bucket = pages if d.get("kind") == "page" else residue
                 bucket[key] = bucket.get(key, 0) + 1
             if d.get("playbook") and dec in ("executed", "verified", "verify_failed", "failed", "denied",
-                                              "rate_limited", "breaker_open"):
+                                              "rate_limited", "breaker_open", "deferred", "retry"):
                 c = per_pb.setdefault(d["playbook"], {})
                 c[dec] = c.get(dec, 0) + 1
             if dec == "verified" and "duration_s" in d:

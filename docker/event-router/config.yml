@@ -34,6 +34,36 @@ openclaw:
   jit_after: 2m        # a page OpenClaw has not taken by then goes out through the JIT bot
   ack_window: 6h       # > the event-router route's repeat_interval (4h)
 
+# Deferred retry (doc 16): an action the executor refused for a
+# time-bounded reason (recent_deploy: a deploy recreated the target less
+# than no_deploy_touching ago) is "not yet", not "never". The incident stays
+# open as `deferred` and the playbook is re-evaluated when the guard expires
+# (+ grace) if the alert still fires, through every guard and limit again.
+deferred:
+  max_per_incident: 2    # a second deploy inside the window (often the revert) may defer once more
+  grace: 1m
+
+# Re-escalation of long-lived incidents (doc 16): an incident handed to
+# OpenClaw or Noah whose alert Grafana keeps re-sending is not deduped into
+# silence for 24h. At reforward_after it goes to OpenClaw again, marked still
+# failing; at page_after again, and for user_facing services as a page
+# (class still_failing, non-urgent: held through quiet hours). Evidence that
+# it still fires: a delivery within firing_within (> the 4h repeat_interval).
+stale:
+  reforward_after: 2h
+  page_after: 6h
+  firing_within: 270m
+  user_facing:           # container names or nodes (globs): what Noah notices himself
+    - plex
+    - homeassistant
+    - zigbee2mqtt
+    - snapserver
+    - snapclient*
+    - mopidy
+    - navidrome
+    - booksonic
+    - airplay_*
+
 # GitLab webhook (POST /gitlab; routing table rows 9 and 10).
 gitlab_events:
   projects: [4, 14]
