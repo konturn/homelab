@@ -30,6 +30,11 @@ containers=${DEADMAN_CONTAINERS:-nginx lab_nginx grafana homeassistant vault git
 grafana_url=${DEADMAN_GRAFANA_URL:-https://grafana.lab.nkontur.com/api/health}
 grafana_resolve=${DEADMAN_GRAFANA_RESOLVE:-grafana.lab.nkontur.com:443:10.3.32.1}
 vault_url=${DEADMAN_VAULT_URL:-https://10.3.32.6:8200/v1/sys/health}
+# A container whose healthcheck still says "starting" passes for this many
+# seconds after it started: a planned recreate (a GitLab upgrade takes
+# minutes to come up) is not an outage. Docker itself turns "starting" into
+# "unhealthy" after start_period + retries, so this only bridges that window.
+start_grace=${DEADMAN_START_GRACE:-900}
 
 dry_run=0
 force_fail=${DEADMAN_FORCE_FAIL:-0}
@@ -100,16 +105,26 @@ check_docker() {
         return
     fi
     record ok dockerd "server $(detail)"
-    local c state
+    local c state started age
     for c in $containers; do
         if ! deadline docker inspect --type container --format \
-            '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' "$c"; then
+            '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}} {{.State.StartedAt}}' "$c"; then
             record FAIL "container:$c" "inspect failed: $(detail)"
             continue
         fi
-        state=$(detail)
+        started=$(detail)
+        state=${started% *}
+        started=${started##* }
         case $state in
             "running healthy"|"running no-healthcheck") record ok "container:$c" "$state" ;;
+            "running starting")
+                age=$(( $(date +%s) - $(date -d "$started" +%s 2>/dev/null || echo 0) ))
+                if [ "$age" -lt "$start_grace" ]; then
+                    record ok "container:$c" "$state (${age}s after start, grace ${start_grace}s)"
+                else
+                    record FAIL "container:$c" "$state (${age}s after start)"
+                fi
+                ;;
             *) record FAIL "container:$c" "$state" ;;
         esac
     done
