@@ -9,24 +9,23 @@ import (
 func TestTierFor(t *testing.T) {
 	cfg := &Config{
 		Tiers: map[int]TierConfig{
-			1: {TTL: 15 * time.Minute, AutoApprove: true, Description: "Auto-approve services"},
-			2: {TTL: 30 * time.Minute, AutoApprove: false, Description: "Infrastructure"},
-			3: {TTL: 60 * time.Minute, AutoApprove: false, Description: "Critical"},
+			1: {TTL: 15 * time.Minute, Description: "Auto-approve services"},
+			2: {TTL: 30 * time.Minute, Description: "Infrastructure"},
+			3: {TTL: 60 * time.Minute, Description: "Critical"},
 		},
 	}
 
 	tests := []struct {
-		tier     int
-		wantTTL  time.Duration
-		wantAuto bool
-		wantErr  bool
+		tier    int
+		wantTTL time.Duration
+		wantErr bool
 	}{
-		{1, 15 * time.Minute, true, false},
-		{2, 30 * time.Minute, false, false},
-		{3, 60 * time.Minute, false, false},
-		{0, 0, false, true},
-		{4, 0, false, true},
-		{-1, 0, false, true},
+		{1, 15 * time.Minute, false},
+		{2, 30 * time.Minute, false},
+		{3, 60 * time.Minute, false},
+		{0, 0, true},
+		{4, 0, true},
+		{-1, 0, true},
 	}
 
 	for _, tt := range tests {
@@ -44,18 +43,15 @@ func TestTierFor(t *testing.T) {
 		if tc.TTL != tt.wantTTL {
 			t.Errorf("tier %d: TTL = %v, want %v", tt.tier, tc.TTL, tt.wantTTL)
 		}
-		if tc.AutoApprove != tt.wantAuto {
-			t.Errorf("tier %d: AutoApprove = %v, want %v", tt.tier, tc.AutoApprove, tt.wantAuto)
-		}
 	}
 }
 
 func TestTTLFor(t *testing.T) {
 	cfg := &Config{
 		Tiers: map[int]TierConfig{
-			1: {TTL: 15 * time.Minute, AutoApprove: true},
-			2: {TTL: 30 * time.Minute, AutoApprove: false},
-			3: {TTL: 60 * time.Minute, AutoApprove: false},
+			1: {TTL: 15 * time.Minute},
+			2: {TTL: 30 * time.Minute},
+			3: {TTL: 60 * time.Minute},
 		},
 		ResourceTTLOverrides: map[string]time.Duration{
 			"ssh-nkontur":  8 * time.Hour,
@@ -103,7 +99,7 @@ func TestTTLFor(t *testing.T) {
 func TestTTLForNilOverrides(t *testing.T) {
 	cfg := &Config{
 		Tiers: map[int]TierConfig{
-			1: {TTL: 15 * time.Minute, AutoApprove: true},
+			1: {TTL: 15 * time.Minute},
 		},
 	}
 
@@ -117,29 +113,6 @@ func TestTTLForNilOverrides(t *testing.T) {
 	}
 }
 
-func TestIsRequesterAllowed(t *testing.T) {
-	cfg := &Config{
-		AllowedRequesters: []string{"prometheus", "backup-agent"},
-	}
-
-	tests := []struct {
-		requester string
-		want      bool
-	}{
-		{"prometheus", true},
-		{"backup-agent", true},
-		{"unknown", false},
-		{"", false},
-	}
-
-	for _, tt := range tests {
-		got := cfg.IsRequesterAllowed(tt.requester)
-		if got != tt.want {
-			t.Errorf("IsRequesterAllowed(%q) = %v, want %v", tt.requester, got, tt.want)
-		}
-	}
-}
-
 func TestValidate(t *testing.T) {
 	base := Config{
 		VaultAddr:             "https://vault.example.com",
@@ -147,54 +120,59 @@ func TestValidate(t *testing.T) {
 		VaultSecretID:         "secret-id",
 		TelegramBotToken:      "bot-token",
 		TelegramWebhookSecret: "webhook-secret",
-		JITAPIKey:             "test-api-key",
+		RequesterKeys:         []RequesterKey{{Name: "openclaw-noah", Hash: HashKey("noah-key")}},
+		ApprovalMatrix:        DefaultApprovalMatrix(),
+		Tiers: map[int]TierConfig{
+			1: {TTL: 15 * time.Minute}, 2: {TTL: 30 * time.Minute}, 3: {TTL: 30 * time.Minute},
+		},
 	}
 
-	// Valid config
 	if err := base.Validate(); err != nil {
 		t.Errorf("expected valid config, got: %v", err)
 	}
 
-	// Missing VaultAddr
+	for name, mutate := range map[string]func(c *Config){
+		"missing VaultAddr":             func(c *Config) { c.VaultAddr = "" },
+		"missing VaultRoleID":           func(c *Config) { c.VaultRoleID = "" },
+		"missing VaultSecretID":         func(c *Config) { c.VaultSecretID = "" },
+		"missing TelegramBotToken":      func(c *Config) { c.TelegramBotToken = "" },
+		"missing TelegramWebhookSecret": func(c *Config) { c.TelegramWebhookSecret = "" },
+		"no credential at all":          func(c *Config) { c.RequesterKeys = nil },
+		"shared key equals a requester key": func(c *Config) {
+			c.JITAPIKey = "noah-key"
+		},
+		"shared key requester also has a key": func(c *Config) {
+			c.JITAPIKey = "other"
+			c.RequesterKeys = append(c.RequesterKeys, RequesterKey{Name: LegacyRequester, Hash: HashKey("p")})
+		},
+		"tier 3 auto": func(c *Config) {
+			c.ApprovalMatrix = map[string]map[int]Decision{"openclaw-noah": {1: DecisionAuto, 2: DecisionAuto, 3: DecisionAuto}}
+		},
+		"tier 3 auto-fyi": func(c *Config) {
+			c.ApprovalMatrix = map[string]map[int]Decision{"openclaw-noah": {1: DecisionAuto, 2: DecisionAuto, 3: DecisionAutoFYI}}
+		},
+		"row without tier 2": func(c *Config) {
+			c.ApprovalMatrix = map[string]map[int]Decision{"openclaw-noah": {1: DecisionAuto, 3: DecisionDeny}}
+		},
+		"missing tier TTL": func(c *Config) { delete(c.Tiers, 3) },
+	} {
+		c := base
+		c.Tiers = map[int]TierConfig{}
+		for k, v := range base.Tiers {
+			c.Tiers[k] = v
+		}
+		mutate(&c)
+		if err := c.Validate(); err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+	}
+
+	// The legacy shared key alone is still a valid configuration.
 	c := base
-	c.VaultAddr = ""
-	if err := c.Validate(); err == nil {
-		t.Error("expected error for missing VaultAddr")
-	}
-
-	// Missing VaultRoleID
-	c = base
-	c.VaultRoleID = ""
-	if err := c.Validate(); err == nil {
-		t.Error("expected error for missing VaultRoleID")
-	}
-
-	// Missing VaultSecretID
-	c = base
-	c.VaultSecretID = ""
-	if err := c.Validate(); err == nil {
-		t.Error("expected error for missing VaultSecretID")
-	}
-
-	// Missing TelegramBotToken
-	c = base
-	c.TelegramBotToken = ""
-	if err := c.Validate(); err == nil {
-		t.Error("expected error for missing TelegramBotToken")
-	}
-
-	// Missing TelegramWebhookSecret
-	c = base
-	c.TelegramWebhookSecret = ""
-	if err := c.Validate(); err == nil {
-		t.Error("expected error for missing TelegramWebhookSecret")
-	}
-
-	// Missing JITAPIKey
-	c = base
-	c.JITAPIKey = ""
-	if err := c.Validate(); err == nil {
-		t.Error("expected error for missing JITAPIKey")
+	c.RequesterKeys = nil
+	c.JITAPIKey = "shared"
+	if err := c.Validate(); err != nil {
+		t.Errorf("legacy key only: %v", err)
 	}
 }
 

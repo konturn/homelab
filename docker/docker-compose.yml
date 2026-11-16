@@ -1342,10 +1342,17 @@ services:
       - TELEGRAM_WEBHOOK_SECRET={{ vault_jit_telegram_webhook_secret | replace("$", "$$") }}
       - LISTEN_ADDR=:8080
       - REQUEST_TIMEOUT=300
-      - ALLOWED_REQUESTERS=prometheus
+      # Requesters are identified by their key (SHA-256 per requester; the
+      # keys themselves are only in homelab/agents/openclaw-*), never by the
+      # request body. Requester x tier -> auto | auto-fyi | approve | deny;
+      # unknown requesters are denied. docs/design/openclaw-identities.md
+      - JIT_REQUESTER_KEYS={{ vault_jit_requester_keys | replace("$", "$$") }}
+      - JIT_APPROVAL_MATRIX=openclaw-noah=auto,auto-fyi,approve;openclaw-ops=auto,approve,deny;prometheus=auto,approve,approve
       # Requests per resource per requester per 15 min. Twice the busiest
       # resource's observed peak (Grafana/InfluxDB checks in agent bursts).
       - JIT_RATE_LIMIT_MAX=72
+      # Shared key from before per-requester keys (requester "prometheus"),
+      # kept until OpenClaw uses its own keys.
       - JIT_API_KEY={{ vault_jit_api_key | replace("$", "$$") }}
       - GITLAB_URL=https://gitlab.lab.nkontur.com
       - GITLAB_ADMIN_TOKEN={{ vault_jit_gitlab_admin_token | replace("$", "$$") }}
