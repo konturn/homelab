@@ -144,9 +144,14 @@ func TestProxyGrantValidation(t *testing.T) {
 	if len(f.take()) != 0 || len(rec.take()) != 0 {
 		t.Fatal("something was minted")
 	}
-	// Still static (transition): the old path keeps working until cutover.
-	if code, _ := grantReq(t, h, "openclaw-noah", map[string]interface{}{"resource": "radarr", "tier": 1, "reason": "x"}); code != http.StatusCreated {
-		t.Fatalf("static radarr during transition: %d", code)
+	// radarr has moved: no static token for it any more.
+	if code, _ := grantReq(t, h, "openclaw-noah", map[string]interface{}{"resource": "radarr", "tier": 1, "reason": "x"}); code != http.StatusBadRequest {
+		t.Fatalf("static radarr after cutover: %d", code)
+	}
+	// A resource with both (during a migration) keeps its static path.
+	f.tiers["mqtt"] = map[string]int{"read": 1}
+	if code, _ := grantReq(t, h, "openclaw-noah", map[string]interface{}{"resource": "mqtt", "tier": 1, "reason": "x"}); code != http.StatusCreated {
+		t.Fatalf("static path during a migration: %d", code)
 	}
 }
 

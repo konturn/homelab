@@ -385,18 +385,14 @@ func MinTierForResource(resource string) int {
 // Resources with a dynamic backend are deliberately absent: if their backend
 // is not configured, the static fallback refuses them instead of handing out
 // a Vault token.
+//
+// The services behind the credential proxy (docker/jit-proxy: radarr, sonarr,
+// prowlarr, plex, ombi, nzbget, deluge, tautulli, pihole) are absent too: the
+// agent gets proxy grants for them, never a token that reads their secrets.
+// MQTT and IPMI are not HTTP and stay here (design 8.4, Q15).
 var staticResourcePaths = map[string][]string{
-	"radarr":   {"homelab/data/docker/radarr"},
-	"sonarr":   {"homelab/data/docker/sonarr"},
-	"plex":     {"homelab/data/docker/plex"},
-	"ombi":     {"homelab/data/docker/ombi"},
-	"nzbget":   {"homelab/data/docker/nzbget"},
-	"deluge":   {"homelab/data/docker/deluge"},
-	"prowlarr": {"homelab/data/docker/prowlarr"},
-	"tautulli": {"homelab/data/docker/tautulli"},
-	"mqtt":     {"homelab/data/mqtt/mosquitto"},
-	"pihole":   {"homelab/data/infrastructure/pihole"},
-	"ipmi":     {"homelab/data/infrastructure/ipmi"},
+	"mqtt": {"homelab/data/mqtt/mosquitto"},
+	"ipmi": {"homelab/data/infrastructure/ipmi"},
 }
 
 // IsStaticResource reports whether a resource is served by the static

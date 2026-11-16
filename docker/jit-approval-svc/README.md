@@ -40,7 +40,8 @@ The secrets the dynamic backends mint from (upstream admin tokens, OAuth clients
 | `gmail-read`, `gmail-send` | Dynamic (GmailBackend) | Google OAuth2 access token (read-only / send scope) |
 | `ssh-*` (router, satellite, zwave, macmini, user hosts; `-elevated` variants) | Dynamic (SSHBackend) | Vault-signed SSH certificate |
 | `vault` | Dynamic (VaultDynamicBackend) | Vault token with a per-request policy for the requested `vault_paths` |
-| Plex, Radarr, Sonarr, Prowlarr, Ombi, NZBGet, Deluge, Tautulli, MQTT, Pi-hole, IPMI | Static (Vault) | Scoped Vault token |
+| Radarr, Sonarr, Prowlarr, Plex, Ombi, NZBGet, Deluge, Tautulli, Pi-hole | Credential proxy (`internal/proxygrant`, `docker/jit-proxy`) | Proxy grant (`jitp_…`): the agent never receives the service's secret; see [Credential proxy](#credential-proxy) |
+| MQTT, IPMI | Static (Vault) | Vault token with the resource's own `jit-static-*` policy (not HTTP; design 8.4) |
 
 The `vault` backend writes a policy `jit-vault-<request id>` whose first line
 records the token's expiry (`# jit-expires-at: <RFC 3339>`), and deletes it
@@ -85,9 +86,13 @@ Agent --GET /r/<resource>/<path>  Authorization: Bearer jitp_...  X-JIT-API-Key:
   broker revokes it on the proxy when it expires, and re-registers live
   multi-use grants when the proxy restarts. Single-use grants are never
   re-registered.
-- **Migration.** While a resource is still in `staticResourcePaths`, the old
-  static credential also works. Once it is removed there (and from
-  `jit-static-*`), only proxy grants are issued for it.
+- **Proxy only.** All nine resources above have been removed from
+  `staticResourcePaths` and from the `jit-static-*` policies: no Vault token
+  that reads their secrets is issued any more, and a request for them without
+  `credential_type: "proxy_grant"` is refused (400). Moving another HTTP
+  service works the same way: add a template file and the Vault path to
+  `local.jit_proxy_paths`, move its consumers to `jitcurl`, then remove its
+  static path.
 - **The agent side** is `jitcurl` (`docker/openclaw/jitcurl.sh`, mounted
   read-only at `/usr/local/bin/jitcurl`):
   `jitcurl radarr read GET '/api/v3/movie/lookup?term=x'`.

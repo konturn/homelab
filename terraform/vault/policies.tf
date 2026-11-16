@@ -386,17 +386,8 @@ resource "vault_policy" "jit_approval_svc" {
 
 locals {
   jit_static_resources = {
-    radarr   = ["homelab/data/docker/radarr"]
-    sonarr   = ["homelab/data/docker/sonarr"]
-    plex     = ["homelab/data/docker/plex"]
-    ombi     = ["homelab/data/docker/ombi"]
-    nzbget   = ["homelab/data/docker/nzbget"]
-    deluge   = ["homelab/data/docker/deluge"]
-    prowlarr = ["homelab/data/docker/prowlarr"]
-    tautulli = ["homelab/data/docker/tautulli"]
-    mqtt     = ["homelab/data/mqtt/mosquitto"]
-    pihole   = ["homelab/data/infrastructure/pihole"]
-    ipmi     = ["homelab/data/infrastructure/ipmi"]
+    mqtt = ["homelab/data/mqtt/mosquitto"]
+    ipmi = ["homelab/data/infrastructure/ipmi"]
   }
 }
 

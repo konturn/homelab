@@ -10,8 +10,8 @@ import (
 )
 
 // staticTier1, staticTier2 and staticTier3 are the static-backend resources by tier.
-var staticTier1 = []string{"plex", "radarr", "sonarr", "ombi", "nzbget", "deluge", "prowlarr", "tautulli", "mqtt"}
-var staticTier2 = []string{"pihole"}
+var staticTier1 = []string{"mqtt"}
+var staticTier2 = []string{}
 var staticTier3 = []string{"ipmi"}
 
 func TestPoliciesForResource_StaticGetsOwnPolicy(t *testing.T) {
@@ -146,8 +146,8 @@ func TestPoliciesForResource_WrongTier(t *testing.T) {
 		t.Errorf("expected nil for wrong tier, got %v", policies)
 	}
 
-	// radarr is tier 1, requesting tier 0 should fail
-	policies = policiesForResource("radarr", 0)
+	// mqtt is tier 1, requesting tier 0 should fail
+	policies = policiesForResource("mqtt", 0)
 	if policies != nil {
 		t.Errorf("expected nil for wrong tier, got %v", policies)
 	}
@@ -184,6 +184,20 @@ func TestResourceTierConsistency(t *testing.T) {
 	for resource, tier := range resourceTier {
 		if tier < 1 || tier > 3 {
 			t.Errorf("resource %q maps to invalid tier %d", resource, tier)
+		}
+	}
+}
+
+// The credential-proxy resources never get a static token.
+func TestProxiedResourcesHaveNoStaticPath(t *testing.T) {
+	for _, res := range []string{"radarr", "sonarr", "prowlarr", "plex", "ombi", "nzbget", "deluge", "tautulli", "pihole"} {
+		if IsStaticResource(res) {
+			t.Errorf("%s still has a static path", res)
+		}
+		for tier := 0; tier <= 3; tier++ {
+			if p := policiesForResource(res, tier); p != nil {
+				t.Errorf("%s tier %d: static policies %v", res, tier, p)
+			}
 		}
 	}
 }
