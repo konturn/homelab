@@ -1273,8 +1273,12 @@ vault:rotate-approles:
         fi
       }
 
+      # rotate_approle <role> [lookup]: "lookup" verifies the new secret_id by
+      # looking it up instead of logging in, for roles whose logins are bound
+      # to another address (secret_id_bound_cidrs) than this job's.
       rotate_approle() {
         local role_name="$1"
+        local verify="${2:-login}"
         echo ""
         echo "=== Rotating AppRole: ${role_name} ==="
 
@@ -1302,6 +1306,16 @@ vault:rotate-approles:
         fi
         echo "  New secret_id generated"
 
+        if [ "$verify" = lookup ]; then
+          local LOOKUP
+          LOOKUP=$(vault_api POST "auth/approle/role/${role_name}/secret-id/lookup" \
+            "{\"secret_id\":\"$NEW_SECRET_ID\"}")
+          if ! echo "$LOOKUP" | jq -e '.data.secret_id_accessor' > /dev/null 2>&1; then
+            echo "ERROR: secret_id lookup FAILED for ${role_name} — aborting"
+            return 1
+          fi
+          echo "  secret_id lookup passed (logins are bound to the service's address)"
+        else
         # Verify login with new credentials
         local LOGIN_TEST
         LOGIN_TEST=$(curl -sk --max-time 10 -X POST \
@@ -1312,6 +1326,7 @@ vault:rotate-approles:
           return 1
         fi
         echo "  Login verification passed"
+        fi
 
         # Return values via globals (sh-compatible)
         _ROTATED_ROLE_ID="$ROLE_ID"
@@ -1442,7 +1457,7 @@ vault:rotate-approles:
       # 2b. Rotate jit-proxy AppRole (stored in Vault KV, with the
       #     control-plane key; the key is generated once and kept)
       # -----------------------------------------------------------------
-      if rotate_approle "jit-proxy"; then
+      if rotate_approle "jit-proxy" lookup; then
         echo "=== Updating jit-proxy credentials in Vault ==="
         EXISTING=$(vault_api GET "homelab/data/docker/jit-proxy")
         CTL_KEY=$(echo "$EXISTING" | jq -r '.data.data.ctl_key // empty' 2>/dev/null)
