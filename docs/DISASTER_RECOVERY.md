@@ -39,7 +39,7 @@ These values are everything needed for full recovery:
 | `RESTIC_REPOSITORY` | Backup repo URL (e.g. `s3:s3.us-east-005.backblazeb2.com/nkontur-homelab`) |
 | `RESTIC_PASSWORD` | Restic repository encryption password |
 | Vault unseal keys (3 of 5) | Unseal Vault for secrets management |
-| LUKS password | Decrypt data drives |
+| LUKS password | Decrypt data drives; also recreates `/etc/password_file.txt`, which is not in the backup |
 
 **Where to keep these:** Encrypted file in cloud storage (1Password, Google Drive, etc.) or printed in a safe deposit box. Do NOT rely solely on GitLab CI variables — they live on the router you're recovering.
 
@@ -186,7 +186,8 @@ This runs `ansible/bootstrap.yml` which:
 
 Once Layer 1 is healthy, run the normal CI pipeline:
 
-0. If the host was reinstalled without restoring `/etc/ssh/ssh_host_*`, its
+0. If the host was reinstalled without restoring `/etc/ssh/ssh_host_*`
+   (see [Restoring /etc](#restoring-etc)), its
    host keys changed and CI (strict host key checking) will refuse to connect.
    Update `ansible/known_hosts` first: see [DEPLOY.md](DEPLOY.md#ssh-host-keys).
 1. Push a commit (or re-run the pipeline)
@@ -218,6 +219,57 @@ restic restore latest --target / --include /mpool/plex/Family
 ```
 
 Restart services after restoring: `cd /persistent_data/application/ansible_state && docker compose down && docker compose up -d`
+
+---
+
+## Restoring /etc
+
+The nightly backup has its own snapshot of `/etc` (path `/etc` in
+`restic snapshots`). Use it to bring a rebuilt boot SSD back to the exact
+network, SSH and system config. Do **not** restore it over a fresh install
+wholesale: `fstab`, `crypttab`, `machine-id` and the initramfs config refer
+to the old disks and install. Restore to a staging directory and copy back
+what you need:
+
+```bash
+# same B2/restic environment as "Additional Data Restore" above
+restic snapshots --path /etc            # pick a date if latest is not wanted
+restic restore latest --path /etc --target /restore
+# files land in /restore/etc/...
+```
+
+Copy back selectively, checking each against the new install first:
+
+| What | Paths | Notes |
+|------|-------|-------|
+| Network | `/etc/netplan/`, `/etc/hostname`, `/etc/hosts` | Interface names can change with new hardware; check `ip link` before `netplan apply`. Replaces the bootstrap netplan from Phase 1. |
+| SSH host keys | `/etc/ssh/ssh_host_*`, `/etc/ssh/sshd_config.d/` | Keeps the hosts identity, so CIs `ansible/known_hosts` still matches (no Phase 4 step 0). Keys must stay `0600 root:root`; then `systemctl restart ssh`. |
+| Disk unlock | `/etc/crypttab` | Compare UUIDs with `blkid` before using it. The key file it names is **not** in the backup (below). Run `update-initramfs -u` afterwards. |
+| CI runner | `/etc/gitlab-runner/` | Runner tokens and `config.toml`; avoids re-registering (Phase 2, "Register the runner"). |
+| VPN | `/etc/wireguard/` | WireGuard configs and keys. |
+| Everything else | e.g. `/etc/systemd/system/`, `/etc/cron.d/`, `/etc/sysctl.d/` | Most of it is rewritten by the router deploy anyway; use the snapshot as a reference for anything that is not. |
+
+```bash
+cp -a /restore/etc/netplan/. /etc/netplan/
+cp -a /restore/etc/ssh/ssh_host_* /etc/ssh/
+cp -a /restore/etc/gitlab-runner/. /etc/gitlab-runner/
+rm -rf /restore    # holds key material; do not leave it around
+```
+
+**The data disk key file is deliberately not in the backup.**
+`/etc/password_file.txt` (the key file `crypttab` uses for `persistent_data`
+and every mpool disk) is excluded from every restic path. Recreate it from
+the LUKS password in offsite storage (*What You Need*) or, once Vault is up,
+from Vault `homelab/infrastructure/luks`, field `password_base64`:
+
+```bash
+echo "$LUKS_PASSWORD_BASE64" | base64 -d > /etc/password_file.txt
+chmod 600 /etc/password_file.txt
+```
+
+The router deploy (`configure-base`) also writes it from Vault and checks it
+against the LUKS devices. Timestamped CUPS `printers.conf.*` copies are also
+excluded (bulk only; `printers.conf` itself is kept).
 
 ---
 

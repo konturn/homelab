@@ -98,6 +98,10 @@
         - {path: "/mpool/plex/Family"}
         - {path: "/var/log"}
         - {path: "/root"}
+        # Host config for a boot SSD rebuild (docs/DISASTER_RECOVERY.md,
+        # "Restoring /etc"). CUPS keeps a timestamped printers.conf copy on
+        # every change (~700M of them); printers.conf itself stays in.
+        - {path: "/etc", exclude: "/etc/cups/printers.conf.*"}
         # Staging copy of the Mac mini, pulled just before this backup by
         # restic-macmini-pull.service (role macmini-backup). No global
         # excludes: it comes from one APFS snapshot, so its SQLite *-wal files

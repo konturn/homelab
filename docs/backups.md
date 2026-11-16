@@ -425,8 +425,11 @@ irreversibility of enabling it. It stays an option for that threat.
 - `/mpool/plex/Photos` & `/mpool/plex/Family` (personal media)
 - `/var/log` (system logs)
 - `/root` (root home directory)
+- `/etc` (host config; restore selectively, see DISASTER_RECOVERY.md, "Restoring /etc")
 
 **Excluded:**
+- `/etc/password_file.txt` (data disk key file; recreated from Vault or offsite storage)
+- `/etc/cups/printers.conf.*` (timestamped CUPS copies)
 - `/mpool/plex/transcode` (ephemeral)
 - Large media files (movies/TV shows - can be re-downloaded)
 - `/mpool/plex/Movies` and `/mpool/plex/TV` (optional, storage-dependent)

@@ -14,6 +14,9 @@ restic_default_folders:
 # Vault unseal keys on disk + offsite backup = defeat the purpose of seal/unseal.
 restic_global_excludes:
   - "/persistent_data/application/vault/unseal"
+  # Data disk key file (crypttab). Rebuilt from Vault or the offsite copy,
+  # never taken from a backup (docs/DISASTER_RECOVERY.md, "Restoring /etc").
+  - "/etc/password_file.txt"
   # libvirt VMs (configure-excel-vm): the excel-vm disk holds work data and
   # is ~100G; install ISOs are re-downloadable. /persistent_data/vms is outside
   # every restic folder today -- these patterns keep it out even if a folder
