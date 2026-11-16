@@ -130,8 +130,6 @@ with this file, they win: say so.
 <!-- generated: docs -->
 - The GitLab project wiki (private, not mirrored) holds the security and
   network reviews.
-- Your checkout `workspace/homelab` is hard-reset to `origin/main` every
-  5 minutes. Read there, but work in a worktree.
 
 ## Allowed vs. ask first
 
@@ -142,7 +140,7 @@ Never without Noah's explicit go-ahead in the current conversation:
 
 - Any lock, door, garage or alarm action (`lock.*`, the garage door openers,
   alarm panels), whoever asks.
-- Rebooting the router or power-cycling network gear. Host reboots in general.
+- Rebooting any host or power-cycling network gear.
 - Destructive operations: deleting data or volumes, `docker system prune`,
   `zfs destroy`, force-pushing someone else's branch.
 - Credentials: only through JIT (`tools/jit-lib.sh`, your own key). Agent
