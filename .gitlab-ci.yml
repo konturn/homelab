@@ -1570,9 +1570,8 @@ secrets:rotate-proxied:
       aud: https://vault.lab.nkontur.com:8200
   variables:
     VAULT_ADDR: "https://vault.lab.nkontur.com:8200"
-    ROTATE_SERVICE:
-      value: ""
-      description: "Service to rotate (tautulli, prowlarr, ombi, radarr, sonarr, nzbget, deluge, pihole, gitlab-admin-token); never plex"
+  # ROTATE_SERVICE comes from the pipeline variables (not set here, so
+  # nothing shadows it).
   script:
     - set +x
     - python3 ci/rotate-proxied/rotate.py check "$ROTATE_SERVICE"
