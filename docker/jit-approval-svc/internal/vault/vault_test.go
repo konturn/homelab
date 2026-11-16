@@ -9,12 +9,13 @@ import (
 	"testing"
 )
 
-// staticTier1 and staticTier2 are the static-backend resources by tier.
+// staticTier1, staticTier2 and staticTier3 are the static-backend resources by tier.
 var staticTier1 = []string{"plex", "radarr", "sonarr", "ombi", "nzbget", "deluge", "prowlarr", "tautulli", "mqtt"}
-var staticTier2 = []string{"pihole", "ipmi"}
+var staticTier2 = []string{"pihole"}
+var staticTier3 = []string{"ipmi"}
 
 func TestPoliciesForResource_StaticGetsOwnPolicy(t *testing.T) {
-	for tier, list := range map[int][]string{1: staticTier1, 2: staticTier2} {
+	for tier, list := range map[int][]string{1: staticTier1, 2: staticTier2, 3: staticTier3} {
 		for _, res := range list {
 			got := policiesForResource(res, tier)
 			want := []string{"jit-static-" + res}
@@ -153,8 +154,11 @@ func TestPoliciesForResource_WrongTier(t *testing.T) {
 }
 
 func TestMinTierForResource(t *testing.T) {
-	if got := MinTierForResource("ssh-router"); got != 2 {
-		t.Errorf("SSH min tier: expected 2, got %d", got)
+	if got := MinTierForResource("ssh-router"); got != 3 {
+		t.Errorf("ssh-router min tier: expected 3, got %d", got)
+	}
+	if got := MinTierForResource("ssh-satellite"); got != 2 {
+		t.Errorf("ssh-satellite min tier: expected 2, got %d", got)
 	}
 	if got := MinTierForResource("grafana"); got != 1 {
 		t.Errorf("grafana min tier: expected 1, got %d", got)

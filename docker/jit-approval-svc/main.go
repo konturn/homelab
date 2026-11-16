@@ -31,7 +31,7 @@ func main() {
 		"listen_addr":        cfg.ListenAddr,
 		"vault_addr":         cfg.VaultAddr,
 		"request_timeout":    cfg.RequestTimeout.String(),
-		"allowed_requesters": cfg.AllowedRequesters,
+		"requesters":         cfg.Requesters(),
 		"ha_url":             cfg.HAURL,
 		"grafana_url":        cfg.GrafanaURL,
 		"influxdb_url":       cfg.InfluxDBURL,

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/http"
 	"strings"
 	"time"
@@ -29,6 +30,9 @@ type Handler struct {
 	limiter           *ratelimit.Limiter
 	lastWebhookRefresh time.Time
 	actions           *actions.Service
+	// fyi sends an informational Telegram line (no buttons), for
+	// auto-fyi grants. nil disables it.
+	fyi func(text string) error
 }
 
 // SetActions enables routing of "act:" button callbacks to the action-prompt
@@ -39,7 +43,7 @@ func (h *Handler) SetActions(a *actions.Service) {
 
 // New creates a new Handler.
 func New(cfg *config.Config, s *store.Store, v *vault.Client, tg *telegram.Client, backends *backend.Registry) *Handler {
-	return &Handler{
+	h := &Handler{
 		cfg:      cfg,
 		store:    s,
 		vault:    v,
@@ -47,6 +51,20 @@ func New(cfg *config.Config, s *store.Store, v *vault.Client, tg *telegram.Clien
 		backends: backends,
 		limiter:  ratelimit.NewFromEnv(),
 	}
+	if tg != nil {
+		h.fyi = func(text string) error {
+			_, err := tg.SendWithButtons(text, nil)
+			return err
+		}
+	}
+	return h
+}
+
+// authenticate identifies the caller from its X-JIT-API-Key. The requester
+// is whoever owns that key (config.Authenticate), never a field of the
+// request body.
+func (h *Handler) authenticate(r *http.Request) (string, bool) {
+	return h.cfg.Authenticate(r.Header.Get("X-JIT-API-Key"))
 }
 
 // maxBodyBytes caps request bodies on /request and /telegram/webhook (the
@@ -79,6 +97,8 @@ type VaultPathRequest struct {
 
 // CreateRequestBody is the JSON body for POST /request.
 type CreateRequestBody struct {
+	// Requester is optional and only checked: the caller is identified by
+	// its key, and a request naming anyone else is refused.
 	Requester  string             `json:"requester"`
 	Resource   string             `json:"resource"`
 	Tier       int                `json:"tier"`
@@ -132,9 +152,8 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate API key
-	apiKey := r.Header.Get("X-JIT-API-Key")
-	if apiKey == "" || subtle.ConstantTimeCompare([]byte(apiKey), []byte(h.cfg.JITAPIKey)) != 1 {
+	requester, ok := h.authenticate(r)
+	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
@@ -144,34 +163,51 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate requester
-	if !h.cfg.IsRequesterAllowed(body.Requester) {
-		logger.Warn("request_rejected_unauthorized", logger.Fields{
-			"requester": body.Requester,
+	// The body may name the requester, but only its own name.
+	if body.Requester != "" && body.Requester != requester {
+		logger.Warn("request_rejected_requester_mismatch", logger.Fields{
+			"requester": requester,
+			"claimed":   body.Requester,
 			"resource":  body.Resource,
 		})
-		writeError(w, http.StatusForbidden, "requester not allowed")
+		writeError(w, http.StatusForbidden, fmt.Sprintf("this key belongs to %s, not %q", requester, body.Requester))
+		return
+	}
+	body.Requester = requester
+
+	// Validate tier
+	if _, err := h.cfg.TierFor(body.Tier); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	// Validate tier
+	// A request below the resource's tier is raised to it: the tier, not
+	// the caller's guess, decides approval and TTL.
+	if minTier := vault.MinTierForResource(body.Resource); minTier > 0 && body.Tier < minTier {
+		logger.Info("request_tier_raised", logger.Fields{
+			"requester":      requester,
+			"resource":       body.Resource,
+			"requested_tier": body.Tier,
+			"tier":           minTier,
+		})
+		body.Tier = minTier
+	}
 	tierCfg, err := h.cfg.TierFor(body.Tier)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	// Enforce minimum tier per resource
-	if minTier := vault.MinTierForResource(body.Resource); minTier > 0 && body.Tier < minTier {
-		logger.Warn("request_rejected_tier_below_minimum", logger.Fields{
-			"requester":     body.Requester,
-			"resource":      body.Resource,
-			"requested_tier": body.Tier,
-			"minimum_tier":  minTier,
+	decision := h.cfg.DecisionFor(requester, body.Tier)
+	if decision == config.DecisionDeny {
+		logger.Warn("request_denied_by_policy", logger.Fields{
+			"requester": requester,
+			"resource":  body.Resource,
+			"tier":      body.Tier,
 		})
-		writeError(w, http.StatusBadRequest, fmt.Sprintf(
-			"requested tier %d below minimum tier %d for resource %s",
-			body.Tier, minTier, body.Resource,
+		writeError(w, http.StatusForbidden, fmt.Sprintf(
+			"%s may not request tier %d resources (%s); ask Noah to have his own agent do it",
+			requester, body.Tier, body.Resource,
 		))
 		return
 	}
@@ -292,12 +328,13 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		"reason":     body.Reason,
 		"scopes":     scopes,
 		"ssh_host":   body.SSHHost,
+		"decision":   string(decision),
 	})
 
-	// Auto-approve for tier 1
+	// Mint now (auto, auto-fyi) or ask Noah (approve)
 	var credResp *CredentialResponse
 	var respErr, respMsg, respBackend string
-	if tierCfg.AutoApprove {
+	if decision.Mints() {
 		cred, mintErr := h.autoApprove(req, tierCfg)
 		if mintErr != nil {
 			// T1 auto-approve failed due to upstream error — fail fast
@@ -312,6 +349,9 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 				LeaseTTL: cred.LeaseTTL.String(),
 				LeaseID:  cred.LeaseID,
 				Metadata: cred.Metadata,
+			}
+			if decision == config.DecisionAutoFYI {
+				h.sendFYI(req, cred.LeaseTTL)
 			}
 		}
 	} else {
@@ -336,9 +376,8 @@ func (h *Handler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate API key
-	apiKey := r.Header.Get("X-JIT-API-Key")
-	if apiKey == "" || subtle.ConstantTimeCompare([]byte(apiKey), []byte(h.cfg.JITAPIKey)) != 1 {
+	requester, ok := h.authenticate(r)
+	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
@@ -351,8 +390,16 @@ func (h *Handler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	requestID := parts[0]
 
+	// A request is visible only to the requester that made it, so one
+	// agent cannot claim a credential another agent was granted.
 	req := h.store.Get(requestID)
-	if req == nil {
+	if req == nil || req.Requester != requester {
+		if req != nil {
+			logger.Warn("status_rejected_other_requester", logger.Fields{
+				"request_id": requestID,
+				"requester":  requester,
+			})
+		}
 		writeError(w, http.StatusNotFound, "request not found")
 		return
 	}
@@ -398,8 +445,7 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if caller provided a valid API key for full details
-	apiKey := r.Header.Get("X-JIT-API-Key")
-	authenticated := apiKey != "" && subtle.ConstantTimeCompare([]byte(apiKey), []byte(h.cfg.JITAPIKey)) == 1
+	_, authenticated := h.authenticate(r)
 
 	if !authenticated {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -434,8 +480,7 @@ func (h *Handler) HandleWebhookRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Require API key
-	apiKey := r.Header.Get("X-JIT-API-Key")
-	if subtle.ConstantTimeCompare([]byte(apiKey), []byte(h.cfg.JITAPIKey)) != 1 {
+	if _, ok := h.authenticate(r); !ok {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
@@ -591,7 +636,8 @@ func (h *Handler) mintCredential(req *store.Request, ttl time.Duration) (*store.
 	return storeCred, nil
 }
 
-// autoApprove immediately approves a tier 1 request by minting a credential.
+// autoApprove immediately approves a request the approval matrix lets
+// through without a human (auto, auto-fyi) by minting a credential.
 // Returns the minted credential on success, or an error if minting failed.
 func (h *Handler) autoApprove(req *store.Request, tierCfg config.TierConfig) (*store.Credential, error) {
 	ttl, maxTTL, err := h.effectiveTTL(req)
@@ -633,6 +679,30 @@ func (h *Handler) autoApprove(req *store.Request, tierCfg config.TierConfig) (*s
 	})
 
 	return cred, nil
+}
+
+// sendFYI tells Noah about an auto-fyi grant: one informational line, no
+// buttons. A failed send is logged; the grant stands.
+func (h *Handler) sendFYI(req *store.Request, ttl time.Duration) {
+	if h.fyi == nil {
+		return
+	}
+	text := fmt.Sprintf("ℹ️ JIT FYI: %s got <b>%s</b> (tier %d, %s): %s",
+		html.EscapeString(req.Requester), html.EscapeString(req.Resource), req.Tier, ttl,
+		html.EscapeString(truncate(displayReason(req), 300)))
+	if err := h.fyi(text); err != nil {
+		logger.Error("fyi_send_failed", logger.Fields{"request_id": req.ID, "error": err.Error()})
+		return
+	}
+	logger.Info("fyi_sent", logger.Fields{"request_id": req.ID})
+}
+
+func truncate(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
 }
 
 // sendApprovalMessage sends a Telegram message with approve/deny buttons.

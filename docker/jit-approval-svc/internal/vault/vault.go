@@ -303,9 +303,11 @@ func (vc *Client) Health() error {
 
 // resourceTier maps each known resource to its minimum tier level.
 // It enforces minimum approval requirements and TTLs per resource; it does
-// not choose Vault policies (see staticResourcePaths).
+// not choose Vault policies (see staticResourcePaths). Who may get what at
+// each tier is the approval matrix (config.ApprovalMatrix); a request below
+// a resource's tier is raised to it.
 var resourceTier = map[string]int{
-	// Tier 1: Auto-approve services (15 min TTL)
+	// Tier 1: services (15 min TTL)
 	"grafana":     1,
 	"influxdb":    1,
 	"plex":        1,
@@ -314,9 +316,7 @@ var resourceTier = map[string]int{
 	"ombi":        1,
 	"nzbget":      1,
 	"deluge":      1,
-	"paperless":   2,
 	"gmail-read":  1,
-	"gmail-send":  2,
 	"prowlarr":    1,
 	"tautulli":    1,
 	"mqtt":        1,
@@ -325,23 +325,32 @@ var resourceTier = map[string]int{
 	// "gitlab" (a Maintainer project token) stays tier 2.
 	"gitlab-moltbot": 1,
 
-	// Tier 2: Infrastructure (requires approval, 30 min TTL)
-	"ssh-router":             2,
-	"ssh-satellite":          2,
-	"ssh-zwave":              2,
-	"ssh-nkontur":            2,
-	"ssh-konoahko":           2,
-	"ssh-konturn":            2,
-	"ssh-router-elevated":    2,
-	"ssh-zwave-elevated":     2,
-	"ssh-satellite-elevated": 2,
-	"ssh-macmini-elevated":   2,
-	"tailscale":              2,
-	"pihole":                 2,
-	"gitlab":                 2,
-	"homeassistant":          2,
-	"vault":                  2,
-	"ipmi":                   2,
+	// Tier 2: infrastructure and personal data (30 min TTL; user hosts 8 h)
+	"paperless":     2,
+	"gmail-send":    2,
+	"ssh-satellite": 2,
+	"ssh-zwave":     2,
+	"ssh-nkontur":   2,
+	"ssh-konoahko":  2,
+	"ssh-konturn":   2,
+	"tailscale":     2,
+	"pihole":        2,
+	"gitlab":        2,
+	"homeassistant": 2,
+	// Scoped to homelab/data/ with read/list/create/update and no
+	// broker-only paths (backend.ValidateVaultPaths): no Vault admin or
+	// policy path is reachable through this resource.
+	"vault": 2,
+
+	// Tier 3: a root shell on the router, elevated (sudo) SSH anywhere, and
+	// out-of-band server control (30 min TTL). Never minted without a tap,
+	// and refused outright to the ops agent.
+	"ssh-router":             3,
+	"ssh-router-elevated":    3,
+	"ssh-zwave-elevated":     3,
+	"ssh-satellite-elevated": 3,
+	"ssh-macmini-elevated":   3,
+	"ipmi":                   3,
 }
 
 // GitLabAgentResourcePrefix starts the resource name of the GitLab agent

@@ -59,11 +59,11 @@ func mockHandlerWithMinter(minter *mockVaultMinter) *Handler {
 		JITAPIKey:             "test-api-key",
 		ListenAddr:            ":8080",
 		RequestTimeout:        5 * time.Minute,
-		AllowedRequesters:     []string{"prometheus"},
+		ApprovalMatrix:        config.DefaultApprovalMatrix(),
 		Tiers: map[int]config.TierConfig{
-			1: {TTL: 15 * time.Minute, AutoApprove: true, Description: "Auto-approve services"},
-			2: {TTL: 30 * time.Minute, AutoApprove: false, Description: "Infrastructure"},
-			3: {TTL: 60 * time.Minute, AutoApprove: false, Description: "Critical"},
+			1: {TTL: 15 * time.Minute, Description: "Services"},
+			2: {TTL: 30 * time.Minute, Description: "Infrastructure"},
+			3: {TTL: 30 * time.Minute, Description: "Critical"},
 		},
 	}
 
@@ -567,7 +567,9 @@ func TestHandleTelegramWebhook_UnauthorizedUser(t *testing.T) {
 	}
 }
 
-func TestHandleRequest_RejectsSSHBelowMinTier(t *testing.T) {
+// A request below the resource's tier is raised to it (ssh-router is tier 3)
+// and, for the legacy requester, waits for approval.
+func TestHandleRequest_RaisesSSHToItsTier(t *testing.T) {
 	h := mockHandler()
 
 	body, _ := json.Marshal(CreateRequestBody{
@@ -584,14 +586,16 @@ func TestHandleRequest_RejectsSSHBelowMinTier(t *testing.T) {
 
 	h.HandleRequest(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("expected 400 for SSH at tier 1, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
 	}
-
-	var resp map[string]string
+	var resp CreateRequestResponse
 	json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp["error"] == "" {
-		t.Error("expected error message in response")
+	if resp.Status != "pending" || resp.Credential != nil {
+		t.Fatalf("expected a pending request without credential, got %+v", resp)
+	}
+	if got := h.store.Get(resp.RequestID); got == nil || got.Tier != 3 {
+		t.Fatalf("stored request %+v, want tier 3", got)
 	}
 }
 

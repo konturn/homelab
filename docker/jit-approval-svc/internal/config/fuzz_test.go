@@ -17,7 +17,7 @@ func FuzzTTLFor(f *testing.F) {
 	f.Add("", -1)
 	cfg := &Config{
 		Tiers: map[int]TierConfig{
-			1: {TTL: 15 * time.Minute, AutoApprove: true},
+			1: {TTL: 15 * time.Minute},
 			2: {TTL: 30 * time.Minute},
 			3: {TTL: 60 * time.Minute},
 		},
