@@ -554,7 +554,7 @@ revert-guard:test:
 fetch-vault-secrets:test:
   extends: .interruptible
   stage: validate
-  image: willhallonline/ansible:latest@sha256:376af9710e0c1ef94132184b7a026f2ba991ce97c86518d3085b0acb426c10d1
+  image: willhallonline/ansible:latest@sha256:a59a5470060b6046b8215318a5c2775e1e9b236b9a15d70d602d454ed4fc69e7
   needs: []
   script:
     - sh ansible/tests/fetch-vault-secrets/run.sh
@@ -1586,7 +1586,7 @@ vault:validate:
 netgear:test:
   extends: .interruptible
   stage: validate
-  image: willhallonline/ansible:latest@sha256:376af9710e0c1ef94132184b7a026f2ba991ce97c86518d3085b0acb426c10d1
+  image: willhallonline/ansible:latest@sha256:a59a5470060b6046b8215318a5c2775e1e9b236b9a15d70d602d454ed4fc69e7
   needs: []
   variables:
     GIT_DEPTH: "50"
@@ -1633,7 +1633,7 @@ netgear:test:
 netgear:apply:
   extends: .netgear_vault
   stage: deploy
-  image: willhallonline/ansible:latest@sha256:376af9710e0c1ef94132184b7a026f2ba991ce97c86518d3085b0acb426c10d1
+  image: willhallonline/ansible:latest@sha256:a59a5470060b6046b8215318a5c2775e1e9b236b9a15d70d602d454ed4fc69e7
   resource_group: netgear-switches
   needs:
     - job: netgear:test
@@ -1755,7 +1755,7 @@ netgear:firmware:
 aruba-iap:test:
   extends: .interruptible
   stage: validate
-  image: willhallonline/ansible:latest@sha256:376af9710e0c1ef94132184b7a026f2ba991ce97c86518d3085b0acb426c10d1
+  image: willhallonline/ansible:latest@sha256:a59a5470060b6046b8215318a5c2775e1e9b236b9a15d70d602d454ed4fc69e7
   needs: []
   variables:
     GIT_DEPTH: "50"
@@ -1788,7 +1788,7 @@ aruba-iap:test:
         - networking/firmware_night.py
 
 .aruba_iap_live:
-  image: willhallonline/ansible:latest@sha256:376af9710e0c1ef94132184b7a026f2ba991ce97c86518d3085b0acb426c10d1
+  image: willhallonline/ansible:latest@sha256:a59a5470060b6046b8215318a5c2775e1e9b236b9a15d70d602d454ed4fc69e7
   resource_group: aruba-iap
   id_tokens:
     VAULT_ID_TOKEN:
@@ -1942,7 +1942,7 @@ aruba-iap:firmware:
 aruba-s2500:test:
   extends: .interruptible
   stage: validate
-  image: willhallonline/ansible:latest@sha256:376af9710e0c1ef94132184b7a026f2ba991ce97c86518d3085b0acb426c10d1
+  image: willhallonline/ansible:latest@sha256:a59a5470060b6046b8215318a5c2775e1e9b236b9a15d70d602d454ed4fc69e7
   needs: []
   script:
     - python3 -m unittest discover -s networking/aruba-s2500 -p 'test_*.py' -v
@@ -2037,7 +2037,7 @@ aruba-s2500:firmware:
 denon:test:
   extends: .interruptible
   stage: validate
-  image: willhallonline/ansible:latest@sha256:376af9710e0c1ef94132184b7a026f2ba991ce97c86518d3085b0acb426c10d1
+  image: willhallonline/ansible:latest@sha256:a59a5470060b6046b8215318a5c2775e1e9b236b9a15d70d602d454ed4fc69e7
   needs: []
   script:
     - python3 -m unittest discover -s networking/denon -p 'test_*.py' -v
@@ -2090,7 +2090,7 @@ denon:drift:
 amcrest:test:
   extends: .interruptible
   stage: validate
-  image: willhallonline/ansible:latest@sha256:376af9710e0c1ef94132184b7a026f2ba991ce97c86518d3085b0acb426c10d1
+  image: willhallonline/ansible:latest@sha256:a59a5470060b6046b8215318a5c2775e1e9b236b9a15d70d602d454ed4fc69e7
   needs: []
   script:
     - python3 -m unittest discover -s networking/amcrest -p 'test_*.py' -v
@@ -2150,7 +2150,7 @@ amcrest:drift:
 slzb:test:
   extends: .interruptible
   stage: validate
-  image: willhallonline/ansible:latest@sha256:376af9710e0c1ef94132184b7a026f2ba991ce97c86518d3085b0acb426c10d1
+  image: willhallonline/ansible:latest@sha256:a59a5470060b6046b8215318a5c2775e1e9b236b9a15d70d602d454ed4fc69e7
   needs: []
   script:
     - python3 -m unittest discover -s networking/slzb -p 'test_*.py' -v
@@ -2280,7 +2280,7 @@ ups-card:drift:
 ipmi:test:
   extends: .interruptible
   stage: validate
-  image: willhallonline/ansible:latest@sha256:376af9710e0c1ef94132184b7a026f2ba991ce97c86518d3085b0acb426c10d1
+  image: willhallonline/ansible:latest@sha256:a59a5470060b6046b8215318a5c2775e1e9b236b9a15d70d602d454ed4fc69e7
   needs: []
   script:
     - python3 -m unittest discover -s ansible/roles/ipmi/files -p 'test_*.py' -v
