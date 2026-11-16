@@ -1,6 +1,6 @@
 # OpenClaw identities: `noah` and `ops`
 
-> **Status:** Implemented (rollout in progress, see [Rollout](#rollout))
+> **Status:** Implemented (2026-11-16)
 > **Date:** 2026-11-16
 > **Related:** `docker/jit-approval-svc/README.md`, `docker/openclaw/`,
 > [event-routing.md](./event-routing.md), [jit-credential-proxy.md](./jit-credential-proxy.md),
@@ -182,6 +182,39 @@ These read only `noah`'s own files, so they do not widen what untrusted input
 can reach. Letting `ops` write those files would let a poisoned cron run
 plant instructions for the more trusted agent.
 
+## Keeping tier 3 rare: router chores
+
+In the 30 days before the split (2026-10-17 to 2026-11-16) the agent asked
+for `ssh-router` or `ssh-router-elevated` 28 times; Noah approved 2 (both
+were things he had asked for), the rest lapsed. Almost all came from alert
+triage:
+
+| Chore | Requests | Better path |
+|---|---|---|
+| Read a container's state, health or logs (pihole, tautulli, grafana, zigbee2mqtt, influxdb, gitlab, deluge) | 11 | Loki (`container` label) and InfluxDB (`docker_container_*`), tier 1 |
+| Read host state: `zpool status`, kernel OOM lines, a systemd unit's status, I/O load | 9 | Loki (`syslog_identifier`), InfluxDB (`systemd_units`, `zfs*`, `diskio`), tier 1; `zpool status` itself is not exported |
+| Restart a hung container (plex, 3 times for one incident) | 3 | executor `restart_container` |
+| Diff a live config file against the repo | 2 | read-only collect |
+| Clear a failed systemd unit (`reset-failed`) | 1 | executor action |
+| One-off host edits (stray cron entry, emergency nginx 503) | 2 | stay tier 3 |
+
+Done now: `ops`'s `AGENTS.md` says reading is tier 1 and where to read.
+
+Proposed, not built (each is a new path from an agent into the root
+executor and wants its own reviewed design, `docs/design/event-routing.md`
+4.5 already lists the types):
+
+1. `collect` on request: `POST /collect {incident, target}` on the event
+   router, allowed clients only, runs fixed read-only commands through the
+   executor (container state and health without the environment, last 200
+   log lines, `zpool status`, `systemctl status` of an allowlisted unit) and
+   returns the text. Covers about 20 of the 28.
+2. `restart_container` on request: the same endpoint, same executor
+   re-checks as a playbook (denylist, once per incident, rate limit, deploy
+   lock), tied to an open incident. Covers the restarts.
+3. `reset_failed_unit` for an allowlist of units (`nut-driver@*`,
+   `snapclient@*`).
+
 ## Rollout
 
 1. Broker: per-requester keys, the matrix and tier 3, accepting the old
@@ -189,4 +222,5 @@ plant instructions for the more trusted agent.
    the old behaviour) during the switch.
 2. OpenClaw: the two agents, the `ops` user and its key, cron re-pointing,
    the hook bound to `ops`.
-3. Remove the shared key and the `prometheus` row.
+3. Remove the shared key and the `prometheus` row. The broker now refuses
+   to start if `JIT_API_KEY` is set.

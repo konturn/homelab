@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -138,13 +139,6 @@ func TestValidate(t *testing.T) {
 		"missing TelegramBotToken":      func(c *Config) { c.TelegramBotToken = "" },
 		"missing TelegramWebhookSecret": func(c *Config) { c.TelegramWebhookSecret = "" },
 		"no credential at all":          func(c *Config) { c.RequesterKeys = nil },
-		"shared key equals a requester key": func(c *Config) {
-			c.JITAPIKey = "noah-key"
-		},
-		"shared key requester also has a key": func(c *Config) {
-			c.JITAPIKey = "other"
-			c.RequesterKeys = append(c.RequesterKeys, RequesterKey{Name: LegacyRequester, Hash: HashKey("p")})
-		},
 		"tier 3 auto": func(c *Config) {
 			c.ApprovalMatrix = map[string]map[int]Decision{"openclaw-noah": {1: DecisionAuto, 2: DecisionAuto, 3: DecisionAuto}}
 		},
@@ -166,13 +160,22 @@ func TestValidate(t *testing.T) {
 			t.Errorf("%s: expected an error", name)
 		}
 	}
+}
 
-	// The legacy shared key alone is still a valid configuration.
-	c := base
-	c.RequesterKeys = nil
-	c.JITAPIKey = "shared"
-	if err := c.Validate(); err != nil {
-		t.Errorf("legacy key only: %v", err)
+// The shared key is gone: a deployment that still sets it does not start.
+func TestLoadRefusesSharedKey(t *testing.T) {
+	for k, v := range map[string]string{
+		"VAULT_ROLE_ID": "r", "VAULT_SECRET_ID": "s", "TELEGRAM_BOT_TOKEN": "t",
+		"TELEGRAM_WEBHOOK_SECRET": "w", "JIT_REQUESTER_KEYS": "openclaw-noah:" + hashHex("k"),
+	} {
+		t.Setenv(k, v)
+	}
+	if _, err := Load(); err != nil {
+		t.Fatalf("valid config: %v", err)
+	}
+	t.Setenv("JIT_API_KEY", "shared")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "JIT_API_KEY") {
+		t.Fatalf("JIT_API_KEY set: err %v", err)
 	}
 }
 

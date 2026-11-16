@@ -24,8 +24,8 @@
 set -eu
 
 CACHE_DIR=${JIT_GITLAB_CACHE_DIR:-/home/node/.openclaw/credentials}
-KEY_PATH=${JIT_API_KEY_VAULT_PATH:-homelab/data/agents/jit-api-key}
-REQUESTER=${JIT_REQUESTER:-prometheus}
+KEY_PATH=${JIT_API_KEY_VAULT_PATH:-homelab/data/agents/openclaw-noah}
+REQUESTER=${JIT_REQUESTER:-openclaw-noah}
 CACHE=$CACHE_DIR/jit-gitlab.json
 LOCK=$CACHE_DIR/jit-gitlab.lock
 JIT_URL=${JIT_URL:-https://jit.lab.nkontur.com}

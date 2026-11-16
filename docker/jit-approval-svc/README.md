@@ -204,7 +204,6 @@ Who gets what without a tap depends on the requester (`JIT_APPROVAL_MATRIX`, def
 |---|---|---|---|
 | `openclaw-noah` | auto | auto-fyi | approve |
 | `openclaw-ops` | auto | approve | deny |
-| `prometheus` (shared key, transition only) | auto | approve | approve |
 | anyone else | deny | deny | deny |
 
 - **auto**: minted at once.
@@ -230,9 +229,8 @@ All configuration via environment variables:
 | `TELEGRAM_BOT_TOKEN` | Yes | — | Telegram bot token for approval messages |
 | `TELEGRAM_CHAT_ID` | No | `8531859108` | Noah's Telegram chat ID |
 | `TELEGRAM_WEBHOOK_SECRET` | Yes | — | Secret for webhook verification |
-| `JIT_REQUESTER_KEYS` | Yes* | — | `name:<sha256 hex of key>,...`, one per requester (*or the legacy `JIT_API_KEY`) |
+| `JIT_REQUESTER_KEYS` | Yes | — | `name:<sha256 hex of key>,...`, one per requester. The old shared `JIT_API_KEY` is refused at startup |
 | `JIT_APPROVAL_MATRIX` | No | see [Approval matrix](#approval-matrix) | `name=<t1>,<t2>,<t3>;...` with `auto`, `auto-fyi`, `approve` or `deny` |
-| `JIT_API_KEY` | No | — | Legacy shared key; authenticates as `JIT_LEGACY_REQUESTER` (default `prometheus`) |
 | `TELEGRAM_WEBHOOK_URL` | No | — | If set, the webhook is registered with Telegram at startup |
 | `LISTEN_ADDR` | No | `:8080` | HTTP listen address |
 | `REQUEST_TIMEOUT` | No | `1800` | Seconds before pending requests auto-timeout (deployed with `300`) |
@@ -317,7 +315,7 @@ go test ./internal/handler -run '^$' -fuzz '^FuzzHandleRequest$' -fuzztime 3m
 
 ```bash
 docker build -t jit-approval-svc .
-docker run -e VAULT_ROLE_ID=... -e VAULT_SECRET_ID=... -e TELEGRAM_BOT_TOKEN=... -e TELEGRAM_WEBHOOK_SECRET=... -e JIT_API_KEY=... jit-approval-svc
+docker run -e VAULT_ROLE_ID=... -e VAULT_SECRET_ID=... -e TELEGRAM_BOT_TOKEN=... -e TELEGRAM_WEBHOOK_SECRET=... -e JIT_REQUESTER_KEYS=<name>:<sha256 of key> jit-approval-svc
 ```
 
 See the `jit-approval-svc` service in `docker/docker-compose.yml` for the homelab deployment.

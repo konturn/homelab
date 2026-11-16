@@ -97,9 +97,8 @@ var dynamicResources = []string{
 // requesterKeys are the fake keys propHandler accepts and who they belong
 // to. "stranger" has a key but no row in the approval matrix.
 var requesterKeys = map[string]string{
-	"fake-api-key":      "prometheus",
+	"fake-api-key":      "openclaw-ops",
 	"fake-noah-key":     "openclaw-noah",
-	"fake-ops-key":      "openclaw-ops",
 	"fake-stranger-key": "stranger",
 }
 
@@ -127,14 +126,11 @@ func propHandlerFYI() (*Handler, *recorder, *[]string) {
 	rec := &recorder{}
 	var keys []config.RequesterKey
 	for k, r := range requesterKeys {
-		if r != "prometheus" {
-			keys = append(keys, config.RequesterKey{Name: r, Hash: config.HashKey(k)})
-		}
+		keys = append(keys, config.RequesterKey{Name: r, Hash: config.HashKey(k)})
 	}
 	cfg := &config.Config{
 		TelegramChatID:        1000001,
 		TelegramWebhookSecret: "fake-webhook-secret",
-		JITAPIKey:             "fake-api-key",
 		RequesterKeys:         keys,
 		ApprovalMatrix:        config.DefaultApprovalMatrix(),
 		RequestTimeout:        5 * time.Minute,
@@ -247,36 +243,36 @@ func doRequest(h *Handler, apiKey string, raw []byte) *httptest.ResponseRecorder
 // for an auto-approve tier on a resource whose minimum tier allows it.
 func FuzzHandleRequest(f *testing.F) {
 	seeds := []string{
-		`{"requester":"prometheus","resource":"grafana","tier":1,"reason":"x"}`,
-		`{"requester":"prometheus","resource":"gitlab-moltbot","tier":1,"reason":"x","ttl":"5m"}`,
-		`{"requester":"prometheus","resource":"gitlab","tier":1,"reason":"x"}`,
-		`{"requester":"prometheus","resource":"gitlab","tier":2,"reason":"x","project_id":"4/../../groups/1"}`,
-		`{"requester":"prometheus","resource":"ssh-router","tier":1,"reason":"x"}`,
-		`{"requester":"prometheus","resource":"ssh-router-elevated","tier":1,"reason":"x"}`,
-		`{"requester":"prometheus","resource":"vault","tier":1,"reason":"x","vault_paths":[{"path":"homelab/data/x","capabilities":["read"]}]}`,
-		`{"requester":"prometheus","resource":"Gitlab-moltbot","tier":1,"reason":"x"}`,
-		`{"requester":"prometheus","resource":"gitlab-mоltbot","tier":1,"reason":"x"}`,
-		`{"requester":"prometheus","resource":"grafana","tier":1,"reason":"x","ttl":"99999h"}`,
-		`{"requester":"prometheus","resource":"grafana","tier":1,"reason":"x","ttl":"-5m"}`,
-		`{"requester":"prometheus","resource":"grafana","tier":1,"reason":"x","ttl":"9223372036854775807ns"}`,
-		`{"requester":"prometheus","resource":"grafana","tier":1.5,"reason":"x"}`,
-		`{"requester":"prometheus","resource":"grafana","tier":"1","reason":"x"}`,
-		`{"requester":"prometheus","resource":"grafana","tier":1,"tier":2,"reason":"x"}`,
-		`{"requester":"prometheus","resource":"grafana","Tier":1,"reason":"x"}`,
+		`{"requester":"openclaw-ops","resource":"grafana","tier":1,"reason":"x"}`,
+		`{"requester":"openclaw-ops","resource":"gitlab-moltbot","tier":1,"reason":"x","ttl":"5m"}`,
+		`{"requester":"openclaw-ops","resource":"gitlab","tier":1,"reason":"x"}`,
+		`{"requester":"openclaw-ops","resource":"gitlab","tier":2,"reason":"x","project_id":"4/../../groups/1"}`,
+		`{"requester":"openclaw-ops","resource":"ssh-router","tier":1,"reason":"x"}`,
+		`{"requester":"openclaw-ops","resource":"ssh-router-elevated","tier":1,"reason":"x"}`,
+		`{"requester":"openclaw-ops","resource":"vault","tier":1,"reason":"x","vault_paths":[{"path":"homelab/data/x","capabilities":["read"]}]}`,
+		`{"requester":"openclaw-ops","resource":"Gitlab-moltbot","tier":1,"reason":"x"}`,
+		`{"requester":"openclaw-ops","resource":"gitlab-mоltbot","tier":1,"reason":"x"}`,
+		`{"requester":"openclaw-ops","resource":"grafana","tier":1,"reason":"x","ttl":"99999h"}`,
+		`{"requester":"openclaw-ops","resource":"grafana","tier":1,"reason":"x","ttl":"-5m"}`,
+		`{"requester":"openclaw-ops","resource":"grafana","tier":1,"reason":"x","ttl":"9223372036854775807ns"}`,
+		`{"requester":"openclaw-ops","resource":"grafana","tier":1.5,"reason":"x"}`,
+		`{"requester":"openclaw-ops","resource":"grafana","tier":"1","reason":"x"}`,
+		`{"requester":"openclaw-ops","resource":"grafana","tier":1,"tier":2,"reason":"x"}`,
+		`{"requester":"openclaw-ops","resource":"grafana","Tier":1,"reason":"x"}`,
 		`{"requester":"prometheus\u0000","resource":"grafana","tier":1,"reason":"x"}`,
-		`{"requester":"prometheus","resource":"grafana","tier":0,"reason":"x"}`,
-		`{"requester":"prometheus","resource":"grafana","tier":-1,"reason":"x"}`,
-		`{"requester":"prometheus","resource":"grafana","tier":4294967297,"reason":"x"}`,
-		`{"requester":"prometheus","resource":"influxdb","tier":1,"reason":"x","scopes":["write"]}`,
+		`{"requester":"openclaw-ops","resource":"grafana","tier":0,"reason":"x"}`,
+		`{"requester":"openclaw-ops","resource":"grafana","tier":-1,"reason":"x"}`,
+		`{"requester":"openclaw-ops","resource":"grafana","tier":4294967297,"reason":"x"}`,
+		`{"requester":"openclaw-ops","resource":"influxdb","tier":1,"reason":"x","scopes":["write"]}`,
 		`[]`, `null`, `{}`, `{"requester":`, "\xff\xfe", ``,
 	}
-	keys := []string{"", "fake-api-key", "fake-noah-key", "fake-ops-key", "fake-stranger-key", "fake-noah-key ", "wrong"}
+	keys := []string{"", "fake-api-key", "fake-noah-key", "fake-stranger-key", "fake-noah-key ", "wrong"}
 	for _, s := range seeds {
 		for i := range keys {
 			f.Add([]byte(s), uint8(i))
 		}
-		f.Add([]byte(strings.ReplaceAll(s, `"prometheus"`, `"openclaw-noah"`)), uint8(2))
-		f.Add([]byte(strings.ReplaceAll(s, `"prometheus"`, `"openclaw-noah"`)), uint8(3))
+		f.Add([]byte(strings.ReplaceAll(s, `"openclaw-ops"`, `"openclaw-noah"`)), uint8(2))
+		f.Add([]byte(strings.ReplaceAll(s, `"openclaw-ops"`, `"openclaw-noah"`)), uint8(1))
 	}
 
 	h, rec := propHandler()
@@ -325,7 +321,7 @@ func FuzzHandleRequestFields(f *testing.F) {
 	f.Add("ssh-nkontur", 3, "100h", "")
 	f.Add("ssh-router", 2, "", "")
 	f.Add("ipmi", 1, "", "")
-	requesters := []string{"prometheus", "openclaw-noah", "openclaw-ops", "stranger"}
+	requesters := []string{"openclaw-noah", "openclaw-ops", "stranger"}
 	f.Fuzz(func(t *testing.T, resource string, tier int, ttl, scopes string) {
 		for _, requester := range requesters {
 			h, rec := propHandler()
@@ -352,7 +348,7 @@ func FuzzHandleRequestFields(f *testing.F) {
 // identity, gitlab-moltbot, is ever auto-minted.
 func TestAutoApprovalMatrix(t *testing.T) {
 	resources := append([]string{"gitlab-root", "gitlab-moltbot2", "GITLAB-MOLTBOT", "plex", "mqtt", "pihole", "ipmi"}, dynamicResources...)
-	for _, requester := range []string{"prometheus", "openclaw-noah", "openclaw-ops", "stranger"} {
+	for _, requester := range []string{"openclaw-noah", "openclaw-ops", "stranger"} {
 		for _, res := range resources {
 			for tier := 0; tier <= 4; tier++ {
 				h, rec, fyis := propHandlerFYI()
@@ -429,7 +425,7 @@ func TestOpsNeverGetsTier3(t *testing.T) {
 		for tier := 0; tier <= 4; tier++ {
 			h, rec := propHandler()
 			raw, _ := json.Marshal(CreateRequestBody{Resource: res, Tier: tier, Reason: "ops"})
-			w := doRequest(h, "fake-ops-key", raw)
+			w := doRequest(h, "fake-api-key", raw)
 			if calls := rec.take(); len(calls) != 0 {
 				t.Fatalf("ops got %s at tier %d: %+v", res, tier, calls)
 			}
@@ -469,14 +465,14 @@ func TestRequesterFieldCannotImpersonate(t *testing.T) {
 	for _, claimed := range []string{"openclaw-noah", "prometheus", "OPENCLAW-OPS", "x"} {
 		h, rec := propHandler()
 		raw, _ := json.Marshal(CreateRequestBody{Requester: claimed, Resource: "gitlab", Tier: 2, Reason: "x"})
-		w := doRequest(h, "fake-ops-key", raw)
+		w := doRequest(h, "fake-api-key", raw)
 		if w.Code != http.StatusForbidden || len(rec.take()) != 0 || h.store.Count() != 0 {
 			t.Errorf("ops claiming %q: status %d", claimed, w.Code)
 		}
 	}
 	h, _ := propHandler()
 	raw, _ := json.Marshal(CreateRequestBody{Requester: "openclaw-ops", Resource: "gitlab", Tier: 2, Reason: "x"})
-	if w := doRequest(h, "fake-ops-key", raw); w.Code != http.StatusCreated {
+	if w := doRequest(h, "fake-api-key", raw); w.Code != http.StatusCreated {
 		t.Errorf("ops naming itself: status %d %s", w.Code, w.Body)
 	}
 }
@@ -486,7 +482,7 @@ func TestRequesterFieldCannotImpersonate(t *testing.T) {
 func TestStatusOnlyForOwnRequests(t *testing.T) {
 	h, _ := propHandler()
 	raw, _ := json.Marshal(CreateRequestBody{Resource: "gitlab", Tier: 2, Reason: "x"})
-	w := doRequest(h, "fake-ops-key", raw)
+	w := doRequest(h, "fake-api-key", raw)
 	var created CreateRequestResponse
 	_ = json.Unmarshal(w.Body.Bytes(), &created)
 	if created.RequestID == "" {
@@ -501,12 +497,12 @@ func TestStatusOnlyForOwnRequests(t *testing.T) {
 		h.HandleStatus(w, req)
 		return w
 	}
-	for _, key := range []string{"fake-noah-key", "fake-api-key", "fake-stranger-key"} {
+	for _, key := range []string{"fake-noah-key", "fake-stranger-key"} {
 		if w := status(key); w.Code != http.StatusNotFound || strings.Contains(w.Body.String(), "secret-token") {
 			t.Errorf("%s polled ops's request: %d %s", requesterKeys[key], w.Code, w.Body)
 		}
 	}
-	if w := status("fake-ops-key"); !strings.Contains(w.Body.String(), "secret-token") {
+	if w := status(keyFor("openclaw-ops")); !strings.Contains(w.Body.String(), "secret-token") {
 		t.Errorf("owner could not claim: %d %s", w.Code, w.Body)
 	}
 }
@@ -522,7 +518,7 @@ func TestRequestedTTLNeverExceedsMax(t *testing.T) {
 		n := rng.Int63n(1_000_000) - 1000
 		ttlStr := fmt.Sprintf("%d%s", n, units[rng.Intn(len(units))])
 		h, rec := propHandler()
-		raw, _ := json.Marshal(CreateRequestBody{Requester: "prometheus", Resource: res, Tier: 1, Reason: "ttl", TTL: ttlStr})
+		raw, _ := json.Marshal(CreateRequestBody{Requester: "openclaw-ops", Resource: res, Tier: 1, Reason: "ttl", TTL: ttlStr})
 		w := doRequest(h, "fake-api-key", raw)
 		calls := rec.take()
 		parsed, _ := time.ParseDuration(ttlStr)
@@ -564,7 +560,7 @@ func FuzzTelegramWebhook(f *testing.F) {
 	f.Fuzz(func(t *testing.T, tmpl []byte, secretOK bool) {
 		h, rec := propHandler()
 		// A pending tier 2 request the callback may refer to.
-		raw, _ := json.Marshal(CreateRequestBody{Requester: "prometheus", Resource: "gitlab", Tier: 2, Reason: "webhook"})
+		raw, _ := json.Marshal(CreateRequestBody{Requester: "openclaw-ops", Resource: "gitlab", Tier: 2, Reason: "webhook"})
 		w := doRequest(h, "fake-api-key", raw)
 		var created CreateRequestResponse
 		_ = json.Unmarshal(w.Body.Bytes(), &created)
