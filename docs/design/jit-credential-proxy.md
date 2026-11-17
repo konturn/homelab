@@ -41,7 +41,7 @@ outside the grant's rules, scrubs secrets from responses and logs every call.
 
 ## Implementation status
 
-As of 2026-11-16 (!1299, !1301, !1302 and the cutover MR):
+As of 2026-11-17 (!1299, !1301, !1302, the cutover MR and !1314):
 
 **Live**
 - `docker/jit-proxy` runs as a separate service (option B, Q1).
@@ -62,10 +62,16 @@ As of 2026-11-16 (!1299, !1301, !1302 and the cutover MR):
 - **NZBGet uses its existing user** with a strict JSON-RPC allowlist; a restricted user is a follow-up.
 - **Not built yet:** the Telegram Revoke button and `/metrics` with alerts. The kill switch is `docker stop jit-proxy` (fail closed). `/summary` and the audit log exist.
 
+**Rotation (8.2): done 2026-11-17.** Each proxied secret (tautulli, prowlarr, ombi, radarr, sonarr, nzbget, deluge, and both Pi-hole passwords) and jit-approval-svc's GitLab admin token was rotated once by `secrets:rotate-proxied`, one run per service. Each run checked that:
+- the new value works and the old one is rejected;
+- the copies in Ombi and in the *arr download clients pass their connection tests;
+- telegraf points flow.
+
+The proxy path was checked with `jitcurl`. Plex is out of scope: it is rotated by hand, and only on suspicion. The job is manual, with no schedule (`docs/SECRET_ROTATION.md`, "Proxied services").
+
 **Stay on the static backend:** MQTT and IPMI (not HTTP; 8.4, Q15), each with its own `jit-static-*` policy.
 
 **Open**
-- **One-time rotation (8.2)** of the proxied secrets after cutover, one `secrets:rotate-proxied` run per service. The job exists (manual, one service per run, allowlist without plex; runbook in `docs/SECRET_ROTATION.md`, "Proxied services"); a schedule for it is not set up.
 - **Phase 3 Paperless** (needs the `jit-agent` Paperless user) and **phase 4 Gmail** (Q8). Both still use their dynamic backends.
 
 ## 1. Problem statement
