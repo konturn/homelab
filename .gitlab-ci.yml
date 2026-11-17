@@ -30,7 +30,8 @@
 #   ┌──────────────────────────┬──────────────┬──────────────┬──────────────────────────┐
 #   router:deploy [id_tokens]  zwave:deploy [id_tokens]  sat-2:deploy [id_tokens]  vault:configure  vault:rotate [manual]
 #   (router:deploy needs vault:configure and the image builds; see the job)
-#   secrets:rotate-proxied [manual; SCHEDULED_TASK=rotate-proxied ROTATE_SERVICE=<name>]
+#   secrets:rotate-proxied [manual; SCHEDULED_TASK=rotate-proxied ROTATE_SERVICE=<name>;
+#   monthly schedule with ROTATE_SERVICE=monthly runs it automatically]
 #
 #   NETGEAR SWITCHES (see networking/switches/netgear/README.md)
 #   netgear:test (MR + main, offline) -> netgear:apply (main, on changes)
@@ -92,6 +93,12 @@
 # Workflow Configuration
 # =============================================================================
 workflow:
+  # The pipeline name is the scheduled task (empty, so no name, otherwise).
+  # GitLab's pipeline webhook carries no schedule variables, so the event
+  # router keys a failed scheduled pipeline by this name (docker/event-router,
+  # router/events.py): one incident per task, resolved by that task's next
+  # green run.
+  name: $SCHEDULED_TASK
   auto_cancel:
     on_new_commit: interruptible
   # Runner selection (base/gitlab-runner/config.toml): pipelines on protected
@@ -1553,7 +1560,9 @@ vault:rotate-approles:
 # =============================================================================
 # One service per run. Start a pipeline on main with
 #   SCHEDULED_TASK=rotate-proxied  ROTATE_SERVICE=<service>
-# (web or API), then play the manual job. The allowlist is in
+# (web or API), then play the manual job. The monthly pipeline schedule sets
+# ROTATE_SERVICE=monthly: the job runs by itself and rotate.py picks the
+# service of the month (round-robin over the allowlist). The allowlist is in
 # ci/rotate-proxied/rotate.py; plex is refused. vault-admin JWT role (protected
 # main only), SSH to the router for the service-side steps and the consumer
 # deploy (ansible/rotate-consumers.yml). Values are never printed: no
@@ -1577,6 +1586,8 @@ secrets:rotate-proxied:
     - python3 ci/rotate-proxied/rotate.py check "$ROTATE_SERVICE"
     - python3 ci/rotate-proxied/rotate.py run --service "$ROTATE_SERVICE" --private-key tmp
   rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_REF_PROTECTED == "true" && $SCHEDULED_TASK == "rotate-proxied" && $ROTATE_SERVICE == "monthly" && $CI_PIPELINE_SOURCE == "schedule"
+      when: on_success
     - if: $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_REF_PROTECTED == "true" && $SCHEDULED_TASK == "rotate-proxied" && $ROTATE_SERVICE && ($CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api")
       when: manual
       allow_failure: false

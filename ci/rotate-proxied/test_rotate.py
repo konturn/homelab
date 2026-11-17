@@ -194,6 +194,36 @@ class AllowlistTests(unittest.TestCase):
         v.assert_not_called()
 
 
+class MonthlyTests(unittest.TestCase):
+    def test_order_is_exactly_the_allowlist(self):
+        self.assertEqual(sorted(rotate.MONTHLY_ORDER), sorted(rotate.SERVICES))
+        self.assertEqual(len(set(rotate.MONTHLY_ORDER)), len(rotate.MONTHLY_ORDER))
+        self.assertNotIn("plex", rotate.MONTHLY_ORDER)
+
+    def test_round_robin(self):
+        d = rotate.dt.date
+        n = len(rotate.MONTHLY_ORDER)
+        picks = [rotate.service_of_the_month(d(2026 + (11 + i) // 12, (11 + i) % 12 + 1, 9)) for i in range(2 * n)]
+        self.assertEqual(picks[:n], list(rotate.MONTHLY_ORDER))
+        self.assertEqual(picks[n:], picks[:n])
+        self.assertEqual(rotate.service_of_the_month(d(2026, 12, 9)), "gitlab-admin-token")
+        # The token is renewed for 364 days at each turn: the next turn must
+        # come well before that.
+        self.assertLessEqual(n, 10)
+
+    def test_monthly_resolves_on_the_cli(self):
+        with mock.patch.object(rotate, "service_of_the_month", return_value="sonarr"):
+            rc, out = run_quiet(rotate.main, ["check", "monthly"])
+        self.assertEqual(rc, 0)
+        self.assertIn("sonarr is this month's service", out)
+        self.assertIn("sonarr: allowed", out)
+
+    def test_schedule_rule_runs_without_manual_play(self):
+        ci = (REPO / ".gitlab-ci.yml").read_text()
+        job = ci.split("\nsecrets:rotate-proxied:\n", 1)[1].split("\n\n", 1)[0]
+        self.assertRegex(job, r'\$ROTATE_SERVICE == "monthly" && \$CI_PIPELINE_SOURCE == "schedule"\n\s+when: on_success')
+
+
 class MaskTests(unittest.TestCase):
     def test_scrub_plain_and_encoded(self):
         m = rotate.Masker()
@@ -384,10 +414,10 @@ class ClientTestResultTests(unittest.TestCase):
     def test_ok(self):
         self.assertTrue(rotate.client_test_result(self.r(200, {}))[0])
 
-    def test_unrelated_setting_only_passes(self):
+    def test_any_flagged_setting_fails(self):
         ok, detail = rotate.client_test_result(self.r(400, [{"propertyName": "TvCategory",
                                                               "errorMessage": "A category is recommended"}]))
-        self.assertTrue(ok)
+        self.assertFalse(ok)
         self.assertIn("TvCategory", detail)
 
     def test_connection_or_login_failure_fails(self):

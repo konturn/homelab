@@ -11,7 +11,7 @@
 #   - reset_approvals_on_push=true ("Remove all approvals when commits are
 #     added to the source branch"): scripts/approve-root-mr.sh and the
 #     automerge sweep approve one reviewed head commit and rely on it.
-#   - instance plan limit ci_pipeline_schedules=20 (default plan), so the
+#   - instance plan limit ci_pipeline_schedules=30 (default plan), so the
 #     project can hold more than GitLab's default of 10 pipeline schedules.
 #   - the event-router webhooks (pipeline + job events to
 #     http://event-router:8080/gitlab, secret token from Vault) on projects
@@ -49,8 +49,8 @@ WANT_MODE=newest_ready_first
 # for router, zwave and satellite-2, and macmini:deploy, in .gitlab-ci.yml.
 RESOURCE_GROUPS=(deploy-router deploy-zwave deploy-satellite-2 deploy-macmini)
 # Instance limit on pipeline schedules per project (GitLab default: 10).
-# The project has 11 schedules (docs/GITLAB_SETTINGS.md).
-WANT_PIPELINE_SCHEDULES=20
+# The project has 21 schedules (docs/GITLAB_SETTINGS.md).
+WANT_PIPELINE_SCHEDULES=30
 ROUTER_HOST="${ROUTER_HOST:-10.4.0.1}"
 # Event-router webhooks (docker/event-router/README.md, "GitLab events").
 HOOK_PROJECTS=(4 14)

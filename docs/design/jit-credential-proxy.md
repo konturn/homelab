@@ -759,6 +759,10 @@ its secret once:
 shape as `vault:rotate-approle`), monthly for services that support it, one
 service per run, with a verification step and a Telegram notice on failure:
 
+(Scheduled since 2026-11-17 as one service per month, round-robin, so each
+service every nine months; a failure reaches OpenClaw as a failed scheduled
+pipeline. docs/SECRET_ROTATION.md, "Monthly schedule".)
+
 | Service | How a new key is applied | Scheduled rotation? |
 |---|---|---|
 | Radarr, Sonarr, Prowlarr | The key can be set from config (`config.xml`, or `*__AUTH__APIKEY` environment variables in current Servarr releases; verify on the deployed versions) and rendered from Vault by Ansible; rotation is a Vault write plus redeploy of the service and its consumers. | **Yes** |
