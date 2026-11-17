@@ -424,6 +424,13 @@ def _seed_from_image(image, path, host_dir):
         docker("cp", f"{cid}:{path.rstrip('/')}/.", host_dir + "/", check=False)
     finally:
         docker("rm", "-f", cid, check=False)
+    # `docker cp .../.` fills the directory but keeps its own mode, and the
+    # service runs with UMask=0077, so it would stay 0700 root. Mounted over a
+    # path the container reads as a non-root user (GitLab's
+    # config/initializers, read by git), the directory then looks empty:
+    # Rails skips every initializer and boot fails with "undefined method
+    # prepend_mod_with". Image directories are world-readable.
+    os.chmod(host_dir, 0o755)
 
 
 def _seed_from_production(entry, host_dir):
