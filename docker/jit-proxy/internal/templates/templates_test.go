@@ -47,7 +47,7 @@ func decide(t *testing.T, r *Resource, tmpl []string, method, target, body strin
 
 func TestRealTemplatesLoad(t *testing.T) {
 	set := loadReal(t)
-	want := []string{"deluge", "nzbget", "ombi", "pihole", "plex", "prowlarr", "radarr", "sonarr", "tautulli"}
+	want := []string{"bluebubbles", "deluge", "nzbget", "ombi", "pihole", "plex", "prowlarr", "radarr", "sonarr", "tautulli"}
 	if got := strings.Join(set.Names(), ","); got != strings.Join(want, ",") {
 		t.Fatalf("resources %s", got)
 	}
@@ -66,7 +66,7 @@ func TestRealTemplatesLoad(t *testing.T) {
 // data need tier 2.
 func TestTiers(t *testing.T) {
 	set := loadReal(t)
-	brokerTier := map[string]int{"radarr": 1, "sonarr": 1, "prowlarr": 1, "plex": 1, "ombi": 1, "nzbget": 1, "deluge": 1, "tautulli": 1, "pihole": 2}
+	brokerTier := map[string]int{"radarr": 1, "sonarr": 1, "prowlarr": 1, "plex": 1, "ombi": 1, "nzbget": 1, "deluge": 1, "tautulli": 1, "pihole": 2, "bluebubbles": 1}
 	for name, r := range set {
 		if r.MinTier < brokerTier[name] {
 			t.Errorf("%s: min_tier %d below the broker's %d", name, r.MinTier, brokerTier[name])
@@ -145,6 +145,15 @@ func TestGoldenSkillCalls(t *testing.T) {
 		{"pihole", "block-toggle", "POST", "/r/pihole/api/dns/blocking", `{"blocking":false,"timer":300}`},
 		{"prowlarr", "read", "GET", "/r/prowlarr/api/v1/search?query=ubuntu&type=search", ""},
 		{"prowlarr", "read", "GET", "/r/prowlarr/api/v1/indexerstats", ""},
+		// skills/imessage/scripts: fetch-messages-bb.sh pages ASC from the checkpoint;
+		// send-imessage-bb.sh looks up a group chat, then posts the text.
+		{"bluebubbles", "read", "GET", "/r/bluebubbles/api/v1/ping", ""},
+		{"bluebubbles", "read", "POST", "/r/bluebubbles/api/v1/message/query", `{"limit":100,"offset":0,"sort":"ASC","after":1793817715396,"with":["chat","chat.participants","attachment","messageSummaryInfo"]}`},
+		{"bluebubbles", "read", "POST", "/r/bluebubbles/api/v1/message/query", `{"limit":100,"offset":300,"sort":"ASC","after":1793817715396,"with":["chat"]}`},
+		{"bluebubbles", "read", "GET", "/r/bluebubbles/api/v1/chat/chat123456789012345", ""},
+		{"bluebubbles", "send", "GET", "/r/bluebubbles/api/v1/chat/chat123456789012345", ""},
+		{"bluebubbles", "send", "POST", "/r/bluebubbles/api/v1/message/text", `{"chatGuid":"iMessage;+;chat123456789012345","message":"line one\nline two","tempGuid":"temp-1-2","method":"private-api"}`},
+		{"bluebubbles", "send", "POST", "/r/bluebubbles/api/v1/message/text", `{"chatGuid":"iMessage;+;chat1","message":"ok","tempGuid":"temp-1-2","method":"private-api","selectedMessageGuid":"p:0/ABCDEF01-2345-6789-ABCD-EF0123456789"}`},
 	}
 	for _, c := range cases {
 		got := decide(t, set[c.res], []string{c.tmpl}, c.method, c.target, c.body)
@@ -214,6 +223,24 @@ func TestGoldenDangerousDenied(t *testing.T) {
 		{"pihole", "POST", "/r/pihole/api/dns/blocking", `{"blocking":false}`},
 		{"pihole", "POST", "/r/pihole/api/dns/blocking", `{"blocking":false,"timer":null}`},
 		{"pihole", "POST", "/r/pihole/api/dns/blocking", `{"blocking":false,"timer":86400}`},
+		{"bluebubbles", "GET", "/r/bluebubbles/api/v1/server/info", ""},
+		{"bluebubbles", "GET", "/r/bluebubbles/api/v1/server/logs", ""},
+		{"bluebubbles", "POST", "/r/bluebubbles/api/v1/mac/restart", ""},
+		{"bluebubbles", "GET", "/r/bluebubbles/api/v1/settings", ""},
+		{"bluebubbles", "GET", "/r/bluebubbles/api/v1/findmy/devices", ""},
+		{"bluebubbles", "GET", "/r/bluebubbles/api/v1/icloud/contact", ""},
+		{"bluebubbles", "GET", "/r/bluebubbles/api/v1/attachment/abc/download", ""},
+		{"bluebubbles", "POST", "/r/bluebubbles/api/v1/message/abc/unsend", `{"partIndex":0}`},
+		{"bluebubbles", "POST", "/r/bluebubbles/api/v1/message/abc/edit", `{"editedMessage":"x"}`},
+		{"bluebubbles", "POST", "/r/bluebubbles/api/v1/message/multipart", `{"chatGuid":"x","parts":[]}`},
+		{"bluebubbles", "POST", "/r/bluebubbles/api/v1/message/react", `{"chatGuid":"x","selectedMessageGuid":"y","reaction":"love"}`},
+		{"bluebubbles", "POST", "/r/bluebubbles/api/v1/chat/new", `{"addresses":["x"],"message":"hi"}`},
+		{"bluebubbles", "DELETE", "/r/bluebubbles/api/v1/chat/abc", ""},
+		{"bluebubbles", "POST", "/r/bluebubbles/api/v1/chat/abc/participant/add", `{"address":"x"}`},
+		{"bluebubbles", "POST", "/r/bluebubbles/api/v1/message/query?password=x", `{"limit":10}`},
+		{"bluebubbles", "POST", "/r/bluebubbles/api/v1/message/query", `{"limit":5000}`},
+		{"bluebubbles", "POST", "/r/bluebubbles/api/v1/message/text", `{"chatGuid":"x","message":"hi","tempGuid":"t","method":"private-api","Method":"apple-script"}`},
+		{"bluebubbles", "GET", "/r/bluebubbles/api/v1/handle/query", ""},
 	}
 	for _, c := range cases {
 		r := set[c.res]
