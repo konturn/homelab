@@ -480,9 +480,15 @@ def fetch_window(lower_ms):
         src, count=1)
     if n != 1:
         raise RuntimeError("fetch script layout changed (CHECKPOINT_FILE line not found)")
+    # Fed through `bash -s`, $0 is "bash", so a DIR derived from it is the
+    # cwd and `source "$DIR/bb-api.sh"` fails. Pin DIR to the script's own
+    # directory inside the container.
+    new, n = re.subn(r'(?m)^DIR=.*$', 'DIR="%s/imessage/scripts"' % SKILLS, new, count=1)
+    if n != 1 and "$DIR" in new:
+        raise RuntimeError("fetch script layout changed (DIR line not found)")
     rc, out, err, _ = docker_exec(["bash", "-s"], stdin=new, timeout=90)
     if rc != 0:
-        raise RuntimeError("fetch failed rc=%s" % rc)
+        raise RuntimeError("fetch failed rc=%s: %s" % (rc, (err or "").strip()[-300:]))
     return json.loads(out)
 
 
