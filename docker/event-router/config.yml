@@ -276,7 +276,7 @@ page_classes:
 
 # Router deploys (resource_group deploy-router in .gitlab-ci.yml): while one
 # runs, nothing but ci-orphan-cancel acts (S7).
-deploy_jobs: ["router:deploy", "router:deploy-service", "facts:drift", "ups-card:drift"]
+deploy_jobs: ["router:deploy", "router:deploy-service", "facts:drift", "ups-card:drift", "secrets:rotate-proxied"]
 
 # Reconciler (routing table row 11): a job of these names still running past
 # its timeout (+ grace), or started before GitLab last came back, is orphaned.
@@ -291,3 +291,4 @@ ci_orphan:
     "router:deploy-service": 60m
     "facts:drift": 30m
     "ups-card:drift": 30m
+    "secrets:rotate-proxied": 45m
