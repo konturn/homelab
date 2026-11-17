@@ -243,3 +243,5 @@ cover.
    the hook bound to `ops`.
 3. Remove the shared key and the `prometheus` row. The broker now refuses
    to start if `JIT_API_KEY` is set.
+   The shared key itself (Vault `homelab/agents/jit-api-key`) was deleted
+   on 2026-11-17 by the one-off CI job `vault:delete-legacy-jit-key`.

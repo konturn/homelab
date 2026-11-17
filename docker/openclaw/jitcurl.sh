@@ -32,7 +32,7 @@ set -eu
 
 JIT_URL=${JIT_URL:-https://jit.lab.nkontur.com}
 PROXY_URL=${JIT_PROXY_URL:-http://172.30.6.10:8090}
-KEY_PATH=${JIT_API_KEY_VAULT_PATH:-homelab/data/agents/jit-api-key}
+KEY_PATH=${JIT_API_KEY_VAULT_PATH:-homelab/data/agents/openclaw-noah}
 CACHE_DIR=${JIT_GRANT_CACHE_DIR:-${JIT_GITLAB_CACHE_DIR:-/home/node/.openclaw/credentials}/jit-grants}
 MIN_LEFT=60
 
