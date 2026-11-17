@@ -40,7 +40,7 @@ The secrets the dynamic backends mint from (upstream admin tokens, OAuth clients
 | `gmail-read`, `gmail-send` | Dynamic (GmailBackend) | Google OAuth2 access token (read-only / send scope) |
 | `ssh-*` (router, satellite, zwave, macmini, user hosts; `-elevated` variants) | Dynamic (SSHBackend) | Vault-signed SSH certificate |
 | `vault` | Dynamic (VaultDynamicBackend) | Vault token with a per-request policy for the requested `vault_paths` |
-| Radarr, Sonarr, Prowlarr, Plex, Ombi, NZBGet, Deluge, Tautulli, Pi-hole | Credential proxy (`internal/proxygrant`, `docker/jit-proxy`) | Proxy grant (`jitp_…`): the agent never receives the service's secret; see [Credential proxy](#credential-proxy) |
+| Radarr, Sonarr, Prowlarr, Plex, Ombi, NZBGet, Deluge, Tautulli, Pi-hole, BlueBubbles | Credential proxy (`internal/proxygrant`, `docker/jit-proxy`) | Proxy grant (`jitp_…`): the agent never receives the service's secret; see [Credential proxy](#credential-proxy) |
 | MQTT, IPMI | Static (Vault) | Vault token with the resource's own `jit-static-*` policy (not HTTP; design 8.4) |
 
 The `vault` backend writes a policy `jit-vault-<request id>` whose first line
@@ -107,6 +107,7 @@ Agent --GET /r/<resource>/<path>  Authorization: Bearer jitp_...  X-JIT-API-Key:
 | nzbget | `read` 1, `control` 1, `remove`* 1 |
 | deluge | `read` 1, `control` 1, `remove`* 1, `remove-data`* 2 |
 | pihole | `read` 2, `block-toggle` 2, `lists` 2 |
+| bluebubbles | `read` 1, `send` 1 |
 
 The proxy enforces these invariants, each covered by tests in
 `docker/jit-proxy` (CI job `jit-proxy:test`):
@@ -273,7 +274,7 @@ longer active" and the client re-sends what it still needs.
 
 | Tier | TTL | Resources |
 |------|-----|-----------|
-| 1 | 15 min | grafana, influxdb, plex, radarr, sonarr, prowlarr, ombi, nzbget, deluge, tautulli, mqtt, gmail-read, ssh-macmini, gitlab-moltbot (1 h) |
+| 1 | 15 min | grafana, influxdb, plex, radarr, sonarr, prowlarr, ombi, nzbget, deluge, tautulli, bluebubbles, mqtt, gmail-read, ssh-macmini, gitlab-moltbot (1 h) |
 | 2 | 30 min | gitlab, homeassistant, paperless, gmail-send, tailscale, pihole, vault (scoped paths), ssh-satellite, ssh-zwave, ssh-nkontur/konoahko/konturn (8 h) |
 | 3 | 30 min | ssh-router, every `ssh-*-elevated`, ipmi |
 

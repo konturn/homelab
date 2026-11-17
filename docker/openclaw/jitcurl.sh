@@ -10,7 +10,8 @@
 #   jitcurl radarr write POST /api/v3/command -d '{"name":"MoviesSearch","movieIds":[12]}'
 #
 # The services behind the credential proxy (docker/jit-proxy:
-# radarr, sonarr, prowlarr, plex, ombi, nzbget, deluge, tautulli, pihole)
+# radarr, sonarr, prowlarr, plex, ombi, nzbget, deluge, tautulli, pihole,
+# bluebubbles)
 # are never called with their own keys. jitcurl asks the JIT broker for a
 # grant (credential_type proxy_grant, the templates as scopes; the broker
 # applies tiers and Noah's approval as for any JIT request), then sends the
