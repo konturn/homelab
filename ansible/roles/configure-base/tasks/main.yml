@@ -171,6 +171,22 @@
     group: root
     mode: 0600
 
+# GRUB menu, kernel console and the root-disk LUKS prompt on the BMC's
+# Serial-over-LAN port as well as the local screen (docs/DISASTER_RECOVERY.md,
+# "Unlocking the root disk remotely"). Takes effect at the next reboot.
+- name: GRUB serial console drop-in
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/boot/grub-serial-console.cfg' }}"
+    dest: '/etc/default/grub.d/50-serial-console.cfg'
+    owner: root
+    group: root
+    mode: 0644
+  register: grub_serial_cfg
+
+- name: Regenerate grub.cfg after the serial console change
+  ansible.builtin.command: update-grub
+  when: grub_serial_cfg.changed
+
 - name: crypttab
   ansible.builtin.copy:
     src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/disk/crypttab' }}"

@@ -222,6 +222,25 @@ Restart services after restoring: `cd /persistent_data/application/ansible_state
 
 ---
 
+## Unlocking the root disk remotely
+
+The root disk's LUKS passphrase is asked for at every boot. Besides the local
+screen, the prompt (and the GRUB menu and kernel messages) appear on the
+second serial port, which the BMC exposes over IPMI Serial-over-LAN
+(`base/boot/grub-serial-console.cfg`, installed by configure-base). From any
+machine on the same LAN segment as the BMC:
+
+```bash
+ipmitool -I lanplus -H <bmc address> -U <ipmi user> sol activate
+# type the passphrase at the prompt; exit the session with ~.
+```
+
+The IPMI credentials are in Vault at `infrastructure/ipmi` (and in your
+offsite copy). While the router is down nothing routes and there is no DHCP,
+so the client must already be on the BMC's subnet; a laptop that reconnects
+mid-outage needs a manual address in that subnet. The GRUB menu shows for five
+seconds on both consoles, so an older kernel can also be picked over SOL.
+
 ## Restoring /etc
 
 The nightly backup has its own snapshot of `/etc` (path `/etc` in
