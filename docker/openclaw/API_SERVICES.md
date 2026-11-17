@@ -44,8 +44,8 @@ tokens never reach it.
 
 ### Services behind the credential proxy
 
-Radarr, Sonarr, Prowlarr, Plex, Ombi, NZBGet, Deluge, Tautulli and Pi-hole
-are only reachable through the JIT credential proxy (`docker/jit-proxy`,
+Radarr, Sonarr, Prowlarr, Plex, Ombi, NZBGet, Deluge, Tautulli, Pi-hole and
+BlueBubbles (iMessage) are only reachable through the JIT credential proxy (`docker/jit-proxy`,
 `docs/design/jit-credential-proxy.md`). Neither agent ever receives their
 keys:
 
@@ -83,6 +83,7 @@ real credential. Templates and what they allow are listed in
 | **NZBGet** | `nzbget` (1) | `read`, `control`, `remove`* |
 | **Deluge** | `deluge` (1) | `read`, `control`, `remove`*, `remove-data`* (2) |
 | **Pi-hole** | `pihole` (2) | `read`, `block-toggle`, `lists` |
+| **BlueBubbles** (iMessage) | `bluebubbles` (1) | `read`, `send` (text replies only) |
 
 \* single use: one request per grant.
 

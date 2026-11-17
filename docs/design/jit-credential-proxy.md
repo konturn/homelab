@@ -45,12 +45,13 @@ As of 2026-11-17 (!1299, !1301, !1302, the cutover MR and !1314):
 
 **Live**
 - `docker/jit-proxy` runs as a separate service (option B, Q1).
-  - It has its own AppRole `jit-proxy`, read-only on exactly the nine KV paths, with logins bound to its fixed `internal` address.
+  - It has its own AppRole `jit-proxy`, read-only on exactly the KV paths its templates name, with logins bound to its fixed `internal` address.
   - The data plane listens on `openclaw-jitproxy` and accepts only the gateway's address. The control plane listens on `jit-proxy-ctl` and needs a bearer key.
   - The image is distroless and non-root, with a read-only root filesystem and no capabilities.
 - The broker issues `proxy_grant` credentials (`internal/proxygrant`). Registration on the control bridge happens before issuance (Q3). Grants are revoked at expiry or by their requester, and live multi-use grants are re-registered after a proxy restart.
 - The agent uses `jitcurl` (`/usr/local/bin/jitcurl`). The skills of both agents (`noah` and `ops`) use it, and `jit_service_key` refuses these services.
 - Proxied, with static issuance removed (`staticResourcePaths` and `jit-static-*`): **radarr, sonarr, prowlarr, plex, ombi, nzbget, deluge, tautulli, pihole**. Each was verified with real calls through the proxy. Live checks also showed that deny lists and template boundaries refuse, and that a grant used with another requester's key is refused.
+- **bluebubbles** (iMessage on the Mac mini, added 2026-11-17, issue #167): after the identity split the `ops` agent runs the iMessage crons with no Vault login, so it reads and sends through the proxy (`read`, `send`; text replies only, no attachments, edits, unsends or server/Mac controls). The proxy reaches the API through `bluebubbles-relay` on its own internal bridge `jitproxy-relay` and adds `?password=` upstream. The `noah` agent's direct path through `openclaw-relay` stays until both agents' scripts use `jitcurl`; the secret was never rotated, so the `noah` agent still holds it.
 
 **Decisions taken where this document left a choice, or where later work changed the premise**
 - **Requester identity (5.3, Q2).** A grant is bound to the SHA-256 of the requester's broker key, which comes from the identity split's per-requester keys (`docs/design/openclaw-identities.md`), not to Vault-token lookup. Both agents share the gateway container, so a per-network `client_net` could not tell them apart.
@@ -148,6 +149,7 @@ What the code does today (`docker/jit-approval-svc`, verified on `main`):
 | `nzbget` | 1 | `docker/nzbget` | username + password | HTTP basic auth, JSON-RPC | Yes | telegraf, Radarr/Sonarr download clients |
 | `deluge` | 1 | `docker/deluge` | Web UI password | JSON-RPC `auth.login` then session cookie | Yes | telegraf `deluge-stats.sh`, Radarr/Sonarr download clients |
 | `tautulli` | 1 | `docker/tautulli` | API key | `apikey` query parameter | Yes | telegraf |
+| `bluebubbles` | 1 | `openclaw/bluebubbles` | Server password | `password` query parameter | Yes | the `noah` agent's direct path through `bluebubbles-relay` (openclaw-relay) |
 | `paperless` | 2 | `docker/paperless` (admin user/password) | DRF token of the admin user | `Authorization: Token` | Yes | paperless-ai uses its own token |
 | `pihole` | 2 | `infrastructure/pihole` | Admin / app password | Session (`sid`) | Yes | none known |
 | `mqtt` | 1 | `mqtt/mosquitto` | Broker username/password | MQTT | **No** | many (HA, zigbee2mqtt, anomaly-detector) |
@@ -299,6 +301,7 @@ Proposed:
 |---|---|---|
 | `openclaw-jitproxy` (new, bridge, `internal: true`) | `openclaw-gateway`, `jit-proxy` | The only listener for agent traffic. The proxy binds its data-plane port to this network's address only. |
 | `jit-proxy-ctl` (new, bridge, `internal: true`) | `jit-approval-svc`, `jit-proxy` | Grant registration and revocation (control plane). |
+| `jitproxy-relay` (bridge, `internal: true`) | `jit-proxy`, `bluebubbles-relay` | The proxy's upstream for `bluebubbles`; the relay forwards to the Mac mini on mgmt, so the proxy needs no mgmt leg. |
 | `internal` (existing macvlan) | `jit-proxy` (outbound only) | Reaching upstreams and Vault. No listener here. |
 
 The agent keeps reaching the broker the way it does now. Nothing new is

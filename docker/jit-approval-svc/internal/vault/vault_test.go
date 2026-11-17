@@ -190,7 +190,7 @@ func TestResourceTierConsistency(t *testing.T) {
 
 // The credential-proxy resources never get a static token.
 func TestProxiedResourcesHaveNoStaticPath(t *testing.T) {
-	for _, res := range []string{"radarr", "sonarr", "prowlarr", "plex", "ombi", "nzbget", "deluge", "tautulli", "pihole"} {
+	for _, res := range []string{"radarr", "sonarr", "prowlarr", "plex", "ombi", "nzbget", "deluge", "tautulli", "pihole", "bluebubbles"} {
 		if IsStaticResource(res) {
 			t.Errorf("%s still has a static path", res)
 		}

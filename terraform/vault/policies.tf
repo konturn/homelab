@@ -413,6 +413,7 @@ resource "vault_policy" "jit_static" {
 
 locals {
   jit_proxy_paths = [
+    "homelab/data/openclaw/bluebubbles",
     "homelab/data/docker/deluge",
     "homelab/data/docker/nzbget",
     "homelab/data/docker/ombi",

@@ -39,6 +39,8 @@ all:
     openclaw_gateway_jitproxy_ip: 172.30.6.20  # the only client the proxy's data plane accepts
     jit_proxy_ctl_ip: 172.30.7.10  # jit-proxy-ctl bridge (broker control plane)
     jit_proxy_internal_ip: 10.3.32.17  # egress only; jit-proxy AppRole is bound to it (terraform/vault/roles.tf)
+    jit_proxy_relay_ip: 172.30.8.10  # jitproxy-relay bridge (upstream for the bluebubbles resource)
+    bluebubbles_relay_jitproxy_ip: 172.30.8.20  # bluebubbles-relay on jitproxy-relay
     # Requester x tier -> auto | auto-fyi | approve | deny, for the JIT broker
     # and the credential proxy alike (docs/design/openclaw-identities.md).
     jit_approval_matrix: "openclaw-noah=auto,auto-fyi,approve;openclaw-ops=auto,approve,deny"

@@ -57,7 +57,7 @@ smaller identity, and anything bigger has to go through Noah.
 
 | Tier | Resources |
 |---|---|
-| 1 | grafana, influxdb, plex, radarr, sonarr, prowlarr, ombi, nzbget, deluge, tautulli, mqtt, gmail-read, ssh-macmini, gitlab-moltbot |
+| 1 | grafana, influxdb, plex, radarr, sonarr, prowlarr, ombi, nzbget, deluge, tautulli, bluebubbles, mqtt, gmail-read, ssh-macmini, gitlab-moltbot |
 | 2 | gitlab, homeassistant, paperless, gmail-send, tailscale, pihole, vault (scoped paths), ssh-satellite, ssh-zwave, ssh-nkontur, ssh-konoahko, ssh-konturn |
 | 3 | ssh-router, ssh-router-elevated, ssh-zwave-elevated, ssh-satellite-elevated, ssh-macmini-elevated, ipmi |
 

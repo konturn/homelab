@@ -319,6 +319,7 @@ var resourceTier = map[string]int{
 	"gmail-read":  1,
 	"prowlarr":    1,
 	"tautulli":    1,
+	"bluebubbles": 1, // iMessage (Mac mini), proxy-only
 	"mqtt":        1,
 	"ssh-macmini": 1,
 	// The agent's own GitLab identity, short-lived (gitlab_agent.go).
@@ -387,8 +388,9 @@ func MinTierForResource(resource string) int {
 // a Vault token.
 //
 // The services behind the credential proxy (docker/jit-proxy: radarr, sonarr,
-// prowlarr, plex, ombi, nzbget, deluge, tautulli, pihole) are absent too: the
-// agent gets proxy grants for them, never a token that reads their secrets.
+// prowlarr, plex, ombi, nzbget, deluge, tautulli, pihole, bluebubbles) are
+// absent too: the agent gets proxy grants for them, never a token that reads
+// their secrets.
 // MQTT and IPMI are not HTTP and stay here (design 8.4, Q15).
 var staticResourcePaths = map[string][]string{
 	"mqtt": {"homelab/data/mqtt/mosquitto"},

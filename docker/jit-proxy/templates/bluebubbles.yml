@@ -1,0 +1,71 @@
+# BlueBubbles (iMessage on the Mac mini). The proxy reaches it through
+# bluebubbles-relay on the jitproxy-relay bridge and adds ?password= upstream;
+# "password" is a credential parameter, so an agent can never send its own.
+# The OpenClaw iMessage skills (skills/imessage/scripts/*-bb.sh) read new
+# messages and send replies through this resource, which lets the ops agent
+# run the iMessage crons without a Vault login.
+#
+# Only the calls those scripts make are allowed. The deny list covers the
+# server, Mac and Find My controls and attachments (binary, and the proxy
+# returns text only), in case a later allow rule is written too broadly.
+resource: bluebubbles
+min_tier: 1
+upstream: http://bluebubbles-relay:1234
+plain_http_on_internal: true
+auth: {type: query, name: password, vault_path: homelab/data/openclaw/bluebubbles, field: password}
+body_max: 65536
+
+deny:
+  - {path: "/api/v1/server/**"}
+  - {path: "/api/v1/mac/**"}
+  - {path: "/api/v1/settings/**"}
+  - {path: "/api/v1/backup/**"}
+  - {path: "/api/v1/fcm/**"}
+  - {path: "/api/v1/webhook/**"}
+  - {path: "/api/v1/icloud/**"}
+  - {path: "/api/v1/findmy/**"}
+  - {path: "/api/v1/facetime/**"}
+  - {path: "/api/v1/attachment/**"}
+  - {path: "/api/v1/message/multipart"}
+  - {path: "/api/v1/message/{guid}/unsend"}
+  - {path: "/api/v1/message/{guid}/edit"}
+  - {path: "/api/v1/chat/{guid}/participant/**"}
+
+templates:
+  read:
+    min_tier: 1
+    description: "Read iMessages and chat details (message query, one chat by identifier)"
+    allow:
+      - {method: GET, path: "/api/v1/ping"}
+      # fetch-messages-bb.sh pages with limit/offset after the checkpoint.
+      # `with` (related rows to include) is a JSON array and is not
+      # constrained here; it only adds chat, handle and attachment metadata.
+      - method: POST
+        path: /api/v1/message/query
+        json:
+          limit: {type: int, min: 1, max: 1000}
+          offset: {type: int, min: 0, max: 1000000}
+          sort: [ASC, DESC]
+          after: int
+          before: int
+        json_optional: [offset, sort, after, before]
+        body_max: 4096
+      - {method: GET, path: "/api/v1/chat/{id}"}
+  send:
+    min_tier: 1
+    description: "Send iMessage text replies as Noah (plus read)"
+    includes: [read]
+    allow:
+      # `message` is free text and may be long or multi-line, so it is not
+      # given a value spec (`any` caps at 512 printable characters); the
+      # body cap bounds it. Only the text endpoint: no attachments, no
+      # reactions, no edits or unsends.
+      - method: POST
+        path: /api/v1/message/text
+        json:
+          chatGuid: any
+          tempGuid: any
+          method: [private-api, apple-script]
+          selectedMessageGuid: any
+        json_optional: [selectedMessageGuid]
+        body_max: 32768
