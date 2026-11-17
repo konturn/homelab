@@ -150,6 +150,32 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(self.plan(["docs/CANARY.md"]), [])
 
 
+class SeedFromImageTest(unittest.TestCase):
+    def test_seeded_dir_is_readable_under_the_service_umask(self):
+        calls = []
+
+        class Result:
+            stdout = "cid\n"
+
+        def fake_docker(*args, **kwargs):
+            calls.append(args)
+            return Result()
+
+        real = canary.docker
+        canary.docker = fake_docker
+        old = os.umask(0o077)
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                host = os.path.join(d, "m0")
+                os.makedirs(host)
+                canary._seed_from_image("img", "/some/dir/", host)
+                self.assertEqual(os.stat(host).st_mode & 0o777, 0o755)
+        finally:
+            os.umask(old)
+            canary.docker = real
+        self.assertEqual(calls[1][:2], ("cp", "cid:/some/dir/."))
+
+
 class StubHostsTest(unittest.TestCase):
     def test_literal_upstreams_only(self):
         text = """
