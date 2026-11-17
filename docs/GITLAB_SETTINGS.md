@@ -10,7 +10,7 @@ the `gitlab:settings` CI job.
 | Resource groups `deploy-router`, `deploy-zwave`, `deploy-satellite-2`, `deploy-macmini`: `process_mode` | `newest_ready_first` | One deploy per host at a time, and the newest commit's deploy goes next instead of the oldest queued one. |
 | Project `ci_forward_deployment_enabled` ("Prevent outdated deployment jobs") | `true` | With the deploy jobs' `environment:`, an older deploy still waiting for its resource group is skipped once a newer one has run. |
 | Project `reset_approvals_on_push` ("Remove all approvals when commits are added to the source branch") | `true` | An approval covers the commit it was given for. `scripts/approve-root-mr.sh` and the automerge sweep approve one reviewed head commit; a later push drops the approval, so the new head needs a new one. Was already on; enforced here since 2026-11-07. |
-| Instance plan limit `ci_pipeline_schedules` (plan `default`) | `20` | GitLab allows 10 pipeline schedules per project by default; this project has 18 (nightly full deploy, 4 reports, 5 drift checks, NETGEAR and Aruba firmware check and rollout, renovate, automerge sweep and report, this job). Raised by hand on 2026-10-20 (Admin > plan limits, the same as `PUT /application/plan_limits`), now enforced here. |
+| Instance plan limit `ci_pipeline_schedules` (plan `default`) | `30` | GitLab allows 10 pipeline schedules per project by default; this project has 21 (nightly full deploy, 4 reports, 6 drift checks, NETGEAR and Aruba firmware check and rollout, renovate, automerge sweep and report, the weekly TLA+ check, the monthly proxied-secret rotation, this job). Raised by hand on 2026-10-20 (Admin > plan limits, the same as `PUT /application/plan_limits`), now enforced here; 30 since 2026-11-17. |
 | Project webhooks on `root/homelab` (4) and `root/homeassistant` (14) | URL `http://event-router:8080/gitlab`, pipeline and job events only, SSL verification off, secret token = Vault `homelab/docker/event-router` `gitlab_webhook_token` | The event router's GitLab input ([docker/event-router/README.md](../docker/event-router/README.md), "GitLab events"). Created by hand on 2026-11-08, enforced here since. |
 | Instance outbound local-request allowlist (Admin > Network > Outbound requests) | contains `event-router` | GitLab refuses to deliver hooks to local addresses unless they are on this list; local requests in general stay off. Only the entry is added; other entries are left alone. |
 
@@ -44,7 +44,7 @@ created. The script reads and sets the limit inside the router's `gitlab`
 container instead:
 
 - read: `gitlab-psql` (`plan_limits` joined to `plans`, plan `default`), under a second;
-- fix: `gitlab-rails runner 'Plan.default.actual_limits.update!(ci_pipeline_schedules: 20)'`
+- fix: `gitlab-rails runner 'Plan.default.actual_limits.update!(ci_pipeline_schedules: 30)'`
   (about 2 minutes to boot Rails; only on drift), then read again.
 
 On the router it runs `docker exec gitlab ...`. In CI it SSHes to

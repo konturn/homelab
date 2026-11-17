@@ -4,6 +4,8 @@
   rotate.py check NAME            exit 0 if NAME is on the allowlist, 2 if not
   rotate.py run --service NAME    rotate it (CI only: protected main, vault-admin)
 
+NAME "monthly" means this month's service (service_of_the_month, UTC).
+
 One service per run (docs/SECRET_ROTATION.md, "Proxied services"):
 
   1. Preflight: the name is on the allowlist (never plex), the value in Vault
@@ -711,16 +713,10 @@ class Sonarr(ArrWithOmbi):
     telegraf = ["sonarr_status"]
 
 
-# A download client test also validates settings that have nothing to do with
-# the credentials (Sonarr fails it when no category is set). Failures on only
-# these properties mean the connection and the login worked.
-CLIENT_TEST_UNRELATED = {"tvcategory", "moviecategory", "musiccategory", "category",
-                         "tvimportedcategory", "movieimportedcategory", "recenttvpriority",
-                         "oldertvpriority", "recentmoviepriority", "oldermoviepriority"}
-
-
 def client_test_result(r: Response):
-    """(passed, detail) for an *arr download client test response."""
+    """(passed, detail) for an *arr download client test response. Only a
+    clean pass counts: every Radarr/Sonarr client test passes with no
+    warnings (checked 2026-11-17), so any flagged setting is a failure."""
     if r.status == 200:
         return True, "HTTP 200"
     if r.status != 400:
@@ -732,8 +728,6 @@ def client_test_result(r: Response):
     if not isinstance(failures, list) or not failures:
         return False, "HTTP 400"
     props = [str(f.get("propertyName") or "") for f in failures if isinstance(f, dict)]
-    if props and all(p.lower() in CLIENT_TEST_UNRELATED for p in props):
-        return True, "connected; only unrelated settings flagged: " + ", ".join(sorted(set(props)))
     return False, "HTTP 400: " + ", ".join(sorted(set(p or "(connection)" for p in props)))
 
 
@@ -876,11 +870,11 @@ class GitlabAdminToken(Service):
         return bool(info and info.get("active") and not info.get("revoked"))
 
     def generate(self, ctx, s, old, data):
-        info = gitlab_self(ctx, old) or fail("GitLab token is not valid")
-        expires = info.get("expires_at")
-        today = dt.date.today()
-        if not expires or dt.date.fromisoformat(expires) <= today + dt.timedelta(days=7):
-            expires = (today + dt.timedelta(days=364)).isoformat()
+        gitlab_self(ctx, old) or fail("GitLab token is not valid")
+        # A year from now (GitLab's limit is 365 days): the monthly schedule
+        # comes back to this token every len(MONTHLY_ORDER) months, well
+        # before then. Keeping the old date would let it lapse in between.
+        expires = (dt.date.today() + dt.timedelta(days=364)).isoformat()
         body = urllib.parse.urlencode({"expires_at": expires})
         r = expect(ctx.http.request("POST", f"{GITLAB}/personal_access_tokens/self/rotate",
                                     headers={"PRIVATE-TOKEN": old}, body=body,
@@ -904,6 +898,21 @@ SERVICES: Dict[str, Callable[[], Service]] = {
     "pihole": Pihole,
     "gitlab-admin-token": GitlabAdminToken,
 }
+
+# Monthly schedule (ROTATE_SERVICE=monthly): one service per month, in this
+# order, starting with MONTHLY_START (year, month). Every allowlisted service,
+# nothing else (test_rotate.py checks). The GitLab token goes first: its
+# expiry date must be renewed before it lapses (GitlabAdminToken.generate).
+MONTHLY = "monthly"
+MONTHLY_START = (2026, 12)
+MONTHLY_ORDER = ("gitlab-admin-token", "tautulli", "prowlarr", "ombi", "radarr", "sonarr",
+                 "nzbget", "deluge", "pihole")
+
+
+def service_of_the_month(today: Optional[dt.date] = None) -> str:
+    d = today or dt.datetime.now(dt.timezone.utc).date()
+    n = (d.year - MONTHLY_START[0]) * 12 + (d.month - MONTHLY_START[1])
+    return MONTHLY_ORDER[n % len(MONTHLY_ORDER)]
 
 
 # --------------------------------------------------------------------------
@@ -1045,7 +1054,11 @@ def main(argv=None) -> int:
     a = p.parse_args(argv)
     os.umask(0o077)
     try:
-        name = validate_service(a.service)
+        service = a.service
+        if service == MONTHLY:
+            service = service_of_the_month()
+            log(f"monthly: {service} is this month's service")
+        name = validate_service(service)
         if a.cmd == "check":
             log(f"{name}: allowed")
             return 0

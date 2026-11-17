@@ -142,6 +142,10 @@ def from_gitlab(payload, projects, branch="main", deploy_jobs=()):
         for v in attrs.get("variables") or []:
             if isinstance(v, dict) and v.get("key") == "SCHEDULED_TASK" and _TASK.match(str(v.get("value") or "")):
                 task = v["value"]
+        # Scheduled pipelines: GitLab sends no schedule variables in the hook,
+        # but the pipeline name (workflow:name in .gitlab-ci.yml) is the task.
+        if not task and _TASK.match(str(attrs.get("name") or "")):
+            task = attrs["name"]
         key = f"{project}:{source}:{task or '-'}"
         labels = {"project_id": str(project), "pipeline_id": str(pid), "pipeline_source": source,
                   "pipeline_key": key}

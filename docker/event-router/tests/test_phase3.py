@@ -528,6 +528,16 @@ class TestGitLab(Fwd):
         self.assertEqual(ev.status, "resolved")
         [ev] = from_gitlab(self.pipeline("failed", source="schedule", task="renovate"), [4])
         self.assertEqual(ev.labels["scheduled_task"], "renovate")
+        # Scheduled pipelines carry no variables in the hook; the pipeline
+        # name (workflow:name) gives the task, so tasks stay separate.
+        sched = self.pipeline("failed", source="schedule")
+        sched["object_attributes"]["name"] = "rotate-proxied"
+        [ev] = from_gitlab(sched, [4])
+        self.assertEqual((ev.fp, ev.labels["scheduled_task"]), ("gitlab:pipeline:4:schedule:rotate-proxied",
+                                                                "rotate-proxied"))
+        sched["object_attributes"]["name"] = "Not a task name!"
+        [ev] = from_gitlab(sched, [4])
+        self.assertEqual(ev.fp, "gitlab:pipeline:4:schedule:-")
         [ev] = from_gitlab(self.pipeline("failed", builds=[{"name": "router:deploy-service", "status": "failed"}]), [4])
         self.assertEqual(ev.labels["handled_by"], "automerge-rollback")
         self.assertEqual(from_gitlab(self.pipeline("failed", ref="feature"), [4]), [])
