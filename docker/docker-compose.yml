@@ -100,6 +100,16 @@ networks:
     ipam:
       config:
         - subnet: 172.30.2.0/24
+  # jit-proxy <-> bluebubbles-relay: the proxy's upstream for the
+  # bluebubbles resource (docker/jit-proxy/templates/bluebubbles.yml), so an
+  # agent without the BlueBubbles password can still use it through a grant.
+  # Only these two attach.
+  jitproxy-relay:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.8.0/24
   # openclaw-gateway <-> jit-proxy (data plane: /r/<resource>/..., grants
   # only). Only these two attach; the proxy listens on this address alone.
   openclaw-jitproxy:
@@ -1428,6 +1438,8 @@ services:
         ipv4_address: {{ jit_proxy_ip }}
       jit-proxy-ctl:
         ipv4_address: {{ jit_proxy_ctl_ip }}
+      jitproxy-relay:
+        ipv4_address: {{ jit_proxy_relay_ip }}
     deploy:
       resources:
         limits:
@@ -3021,9 +3033,10 @@ services:
       # is for egress and noVNC (:6080).
       - CDP_LISTEN_ADDR={{ chromium_cdp_ip }}
       - CDP_ALLOWED_ORIGINS=http://{{ chromium_cdp_ip }}:9222
-  # TCP relay from openclaw-gateway to the BlueBubbles API on the Mac mini
-  # (mgmt VLAN), so the gateway itself needs no mgmt leg. Listens only on
-  # the openclaw-relay network and forwards to a single host:port.
+  # TCP relay from openclaw-gateway and jit-proxy to the BlueBubbles API on
+  # the Mac mini (mgmt VLAN), so neither needs a mgmt leg. Listens only on
+  # the openclaw-relay and jitproxy-relay networks and forwards to a single
+  # host:port.
   bluebubbles-relay:
     image: gitlab-registry.lab.nkontur.com:443/root/homelab/nginx:latest  # docker/images/nginx
     container_name: bluebubbles-relay
@@ -3040,6 +3053,8 @@ services:
       mgmt:
       openclaw-relay:
         ipv4_address: {{ bluebubbles_relay_ip }}
+      jitproxy-relay:
+        ipv4_address: {{ bluebubbles_relay_jitproxy_ip }}
     restart: unless-stopped
     deploy:
       resources:
@@ -3056,6 +3071,7 @@ services:
         stream {
           server {
             listen {{ bluebubbles_relay_ip }}:1234;
+            listen {{ bluebubbles_relay_jitproxy_ip }}:1234;
             proxy_pass {{ mac_mini_address }}:1234;
             proxy_connect_timeout 5s;
           }
