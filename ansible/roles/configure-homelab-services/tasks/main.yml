@@ -538,6 +538,8 @@
       dest: "{{ docker_persistent_data_path }}/grafana/provisioning/alerting/infrastructure.yml"
     - src: "docker/grafana/provisioning/alerting/anomaly.yml"
       dest: "{{ docker_persistent_data_path }}/grafana/provisioning/alerting/anomaly.yml"
+    - src: "docker/grafana/provisioning/alerting/air-quality.yml"
+      dest: "{{ docker_persistent_data_path }}/grafana/provisioning/alerting/air-quality.yml"
     # Dashboards: provider (read at startup, hence the restart below) and JSON
     - src: "docker/grafana/provisioning/dashboards/homelab.yml"
       dest: "{{ docker_persistent_data_path }}/grafana/provisioning/dashboards/homelab.yml"
@@ -549,6 +551,8 @@
       dest: "{{ docker_persistent_data_path }}/grafana/provisioning/dashboards/json/event-router.json"
     - src: "docker/grafana/provisioning/dashboards/json/solterra.json"
       dest: "{{ docker_persistent_data_path }}/grafana/provisioning/dashboards/json/solterra.json"
+    - src: "docker/grafana/provisioning/dashboards/json/air-quality.json"
+      dest: "{{ docker_persistent_data_path }}/grafana/provisioning/dashboards/json/air-quality.json"
   when: "'router' in inventory_hostname"
 
 # Vaultwarden's admin-panel settings (/data/config.json) take precedence over

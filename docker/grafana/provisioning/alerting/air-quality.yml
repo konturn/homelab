@@ -1,0 +1,69 @@
+apiVersion: 1
+
+groups:
+  # Indoor air quality (Awair Element REST sensors in Home Assistant, written
+  # to the homeassistant bucket). docker/grafana/provisioning/dashboards/json/air-quality.json
+  - orgId: 1
+    name: air-quality
+    folder: General Alerting
+    interval: 5m
+    rules:
+      # Minutes the bedroom CO2 10-minute mean spent above 1000 ppm between
+      # 23:00 and 07:00 local, over the last 10h. The window only holds
+      # overnight samples from 23:00 to ~17:00, so the rule fires in the
+      # morning after a stuffy night and resolves by itself in the afternoon.
+      # The thermostat fan already runs on Low above 1000 ppm (HA automation
+      # "Turn on fans when C02 high"), which only recirculates air, so this
+      # firing means the room needs outside air. Page class air_quality, held
+      # through quiet hours: it arrives at 08:00.
+      - uid: bedroom-co2-high-overnight
+        title: Bedroom CO2 high overnight
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 36000, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                import "date"
+                import "timezone"
+
+                ny = timezone.location(name: "America/New_York")
+                from(bucket: "homeassistant")
+                  |> range(start: -10h)
+                  |> filter(fn: (r) => r._field == "value" and r.entity_id == "bedroom_sensor_carbon_dioxide")
+                  |> aggregateWindow(every: 10m, fn: mean, createEmpty: false)
+                  |> filter(fn: (r) => {
+                      h = date.hour(t: r._time, location: ny)
+                      return h >= 23 or h < 7
+                  })
+                  |> map(fn: (r) => ({r with _value: if r._value > 1000.0 then 10.0 else 0.0}))
+                  |> sum()
+                  |> keep(columns: ["_value"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+              settings: {mode: dropNN}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: {type: gt, params: [120]}
+              refId: C
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Bedroom CO2 was above 1000 ppm for {{ $values.B.Value }} minutes overnight"
+          description: "The bedroom Awair's CO2 averaged above 1000 ppm for more than 2 hours between 23:00 and 07:00. The thermostat fan was already on Low; recirculation does not lower CO2, so the room needs outside air (window, door, or fresh-air intake). Dashboard: Homelab / Air quality."
+        labels:
+          severity: warning

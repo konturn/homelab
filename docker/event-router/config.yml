@@ -273,6 +273,9 @@ page_classes:
   certificate:
     rules:
       - {rule_uid: ssl-cert-expiry-3d}
+  air_quality:
+    rules:
+      - {rule_uid: bedroom-co2-high-overnight}
 
 # Router deploys (resource_group deploy-router in .gitlab-ci.yml): while one
 # runs, nothing but ci-orphan-cancel acts (S7).
