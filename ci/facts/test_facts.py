@@ -276,6 +276,18 @@ class DriftTest(unittest.TestCase):
         self.assertIn("example-init: one-shot exited, exit code 2", joined)
         self.assertIn("gitlab: running, unhealthy", joined)
 
+    def test_undeclared_long_running_container_is_a_note(self):
+        live = self.healthy()
+        live["containers"]["agitated_edison"] = {"state": "running", "exit_code": None, "health": None, "up_days": 10}
+        live["containers"]["canary-gitlab-20261108"] = {"state": "running", "exit_code": None, "health": None, "up_days": 0}
+        live["containers"]["old_exited"] = {"state": "exited", "exit_code": 1, "health": None, "up_days": None}
+        live["containers"]["no_uptime_field"] = {"state": "running", "exit_code": None, "health": None}
+        rep, items = self.texts(live)
+        self.assertEqual(items, [])  # a note, never drift
+        notes = [t for lvl, t in rep.sections["containers"] if lvl == "NOTE"]
+        self.assertEqual(len(notes), 1, notes)
+        self.assertTrue(notes[0].startswith("agitated_edison: running for 10+ days"), notes)
+
     def test_expected_interfaces_from_compose(self):
         ifaces = drift.expected_interfaces()
         self.assertEqual(ifaces["containers"]["homeassistant"],
