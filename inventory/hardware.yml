@@ -253,10 +253,11 @@ amps:
       A's input 4, so the Office speakers can only play Global today (#154).
   C:
     model: Monoprice 10761
-    connected: false
+    serial_by_id: usb-Prolific_Technology_Inc._USB-Serial_Controller_DFCAb2A8J14-if00-port0
+    ha_port: /dev/ttyUSB2
     note: >-
-      Not connected yet. Planned (#154): Office, Main Bedroom, Guest Bedroom,
-      maybe Movie Room, on a third USB-serial adapter.
+      Connected 2026-11-18; speakers and inputs not wired yet. Planned (#154):
+      Office, Main Bedroom, Guest Bedroom, maybe Movie Room.
 
 # ---------------------------------------------------------------------------
 # Network-attached devices with no health signal of their own. Addresses and

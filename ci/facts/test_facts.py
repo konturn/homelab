@@ -219,6 +219,10 @@ class DriftTest(unittest.TestCase):
                               for n, w in self.expected.items()}
         for d in live["disks"].values():
             d["mappers"] = ["persistent_data" if m == "persistent_data_r" else m for m in d["mappers"]]
+        # Amps connected after the snapshot was taken (amp C, 2026-11-18).
+        for amp in self.hw["amps"].values():
+            if amp.get("connected", True) is not False:
+                live["serial_by_id"].setdefault(amp["serial_by_id"], amp["ha_port"].rsplit("/", 1)[1])
         return live
 
     def test_healthy_snapshot_has_no_drift(self):
