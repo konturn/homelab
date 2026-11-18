@@ -211,6 +211,6 @@ pyobjc-framework-libdispatch==13.0 \
     --hash=sha256:b725e5ea9a881258d94646a3e09287c3608d560539abe04c75ba8b95847fe999 \
     --hash=sha256:d0f070fc479b14eb6da96cf7cb4f8034eaa254a3f78d0fd3962bb2eded6f3a4e \
     --hash=sha256:e0607c241ffb17b380c25ff30eeaf64008ff4f7749c39604da82570400f582dc
-whiskerless==0.2.0rc78 \
-    --hash=sha256:a10f98acaa8f1f104114209638afc25ed1a4a170cfbf88833090ccfc8a54c49e \
-    --hash=sha256:cf02fcbce540f4b173ef9ac6c7092e4ff319c90c4d41da7c3fab0ec2c6140694
+whiskerless==0.2.0rc76 \
+    --hash=sha256:35e6b6adfb7a79190d118ddfecd9f6b8ac30a31066251d41cfbee967e3ed6139 \
+    --hash=sha256:e7c011bca6177ce5d321a74088c18ba4be126d3f8aca4c7ce08835337139e166
