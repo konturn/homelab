@@ -190,6 +190,23 @@ template:
         unit_of_measurement: 'μg/m³'
         availability: {{ '\'{{ is_number(state_attr("sensor.awair_kitchen_sensors", "pm25")) }}\'' }}
         state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "pm25") }}\'' }}
+      - name: "Kitchen Sensor Dew Point"
+        unique_id: awair_lr_dew_point
+        device_class: temperature
+        unit_of_measurement: '°C'
+        availability: {{ '\'{{ is_number(state_attr("sensor.awair_kitchen_sensors", "dew_point")) }}\'' }}
+        state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "dew_point") }}\'' }}
+      - name: "Kitchen Sensor Absolute Humidity"
+        unique_id: awair_lr_abs_humid
+        unit_of_measurement: 'g/m³'
+        availability: {{ '\'{{ is_number(state_attr("sensor.awair_kitchen_sensors", "abs_humid")) }}\'' }}
+        state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "abs_humid") }}\'' }}
+      - name: "Kitchen Sensor Particulate Matter 10"
+        unique_id: awair_lr_pm10
+        device_class: pm10
+        unit_of_measurement: 'μg/m³'
+        availability: {{ '\'{{ is_number(state_attr("sensor.awair_kitchen_sensors", "pm10_est")) }}\'' }}
+        state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "pm10_est") }}\'' }}
       # Bedroom Awair Sensors (modern format)
       - name: "Bedroom Sensor Quality Score"
         unique_id: bedroom_awair_lr_score
@@ -223,6 +240,23 @@ template:
         unit_of_measurement: 'μg/m³'
         availability: {{ '\'{{ is_number(state_attr("sensor.awair_bedroom_sensors", "pm25")) }}\'' }}
         state: {{ '\'{{ state_attr("sensor.awair_bedroom_sensors", "pm25") }}\'' }}
+      - name: "Bedroom Sensor Dew Point"
+        unique_id: bedroom_awair_lr_dew_point
+        device_class: temperature
+        unit_of_measurement: '°C'
+        availability: {{ '\'{{ is_number(state_attr("sensor.awair_bedroom_sensors", "dew_point")) }}\'' }}
+        state: {{ '\'{{ state_attr("sensor.awair_bedroom_sensors", "dew_point") }}\'' }}
+      - name: "Bedroom Sensor Absolute Humidity"
+        unique_id: bedroom_awair_lr_abs_humid
+        unit_of_measurement: 'g/m³'
+        availability: {{ '\'{{ is_number(state_attr("sensor.awair_bedroom_sensors", "abs_humid")) }}\'' }}
+        state: {{ '\'{{ state_attr("sensor.awair_bedroom_sensors", "abs_humid") }}\'' }}
+      - name: "Bedroom Sensor Particulate Matter 10"
+        unique_id: bedroom_awair_lr_pm10
+        device_class: pm10
+        unit_of_measurement: 'μg/m³'
+        availability: {{ '\'{{ is_number(state_attr("sensor.awair_bedroom_sensors", "pm10_est")) }}\'' }}
+        state: {{ '\'{{ state_attr("sensor.awair_bedroom_sensors", "pm10_est") }}\'' }}
   - binary_sensor:
       - name: "Front Hallway Door Active"
         state: >

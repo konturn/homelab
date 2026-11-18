@@ -322,7 +322,6 @@ network_devices:
     address_var: bedroom_qual_address
     mac_var: bedroom_qual_mac
     vlan: 6
-    note: Offline 2026-11-08.
   weather_station:
     desc: Ambient Weather station (local push to ambientweather2mqtt)
     address_var: weather_station_address

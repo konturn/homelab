@@ -71,7 +71,7 @@ with this file, they win: say so.
 - Apple TV 4K (HA apple_tv, local; Thread border router): 
 - Network amp `amp`, model unknown: Offline 2026-11-08.
 - Awair air quality sensor, kitchen: Offline 2026-11-08.
-- Awair air quality sensor, bedroom: Offline 2026-11-08.
+- Awair air quality sensor, bedroom: 
 - Ambient Weather station (local push to ambientweather2mqtt): 
 - Dreame Z10 Pro vacuum, Valetudo (MQTT, local): Offline 2026-11-08.
 - SLZB-MR1 Zigbee coordinator (HA smlight, Zigbee2MQTT): No internet.
