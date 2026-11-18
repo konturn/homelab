@@ -228,8 +228,8 @@ amps:
       12: {name: Dining Room Speakers, entity: media_player.zone_12}
       13: {name: Guest Bathroom Speakers, entity: media_player.zone_13}
       14: {name: Deck Speakers, entity: media_player.zone_5}
-      15: {name: Kitchen Speakers, entity: media_player.zone_15}
-      16: {name: Living Room Speakers 1, entity: media_player.zone_16}
+      15: {name: Dead, entity: media_player.amp_a_zone_15}
+      16: {name: Unwired, entity: media_player.amp_a_zone_16}
   B:
     model: Monoprice 10761
     serial_by_id: usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0
@@ -251,13 +251,19 @@ amps:
     note: >-
       Office Speakers (zone 16) sit on B, but the Office stream is labelled on
       A's input 4, so the Office speakers can only play Global today (#154).
+  # 2026-11-18: Kitchen and Living Room Speakers 1 moved here from amp A
+  # (A zone 15 output dead, zone 16 thin), keeping their entity ids so groups,
+  # scripts, dashboards and HomeKit follow. Zones 11-14 are spare
+  # (media_player.amp_c_zone_1x); planned for Main Bedroom, Guest Bedroom (#154).
   C:
     model: Monoprice 10761
     serial_by_id: usb-Prolific_Technology_Inc._USB-Serial_Controller_DFCAb2A8J14-if00-port0
     ha_port: /dev/ttyUSB2
-    note: >-
-      Connected 2026-11-18; speakers and inputs not wired yet. Planned (#154):
-      Office, Main Bedroom, Guest Bedroom, maybe Movie Room.
+    inputs:
+      1: {label: Global, stream: Global}
+    zones:
+      15: {name: Kitchen Speakers, entity: media_player.zone_15}
+      16: {name: Living Room Speakers 1, entity: media_player.zone_16}
 
 # ---------------------------------------------------------------------------
 # Network-attached devices with no health signal of their own. Addresses and
