@@ -32,7 +32,6 @@
 #   (router:deploy needs vault:configure and the image builds; see the job)
 #   secrets:rotate-proxied [manual; SCHEDULED_TASK=rotate-proxied ROTATE_SERVICE=<name>;
 #   monthly schedule with ROTATE_SERVICE=monthly runs it automatically]
-#   vault:delete-legacy-jit-key [one-off, manual; SCHEDULED_TASK=delete-legacy-jit-key]
 #
 #   NETGEAR SWITCHES (see networking/switches/netgear/README.md)
 #   netgear:test (MR + main, offline) -> netgear:apply (main, on changes)
@@ -1590,83 +1589,6 @@ secrets:rotate-proxied:
     - if: $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_REF_PROTECTED == "true" && $SCHEDULED_TASK == "rotate-proxied" && $ROTATE_SERVICE == "monthly" && $CI_PIPELINE_SOURCE == "schedule"
       when: on_success
     - if: $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_REF_PROTECTED == "true" && $SCHEDULED_TASK == "rotate-proxied" && $ROTATE_SERVICE && ($CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api")
-      when: manual
-      allow_failure: false
-
-# One-off (docs/design/openclaw-identities.md, Rollout step 3): delete the
-# shared JIT key from before the per-agent keys, Vault homelab/agents/jit-api-key.
-# Start a pipeline on main with SCHEDULED_TASK=delete-legacy-jit-key (web or
-# API) and play the job. vault-admin JWT role (protected main only). It
-# refuses unless the secret holds only `api_key`, and that key is neither in
-# jit-approval-svc's requester_keys (by SHA-256) nor equal to either agent's
-# key; then it deletes every version and the metadata, and checks the path is
-# gone. Already gone: it says so and succeeds. No value is printed (no
-# `set -x`; values stay in 0600 temp files). Remove this job once it has run.
-vault:delete-legacy-jit-key:
-  stage: deploy
-  image: alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
-  environment: admin
-  needs: []
-  timeout: 5m
-  id_tokens:
-    VAULT_ID_TOKEN:
-      aud: https://vault.lab.nkontur.com:8200
-  variables:
-    VAULT_ADDR: "https://vault.lab.nkontur.com:8200"
-  before_script:
-    - apk add --no-cache curl jq
-  script:
-    - |
-      set +x
-      set -euo pipefail
-      umask 077
-      P=agents/jit-api-key
-      H=$(mktemp); B=$(mktemp)
-      trap 'rm -f "$H" "$B"' EXIT
-      VT=$(jq -nc --arg j "$VAULT_ID_TOKEN" '{role: "vault-admin", jwt: $j}' |
-        curl -sS --max-time 15 -X POST --data @- "$VAULT_ADDR/v1/auth/jwt/login" |
-        jq -r '.auth.client_token // empty')
-      [ -n "$VT" ] || { echo "ERROR: vault-admin login failed"; exit 1; }
-      printf 'X-Vault-Token: %s\n' "$VT" > "$H"
-      unset VT
-      # vault METHOD PATH: body in $B, HTTP status on stdout
-      vault() { curl -sS --max-time 15 -X "$1" -H @"$H" -o "$B" -w '%{http_code}' "$VAULT_ADDR/v1/$2"; }
-      keyhash() { jq -j '.data.data.api_key // empty' "$B" | sha256sum | cut -d' ' -f1; }
-
-      code=$(vault GET "homelab/metadata/$P")
-      if [ "$code" = 404 ]; then echo "homelab/$P: already gone"; exit 0; fi
-      [ "$code" = 200 ] || { echo "ERROR: metadata read: HTTP $code"; exit 1; }
-      echo "homelab/$P: versions $(jq -r '.data.versions | keys | join(",")' "$B"), current $(jq -r .data.current_version "$B")"
-      code=$(vault GET "homelab/data/$P")
-      [ "$code" = 200 ] || { echo "ERROR: data read: HTTP $code"; exit 1; }
-      fields=$(jq -r '.data.data | keys | join(",")' "$B")
-      [ "$fields" = api_key ] || { echo "ERROR: fields are '$fields', want only api_key; not deleting"; exit 1; }
-      old=$(keyhash)
-
-      code=$(vault GET homelab/data/docker/jit-approval-svc)
-      [ "$code" = 200 ] || { echo "ERROR: jit-approval-svc read: HTTP $code"; exit 1; }
-      hashes=$(jq -r '.data.data.requester_keys // ""' "$B" | tr ',' '\n' | cut -s -d: -f2 | tr -d ' ' | tr 'A-F' 'a-f')
-      n=$(printf '%s\n' "$hashes" | grep -c . || true)
-      [ "$n" -ge 2 ] || { echo "ERROR: requester_keys has $n entries, want the agents' keys; not deleting"; exit 1; }
-      if printf '%s\n' "$hashes" | grep -qx "$old"; then
-        echo "ERROR: the old key is still a requester key; not deleting"; exit 1
-      fi
-      for a in openclaw-noah openclaw-ops; do
-        code=$(vault GET "homelab/data/agents/$a")
-        [ "$code" = 200 ] || { echo "ERROR: agents/$a read: HTTP $code"; exit 1; }
-        [ "$(keyhash)" != "$old" ] || { echo "ERROR: agents/$a holds the old key; not deleting"; exit 1; }
-        printf '%s\n' "$hashes" | grep -qx "$(keyhash)" || { echo "ERROR: agents/$a key is not in requester_keys; not deleting"; exit 1; }
-      done
-      echo "checks: only api_key; not a requester key; both agent keys differ and are registered"
-
-      code=$(vault DELETE "homelab/metadata/$P")
-      [ "$code" = 204 ] || { echo "ERROR: delete: HTTP $code"; exit 1; }
-      [ "$(vault GET "homelab/metadata/$P")" = 404 ] && [ "$(vault GET "homelab/data/$P")" = 404 ] ||
-        { echo "ERROR: homelab/$P still readable after delete"; exit 1; }
-      echo "homelab/$P: all versions and metadata deleted"
-      vault POST auth/token/revoke-self >/dev/null || true
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_REF_PROTECTED == "true" && $SCHEDULED_TASK == "delete-legacy-jit-key" && ($CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api")
       when: manual
       allow_failure: false
 
