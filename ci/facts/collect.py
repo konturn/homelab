@@ -154,7 +154,9 @@ def usb_ports():
 
 
 def containers():
-    """{name: {state, exit_code, health}} for every container (docker ps -a)."""
+    """{name: {state, exit_code, health, up_days}} for every container (docker ps -a).
+    up_days: whole days a running container has been up, from docker's rounded
+    "Up 3 days" / "Up 2 weeks" text; 0 under a day, None when not running."""
     rc, out, err = run(["docker", "ps", "-a", "--format", "{{.Names}}\t{{.State}}\t{{.Status}}"])
     if rc != 0:
         raise RuntimeError("docker ps failed: " + err)
@@ -163,8 +165,11 @@ def containers():
         name, state, status = (line.split("\t") + ["", ""])[:3]
         m = re.search(r"Exited \((-?\d+)\)", status)
         h = re.search(r"\((healthy|unhealthy|health: starting)\)", status)
+        u = re.match(r"Up (\d+) (day|week|month|year)s?\b", status)
+        up_days = (int(u.group(1)) * {"day": 1, "week": 7, "month": 30, "year": 365}[u.group(2)]
+                   if u else (0 if status.startswith("Up") else None))
         result[name] = {"state": state, "exit_code": int(m.group(1)) if m else None,
-                        "health": h.group(1) if h else None}
+                        "health": h.group(1) if h else None, "up_days": up_days}
     return result
 
 

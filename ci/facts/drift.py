@@ -18,7 +18,10 @@ Checks:
   containers every service in docker/docker-compose.yml (the router's) is
             running and not unhealthy; one-shot init services (no restart
             policy) exited 0. Skipped: services behind a compose profile and
-            snapclient_disabled_zones (ansible/inventory.yml)
+            snapclient_disabled_zones (ansible/inventory.yml). NOTE for a
+            running container that no compose service declares and that has
+            been up a day or more (a leftover `docker run`; CI and canary
+            containers live minutes)
   interfaces every compose interface_name exists in its container, and Home
             Assistant's configured_adapters (zeroconf/HomeKit) equals
             homeassistant_network_adapters (ansible/inventory.yml)
@@ -357,7 +360,22 @@ def check_containers(expected: dict, live: dict, rep: Report) -> str:
                       # only a stopped container is started; an unhealthy one needs a look
                       action={"type": "container", "name": name}
                       if want == "running" and not problem.startswith("running") else None)
+    declared = set(expected) | declared_anywhere()
+    for name, c in sorted(have.items()):
+        if name in declared or c["state"] != "running" or (c.get("up_days") or 0) < UNDECLARED_MIN_DAYS:
+            continue
+        rep.note(S, f"{name}: running for {c['up_days']}+ days, not declared in any compose file "
+                    "(leftover `docker run`? nothing updates or watches it).")
     return f"{len(expected) - bad}/{len(expected)} declared containers up"
+
+
+UNDECLARED_MIN_DAYS = 1
+
+
+def declared_anywhere(root: Path = facts.ROOT) -> set:
+    """Every container name the router's compose file could create, profiles and
+    disabled zones included, so a declared-but-skipped service is never 'undeclared'."""
+    return {spec.get("container_name") or svc for svc, spec in facts.compose_services(root).items()}
 
 
 ROUTER = "router.lab.nkontur.com"
