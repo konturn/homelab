@@ -273,9 +273,6 @@ page_classes:
   certificate:
     rules:
       - {rule_uid: ssl-cert-expiry-3d}
-  home_automation:
-    rules:
-      - {rule_uid: z2m-discovery-missing}
   air_quality:
     rules:
       - {rule_uid: bedroom-co2-high-overnight}

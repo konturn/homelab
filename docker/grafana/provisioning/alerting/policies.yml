@@ -69,7 +69,7 @@ policies:
       # Pi-hole not answering), bedroom CO2 high overnight.
       - receiver: homelab-email-alerts
         matchers:
-          - __alert_rule_uid__ =~ "host-metrics-stale|ssl-cert-expiry-3d|event-router-down|pihole-dns-latency-high|bedroom-co2-high-overnight|z2m-discovery-missing"
+          - __alert_rule_uid__ =~ "host-metrics-stale|ssl-cert-expiry-3d|event-router-down|pihole-dns-latency-high|bedroom-co2-high-overnight"
         mute_time_intervals: [quiet-hours]
         group_wait: 10s
         group_interval: 2m

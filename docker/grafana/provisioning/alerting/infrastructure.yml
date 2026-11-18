@@ -3015,7 +3015,8 @@ groups:
       # config on mosquitto. Nothing breaks until Home Assistant restarts;
       # then all such devices come back unavailable (2026-11-18: 27 lights).
       # zigbee2mqtt only publishes the configs at its own start, so the fix
-      # is docker restart zigbee2mqtt. Page class home_automation.
+      # is docker restart zigbee2mqtt: the event router does it (playbook
+      # zigbee-discovery-republish) and pages only if that fails.
       - uid: z2m-discovery-missing
         title: Zigbee discovery configs missing
         condition: C
