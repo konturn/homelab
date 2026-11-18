@@ -65,6 +65,7 @@ re-reads all three sources on every request.
 | Playbook | Alert | Action |
 |---|---|---|
 | `zigbee-silence-restart` | `zigbee-radio-silence` | restart zigbee2mqtt (executor first probes coordinator, MQTT, DNS) |
+| `zigbee-discovery-republish` | `z2m-discovery-missing` | restart zigbee2mqtt so it republishes its Home Assistant discovery configs (same probes) |
 | `restart-once` | `container-health-failure` | restart the unhealthy container once, not on the denylist, not ephemeral (`runner-*`, `canary-*`, `e2e-*`), not within 2h of a deploy |
 | `ci-orphan-cancel` | reconciler, every 5 min | cancel a `deploy-router` job running past its timeout or started before GitLab came back |
 | `ci-orphan-retry` | after `ci-orphan-cancel` verified | retry the cancelled job if nothing newer superseded it (shadow) |

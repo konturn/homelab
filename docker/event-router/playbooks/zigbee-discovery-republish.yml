@@ -1,0 +1,20 @@
+# zigbee2mqtt publishes its retained Home Assistant discovery configs only at
+# its own start. When they go missing from mosquitto (2026-11-18), the next
+# Home Assistant restart leaves every Zigbee device unavailable. Restarting
+# zigbee2mqtt republishes them; the executor first probes everything
+# zigbee2mqtt needs (coordinator TCP, MQTT, DNS, /persistent_data) and
+# refuses if any is down. Alert: z2m-discovery-missing (telegraf
+# scripts/z2m-discovery.sh, every 5m).
+id: zigbee-discovery-republish
+description: Restart zigbee2mqtt when its Home Assistant discovery configs are missing
+mode: active
+match:
+  source: grafana
+  rule_uid: z2m-discovery-missing
+node: zigbee2mqtt
+action: {type: restart_container, target: zigbee2mqtt}
+verify:
+  alert_resolved: 15m      # next 5m sample shows devices_missing=0
+limits: {max_runs: 2, per: 6h, cooldown: 30m}
+on_success: {notify: digest}
+on_failure: {notify: page}
