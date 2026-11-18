@@ -3007,6 +3007,82 @@ groups:
   # series (telegraf lr4_mqtt), so robots still on the cloud never alert.
   # Routed like every alert to the event router (no email class).
   - orgId: 1
+    name: zigbee-alerts
+    folder: General Alerting
+    interval: 5m
+    rules:
+      # A paired Zigbee device with no retained Home Assistant discovery
+      # config on mosquitto. Nothing breaks until Home Assistant restarts;
+      # then all such devices come back unavailable (2026-11-18: 27 lights).
+      # zigbee2mqtt only publishes the configs at its own start, so the fix
+      # is docker restart zigbee2mqtt. Page class home_automation.
+      - uid: z2m-discovery-missing
+        title: Zigbee discovery configs missing
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 1800, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -30m)
+                  |> filter(fn: (r) => r._measurement == "z2m_discovery" and r._field == "devices_missing")
+                  |> group(columns: ["host"])
+                  |> last()
+                  |> keep(columns: ["_time", "_value", "host"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 15m
+        annotations:
+          summary: "{{ $values.B.Value }} Zigbee device(s) have no Home Assistant discovery config on mosquitto; the next Home Assistant restart leaves them unavailable. Fix: docker restart zigbee2mqtt."
+        labels:
+          severity: warning
+
+      # Collector health for z2m-discovery-missing (collect_ok=0, or no
+      # points at all).
+      - uid: z2m-discovery-collection-failed
+        title: Zigbee Discovery Check Failed
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 1800, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -30m)
+                  |> filter(fn: (r) => r._measurement == "z2m_discovery" and r._field == "collect_ok")
+                  |> group(columns: ["host"])
+                  |> last()
+                  |> keep(columns: ["_time", "_value", "host"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: min, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [1]}}]}
+        noDataState: Alerting
+        execErrState: Error
+        for: 30m
+        annotations:
+          summary: "z2m-discovery.sh is failing or not reporting on {{ $labels.host }}; Zigbee discovery configs missing is blind"
+        labels:
+          severity: warning
+
+  - orgId: 1
     name: litter-robot-alerts
     folder: General Alerting
     interval: 5m

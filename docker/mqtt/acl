@@ -94,8 +94,11 @@ topic write prod/LR4/+/activity
 topic read prod/LR4/+/command
 topic write $SYS/broker/connection/lr4-bridge/state
 
-# telegraf's Litter-Robot heartbeat and lr4ctl status
+# telegraf's read-only monitor: the Litter-Robot heartbeat and lr4ctl
+# status, and the Zigbee discovery check (telegraf/scripts/z2m-discovery.sh)
 user lr4-monitor
 topic read prod/LR4/+/state
 topic read prod/LR4/+/activity
 topic read $SYS/broker/connection/lr4-bridge/state
+topic read homeassistant/+/+/+/config
+topic read zigbee2mqtt/bridge/devices

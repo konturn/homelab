@@ -489,6 +489,10 @@ all:
           dest: "/etc/telegraf/scripts/zpool-health.sh"
           name: "telegraf"
           mode: "0755"
+        - src: "docker/telegraf/scripts/z2m-discovery.sh"
+          dest: "/etc/telegraf/scripts/z2m-discovery.sh"
+          name: "telegraf"
+          mode: "0755"
 
       docker_data_dirs:
         # jit-approval-svc action-prompt socket (container user svc, uid 1000)
