@@ -125,6 +125,13 @@
   ],
   "packageRules": [
     {
+      "description": "whiskerless is pinned in three places that must move together: this lock file, WANT_VERSION in whiskerless-mac, and the ha-whiskerless fork (docs/litter-robot.md, Bumping the integration). Bumped by hand only.",
+      "matchFileNames": [
+        "scripts/litter-robot/requirements-macos.txt"
+      ],
+      "enabled": false
+    },
+    {
       "description": "Router compose file: its own branches, so an MR there changes one image in one file and the auto-merge policy can evaluate it",
       "matchFileNames": [
         "docker/docker-compose.yml"
