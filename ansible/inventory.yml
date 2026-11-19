@@ -93,8 +93,6 @@ all:
     amp_address: 10.6.128.7
     doorbell_mac: 9c:8e:cd:3c:de:33
     doorbell_address: 10.6.128.9
-    kitchen_qual_address: 10.6.128.10
-    kitchen_qual_mac: 70:88:6b:14:b5:41
     satellite_2_address: 10.6.128.11
     satellite_2_mac: dc:a6:32:74:a1:cf
     back_camera_address: 10.6.128.14
@@ -261,7 +259,6 @@ all:
         - "{{ frame_tv_address }} frame-tv.lab.nkontur.com"
         - "{{ thermador_hood_address }} thermador-hood.lab.nkontur.com"
         - "{{ thermador_range_address }} thermador-range.lab.nkontur.com"
-        - "{{ kitchen_qual_address }} AWAIR-ELEM-14B541.lab.nkontur.com"
         - "{{ bedroom_qual_address }} AWAIR-ELEM-147AA0.lab.nkontur.com"
         - "{{ satellite_2_address }} satellite-2.lab.nkontur.com"
         - "{{ snapserver_address }} snapserver.lab.nkontur.com"

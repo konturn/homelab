@@ -318,12 +318,6 @@ network_devices:
     mac_var: amp_mac
     vlan: 6
     note: Offline 2026-11-08.
-  kitchen_qual:
-    desc: Awair air quality sensor, kitchen
-    address_var: kitchen_qual_address
-    mac_var: kitchen_qual_mac
-    vlan: 6
-    note: Offline 2026-11-08.
   bedroom_qual:
     desc: Awair air quality sensor, bedroom
     address_var: bedroom_qual_address
