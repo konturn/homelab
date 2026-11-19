@@ -3084,6 +3084,114 @@ groups:
           severity: warning
 
   - orgId: 1
+    name: home-assistant-maintenance
+    folder: General Alerting
+    interval: 5m
+    rules:
+      # Repairs first seen in the last 24h (ci/ha-maintenance). No playbook:
+      # the event router hands it to OpenClaw (ops), which reads the report and
+      # proposes a fix as an MR or asks Noah when it needs him (re-auth).
+      - uid: ha-repairs-new
+        title: Home Assistant Repairs new
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 10800, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -10800s)
+                  |> filter(fn: (r) => r._measurement == "ha_maintenance" and r._field == "repairs_new")
+                  |> group(columns: ["host"])
+                  |> last()
+                  |> keep(columns: ["_time", "_value", "host"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "{{ $values.B.Value }} new Home Assistant Repairs issue(s); details in reports/updates/ha-maintenance.json"
+        labels:
+          severity: warning
+
+      # An install the job started (auto or after Noah's tap) that did not
+      # verify. Page class home_automation (mailed outside quiet hours).
+      - uid: ha-firmware-update-failed
+        title: Home Assistant firmware update failed
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 86400, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -86400s)
+                  |> filter(fn: (r) => r._measurement == "ha_maintenance" and r._field == "installs_failed")
+                  |> group(columns: ["host"])
+                  |> sum()
+                  |> keep(columns: ["_time", "_value", "host"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: gt, params: [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "A device firmware install by the HA maintenance job did not verify (version unchanged or Z-Wave node not alive); auto installs are paused 3 days"
+        labels:
+          severity: warning
+
+      # Collector health: the job runs every 2h from 10:15 to 16:15, so 30h
+      # without a good run means the schedule or the job is broken.
+      - uid: ha-maintenance-stale
+        title: Home Assistant maintenance job not running
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 108000, to: 0}
+            datasourceUid: influxdb
+            model:
+              query: |
+                from(bucket: "metrics")
+                  |> range(start: -108000s)
+                  |> filter(fn: (r) => r._measurement == "ha_maintenance" and r._field == "collect_ok")
+                  |> group(columns: ["host"])
+                  |> last()
+                  |> keep(columns: ["_time", "_value", "host"])
+              refId: A
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: reduce, expression: A, reducer: last, refId: B, settings: {mode: dropNN}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {type: threshold, expression: B, refId: C, conditions: [{evaluator: {type: lt, params: [1]}}]}
+        noDataState: Alerting
+        execErrState: Error
+        for: 30m
+        annotations:
+          summary: "ha-maintenance has not completed a run in 30h (or its last run could not reach Home Assistant)"
+        labels:
+          severity: warning
+
+  - orgId: 1
     name: litter-robot-alerts
     folder: General Alerting
     interval: 5m

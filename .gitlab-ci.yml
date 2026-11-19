@@ -86,6 +86,8 @@
 #   REPORTS (see ci/reports/README.md)
 #   report:cves / report:app-updates / report:os-patches / report:firmware
 #   (scheduled on main, SCHEDULED_TASK=trivy|app-report|os-report|firmware-report)
+#   ha:maintenance (every 2h in the day, SCHEDULED_TASK=ha-maintenance): HA updates,
+#   Repairs, Z-Wave node health (docs/HOMEASSISTANT.md, "Maintenance job")
 #
 #   BOOTSTRAP (main only, manual)
 #   ┌──────────────┬──────────────┐
@@ -2646,6 +2648,43 @@ report:firmware:
       --secret aruba-s2500=network/aruba-s2500
   rules:
     - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "firmware-report" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+
+# Home Assistant maintenance (docs/HOMEASSISTANT.md, "Maintenance job"):
+# SCHEDULED_TASK=ha-maintenance every 2h in the day. Inventories updates,
+# Repairs, dead Z-Wave nodes and long-unavailable entities; pings and
+# re-interviews dead Z-Wave nodes; installs firmware for mains-powered Z-Wave
+# switches/plugs/dimmers on its own and everything else not denied after
+# Noah's tap (ci/ha-maintenance/ha_maint.py). HA token from Vault (ci-deploy).
+# HA_MAINT_DRY_RUN=1 on a manual run lists what it would do and changes nothing.
+ha-maintenance:test:
+  extends:
+    - .ansible
+    - .interruptible
+  stage: validate
+  needs: []
+  before_script: []
+  script:
+    # zoneinfo needs a time zone database; the router has the system one, this image none.
+    - pip3 install -q --break-system-packages --cache-dir /cache/pip tzdata
+    - python3 -m unittest discover -s ci/ha-maintenance -p 'test_*.py' -v
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - ci/ha-maintenance/**/*
+        - ci/reports/**/*
+
+ha:maintenance:
+  extends: .scheduled_report
+  resource_group: ha-maintenance
+  timeout: 50m
+  script:
+    - >-
+      python3 ci/reports/run_remote.py ci/ha-maintenance/ha_maint.py
+      --extra ci/ha-maintenance/ha_maint.py --extra ci/ha-maintenance/hass_ws.py
+      --secret ha=docker/homeassistant --timeout 2700
+      ${HA_MAINT_DRY_RUN:+--arg --dry-run}
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "ha-maintenance" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
 
 # =============================================================================
 # Auto-merge for low-risk image updates (see docs/AUTOMERGE.md)

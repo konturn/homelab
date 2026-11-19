@@ -18,7 +18,11 @@ prompts"). Decision 13:
     posts the prompt, id apr-<hex>, and keeps the request in its state
     file), and closes the prompt once the request expires. It never acts on
     a request itself: the agent asks the executor again, which checks the
-    approval and everything else.
+    approval and everything else;
+  - records Noah's Install/Skip on a Home Assistant update prompt (the
+    ha-maintenance job posts it, id haup-<hex>) by appending the press to
+    HA_DECISIONS; the job's next run reads it and does the install, through
+    its own denylist and window. Nothing is installed from here.
 
 It works while the event-router container is down: the override file is what
 both the router and the executor read. Python standard library only.
@@ -157,6 +161,8 @@ def describe(cfg):
 
 BUTTONS = [{"action": "stop", "label": "Stop automation"}, {"action": "resume", "label": "Resume"}]
 APPROVAL = re.compile(r"^apr-[0-9a-f]{12}$")
+HA_PROMPT = re.compile(r"^haup-[0-9a-f]{12}$")
+HA_DECISIONS = os.environ.get("HA_MAINT_DECISIONS", "/var/lib/ha-maintenance/decisions.jsonl")
 
 
 def approvals(cfg, fn):
@@ -204,6 +210,21 @@ def decide_approval(cfg, d, now):
         jit(cfg, "POST", f"/v1/prompts/{d['id']}", {"text": approval_text(a, outcome), "buttons": []})
         log(event="approval", id=d["id"], status=a.get("status"), requester=a.get("requester"),
             target=a.get("target"))
+
+
+def record_ha_decision(cfg, d, now):
+    """A press on a ha-maintenance update prompt (ci/ha-maintenance/ha_maint.py):
+    append it for the job's next run and close the prompt."""
+    if d.get("action") not in ("install", "skip"):
+        return
+    os.makedirs(os.path.dirname(HA_DECISIONS), mode=0o755, exist_ok=True)
+    with open(HA_DECISIONS, "a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        f.write(json.dumps({"id": d["id"], "action": d["action"], "at": now}) + "\n")
+    outcome = ("Install: queued for the next maintenance run (10:00-18:00, one at a time, verified)."
+               if d["action"] == "install" else "Skipped this version.")
+    jit(cfg, "POST", f"/v1/prompts/{d['id']}", {"text": f"<b>Home Assistant update</b>\n{outcome}", "buttons": []})
+    log(event="ha_update_decision", id=d["id"], action=d["action"])
 
 
 def expire_approvals(cfg, now):
@@ -256,6 +277,9 @@ def loop_once(cfg, st, now):
         for d in body.get("decisions") or []:
             if APPROVAL.match(str(d.get("id") or "")):
                 decide_approval(cfg, d, time.time())
+                continue
+            if HA_PROMPT.match(str(d.get("id") or "")):
+                record_ha_decision(cfg, d, time.time())
                 continue
             if d.get("id") != st.get("prompt_id"):
                 continue
