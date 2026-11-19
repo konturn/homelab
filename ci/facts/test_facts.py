@@ -119,9 +119,11 @@ class AgentContextTest(unittest.TestCase):
             self.assertIn(f"<!-- generated: {name} -->", template, f"section {name} unused")
 
     def test_size_fits_openclaw(self):
-        # OpenClaw truncates a bootstrap file above 20,000 chars; its config
-        # guard distrusts a file that shrinks by more than half.
-        self.assertLess(len(self.text), 18000)
+        # OpenClaw truncates a bootstrap file above agents.defaults.
+        # bootstrapMaxChars (200,000 in docker/openclaw/openclaw.json.j2; the
+        # default is 20,000); its config guard distrusts a file that shrinks
+        # by more than half.
+        self.assertLess(len(self.text), 180000)
         self.assertGreater(len(self.text), 6000)
 
     def test_bot_config_matches_sweep(self):
