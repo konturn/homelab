@@ -2781,7 +2781,8 @@ automerge:sweep:
   rules:
     - if: $CI_COMMIT_BRANCH == "main" && $AUTOMERGE_TASK == "sweep" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
 
-# Scheduled daily with AUTOMERGE_TASK=report: mails a summary via the router's msmtp.
+# Scheduled daily with AUTOMERGE_TASK=report: logs a summary, and mails it (router's msmtp)
+# only when a rollback or a waiting security update needs a human.
 automerge:report:
   extends: .ansible
   stage: deploy

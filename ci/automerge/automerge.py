@@ -12,7 +12,7 @@ Subcommands
                 plan for one host (--host <deploy job prefix>).
   deploy-report main pipeline: record the deploy outcome (note / issue / revert MR / mail).
   notify        Mail root from a CI job (used when a deploy fails before deploy-report).
-  daily-report  Scheduled on main: mail a summary of the last 24h.
+  daily-report  Scheduled on main: summarise the last 24h; mail it only if something needs a human.
 
 Code in this file runs from `main` for every command that holds credentials;
 MR content is only ever read as data through the API.
@@ -1568,13 +1568,23 @@ def cmd_daily_report(args: argparse.Namespace) -> int:
         lines.append(f"  !{m['iid']} {m['title']}  (open {age.days}d){sec}  {m['web_url']}")
     body = "\n".join(lines) + "\n"
     log(body)
-    if not (merged or rb_new or rb_open or manual_security) and not truthy(os.environ.get("AUTOMERGE_REPORT_ALWAYS")):
-        log("Nothing to report; not sending mail.")
+    # Successful merges alone do not mail (the summary stays in this job's
+    # log): only something that needs a human does.
+    if not (rb_new or rb_open or manual_security) and not truthy(os.environ.get("AUTOMERGE_REPORT_ALWAYS")):
+        log("Nothing needs a human; not sending mail.")
         return 0
     if dry:
         log("[dry-run] not sending mail")
         return 0
-    subject = "Homelab auto-merge: " + (f"{len(rb_open)} rollback(s) open" if rb_open else f"{len(merged)} merged")
+    if rb_open:
+        what = f"{len(rb_open)} rollback(s) open"
+    elif rb_new:
+        what = f"{len(rb_new)} rollback(s) in the last 24h"
+    elif manual_security:
+        what = f"{len(manual_security)} security update(s) waiting for a human"
+    else:
+        what = f"{len(merged)} merged"
+    subject = "Homelab auto-merge: " + what
     if not mail_root(subject, body):
         return 1
     log("Summary mailed.")
