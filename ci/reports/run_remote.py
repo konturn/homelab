@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Run one report script on the router host (CI side).
 
-    run_remote.py SCRIPT [--secret NAME=vault/path ...] [--data DIR] [--extra FILE ...]
+    run_remote.py SCRIPT [--secret NAME=vault/path ...] [--data DIR] [--extra FILE ...] [--arg ARG ...]
+
+SCRIPT is a name in ci/reports/, or a repo path shipped with --extra
+(ci/ha-maintenance/ha_maint.py).
 
 Ships ci/reports/*.py (plus --extra files and the --data directory) to a
 private temp dir on the router, logs in to Vault with the job's VAULT_ID_TOKEN
@@ -15,6 +18,7 @@ import argparse
 import io
 import json
 import os
+import shlex
 import ssl
 import subprocess
 import sys
@@ -96,6 +100,7 @@ def main() -> int:
     p.add_argument("--extra", action="append", default=[])
     p.add_argument("--data")
     p.add_argument("--timeout", type=int, default=7200)
+    p.add_argument("--arg", action="append", default=[], help="extra script argument (repeatable)")
     a = p.parse_args()
     secrets = vault_secrets(a.secret)
     work = f"/tmp/ci-report-{os.environ.get('CI_JOB_ID', os.getpid())}"
@@ -105,7 +110,10 @@ def main() -> int:
         print("ERROR: could not ship the report bundle to the router", file=sys.stderr)
         return 1
     args = " --data data" if a.data else ""
-    cmd = (f"cd {work} && python3 ci/reports/{a.script}{args}; rc=$?; cd / && rm -rf {work}; exit $rc")
+    args += "".join(" " + shlex.quote(x) for x in a.arg)
+    # A bare name is a report in ci/reports; a repo path (shipped with --extra) runs as given.
+    script = a.script if "/" in a.script else f"ci/reports/{a.script}"
+    cmd = (f"cd {work} && python3 {shlex.quote(script)}{args}; rc=$?; cd / && rm -rf {work}; exit $rc")
     r = subprocess.run(SSH + [cmd], input=json.dumps(secrets).encode(), timeout=a.timeout)
     return r.returncode
 
