@@ -1,0 +1,31 @@
+# Home Assistant entity registry: the desired state (docs/HOMEASSISTANT.md,
+# "Entity registry"). Applied by ci/ha-entities/reconcile.py: on main when
+# this file or the amps in inventory/hardware.yml change, and checked daily.
+#
+# Only entities listed here (or as amp zones in inventory/hardware.yml) are
+# touched. Per entity, one line, all fields optional:
+#   name      friendly name. On an entity named after its device (most
+#             integrations, e.g. monoprice) it is set on the device.
+#   area      area id (Settings > Areas). Set where the name is: device or entity.
+#   disabled  true / false
+#   rename_from  an entity_id to rename to this one, if this one is missing
+#
+# Amp zone names and input names come from inventory/hardware.yml (amps.*);
+# an entry here overrides the zone name there. `amp_inputs` adds input names
+# the inventory does not list.
+#
+# A UI edit to a listed entity is not reverted: the daily check opens an MR
+# (label ha-entities-adopt) that writes the Home Assistant value back here.
+
+entities:
+  media_player.zone_15: {area: kitchen}
+  media_player.zone_16: {area: living_room}
+  media_player.amp_a_zone_15: {name: Amp A Zone 15 (dead output), disabled: true}
+  media_player.amp_a_zone_16: {name: Amp A Zone 16 (unwired), disabled: true}
+  media_player.amp_c_zone_11: {name: Amp C Zone 11 (spare)}
+  media_player.amp_c_zone_12: {name: Amp C Zone 12 (spare)}
+  media_player.amp_c_zone_13: {name: Amp C Zone 13 (spare)}
+  media_player.amp_c_zone_14: {name: Amp C Zone 14 (spare)}
+
+amp_inputs:
+  C: {2: Input 2, 3: Input 3, 4: Input 4, 5: Input 5, 6: Input 6}

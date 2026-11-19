@@ -70,6 +70,10 @@
 #   facts:test (MR + main, offline), facts:drift (scheduled with ipmi:drift, or
 #   SCHEDULED_TASK=facts-drift; fixes, records or reports drift)
 #
+#   HOME ASSISTANT ENTITY REGISTRY (see docs/HOMEASSISTANT.md, "Entity registry")
+#   ha-entities:test (MR + main, offline), ha-entities:apply (main, on change),
+#   ha-entities:drift (scheduled, SCHEDULED_TASK=ha-entities-drift; opens an adopt MR)
+#
 #   AUTO-MERGE (see docs/AUTOMERGE.md)
 #   automerge:test + automerge:eligibility (MR, informational)
 #   automerge:properties-deep (main, on policy changes; SCHEDULED_TASK=automerge-properties)
@@ -1610,6 +1614,74 @@ rotate-proxied:test:
     - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
       changes:
         - ci/rotate-proxied/**/*
+
+# =============================================================================
+# Home Assistant entity registry (docs/HOMEASSISTANT.md, "Entity registry")
+# =============================================================================
+# docker/homeassistant/entities.yml + the amps in inventory/hardware.yml are
+# the desired names, areas, disabled flags and amp input names of the entities
+# they list. ha-entities:apply makes Home Assistant match on main when they
+# change; ha-entities:drift (daily, SCHEDULED_TASK=ha-entities-drift) changes
+# nothing in Home Assistant and opens an MR (label ha-entities-adopt) that
+# writes UI edits back into the repo. Token: Vault homelab/docker/homeassistant
+# via the ci-deploy JWT role (protected main only).
+.ha_entities:
+  extends: .ansible
+  stage: deploy
+  needs: []
+  before_script: []
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: https://vault.lab.nkontur.com:8200
+  variables:
+    VAULT_ADDR: "https://10.3.32.6:8200"
+    VAULT_SKIP_VERIFY: "true"
+    VAULT_JWT_ROLE: "ci-deploy"
+  artifacts:
+    when: always
+    paths:
+      - ha-entities.txt
+    expire_in: 30 days
+
+ha-entities:apply:
+  extends: .ha_entities
+  script:
+    - python3 ci/ha-entities/reconcile.py apply --report ha-entities.txt
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - docker/homeassistant/entities.yml
+        - inventory/hardware.yml
+        - ci/ha-entities/**/*
+
+ha-entities:drift:
+  extends: .ha_entities
+  script:
+    - python3 ci/ha-entities/reconcile.py drift --report ha-entities.txt
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "ha-entities-drift" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+
+ha-entities:test:
+  extends:
+    - .ansible
+    - .interruptible
+  stage: validate
+  needs: []
+  before_script: []
+  script:
+    - python3 -m unittest discover -s ci/ha-entities -p "test_*.py" -v
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - ci/ha-entities/**/*
+        - docker/homeassistant/entities.yml
+        - inventory/hardware.yml
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - ci/ha-entities/**/*
+        - docker/homeassistant/entities.yml
 
 vault:validate:
   extends: .interruptible
