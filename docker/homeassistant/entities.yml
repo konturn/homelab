@@ -26,6 +26,18 @@ entities:
   media_player.amp_c_zone_12: {name: Amp C Zone 12 (spare)}
   media_player.amp_c_zone_13: {name: Amp C Zone 13 (spare)}
   media_player.amp_c_zone_14: {name: Amp C Zone 14 (spare)}
+  media_player.zone_21_3: {name: Amp C Zone 21 (no expansion unit), disabled: true}
+  media_player.zone_22_3: {name: Amp C Zone 22 (no expansion unit), disabled: true}
+  media_player.zone_23_3: {name: Amp C Zone 23 (no expansion unit), disabled: true}
+  media_player.zone_24_3: {name: Amp C Zone 24 (no expansion unit), disabled: true}
+  media_player.zone_25_3: {name: Amp C Zone 25 (no expansion unit), disabled: true}
+  media_player.zone_26_3: {name: Amp C Zone 26 (no expansion unit), disabled: true}
+  media_player.zone_31_3: {name: Amp C Zone 31 (no expansion unit), disabled: true}
+  media_player.zone_32_3: {name: Amp C Zone 32 (no expansion unit), disabled: true}
+  media_player.zone_33_3: {name: Amp C Zone 33 (no expansion unit), disabled: true}
+  media_player.zone_34_3: {name: Amp C Zone 34 (no expansion unit), disabled: true}
+  media_player.zone_35_3: {name: Amp C Zone 35 (no expansion unit), disabled: true}
+  media_player.zone_36_3: {name: Amp C Zone 36 (no expansion unit), disabled: true}
 
 amp_inputs:
   C: {2: Input 2, 3: Input 3, 4: Input 4, 5: Input 5, 6: Input 6}
