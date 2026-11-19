@@ -2664,6 +2664,8 @@ ha-maintenance:test:
   needs: []
   before_script: []
   script:
+    # zoneinfo needs a time zone database; the router has the system one, this image none.
+    - pip3 install -q --break-system-packages --cache-dir /cache/pip tzdata
     - python3 -m unittest discover -s ci/ha-maintenance -p 'test_*.py' -v
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
