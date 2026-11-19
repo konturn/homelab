@@ -330,7 +330,7 @@ restart.
 America/New_York). It runs on the router through `ci/reports/run_remote.py`
 with the Home Assistant token from Vault (`docker/homeassistant`, `ci-deploy`
 role, passed on stdin) and talks to Home Assistant over its websocket API
-(`ci/ha-maintenance/hass_ws.py`, standard library only, reusable).
+(`ci/reports/hass_ws.py`, standard library only, shared with ci/ha-entities).
 
 Why a CI schedule: it is the pattern the other Home Assistant reads already use
 (`report:app-updates`), the token never lands on disk, every run has a job log,

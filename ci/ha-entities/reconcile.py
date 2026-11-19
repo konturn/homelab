@@ -20,7 +20,7 @@ Rules:
     is reported, not changed.
   - every change is printed; values are names and ids, nothing secret.
 
-Talks to Home Assistant over its websocket API (stdlib client below) and the
+Talks to Home Assistant over its websocket API (ci/reports/hass_ws.py) and the
 REST options flow (monoprice sources). Token: HA_TOKEN, or Vault
 homelab/docker/homeassistant field token through a JWT login (CI, VAULT_ID_TOKEN).
 """
@@ -28,13 +28,10 @@ homelab/docker/homeassistant field token through a JWT login (CI, VAULT_ID_TOKEN
 from __future__ import annotations
 
 import argparse
-import base64
 import json
 import os
 import re
-import socket
 import ssl
-import struct
 import sys
 import urllib.error
 import urllib.parse
@@ -44,6 +41,9 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "ci" / "reports"))
+from hass_ws import HassError, HassWS  # noqa: E402  (shared with ci/ha-maintenance)
+
 ENTITIES = "docker/homeassistant/entities.yml"
 HARDWARE = "inventory/hardware.yml"
 HA_URL = os.environ.get("HA_URL", "https://homeassistant.lab.nkontur.com")
@@ -302,104 +302,14 @@ def inputs_sources(root: Path = ROOT) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Home Assistant: a minimal stdlib websocket client and REST
+# Home Assistant: websocket (ci/reports/hass_ws.py) and REST
 # ---------------------------------------------------------------------------
-
-class WS:
-    def __init__(self, url: str, token: str, timeout: float = 30):
-        u = urllib.parse.urlparse(url)
-        port = u.port or (443 if u.scheme == "https" else 80)
-        sock = socket.create_connection((u.hostname, port), timeout=timeout)
-        if u.scheme == "https":
-            sock = ssl.create_default_context().wrap_socket(sock, server_hostname=u.hostname)
-        self.sock = sock
-        self.buf = b""
-        key = base64.b64encode(os.urandom(16)).decode()
-        sock.sendall((f"GET /api/websocket HTTP/1.1\r\nHost: {u.hostname}\r\nUpgrade: websocket\r\n"
-                      f"Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n").encode())
-        head = self._until(b"\r\n\r\n")
-        if b" 101 " not in head.split(b"\r\n", 1)[0]:
-            raise RuntimeError("websocket upgrade refused: " + head.split(b"\r\n", 1)[0].decode(errors="replace"))
-        if self.recv().get("type") != "auth_required":
-            raise RuntimeError("unexpected websocket greeting")
-        self.send({"type": "auth", "access_token": token})
-        if self.recv().get("type") != "auth_ok":
-            raise RuntimeError("Home Assistant refused the token")
-        self.n = 0
-
-    def _read(self, k: int) -> bytes:
-        while len(self.buf) < k:
-            chunk = self.sock.recv(65536)
-            if not chunk:
-                raise RuntimeError("websocket closed")
-            self.buf += chunk
-        out, self.buf = self.buf[:k], self.buf[k:]
-        return out
-
-    def _until(self, marker: bytes) -> bytes:
-        while marker not in self.buf:
-            chunk = self.sock.recv(65536)
-            if not chunk:
-                raise RuntimeError("connection closed during handshake")
-            self.buf += chunk
-        i = self.buf.index(marker) + len(marker)
-        out, self.buf = self.buf[:i], self.buf[i:]
-        return out
-
-    def _frame(self, opcode: int, payload: bytes):
-        mask = os.urandom(4)
-        n = len(payload)
-        head = bytes([0x80 | opcode])
-        if n < 126:
-            head += bytes([0x80 | n])
-        elif n < 65536:
-            head += bytes([0x80 | 126]) + struct.pack(">H", n)
-        else:
-            head += bytes([0x80 | 127]) + struct.pack(">Q", n)
-        self.sock.sendall(head + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(payload)))
-
-    def send(self, msg: dict):
-        self._frame(0x1, json.dumps(msg).encode())
-
-    def recv(self) -> dict:
-        data = b""
-        while True:
-            b1, b2 = self._read(2)
-            op, n = b1 & 0x0F, b2 & 0x7F
-            if n == 126:
-                n = struct.unpack(">H", self._read(2))[0]
-            elif n == 127:
-                n = struct.unpack(">Q", self._read(8))[0]
-            mask = self._read(4) if b2 & 0x80 else None
-            payload = self._read(n)
-            if mask:
-                payload = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
-            if op == 0x8:
-                raise RuntimeError("websocket closed by Home Assistant")
-            if op == 0x9:
-                self._frame(0xA, payload)
-                continue
-            if op in (0x0, 0x1, 0x2):
-                data += payload
-                if b1 & 0x80:
-                    return json.loads(data)
-
-    def call(self, **msg):
-        self.n += 1
-        msg["id"] = self.n
-        self.send(msg)
-        while True:
-            r = self.recv()
-            if r.get("id") == self.n and r.get("type") == "result":
-                if not r.get("success"):
-                    raise RuntimeError(f"{msg['type']}: {r.get('error')}")
-                return r.get("result")
-
 
 class HA:
     def __init__(self, url: str, token: str):
         self.url, self.token = url.rstrip("/"), token
-        self.ws = WS(self.url, token)
+        self.ws = HassWS(self.url, token, timeout=30)
+        self.ws.connect()
 
     def rest(self, method: str, path: str, body=None):
         req = urllib.request.Request(self.url + path, method=method,
@@ -414,17 +324,17 @@ class HA:
         out = {}
         for eid in eids:
             try:
-                out[eid] = self.ws.call(type="config/entity_registry/get", entity_id=eid)
-            except RuntimeError as e:
-                if "not_found" not in str(e) and "Entity not found" not in str(e):
+                out[eid] = self.ws.call("config/entity_registry/get", entity_id=eid)
+            except HassError as e:
+                if e.code != "not_found" and "Entity not found" not in str(e) and "Entity not found" not in str(e):
                     raise
         return out
 
     def devices(self) -> dict:
-        return {d["id"]: d for d in self.ws.call(type="config/device_registry/list")}
+        return {d["id"]: d for d in self.ws.call("config/device_registry/list")}
 
     def areas(self) -> set:
-        return {a["area_id"] for a in self.ws.call(type="config/area_registry/list")}
+        return {a["area_id"] for a in self.ws.call("config/area_registry/list")}
 
     def monoprice(self) -> dict:
         """{port (entry title): (entry_id, {n: name})} from each entry's options flow."""
@@ -450,12 +360,12 @@ class HA:
 
     def apply(self, c: dict):
         if c["op"] == "rename":
-            self.ws.call(type="config/entity_registry/update", entity_id=c["entity_id"],
+            self.ws.call("config/entity_registry/update", entity_id=c["entity_id"],
                          new_entity_id=c["new_entity_id"])
         elif c["op"] == "entity":
-            self.ws.call(type="config/entity_registry/update", entity_id=c["entity_id"], **{c["field"]: c["to"]})
+            self.ws.call("config/entity_registry/update", entity_id=c["entity_id"], **{c["field"]: c["to"]})
         elif c["op"] == "device":
-            self.ws.call(type="config/device_registry/update", device_id=c["device_id"], **{c["field"]: c["to"]})
+            self.ws.call("config/device_registry/update", device_id=c["device_id"], **{c["field"]: c["to"]})
 
 
 def token_from_env() -> str:

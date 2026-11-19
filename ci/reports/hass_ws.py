@@ -7,8 +7,9 @@
 
 One request at a time: call() sends a message and returns its result,
 skipping events and other ids. Raises HassError when HA answers
-success: false. Shared by ci/ha-maintenance; written so other jobs can
-import it (no HA-specific state).
+success: false. Shared by ci/ha-maintenance (runs on the router against
+the container over http) and ci/ha-entities (runs in CI against the
+https URL). Lives in ci/reports so run_remote.py ships it.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ import base64
 import json
 import os
 import socket
+import ssl
 import struct
 import urllib.parse
 from typing import Any, Optional
@@ -31,9 +33,10 @@ class HassError(RuntimeError):
 class HassWS:
     def __init__(self, base_url: str, token: str, timeout: float = 60):
         u = urllib.parse.urlparse(base_url)
-        if u.scheme != "http":
-            raise ValueError("only plain http to the container address is supported")
-        self.host, self.port = u.hostname, u.port or 8123
+        if u.scheme not in ("http", "https"):
+            raise ValueError("Home Assistant URL must be http or https")
+        self.tls = u.scheme == "https"
+        self.host, self.port = u.hostname, u.port or (443 if self.tls else 8123)
         self.token, self.timeout = token, timeout
         self.sock: Optional[socket.socket] = None
         self.buf = b""
@@ -49,6 +52,8 @@ class HassWS:
 
     def connect(self) -> None:
         self.sock = socket.create_connection((self.host, self.port), timeout=self.timeout)
+        if self.tls:
+            self.sock = ssl.create_default_context().wrap_socket(self.sock, server_hostname=self.host)
         key = base64.b64encode(os.urandom(16)).decode()
         self.sock.sendall((f"GET /api/websocket HTTP/1.1\r\nHost: {self.host}:{self.port}\r\n"
                            "Upgrade: websocket\r\nConnection: Upgrade\r\n"
