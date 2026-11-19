@@ -1844,7 +1844,7 @@ services:
   # needs `version:` in docker/frigate/config.yml updated (renovate.json).
   frigate:
     container_name: frigate
-    image: ghcr.io/blakeblackshear/frigate:0.18.2-tensorrt@sha256:1cafb6ebbaff0aaf275cc3f31951bcf7e29f3989f18a10ba9565091367d8736c
+    image: ghcr.io/blakeblackshear/frigate:0.18.3-tensorrt@sha256:e1576bbceb8bfd4f954a9f67190bb350f99ff2398a1db75fb8b5241d31f3fd9b
     restart: unless-stopped
     security_opt:
       - no-new-privileges=true
