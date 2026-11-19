@@ -56,6 +56,8 @@ ansible-playbook -i ansible/inventory.yml ansible/macmini.yml
 
 > 🔌 **See [docs/POWER.md](docs/POWER.md)** for the UPS, what happens in a power outage (shutdown and restart), battery health and the supervised UPS test plan.
 
+> ✅ **See [docs/DONE.md](docs/DONE.md)** for what "done" means for this lab: the criteria for a self-maintaining steady state, and the rules new work has to follow.
+
 ## Services
 
 ### External (10.2.x.x)
