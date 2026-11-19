@@ -381,6 +381,23 @@ class TestRestart(unittest.TestCase):
         reply, _ = self.env.run(self.env.req("restart_container", "plex", approval=apr), self.now + 4000)
         self.assertEqual(reply["refused"], "approval")
 
+    def test_ha_update_presses_are_recorded_for_the_maintenance_job(self):
+        sent = []
+        C.jit = lambda cfg, m, p, b=None: (sent.append((m, p, b)), (200, {}))[1]
+        with tempfile.TemporaryDirectory() as d:
+            C.HA_DECISIONS = os.path.join(d, "ha", "decisions.jsonl")
+            C.record_ha_decision(self.env.cfg, {"id": "haup-0123456789ab", "action": "install"}, self.now)
+            C.record_ha_decision(self.env.cfg, {"id": "haup-0123456789ac", "action": "skip"}, self.now)
+            C.record_ha_decision(self.env.cfg, {"id": "haup-0123456789ad", "action": "approve"}, self.now)
+            with open(C.HA_DECISIONS) as f:
+                rows = [json.loads(x) for x in f]
+        self.assertEqual([(r["id"], r["action"]) for r in rows],
+                         [("haup-0123456789ab", "install"), ("haup-0123456789ac", "skip")])
+        self.assertEqual([p for _, p, _ in sent], ["/v1/prompts/haup-0123456789ab", "/v1/prompts/haup-0123456789ac"])
+        self.assertTrue(all(b["buttons"] == [] for _, _, b in sent))
+        self.assertTrue(C.HA_PROMPT.match("haup-0123456789ab"))
+        self.assertFalse(C.APPROVAL.match("haup-0123456789ab"))
+
     def test_denied_and_expired_taps(self):
         C.jit = lambda cfg, m, p, b=None: (200, {})
         reply, _ = self.env.run(self.env.req("restart_container", "plex"), self.now)

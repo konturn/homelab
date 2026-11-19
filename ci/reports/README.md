@@ -50,5 +50,8 @@ only where `KNOWN_LATEST` in `firmware.py` has an entry. The NETGEAR and Aruba
 Instant entries are updated by the firmware bump MRs; the S2500 entry is the
 last ArubaOS-MAS 7.4 release known (`networking/aruba-s2500/README.md`).
 
+`ha:maintenance` (`ci/ha-maintenance/`) uses `run_remote.py` too but acts on Home
+Assistant; it is documented in docs/HOMEASSISTANT.md, "Maintenance job".
+
 Run a report by hand: CI/CD > Pipelines > Run pipeline on `main` with
 `SCHEDULED_TASK=<value>`. Tests: `python3 -m unittest discover -s ci/reports -v`.

@@ -292,6 +292,61 @@ restart.
   (`www/frame/halloween/`, with a `manifest.csv` of sources and licences),
   not in git.
 
+## Maintenance job
+
+`ci/ha-maintenance/ha_maint.py`, scheduled CI job `ha:maintenance`
+(`SCHEDULED_TASK=ha-maintenance`, 10:15, 12:15, 14:15 and 16:15
+America/New_York). It runs on the router through `ci/reports/run_remote.py`
+with the Home Assistant token from Vault (`docker/homeassistant`, `ci-deploy`
+role, passed on stdin) and talks to Home Assistant over its websocket API
+(`ci/ha-maintenance/hass_ws.py`, standard library only, reusable).
+
+Why a CI schedule: it is the pattern the other Home Assistant reads already use
+(`report:app-updates`), the token never lands on disk, every run has a job log,
+and `resource_group` keeps two runs from overlapping. The event router reacts to
+alerts; it does not poll Home Assistant.
+
+Each run:
+
+| Step | What | Limits |
+|---|---|---|
+| Inventory | pending `update.*` entities, Repairs, dead Z-Wave nodes (or alive with every controllable entity unavailable for 2h), entities unavailable >24h | read-only |
+| Z-Wave nodes | `zwave_js.ping`; if a ping 1h+ ago did not help, re-interview (`zwave_js/refresh_node_info`) | one node action per run, 24h per node, 2 re-interviews per node per week; never an on/off command |
+| Firmware, auto | mains-powered Z-Wave switches, plugs and dimmers (no battery, controllable entities only `switch`/`light`) | version seen 7 days, 10:00-18:00, one per day, verified |
+| Firmware, tap | every other update that is not denied: a JIT bot prompt (Install / Skip); identical updates (same integration, model, version) share one prompt | at most 3 new prompts per run, re-sent weekly if unanswered; approved installs run in the window, one per run, verified |
+| Denied | never installed or prompted (`classify()` and its tests): Litter-Robots (stay on ESP 1.1.75), SLZB coordinator, UPS, Solterra, locks, garage, alarm (by name, integration, or a `lock`/`alarm_control_panel`/garage `cover` entity on the device), Home Assistant itself, Z-Wave JS and its controller, container images Renovate updates (Plex, Frigate) | changing this list is a code change |
+
+Loads that must not lose power for a reboot (fridge, freezer, sump, server,
+network) are never auto, only tap.
+
+**Verification.** After an install the job waits up to 30 min for the update
+entity to report the new version and, for Z-Wave, for the node to be alive. A
+failure is recorded, that entity gets no auto retry for 7 days, all auto
+installs pause for 3 days, and `ha-firmware-update-failed` pages (class
+`home_automation`, mailed outside quiet hours).
+
+**Taps.** The job posts the prompt on the JIT service's action socket (id
+`haup-<hex>`). `event-router-control`, the one consumer of that socket's
+presses, appends Install/Skip to `/var/lib/ha-maintenance/decisions.jsonl` and
+closes the prompt; the next run in the window installs. Nothing is installed by
+the control service.
+
+**Output.**
+- `reports/updates/ha-maintenance.{md,json}` (Morning Digest): actions, Repairs,
+  nodes down, every pending update with its decision and reason, long-unavailable
+  entities.
+- `/var/lib/ha-maintenance/ha_maintenance.influx`, one point per run, read by
+  telegraf (measurement `ha_maintenance`).
+- Alerts: `ha-repairs-new` (no playbook, so the event router hands it to
+  OpenClaw ops, which proposes the fix), `ha-firmware-update-failed` (page),
+  `ha-maintenance-stale` (no good run in 30h).
+- State: `/var/lib/ha-maintenance/state.json` (versions first seen, prompts,
+  approvals, skips, failures, node actions).
+
+Run by hand: Run pipeline on `main` with `SCHEDULED_TASK=ha-maintenance`; add
+`HA_MAINT_DRY_RUN=1` to list what it would do without changing anything. Tests:
+`python3 -m unittest discover -s ci/ha-maintenance -v`.
+
 ## Miele (Miele@LAN, local)
 
 The Miele appliance is read over the LAN by `miele_lan` (Miele@LAN), pinned
