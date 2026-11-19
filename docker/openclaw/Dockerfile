@@ -135,7 +135,7 @@ RUN cd /opt/openclaw-tools \
 
 # Install Claude CLI for the openclaw claude-cli backend (auth via CLAUDE_CODE_OAUTH_TOKEN env)
 # Pinned: Opus 5.5 (claude-opus-5-5) needs >= 2.1.296; older CLIs reject the model ID
-RUN npm install -g @anthropic-ai/claude-code@2.1.327
+RUN npm install -g @anthropic-ai/claude-code@2.1.328
 
 # Bundled diagnostics-otel plugin: install its production dependencies at
 # build time from the upstream npm-shrinkwrap.json (exact versions and
