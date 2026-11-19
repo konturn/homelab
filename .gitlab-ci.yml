@@ -1656,6 +1656,7 @@ ha-entities:apply:
         - docker/homeassistant/entities.yml
         - inventory/hardware.yml
         - ci/ha-entities/**/*
+        - ci/reports/hass_ws.py
 
 ha-entities:drift:
   extends: .ha_entities
@@ -1678,11 +1679,13 @@ ha-entities:test:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - ci/ha-entities/**/*
+        - ci/reports/hass_ws.py
         - docker/homeassistant/entities.yml
         - inventory/hardware.yml
     - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
       changes:
         - ci/ha-entities/**/*
+        - ci/reports/hass_ws.py
         - docker/homeassistant/entities.yml
 
 vault:validate:
@@ -2680,7 +2683,7 @@ ha:maintenance:
   script:
     - >-
       python3 ci/reports/run_remote.py ci/ha-maintenance/ha_maint.py
-      --extra ci/ha-maintenance/ha_maint.py --extra ci/ha-maintenance/hass_ws.py
+      --extra ci/ha-maintenance/ha_maint.py
       --secret ha=docker/homeassistant --timeout 2700
       ${HA_MAINT_DRY_RUN:+--arg --dry-run}
   rules:
