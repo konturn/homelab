@@ -305,10 +305,11 @@ services:
       - external
       - internal
     restart: unless-stopped
-    # Memory right-sized: 7-day peak 5186MB, OOM kills detected (3178 samples).
-    # Previous 6G limit caused OOM under transcoding/library scan bursts.
-    # 8G gives ~1.5x headroom over observed peak. Kept as is with NVENC:
-    # GPU transcodes use less host RAM, but library scans set the peak.
+    # Memory: the nightly Butler run (from ~02:00 ET), not transcodes, sets
+    # the peak. Its anon peak was under 2.4 GB until 2026-11-06, then rose to
+    # 5-7.6 GB most nights and 8.5 GB on 2026-11-19 (85% of the old 10G), with
+    # no streams active. Daytime use stays under 0.5 GB. 14G gives ~1.6x over
+    # that peak; the host has 126 GB. Earlier 6G and 8G limits OOMed.
     # GPU: the Quadro P5000 (NVDEC/NVENC, no consumer session cap) does
     # hardware transcoding. The nvidia runtime comes from configure-docker
     # (nvidia_container_runtime, docker/daemon.json). Each transcode takes
@@ -328,7 +329,7 @@ services:
       resources:
         limits:
           cpus: '16'
-          memory: 10G
+          memory: 14G
         reservations:
           memory: 3G
           devices:
