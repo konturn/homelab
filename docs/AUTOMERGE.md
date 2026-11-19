@@ -73,7 +73,7 @@ The pieces:
 | `automerge:eligibility` | MR pipeline | MRs touching `docker/docker-compose*.yml` or `.gitlab-ci.yml` (informational only; `automerge.py evaluate <iid>` shows any MR's verdict) |
 | `automerge:sweep` | scheduled pipeline on `main`, `AUTOMERGE_TASK=sweep` | every 15 min |
 | `<host>:deploy-service` (`router`, `zwave`, `satellite-2`) | `main` pipeline | only for commits merged by the sweep |
-| `automerge:report` | scheduled pipeline on `main`, `AUTOMERGE_TASK=report` | daily |
+| `automerge:report` | scheduled pipeline on `main`, `AUTOMERGE_TASK=report` | daily (mails only when something needs a human) |
 
 `ci/` is CODEOWNERS-protected, so the policy and freeze file can only change
 through a reviewed MR.
@@ -253,9 +253,10 @@ listing the reasons, the first time the sweep sees it. It also appears:
 
 - on the Renovate dependency dashboard (open MRs, or pending approval for
   majors);
-- in the daily `automerge:report` mail under "Updates waiting for a human",
-  with its age. A waiting MR labelled `security` makes the report mail even on
-  a day with nothing merged.
+- in the daily `automerge:report` under "Updates waiting for a human", with
+  its age. The report is written to the job log every day; it is mailed only
+  when a rollback issue is new or open, or a waiting MR is labelled
+  `security`. Successful merges alone send no mail.
 
 The label is removed again if the MR becomes eligible.
 
@@ -959,7 +960,8 @@ unless it changes docs only, `Automerge-Deploy: [<host>] ...`:
   not restart Grafana for them either.
 - **Docs** deploy nothing.
 
-The daily `automerge:report` lists each one as "merged for moltbot: <title>".
+The daily `automerge:report` lists each one as "merged for moltbot: <title>"
+(in the job log; merges alone are not mailed).
 
 ## Freezing
 
@@ -1078,6 +1080,7 @@ above. The script refuses any MR not authored by root.
   - `automerge sweep`: `*/15 * * * *`, variable `AUTOMERGE_TASK=sweep` (every
     class live; `AUTOMERGE_DRY_RUN` removed 2026-11-04).
   - `automerge report`: `30 8 * * *`, variable `AUTOMERGE_TASK=report`.
+    `AUTOMERGE_REPORT_ALWAYS=1` on the schedule mails the summary every day.
 - **Dry run**: while the sweep schedule has `AUTOMERGE_DRY_RUN=1`, every class
   except the fast track (general, CI image, bot-config) logs every decision (`ELIGIBLE` / `not eligible` with reasons, "would
   merge ...") and writes nothing. **The fast-track class stays live.**
