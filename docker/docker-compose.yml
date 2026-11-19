@@ -2748,7 +2748,7 @@ services:
       retries: 3
       start_period: 60s
   nextcloud:
-    image: nextcloud:35.0.3-apache@sha256:fc14de792d6b8fdf413557c1aa1a5425a7252a41ed7065df5d85b7b5e36561cc
+    image: nextcloud:35.0.3-apache@sha256:f22d1dd63844bd15bbf6c2019149653c3d1c775ba48b173b56c3c6ad5f386196
     container_name: nextcloud
     security_opt:
       - no-new-privileges=true
