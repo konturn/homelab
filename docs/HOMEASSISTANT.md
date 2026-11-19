@@ -110,6 +110,37 @@ commands and sensors, go in a package instead:
   (`-i automation` etc. prints what was parsed). It should report no errors
   or warnings.
 
+## Entity registry (names, areas, disabled, amp inputs)
+
+The names, areas and disabled flags of the entities that matter, and the
+Monoprice amp input names, come from the repo:
+
+- `docker/homeassistant/entities.yml`: one line per entity, fields `name`,
+  `area` (area id), `disabled`, `rename_from`. Quote a name that contains a
+  comma; an unknown field is refused.
+- `inventory/hardware.yml`, `amps.*`: each zone's name and entity id, and the
+  input names (`inputs.N.label`). An `entities.yml` entry overrides a zone
+  name; `amp_inputs` there adds inputs the inventory does not list.
+
+`ci/ha-entities/reconcile.py` applies them over the websocket API (and the
+monoprice options flow for inputs). Only listed entities and inputs are
+touched. On an entity named after its device (no name of its own, as with
+the monoprice zones) the name and area are set on the device. An entity id
+is renamed only through `rename_from`, only when the old id exists and the
+new one does not; anything else is reported.
+
+- **On change:** `ha-entities:apply` runs on main when `entities.yml`,
+  `inventory/hardware.yml` or the script change, and fails if Home Assistant
+  does not converge.
+- **Daily:** `ha-entities:drift` (schedule, `SCHEDULED_TASK=ha-entities-drift`)
+  changes nothing in Home Assistant. A value edited in the UI becomes an MR,
+  label `ha-entities-adopt`, that writes it into the repo (rendered inventory
+  files included). There is one such MR at a time, refreshed in place. Merge
+  it to keep the UI edit; close it and run `ha-entities:apply` to restore the
+  repo's value.
+- **By hand:** `python3 ci/ha-entities/reconcile.py plan` (dry run; `HA_TOKEN`
+  or `VAULT_TOKEN`), `apply`, or `--only <entity_id>` to limit a run.
+
 ## Secrets
 
 `configuration.yaml` and the packages contain no credentials, and the deploy
