@@ -3088,7 +3088,7 @@ groups:
     folder: General Alerting
     interval: 5m
     rules:
-      # Repairs first seen in the last 24h (ci/ha-maintenance). No playbook:
+      # Repairs first seen by the latest run (ci/ha-maintenance). No playbook:
       # the event router hands it to OpenClaw (ops), which reads the report and
       # proposes a fix as an MR or asks Noah when it needs him (re-auth).
       - uid: ha-repairs-new

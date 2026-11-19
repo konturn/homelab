@@ -416,7 +416,8 @@ def write_metric(fields: Dict[str, int], now: float) -> None:
 
 def track(st: dict, inv: dict, now: float) -> int:
     """Remember when each pending version and each repair was first seen;
-    returns the number of repairs first seen in the last 24h."""
+    returns the number of repairs first seen by this run (so the alert fires
+    once per repair, not on every run for a day)."""
     pending = {u["entity_id"]: u["latest"] for u in inv["updates"]}
     for eid, ver in pending.items():
         if st["seen"].get(eid, {}).get("version") != ver:
@@ -425,12 +426,13 @@ def track(st: dict, inv: dict, now: float) -> int:
         for eid in [e for e in st[d] if e not in pending]:
             del st[d][eid]
     cur = {f"{i['domain']}/{i['issue_id']}" for i in inv["issues"]}
-    for k in cur:
-        st["issues"].setdefault(k, now)
+    new = [k for k in cur if k not in st["issues"]]
+    for k in new:
+        st["issues"][k] = now
     for k in [k for k in st["issues"] if k not in cur]:
         del st["issues"][k]
     st["prompts"] = {k: v for k, v in st["prompts"].items() if now - v["at"] < PROMPT_TTL + 86400}
-    return sum(1 for k in cur if now - st["issues"][k] < 86400)
+    return len(new)
 
 
 # --- main --------------------------------------------------------------------------------
