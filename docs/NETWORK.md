@@ -167,7 +167,6 @@ for Home Assistant"). HA's other traffic stays on Mullvad.
 | 10.6.128.5 | Shield TV |
 | 10.6.128.6 | Z-Wave satellite (Raspberry Pi) |
 | 10.6.128.9 | Doorbell camera |
-| 10.6.128.10 | Kitchen air quality sensor |
 | 10.6.128.11 | Satellite-2 (Raspberry Pi, document scanner) |
 | 10.6.128.14 | Back camera |
 | 10.6.128.15 | Bedroom air quality sensor |

@@ -39,7 +39,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^(bedroom|kitchen)_sensor_quality_score$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: if r.entity_id =~ /^bedroom/ then \"Bedroom\" else \"Kitchen\"}))\n  |> group(columns: [\"room\"])\n  |> last()"
+          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^bedroom_sensor_quality_score$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: \"Bedroom\"}))\n  |> group(columns: [\"room\"])\n  |> last()"
         }
       ],
       "fieldConfig": {
@@ -107,7 +107,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^(bedroom|kitchen)_sensor_carbon_dioxide$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: if r.entity_id =~ /^bedroom/ then \"Bedroom\" else \"Kitchen\"}))\n  |> group(columns: [\"room\"])\n  |> last()"
+          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^bedroom_sensor_carbon_dioxide$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: \"Bedroom\"}))\n  |> group(columns: [\"room\"])\n  |> last()"
         }
       ],
       "fieldConfig": {
@@ -175,7 +175,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^(bedroom|kitchen)_sensor_temperature$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: if r.entity_id =~ /^bedroom/ then \"Bedroom\" else \"Kitchen\"}))\n  |> group(columns: [\"room\"])\n  |> last()"
+          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^bedroom_sensor_temperature$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: \"Bedroom\"}))\n  |> group(columns: [\"room\"])\n  |> last()"
         }
       ],
       "fieldConfig": {
@@ -243,7 +243,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^(bedroom|kitchen)_sensor_relative_humidity$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: if r.entity_id =~ /^bedroom/ then \"Bedroom\" else \"Kitchen\"}))\n  |> group(columns: [\"room\"])\n  |> last()"
+          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^bedroom_sensor_relative_humidity$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: \"Bedroom\"}))\n  |> group(columns: [\"room\"])\n  |> last()"
         }
       ],
       "fieldConfig": {
@@ -311,7 +311,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^(bedroom|kitchen)_sensor_total_voc$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: if r.entity_id =~ /^bedroom/ then \"Bedroom\" else \"Kitchen\"}))\n  |> group(columns: [\"room\"])\n  |> last()"
+          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^bedroom_sensor_total_voc$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: \"Bedroom\"}))\n  |> group(columns: [\"room\"])\n  |> last()"
         }
       ],
       "fieldConfig": {
@@ -379,7 +379,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^(bedroom|kitchen)_sensor_particulate_matter_2_5$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: if r.entity_id =~ /^bedroom/ then \"Bedroom\" else \"Kitchen\"}))\n  |> group(columns: [\"room\"])\n  |> last()"
+          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^bedroom_sensor_particulate_matter_2_5$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: \"Bedroom\"}))\n  |> group(columns: [\"room\"])\n  |> last()"
         }
       ],
       "fieldConfig": {
@@ -447,7 +447,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^(bedroom|kitchen)_sensor_quality_score$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: if r.entity_id =~ /^bedroom/ then \"Bedroom\" else \"Kitchen\"}))\n  |> group(columns: [\"room\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^bedroom_sensor_quality_score$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: \"Bedroom\"}))\n  |> group(columns: [\"room\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
         }
       ],
       "fieldConfig": {
@@ -523,7 +523,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^(bedroom|kitchen)_sensor_carbon_dioxide$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: if r.entity_id =~ /^bedroom/ then \"Bedroom\" else \"Kitchen\"}))\n  |> group(columns: [\"room\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^bedroom_sensor_carbon_dioxide$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: \"Bedroom\"}))\n  |> group(columns: [\"room\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
         }
       ],
       "fieldConfig": {
@@ -599,7 +599,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^(bedroom|kitchen)_sensor_temperature$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: if r.entity_id =~ /^bedroom/ then \"Bedroom\" else \"Kitchen\"}))\n  |> group(columns: [\"room\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^bedroom_sensor_temperature$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: \"Bedroom\"}))\n  |> group(columns: [\"room\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
         }
       ],
       "fieldConfig": {
@@ -675,7 +675,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^(bedroom|kitchen)_sensor_relative_humidity$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: if r.entity_id =~ /^bedroom/ then \"Bedroom\" else \"Kitchen\"}))\n  |> group(columns: [\"room\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^bedroom_sensor_relative_humidity$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: \"Bedroom\"}))\n  |> group(columns: [\"room\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
         }
       ],
       "fieldConfig": {
@@ -751,7 +751,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^(bedroom|kitchen)_sensor_total_voc$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: if r.entity_id =~ /^bedroom/ then \"Bedroom\" else \"Kitchen\"}))\n  |> group(columns: [\"room\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^bedroom_sensor_total_voc$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: \"Bedroom\"}))\n  |> group(columns: [\"room\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
         }
       ],
       "fieldConfig": {
@@ -827,7 +827,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^(bedroom|kitchen)_sensor_particulate_matter_2_5$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: if r.entity_id =~ /^bedroom/ then \"Bedroom\" else \"Kitchen\"}))\n  |> group(columns: [\"room\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^bedroom_sensor_particulate_matter_2_5$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: \"Bedroom\"}))\n  |> group(columns: [\"room\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
         }
       ],
       "fieldConfig": {
@@ -903,7 +903,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^(bedroom|kitchen)_sensor_dew_point$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: if r.entity_id =~ /^bedroom/ then \"Bedroom\" else \"Kitchen\"}))\n  |> group(columns: [\"room\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^bedroom_sensor_dew_point$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: \"Bedroom\"}))\n  |> group(columns: [\"room\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
         }
       ],
       "fieldConfig": {
@@ -971,7 +971,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^(bedroom|kitchen)_sensor_particulate_matter_10$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: if r.entity_id =~ /^bedroom/ then \"Bedroom\" else \"Kitchen\"}))\n  |> group(columns: [\"room\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "query": "from(bucket: \"homeassistant\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._field == \"value\" and r.entity_id =~ /^bedroom_sensor_particulate_matter_10$/)\n  |> map(fn: (r) => ({_time: r._time, _value: r._value, room: \"Bedroom\"}))\n  |> group(columns: [\"room\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
         }
       ],
       "fieldConfig": {

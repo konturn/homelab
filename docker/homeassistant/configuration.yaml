@@ -110,25 +110,6 @@ rest:
 
 sensor:
   - platform: rest
-    name: awair_kitchen_sensors
-    resource: http://AWAIR-ELEM-14B541.lab.nkontur.com/air-data/latest
-    json_attributes:
-      - timestamp
-      - score
-      - dew_point
-      - temp
-      - humid
-      - abs_humid
-      - co2
-      - co2_est
-      - voc
-      - voc_baseline
-      - voc_h2_raw
-      - voc_ethanol_raw
-      - pm25
-      - pm10_est
-    value_template: 'OK'
-  - platform: rest
     name: awair_bedroom_sensors
     resource: http://AWAIR-ELEM-147AA0.lab.nkontur.com/air-data/latest
     json_attributes:
@@ -156,57 +137,8 @@ sensor:
     end: "{{ '{{' }} now() {{ '}}' }}"
 template:
   - sensor:
-      # Kitchen Awair Sensors (modern format). The availability templates make
-      # these unavailable instead of unknown/None when the Awair is offline.
-      - name: "Kitchen Sensor Quality Score"
-        unique_id: awair_lr_score
-        unit_of_measurement: '%'
-        availability: {{ '\'{{ is_number(state_attr("sensor.awair_kitchen_sensors", "score")) }}\'' }}
-        state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "score") }}\'' }}
-      - name: "Kitchen Sensor Temperature"
-        unique_id: awair_lr_temp
-        device_class: temperature
-        unit_of_measurement: '°C'
-        availability: {{ '\'{{ is_number(state_attr("sensor.awair_kitchen_sensors", "temp")) }}\'' }}
-        state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "temp") }}\'' }}
-      - name: "Kitchen Sensor Relative Humidity"
-        unique_id: awair_lr_humid
-        device_class: humidity
-        unit_of_measurement: '%'
-        availability: {{ '\'{{ is_number(state_attr("sensor.awair_kitchen_sensors", "humid")) }}\'' }}
-        state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "humid") }}\'' }}
-      - name: "Kitchen Sensor Carbon Dioxide"
-        unique_id: awair_lr_co2
-        unit_of_measurement: 'ppm'
-        availability: {{ '\'{{ is_number(state_attr("sensor.awair_kitchen_sensors", "co2")) }}\'' }}
-        state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "co2") }}\'' }}
-      - name: "Kitchen Sensor Total VOC"
-        unique_id: awair_lr_voc
-        unit_of_measurement: 'ppb'
-        availability: {{ '\'{{ is_number(state_attr("sensor.awair_kitchen_sensors", "voc")) }}\'' }}
-        state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "voc") }}\'' }}
-      - name: "Kitchen Sensor Particulate Matter 2.5"
-        unique_id: awair_lr_pm25
-        unit_of_measurement: 'μg/m³'
-        availability: {{ '\'{{ is_number(state_attr("sensor.awair_kitchen_sensors", "pm25")) }}\'' }}
-        state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "pm25") }}\'' }}
-      - name: "Kitchen Sensor Dew Point"
-        unique_id: awair_lr_dew_point
-        device_class: temperature
-        unit_of_measurement: '°C'
-        availability: {{ '\'{{ is_number(state_attr("sensor.awair_kitchen_sensors", "dew_point")) }}\'' }}
-        state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "dew_point") }}\'' }}
-      - name: "Kitchen Sensor Absolute Humidity"
-        unique_id: awair_lr_abs_humid
-        unit_of_measurement: 'g/m³'
-        availability: {{ '\'{{ is_number(state_attr("sensor.awair_kitchen_sensors", "abs_humid")) }}\'' }}
-        state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "abs_humid") }}\'' }}
-      - name: "Kitchen Sensor Particulate Matter 10"
-        unique_id: awair_lr_pm10
-        device_class: pm10
-        unit_of_measurement: 'μg/m³'
-        availability: {{ '\'{{ is_number(state_attr("sensor.awair_kitchen_sensors", "pm10_est")) }}\'' }}
-        state: {{ '\'{{ state_attr("sensor.awair_kitchen_sensors", "pm10_est") }}\'' }}
+      # Awair template sensors. The availability templates make these
+      # unavailable instead of unknown/None when the Awair is offline.
       # Bedroom Awair Sensors (modern format)
       - name: "Bedroom Sensor Quality Score"
         unique_id: bedroom_awair_lr_score

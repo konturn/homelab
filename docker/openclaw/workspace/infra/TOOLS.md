@@ -70,7 +70,6 @@ with this file, they win: say so.
 - NVIDIA Shield TV: Offline 2026-11-08.
 - Apple TV 4K (HA apple_tv, local; Thread border router): 
 - Network amp `amp`, model unknown: Offline 2026-11-08.
-- Awair air quality sensor, kitchen: Offline 2026-11-08.
 - Awair air quality sensor, bedroom: 
 - Ambient Weather station (local push to ambientweather2mqtt): 
 - Dreame Z10 Pro vacuum, Valetudo (MQTT, local): Offline 2026-11-08.
