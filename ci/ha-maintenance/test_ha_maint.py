@@ -175,5 +175,16 @@ class Decisions(unittest.TestCase):
         self.assertEqual(M.read_decisions(), [])                             # consumed
 
 
+
+class TrackRepairs(unittest.TestCase):
+    def test_repair_counts_as_new_only_on_the_run_that_first_sees_it(self):
+        st, inv = state(), {"updates": [], "issues": [{"domain": "automation", "issue_id": "x"}]}
+        self.assertEqual(M.track(st, inv, at(10)), 1)
+        self.assertEqual(M.track(st, inv, at(12)), 0)     # same repair, 2h later
+        inv["issues"].append({"domain": "spotify", "issue_id": "reauth"})
+        self.assertEqual(M.track(st, inv, at(14)), 1)
+        self.assertEqual(M.track(st, {"updates": [], "issues": []}, at(16)), 0)
+        self.assertEqual(st["issues"], {})
+
 if __name__ == "__main__":
     unittest.main()
