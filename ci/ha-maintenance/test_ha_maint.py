@@ -115,6 +115,13 @@ class Install(unittest.TestCase):
         self.assertEqual(M.pick_install([u], st, now), (u, "approved"))
         self.assertIsNone(M.pick_install([u], st, at(20)))                   # still only in the window
 
+    def test_no_install_while_another_is_running(self):
+        u, st = upd(platform="mqtt", name="Pantry", domains=["light"]), state()
+        st["approved"][u["entity_id"]] = {"version": "1.1", "at": 0}
+        busy = upd(entity_id="update.hall_bulb", platform="mqtt", name="Hall", domains=["light"], in_progress=True)
+        self.assertIsNone(M.pick_install([u, busy], st, at(12)))
+        self.assertEqual(M.pick_install([u], st, at(12)), (u, "approved"))
+
     def test_denied_never_installs_even_if_approved(self):
         u, st = upd(platform="litterrobot", name="Litter-Robot"), state()
         st["approved"][u["entity_id"]] = {"version": u["latest"], "at": 0}
