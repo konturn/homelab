@@ -350,7 +350,7 @@ Each run:
 Loads that must not lose power for a reboot (fridge, freezer, sump, server,
 network) are never auto, only tap.
 
-**Verification.** After an install the job waits up to 30 min for the update
+**Verification.** After an install the job waits up to 30 min (75 for Zigbee OTA through zigbee2mqtt, which takes 30-45 min per bulb) for the update
 entity to report the new version and, for Z-Wave, for the node to be alive. A
 failure is recorded, that entity gets no auto retry for 7 days, all auto
 installs pause for 3 days, and `ha-firmware-update-failed` pages (class

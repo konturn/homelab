@@ -60,6 +60,9 @@ REINTERVIEWS_PER_WEEK = 2
 UNRESPONSIVE_AFTER = 2 * 3600
 UNAVAILABLE_REPORT = 24 * 3600
 VERIFY_TIMEOUT = 30 * 60
+# Zigbee OTA through zigbee2mqtt (HA platform mqtt) is slow: a Hue bulb took
+# 34 min (z2m estimated 45), so 30 min reported a good install as failed.
+ZIGBEE_VERIFY_TIMEOUT = 75 * 60
 FAIL_BACKOFF = 7 * 86400                # no auto retry of a failed entity
 AUTO_PAUSE = 3 * 86400                  # no auto install at all after any failure
 PROMPT_TTL = 72 * 3600
@@ -352,6 +355,10 @@ def apply_decisions(st: dict, decisions: List[dict], now: float) -> List[str]:
     return log
 
 
+def verify_timeout(u: dict) -> int:
+    return ZIGBEE_VERIFY_TIMEOUT if u.get("platform") == "mqtt" else VERIFY_TIMEOUT
+
+
 def wait_installed(ha: HassWS, u: dict, deadline: float) -> Tuple[bool, str]:
     while time.time() < deadline:
         time.sleep(30)
@@ -365,7 +372,7 @@ def wait_installed(ha: HassWS, u: dict, deadline: float) -> Tuple[bool, str]:
         if a.get("installed_version") == u["latest"] or (
                 (s.get(u["entity_id"]) or {}).get("state") == "off" and a.get("installed_version") != u["installed"]):
             return True, "installed"
-    return False, f"not at {u['latest']} after {VERIFY_TIMEOUT // 60} min"
+    return False, f"not at {u['latest']} after {verify_timeout(u) // 60} min"
 
 
 def node_alive(ha: HassWS, device_id: str) -> bool:
@@ -500,7 +507,7 @@ def run(ha: HassWS, st: dict, now: float, dry: bool) -> Tuple[dict, List[str], D
             try:
                 ha.call("call_service", domain="update", service="install",
                         target={"entity_id": u["entity_id"]})
-                ok, detail = wait_installed(ha, u, time.time() + VERIFY_TIMEOUT)
+                ok, detail = wait_installed(ha, u, time.time() + verify_timeout(u))
                 if ok and u.get("device_id") and u["platform"] == "zwave_js" and not node_alive(ha, u["device_id"]):
                     ok, detail = False, "installed, but the Z-Wave node is not alive"
             except (HassError, OSError) as e:
