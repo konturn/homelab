@@ -154,8 +154,8 @@ def local_day(now: float) -> str:
 def pick_install(updates: List[dict], st: dict, now: float) -> Optional[Tuple[dict, str]]:
     """The one install this run may start, or None: an approved tap first, then
     one auto (soaked, not failed recently, none today, not paused)."""
-    if not in_window(now):
-        return None
+    if not in_window(now) or any(u["in_progress"] for u in updates):
+        return None             # one install at a time, including one a past run left running
     for u in sorted(updates, key=lambda u: u["entity_id"]):
         a = st["approved"].get(u["entity_id"])
         if u["decision"] != "deny" and a and a.get("version") == u["latest"]:
@@ -359,7 +359,10 @@ def verify_timeout(u: dict) -> int:
     return ZIGBEE_VERIFY_TIMEOUT if u.get("platform") == "mqtt" else VERIFY_TIMEOUT
 
 
-def wait_installed(ha: HassWS, u: dict, deadline: float) -> Tuple[bool, str]:
+def wait_installed(ha: HassWS, u: dict, deadline: float) -> Tuple[Optional[bool], str]:
+    """(True, ...) installed, (False, ...) failed, (None, ...) still running at the
+    deadline: a Zigbee OTA of a bulb can take most of an hour."""
+    running = False
     while time.time() < deadline:
         time.sleep(30)
         try:
@@ -367,11 +370,14 @@ def wait_installed(ha: HassWS, u: dict, deadline: float) -> Tuple[bool, str]:
         except (HassError, OSError) as e:
             return False, f"lost Home Assistant while waiting: {e}"
         a = (s.get(u["entity_id"]) or {}).get("attributes") or {}
-        if a.get("in_progress"):
+        running = bool(a.get("in_progress"))
+        if running:
             continue
         if a.get("installed_version") == u["latest"] or (
                 (s.get(u["entity_id"]) or {}).get("state") == "off" and a.get("installed_version") != u["installed"]):
             return True, "installed"
+    if running:
+        return None, f"still installing after {verify_timeout(u) // 60} min (not counted as failed)"
     return False, f"not at {u['latest']} after {verify_timeout(u) // 60} min"
 
 
@@ -446,7 +452,7 @@ def track(st: dict, inv: dict, now: float) -> int:
 def run(ha: HassWS, st: dict, now: float, dry: bool) -> Tuple[dict, List[str], Dict[str, int]]:
     inv = inventory(ha, now)
     actions: List[str] = []
-    m = {"installs_ok": 0, "installs_failed": 0, "node_actions": 0, "prompts_sent": 0}
+    m = {"installs_ok": 0, "installs_failed": 0, "installs_running": 0, "node_actions": 0, "prompts_sent": 0}
     repairs_new = track(st, inv, now)     # in a dry run the state is never saved
     if not dry:
         actions += apply_decisions(st, read_decisions(), now)
@@ -515,6 +521,8 @@ def run(ha: HassWS, st: dict, now: float, dry: bool) -> Tuple[dict, List[str], D
             actions.append(f"{u['entity_id']}: {detail}")
             if ok:
                 m["installs_ok"] += 1
+            elif ok is None:
+                m["installs_running"] += 1
             else:
                 m["installs_failed"] += 1
                 st["failed"][u["entity_id"]] = now
