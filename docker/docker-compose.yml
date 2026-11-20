@@ -2704,7 +2704,7 @@ services:
     # 12.3.x (renovate.json). Moving to another series is a deliberate change:
     # upgrades to a newer LTS run in place (MARIADB_AUTO_UPGRADE), downgrades
     # need a dump and restore into a fresh volume.
-    image: mariadb:12.3.3@sha256:4ebbcf100a3ba320766dfa0e1af008df12261301db6ef72798c7650f70794aed
+    image: mariadb:12.3.3@sha256:4aaf88b3106382c8c18e49f0cec60267be618fc22f858c4503afb2a2555afed3
     container_name: nextcloud_database
     security_opt:
       - no-new-privileges=true
