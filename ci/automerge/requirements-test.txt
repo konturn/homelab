@@ -1,4 +1,4 @@
 # Test-only dependencies of ci/automerge (automerge:test,
 # automerge:properties-deep). Pinned; Renovate (pip_requirements) bumps them.
-hypothesis==6.170.15
+hypothesis==6.170.17
 sortedcontainers==2.4.0
