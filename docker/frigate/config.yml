@@ -28,17 +28,8 @@ networking:
     internal: 127.0.0.1:5000
     external: 8971
 
-# The doorbell (front_door) is offline: its record and detect ffmpeg are
-# restarted every few seconds, ~230 log lines a minute. Only critical lines
-# until it is back; then delete these three overrides. Its state stays
-# visible: camera_fps 0 in /api/stats and HA, and the IoT Device Unreachable
-# alert.
 logger:
   default: info
-  logs:
-    watchdog.front_door: critical
-    ffmpeg.front_door.record: critical
-    ffmpeg.front_door.detect: critical
 
 mqtt:
   enabled: true
@@ -200,6 +191,13 @@ cameras:
   # retrying and reports the camera offline (camera_fps 0) until it is back.
   # Frigate scales the sub stream to this detect size.
   front_door:
+    # The doorbell is offline (10.6.128.9, pending a hardware fix). While it is
+    # enabled, Frigate restarts its capture every few seconds and logs ~17k
+    # error lines a day through frigate.video.ffmpeg, a logger every camera
+    # shares, so per-camera log levels cannot quiet it. Set this back to true
+    # once the doorbell answers; it stays watched meanwhile by the IoT Device
+    # Unreachable alert, whose exclusion for it expires on its own.
+    enabled: false
     ffmpeg:
       inputs:
         - path: rtsp://127.0.0.1:8554/front_door

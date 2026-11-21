@@ -23,10 +23,12 @@ floodlights.
 | `front_door` | Amcrest AD410 doorbell (`doorbell_address`) | 10.6.128.9 | main | sub, scaled to 640x480 at 5 fps |
 | `cat_feeder` | PETLIBRO PLAF203 feeder, via the `petlibro-camera` relay (docs/petlibro-camera.md) | `petlibro_camera_ip`:8554 (RTSP, Frigate login) | events only (alerts 14 d, detections 7 d) | 640x360 at 2 fps, `cat` and `person` |
 
-While the doorbell is offline, Frigate restarts its ffmpeg processes every few
-seconds (~230 log lines a minute). `logger.logs` in config.yml lowers those
-loggers to `critical` and the go2rtc `rtsp` module to `error`; delete the
-overrides once the doorbell is back.
+While the doorbell is offline, `front_door` has `enabled: false` in
+config.yml. Enabled, Frigate restarts its capture every few seconds and logs
+~17k error lines a day through `frigate.video.ffmpeg`, a logger all cameras
+share, so per-camera log levels cannot quiet it. Set it back to `true` once
+the doorbell is back (and drop the go2rtc `rtsp: error` log override if
+nothing else needs it).
 
 The cameras burn a clock into the image. Its seconds change every second, so
 without a motion mask every recording segment counts as motion, and motion
