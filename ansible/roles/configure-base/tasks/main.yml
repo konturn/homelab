@@ -437,12 +437,17 @@
     weekday: "0"
     job: "docker exec -u www-data nextcloud php occ files:scan --all"
 
+# Only files not already owned by konoahko. A no-op chown still updates a
+# file's ctime, and restic re-reads every file whose ctime changed, so a
+# plain `chown -R` made the nightly backup re-read all of /mpool/plex/config,
+# Photos and Family (~250 GiB, ~1h40m) every night. -h acts on symlinks
+# themselves, as `chown -R` does.
 - name: Sets up perodic plex chown
   ansible.builtin.cron:
     name: "Plex dir chown"
     minute: "0"
     hour: "0"
-    job: "chown -R konoahko:konoahko /mpool/plex"
+    job: "find /mpool/plex \\( ! -user konoahko -o ! -group konoahko \\) -exec chown -h konoahko:konoahko {} +"
 
 - name: Install msmtp
   apt:
