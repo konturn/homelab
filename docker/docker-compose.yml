@@ -413,7 +413,8 @@ services:
     image: lscr.io/linuxserver/tautulli:18993091-ls1@sha256:597e4c4992917f5499179406ad6d5ac3304024dd246f1d371fb30f55d35b1535
     networks:
       - internal
-      - external
+    # Internal only: every client (lab_nginx vhost, telegraf, the JIT proxy)
+    # and Plex itself are on internal.
     ports:
       - "8181/tcp"
     # Memory (2026-09-01, 30d max): 99M. 256M gives 2.6x headroom.
