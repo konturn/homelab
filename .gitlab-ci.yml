@@ -473,7 +473,7 @@ anomaly-detector:test:
 event-router:tlc:
   extends: .interruptible
   stage: validate
-  image: eclipse-temurin:21.0.13_9-jre-alpine@sha256:ac05c3c42b7c2f1a52c9bd52f01041fa1958231b15ebeae7420429cbc5baf474
+  image: eclipse-temurin:21.0.13.1_2-jre-alpine@sha256:5d7689f47d670aca766b9503a70bccc2d73b4eb9221ae8f714ae958313c4ce70
   needs: []
   timeout: 20m
   variables:
