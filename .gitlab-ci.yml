@@ -2679,12 +2679,12 @@ ha-maintenance:test:
 ha:maintenance:
   extends: .scheduled_report
   resource_group: ha-maintenance
-  timeout: 50m
+  timeout: 95m
   script:
     - >-
       python3 ci/reports/run_remote.py ci/ha-maintenance/ha_maint.py
       --extra ci/ha-maintenance/ha_maint.py
-      --secret ha=docker/homeassistant --timeout 2700
+      --secret ha=docker/homeassistant --timeout 5400
       ${HA_MAINT_DRY_RUN:+--arg --dry-run}
   rules:
     - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "ha-maintenance" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
