@@ -253,10 +253,9 @@ amps:
       A's input 4, so the Office speakers can only play Global today (#154).
   # 2026-11-18: Kitchen and Living Room Speakers 1 moved here from amp A
   # (A zone 15 output dead, zone 16 thin), keeping their entity ids so groups,
-  # scripts, dashboards and HomeKit follow. Their speaker wires are on zones
-  # 11 and 12 (confirmed by ear 2026-11-21). Zones 13-16 are spare
-  # (media_player.amp_c_zone_1x, 14 is media_player.test for now); planned for
-  # Main Bedroom, Guest Bedroom (#154).
+  # scripts, dashboards and HomeKit follow. Zones are numbered from the other
+  # end of the terminal strip than first assumed (checked by ear 2026-11-21).
+  # Zones 15 and 16 are spare (media_player.amp_c_zone_15/16).
   C:
     model: Monoprice 10761
     serial_by_id: usb-Prolific_Technology_Inc._USB-Serial_Controller_DFCAb2A8J14-if00-port0
@@ -266,6 +265,8 @@ amps:
     zones:
       11: {name: Living Room Speakers 1, entity: media_player.zone_16}
       12: {name: Kitchen Speakers, entity: media_player.zone_15}
+      13: {name: Guest Bedroom Speakers, entity: media_player.guest_bedroom_speakers}
+      14: {name: Main Bedroom Speakers, entity: media_player.main_bedroom_speakers}
 
 # ---------------------------------------------------------------------------
 # Network-attached devices with no health signal of their own. Addresses and

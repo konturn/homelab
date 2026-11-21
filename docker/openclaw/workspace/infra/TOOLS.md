@@ -62,7 +62,7 @@ with this file, they win: say so.
 - AirPlay 2 receivers (docs/AUDIO.md), name -> snapserver source: House (airplay_house, 10.6.32.24) -> Network, Movie Room (airplay_movie_room, 10.6.32.25) -> Network_Movie_Room, Office (airplay_office, 10.6.32.26) -> Network_Office, Kitchen (airplay_kitchen, 10.6.32.27) -> Network_Kitchen, Main Bedroom (airplay_main_bedroom, 10.6.32.28) -> Network_Main_Bedroom, Main Bathroom (airplay_main_bathroom, 10.6.32.29) -> Network_Main_Bathroom, Guest Bathroom (airplay_guest_bathroom, 10.6.32.30) -> Network_Guest_Bathroom, Guest Bedroom (airplay_guest_bedroom, 10.6.32.31) -> Network_Guest_Bedroom.
 - Amp A (HA /dev/ttyUSB0), inputs 1 Global, 2 Guest_Bathroom, 3 Guest_Bedroom, 4 Office; zones Living Room Speakers 2 (zone_11), Dining Room (zone_12), Guest Bathroom (zone_13), Deck (zone_5), Dead (amp_a_zone_15), Unwired (amp_a_zone_16).
 - Amp B (HA /dev/ttyUSB1), inputs 1 Global; zones Main Bathroom (zone_11_2), Gym (zone_12_2), Front Basement Hallway (zone_13_2), Ping Pong (zone_14), Back Basement Hallways (zone_15_2), Office (zone_16_2). Office Speakers (zone 16) sit on B, but the Office stream is labelled on A's input 4, so the Office speakers can only play Global today (#154).
-- Amp C (HA /dev/ttyUSB2), inputs 1 Global; zones Living Room Speakers 1 (zone_16), Kitchen (zone_15).
+- Amp C (HA /dev/ttyUSB2), inputs 1 Global; zones Living Room Speakers 1 (zone_16), Kitchen (zone_15), Guest Bedroom (guest_bedroom_speakers), Main Bedroom (main_bedroom_speakers).
 - Amcrest back camera (Home Assistant camera.10_6_128_14): No internet; NTP from the router.
 - Amcrest doorbell (amcrest2mqtt): Unreachable since 2026-07-13 (issue #123); hardware fix pending.
 - Denon AVR-X6700H (HA denonavr, local): 

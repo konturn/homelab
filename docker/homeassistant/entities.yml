@@ -22,8 +22,8 @@ entities:
   media_player.zone_16: {area: living_room}
   media_player.amp_a_zone_15: {name: Amp A Zone 15 (dead output), disabled: true}
   media_player.amp_a_zone_16: {name: Amp A Zone 16 (unwired), disabled: true}
-  media_player.amp_c_zone_13: {name: Amp C Zone 13 (spare)}
-  media_player.test: {name: Test, rename_from: media_player.amp_c_zone_14}
+  media_player.guest_bedroom_speakers: {rename_from: media_player.amp_c_zone_13}
+  media_player.main_bedroom_speakers: {area: bedroom, rename_from: media_player.amp_c_zone_14}
   media_player.amp_c_zone_15: {name: Amp C Zone 15 (spare)}
   media_player.amp_c_zone_16: {name: Amp C Zone 16 (spare)}
   media_player.zone_21_3: {name: Amp C Zone 21 (no expansion unit), disabled: true}
