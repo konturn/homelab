@@ -224,12 +224,12 @@ amps:
       5: {label: c}
       6: {label: d}
     zones:
-      11: {name: Living Room Speakers 2, entity: media_player.zone_11}
-      12: {name: Dining Room Speakers, entity: media_player.zone_12}
+      11: {name: Amp A Zone 11 (spare), entity: media_player.amp_a_zone_11}
+      12: {name: Amp A Zone 12 (spare), entity: media_player.amp_a_zone_12}
       13: {name: Guest Bathroom Speakers, entity: media_player.zone_13}
       14: {name: Deck Speakers, entity: media_player.zone_5}
-      15: {name: Dead, entity: media_player.amp_a_zone_15}
-      16: {name: Unwired, entity: media_player.amp_a_zone_16}
+      15: {name: Amp A Zone 15 (bad output), entity: media_player.amp_a_zone_15}
+      16: {name: Amp A Zone 16 (bad output), entity: media_player.amp_a_zone_16}
   B:
     model: Monoprice 10761
     serial_by_id: usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0
@@ -251,11 +251,12 @@ amps:
     note: >-
       Office Speakers (zone 16) sit on B, but the Office stream is labelled on
       A's input 4, so the Office speakers can only play Global today (#154).
-  # 2026-11-18: Kitchen and Living Room Speakers 1 moved here from amp A
-  # (A zone 15 output dead, zone 16 thin), keeping their entity ids so groups,
-  # scripts, dashboards and HomeKit follow. Zones are numbered from the other
-  # end of the terminal strip than first assumed (checked by ear 2026-11-21).
-  # Zones 15 and 16 are spare (media_player.amp_c_zone_15/16).
+  # Kitchen, Dining Room and both Living Room pairs moved here from amp A
+  # (A zones 15 and 16 have bad outputs; 11 and 12 are spare), keeping their
+  # entity ids so groups, scripts, dashboards and HomeKit follow. Zones are
+  # numbered from the other end of the terminal strip than first assumed.
+  # Every zone checked by ear 2026-11-21. Living Room Speakers 2 (zone 16)
+  # has a bad speaker connection; leave it off until that is fixed.
   C:
     model: Monoprice 10761
     serial_by_id: usb-Prolific_Technology_Inc._USB-Serial_Controller_DFCAb2A8J14-if00-port0
@@ -264,9 +265,11 @@ amps:
       1: {label: Global, stream: Global}
     zones:
       11: {name: Living Room Speakers 1, entity: media_player.zone_16}
-      12: {name: Kitchen Speakers, entity: media_player.zone_15}
+      12: {name: Dining Room Speakers, entity: media_player.zone_12}
       13: {name: Guest Bedroom Speakers, entity: media_player.guest_bedroom_speakers}
       14: {name: Main Bedroom Speakers, entity: media_player.main_bedroom_speakers}
+      15: {name: Kitchen Speakers, entity: media_player.zone_15}
+      16: {name: Living Room Speakers 2, entity: media_player.zone_11}
 
 # ---------------------------------------------------------------------------
 # Network-attached devices with no health signal of their own. Addresses and
