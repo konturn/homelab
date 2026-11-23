@@ -195,6 +195,12 @@ all:
       docker_compose_file_names:
         -  "docker-compose.yml"
       docker_compose_dest_path: "{{ docker_persistent_data_path }}/ansible_state"
+      # Out-of-band GitLab upgrades (docs/AUTOMERGE.md, "GitLab updates"):
+      # the image pin, the restore-point dataset and its mount.
+      gitlab_oob_enabled: true
+      gitlab_oob_state_dir: "{{ docker_persistent_data_path }}/gitlab-oob"
+      gitlab_oob_zfs_dataset: mpool/backups/gitlab-oob
+      gitlab_oob_mirror_mount: /mpool/backups/gitlab-oob
       # Snapclient zones whose USB sound card is not detected. Each listed zone's
       # container is rendered with deploy.replicas: 0, so compose removes it
       # instead of letting it crash-loop on "Can't open plughw:CARD=<Zone>"

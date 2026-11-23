@@ -3,6 +3,50 @@
 # (ansible/service-update.yml). `compose_src_dir` defaults to the
 # repo's docker/ directory; the per-service deploy points it at the pre-merge
 # copy when rolling back.
+#
+# GitLab's image is pinned on the host (docs/AUTOMERGE.md, "GitLab updates"):
+# the rendered file names the image in <gitlab_oob_state_dir>/image, not the
+# one on main, so no deploy run from CI changes GitLab's image. Only
+# gitlab-oob-upgrade (a host timer) moves the pin, with a restore point and
+# rollback. The first deploy writes the pin from the running container.
+- name: Bootstrap the GitLab image pin from the running container
+  ansible.builtin.shell: |
+    set -eu
+    f={{ gitlab_oob_state_dir | quote }}/image
+    [ -s "$f" ] && exit 0
+    img=$(docker inspect gitlab 2>/dev/null \
+      | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["Config"]["Image"])') || exit 0
+    case "$img" in gitlab/gitlab-e[ec]:*@sha256:*) ;; *) exit 0 ;; esac
+    mkdir -p {{ gitlab_oob_state_dir | quote }}
+    printf '%s\n' "$img" > "$f"
+    echo created
+  register: _gitlab_oob_bootstrap
+  changed_when: "'created' in _gitlab_oob_bootstrap.stdout"
+  when:
+    - gitlab_oob_enabled | default(false)
+    - not ansible_check_mode
+
+- name: Read the GitLab image pin
+  ansible.builtin.slurp:
+    src: "{{ gitlab_oob_state_dir }}/image"
+  register: _gitlab_oob_pin
+  failed_when: false
+  when: gitlab_oob_enabled | default(false)
+
+- name: Use the GitLab image pin
+  ansible.builtin.set_fact:
+    gitlab_oob_image: >-
+      {{ (_gitlab_oob_pin.content | b64decode | trim)
+         if (gitlab_oob_enabled | default(false)) and (_gitlab_oob_pin.content | default('') | length > 0)
+         else '' }}
+
+- name: Check the GitLab image pin
+  ansible.builtin.assert:
+    that:
+      - gitlab_oob_image is match('^gitlab/gitlab-e[ec]:[A-Za-z0-9][A-Za-z0-9._-]*@sha256:[a-f0-9]{64}$')
+    fail_msg: "{{ gitlab_oob_state_dir }}/image is not a digest-pinned GitLab image"
+  when: gitlab_oob_image | length > 0
+
 - name: Template out compose file to ansible state directory on host
   ansible.builtin.template:
     src: "{{ (compose_src_dir | default(lookup('env', 'CI_PROJECT_DIR') + '/docker')) + '/' + item }}"
@@ -12,3 +56,13 @@
     mode: '0700'
   no_log: true
   loop: "{{ docker_compose_file_names }}"
+
+- name: Apply the GitLab image pin to the rendered compose file(s)
+  ansible.builtin.replace:
+    path: "{{ docker_compose_dest_path + '/' + item }}"
+    regexp: >-
+      ^(\s+image:\s*['"]?)gitlab/gitlab-e[ec]:[A-Za-z0-9][A-Za-z0-9._-]*@sha256:[a-f0-9]{64}(['"]?\s*)$
+    replace: '\g<1>{{ gitlab_oob_image }}\g<2>'
+  no_log: true
+  loop: "{{ docker_compose_file_names }}"
+  when: gitlab_oob_image | length > 0
