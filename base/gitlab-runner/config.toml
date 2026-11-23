@@ -43,7 +43,7 @@ check_interval = 0
   limit = 6
   request_concurrency = 2
   [runners.docker]
-    image = "ubuntu:24.04@sha256:73b999393d07f2bf65a40373778a44dc9a6d54ad7718d29247d8ff9413c4d6a8"
+    image = "ubuntu:24.04@sha256:9c7f200c07e3d4a03e7249d2c16bf66a51120fb876aa2242cf31451412543289"
     # Job, helper and service containers all join this network. Not host
     # networking: jobs reach only the allowlisted destinations (CI-PROT-EGRESS
     # in networking/iptables/rules.v4, docs/FIREWALL.md).
@@ -84,7 +84,7 @@ check_interval = 0
   executor = "docker"
   limit = 1
   [runners.docker]
-    image = "ubuntu:24.04@sha256:73b999393d07f2bf65a40373778a44dc9a6d54ad7718d29247d8ff9413c4d6a8"
+    image = "ubuntu:24.04@sha256:9c7f200c07e3d4a03e7249d2c16bf66a51120fb876aa2242cf31451412543289"
     # Host network on purpose, for this runner only: the firmware jobs bind
     # a TFTP server to 10.4.0.1 / 10.100.0.2 and the switches and APs fetch
     # the image from it. Every other protected job runs on router-protected.
@@ -108,7 +108,7 @@ check_interval = 0
   limit = 6
   request_concurrency = 2
   [runners.docker]
-    image = "ubuntu:24.04@sha256:73b999393d07f2bf65a40373778a44dc9a6d54ad7718d29247d8ff9413c4d6a8"
+    image = "ubuntu:24.04@sha256:9c7f200c07e3d4a03e7249d2c16bf66a51120fb876aa2242cf31451412543289"
     # Job, helper and service containers all join this network
     network_mode = "gitlab-ci"
     privileged = false
