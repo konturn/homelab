@@ -43,6 +43,11 @@ restic_global_excludes:
   # to restore: completed blocks are flushed to traces/, which stays backed up.
   - "/persistent_data/docker/volumes/docker_tempo-storage/_data/live-store"
   - "/persistent_data/docker/volumes/docker_tempo-storage/_data/wal"
+  # GitLab runner cache and build volumes: CI writes and deletes them while
+  # jobs run, including the nightly Renovate job inside the backup window, so
+  # restic lists a file and then finds it gone (exit 3). They are rebuilt by
+  # the next job and have nothing to restore.
+  - "/persistent_data/docker/volumes/runner-*"
 
 # Each entry: path; optional exclude (one restic --exclude value); optional
 # tag (adds --tag to that folder's snapshots); optional global_excludes: false
