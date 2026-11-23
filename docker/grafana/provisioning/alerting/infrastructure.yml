@@ -256,6 +256,7 @@ groups:
             relativeTimeRange: {from: 900, to: 0}
             datasourceUid: loki
             model:
+              queryType: instant
               expr: 'sum(count_over_time({job="systemd-journal"} |= "Memory cgroup out of memory" [15m]))'
               refId: A
           - refId: B
@@ -303,6 +304,7 @@ groups:
             relativeTimeRange: {from: 900, to: 0}
             datasourceUid: loki
             model:
+              queryType: instant
               expr: 'sum(count_over_time({job="systemd-journal"} |= "fork rejected by pids controller" [15m]))'
               refId: A
           - refId: B
@@ -1167,6 +1169,7 @@ groups:
             relativeTimeRange: {from: 900, to: 0}
             datasourceUid: loki
             model:
+              queryType: instant
               # The unit name is in the message body, not in a label: these
               # lines come from PID 1, so the stream carries init.scope rather
               # than the unit that failed. Hence the regexp extraction.
@@ -2079,6 +2082,14 @@ groups:
     folder: General Alerting
     interval: 30m
     rules:
+      # Loki count rules use queryType: instant (as restic-backup-error/-incomplete
+      # and container-log-flood). As a range query over relativeTimeRange,
+      # count_over_time([N]) is evaluated at every step of the last N and the
+      # max reducer takes the highest: a "< 1 success line" staleness rule then
+      # needs 2N without a success to fire (96h for the nightly backup, 16d for
+      # the weekly dumps), and an event counter stays firing for 2N. Not
+      # failed-ssh-logins: a security page evaluated every 5m, where the wider
+      # look-back only adds sensitivity.
       - uid: restic-backup-stale
         title: Restic Backup Stale (48h)
         condition: C
@@ -2087,6 +2098,7 @@ groups:
             relativeTimeRange: {from: 172800, to: 0}
             datasourceUid: loki
             model:
+              queryType: instant
               expr: 'count_over_time({unit="restic-backup.service"} |= "snapshot" |= "saved" [48h])'
               refId: A
           - refId: B
@@ -2261,6 +2273,7 @@ groups:
             relativeTimeRange: {from: 172800, to: 0}
             datasourceUid: loki
             model:
+              queryType: instant
               expr: 'count_over_time({unit="restic-backup.service"} |= "restic-b2-policy: OK" [48h])'
               refId: A
           - refId: B
@@ -2293,6 +2306,7 @@ groups:
             relativeTimeRange: {from: 172800, to: 0}
             datasourceUid: loki
             model:
+              queryType: instant
               expr: 'count_over_time({unit="restic-db-dumps.service"} |= "restic-db-dumps: SUMMARY group=nightly" |= "failed=0" [48h])'
               refId: A
           - refId: B
@@ -2320,6 +2334,7 @@ groups:
             relativeTimeRange: {from: 691200, to: 0}
             datasourceUid: loki
             model:
+              queryType: instant
               expr: 'count_over_time({unit="restic-db-dumps-weekly.service"} |= "restic-db-dumps: SUMMARY group=weekly" |= "failed=0" [8d])'
               refId: A
           - refId: B
