@@ -805,6 +805,37 @@ def _ssl_ctx(skip_env: str, ca_env: str) -> ssl.SSLContext:
     return ssl.create_default_context(cafile=os.environ.get(ca_env) or None)
 
 
+VAULT_ATTEMPTS = 3
+VAULT_RETRY_DELAY = 10  # seconds between attempts
+
+
+def _vault_open(req: urllib.request.Request, ctx) -> dict:
+    """POST/GET one Vault request, retrying network errors.
+
+    A short Vault or DNS blip (a bare URLError) used to end a whole firmware
+    rollout before it touched a switch. HTTP errors are answers, not blips,
+    and are raised at once.
+    """
+    for attempt in range(1, VAULT_ATTEMPTS + 1):
+        try:
+            with urllib.request.urlopen(req, context=ctx, timeout=15) as r:
+                return json.load(r)
+        except urllib.error.HTTPError:
+            raise
+        except urllib.error.URLError as e:
+            if attempt == VAULT_ATTEMPTS:
+                raise
+            print(f"  Vault unreachable ({e.reason}), retrying in {VAULT_RETRY_DELAY}s "
+                  f"({attempt}/{VAULT_ATTEMPTS})", flush=True)
+            time.sleep(VAULT_RETRY_DELAY)
+    raise AssertionError("unreachable")
+
+
+def _vault_err(e: Exception) -> str:
+    reason = getattr(e, "reason", None)
+    return f"{type(e).__name__} ({reason})" if reason is not None else type(e).__name__
+
+
 def vault_read(path: str) -> dict:
     addr = os.environ.get("VAULT_ADDR")
     if not addr:
@@ -818,19 +849,17 @@ def vault_read(path: str) -> dict:
         body = json.dumps({"role": os.environ.get("VAULT_JWT_ROLE", "ci-deploy"), "jwt": jwt}).encode()
         req = urllib.request.Request(f"{addr}/v1/auth/jwt/login", data=body, method="POST")
         try:
-            with urllib.request.urlopen(req, context=ctx, timeout=15) as r:
-                token = json.load(r)["auth"]["client_token"]
+            token = _vault_open(req, ctx)["auth"]["client_token"]
         except (urllib.error.URLError, KeyError, ValueError) as e:
-            raise NgError(f"Vault JWT login failed: {type(e).__name__}") from None
+            raise NgError(f"Vault JWT login failed: {_vault_err(e)}") from None
     mount, _, rest = path.partition("/")
     req = urllib.request.Request(f"{addr}/v1/{mount}/data/{rest}", headers={"X-Vault-Token": token})
     try:
-        with urllib.request.urlopen(req, context=ctx, timeout=15) as r:
-            data = json.load(r)["data"]["data"]
+        data = _vault_open(req, ctx)["data"]["data"]
     except urllib.error.HTTPError as e:
         raise NgError(f"Vault read of {path} failed: HTTP {e.code}") from None
     except (urllib.error.URLError, KeyError, ValueError) as e:
-        raise NgError(f"Vault read of {path} failed: {type(e).__name__}") from None
+        raise NgError(f"Vault read of {path} failed: {_vault_err(e)}") from None
     for k in ("username", "password", "host"):
         if not data.get(k):
             raise NgError(f"Vault secret {path} has no '{k}' field")

@@ -1248,5 +1248,49 @@ class TestSwitchFirmwareCalls(unittest.TestCase):
         self.assertIn("boom", str(cm.exception))
 
 
+class VaultRetryTest(unittest.TestCase):
+    """A network blip on a Vault call is retried; HTTP errors are not."""
+
+    def _env(self):
+        return mock.patch.dict(ng.os.environ, {"VAULT_ADDR": "https://vault.invalid:8200",
+                                               "VAULT_TOKEN": "t"}, clear=False)
+
+    def _resp(self, payload):
+        r = mock.MagicMock()
+        r.__enter__.return_value = io.BytesIO(json.dumps(payload).encode())
+        return r
+
+    def test_retries_url_error_then_succeeds(self):
+        ok = self._resp({"data": {"data": {"username": "u", "password": "p", "host": "h"}}})
+        blip = ng.urllib.error.URLError("timed out")
+        with self._env(), mock.patch.object(ng.time, "sleep") as sleep, \
+                mock.patch.object(ng.urllib.request, "urlopen", side_effect=[blip, ok]) as op, \
+                redirect_stdout(io.StringIO()):
+            data = ng.vault_read("homelab/network/test-switch")
+        self.assertEqual(data["host"], "h")
+        self.assertEqual(op.call_count, 2)
+        sleep.assert_called_once()
+
+    def test_gives_up_with_reason(self):
+        blip = ng.urllib.error.URLError("timed out")
+        with self._env(), mock.patch.object(ng.time, "sleep"), \
+                mock.patch.object(ng.urllib.request, "urlopen", side_effect=blip) as op, \
+                redirect_stdout(io.StringIO()):
+            with self.assertRaises(ng.NgError) as cm:
+                ng.vault_read("homelab/network/test-switch")
+        self.assertEqual(op.call_count, ng.VAULT_ATTEMPTS)
+        self.assertIn("timed out", str(cm.exception))
+
+    def test_http_error_not_retried(self):
+        err = ng.urllib.error.HTTPError("u", 403, "forbidden", {}, None)
+        with self._env(), mock.patch.object(ng.time, "sleep") as sleep, \
+                mock.patch.object(ng.urllib.request, "urlopen", side_effect=err) as op:
+            with self.assertRaises(ng.NgError) as cm:
+                ng.vault_read("homelab/network/test-switch")
+        self.assertEqual(op.call_count, 1)
+        sleep.assert_not_called()
+        self.assertIn("HTTP 403", str(cm.exception))
+
+
 if __name__ == "__main__":
     unittest.main()
