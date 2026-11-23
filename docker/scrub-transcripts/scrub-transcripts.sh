@@ -137,10 +137,9 @@ if [[ -f "$REPORT_FILE" ]] && [[ -s "$REPORT_FILE" ]]; then
     # *.deleted.* purge below never saw anything older than 10 minutes.
     #
     # perl -pi writes a new file even when nothing matched, so a redaction
-    # that fails still restamps the file. Since 2026-11-05 six legacy
-    # transcripts (three of them *.deleted.* from February) failed on every
-    # run, which kept their mtime under 10 minutes old and the purge below
-    # never reached them. mtime is put back around every rewrite.
+    # that fails still restamps the file, and a file that fails on every run
+    # never gets old enough for the purge below. mtime is put back around
+    # every rewrite.
     #
     # A failure logs the rule, the secret's length and how many lines it
     # spans, never the secret. grep -F reads a pattern containing a newline
