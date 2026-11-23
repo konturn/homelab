@@ -208,6 +208,137 @@ class EligibilityTests(unittest.TestCase):
         self.assertFalse(v.manual)
 
 
+GUARD_JOBS = ["ci-image:ansible-canary", "automerge:test"]
+ALLOW_G = {
+    **ALLOW,
+    "ci_images": {"enabled": True, "authors": [RENOVATE], "files": [CI],
+                  "denylist": {"docker.io/willhallonline/ansible": "the lagging sweep copy"},
+                  "guarded": {"willhallonline/ansible": {
+                      "except_tags": ["latest"], "updates": ["digest", "patch"],
+                      "required_jobs": GUARD_JOBS, "reason": "runs the deploys"}}},
+}
+BASE_G = BASE + f"""
+.ansible_sweep:
+  extends: .ansible
+  image: docker.io/willhallonline/ansible:2.21.4-alpine-3.22@{D1}
+
+automerge:sweep:
+  extends: .ansible_sweep
+  script:
+    - sweep
+
+netgear:test:
+  image: willhallonline/ansible:latest@{D1}
+  script:
+    - test
+"""
+ANSIBLE_LINE = f"willhallonline/ansible:2.21.4-alpine-3.22@{D1}\n  before_script"
+
+
+class _BlockerGitLab:
+    def __init__(self, jobs=()):
+        self.jobs = list(jobs)
+
+    def get_all(self, path, **params):
+        return self.jobs
+
+
+class GuardedImageTests(unittest.TestCase):
+    """ci_images.guarded: the .ansible image line takes digest and patch
+    updates after the canary and unit suites passed; its :latest lines are
+    ordinary CI image updates; the lagging sweep copy is never auto-merged."""
+
+    def ev(self, head, base=BASE_G):
+        return evaluate(head, base=base, allow=ALLOW_G)
+
+    def test_ansible_digest_update_needs_the_jobs(self):
+        v = self.ev(edit(BASE_G, ANSIBLE_LINE, ANSIBLE_LINE.replace(D1, D2)))
+        self.assertTrue(v.eligible, v.reasons)
+        self.assertEqual([(c.service, c.kind) for c in v.changes], [(".ansible", "digest")])
+        self.assertEqual(v.required_jobs, GUARD_JOBS)
+        self.assertIn("needs passed MR pipeline jobs", " ".join(v.notes))
+
+    def test_ansible_patch_update_allowed(self):
+        v = self.ev(edit(BASE_G, ANSIBLE_LINE,
+                         ANSIBLE_LINE.replace(f"2.21.4-alpine-3.22@{D1}", f"2.21.5-alpine-3.22@{D2}")))
+        self.assertTrue(v.eligible, v.reasons)
+        self.assertEqual(v.changes[0].kind, "patch")
+        self.assertEqual(v.required_jobs, GUARD_JOBS)
+
+    def test_ansible_minor_update_is_manual(self):
+        v = self.ev(edit(BASE_G, ANSIBLE_LINE,
+                         ANSIBLE_LINE.replace(f"2.21.4-alpine-3.22@{D1}", f"2.22.0-alpine-3.22@{D2}")))
+        self.assertFalse(v.eligible)
+        self.assertTrue(v.denied)
+        self.assertIn("guarded", " ".join(v.reasons))
+
+    def test_latest_lines_are_ordinary(self):
+        v = self.ev(edit(BASE_G, f"ansible:latest@{D1}", f"ansible:latest@{D2}"))
+        self.assertTrue(v.eligible, v.reasons)
+        self.assertEqual([(c.service, c.kind) for c in v.changes], [("netgear:test", "digest")])
+        self.assertEqual(v.required_jobs, [])
+
+    def test_moving_off_or_onto_the_exempt_tag_is_guarded(self):
+        base = edit(BASE_G, f"ansible:latest@{D1}", f"ansible:2.21.4-alpine-3.22@{D1}\n  # x")
+        base = base.replace("\n  # x", "")
+        head = edit(base, f"netgear:test:\n  image: willhallonline/ansible:2.21.4-alpine-3.22@{D1}",
+                    f"netgear:test:\n  image: willhallonline/ansible:latest@{D2}")
+        v = self.ev(head, base=base)
+        self.assertFalse(v.eligible)
+
+    def test_sweep_copy_is_never_auto_merged(self):
+        old = f"docker.io/willhallonline/ansible:2.21.4-alpine-3.22@{D1}"
+        v = self.ev(edit(BASE_G, old, old.replace(D1, D2)))
+        self.assertFalse(v.eligible)
+        self.assertTrue(v.denied)
+        # nor together with the .ansible line
+        head = edit(edit(BASE_G, old, old.replace(D1, D2)), ANSIBLE_LINE, ANSIBLE_LINE.replace(D1, D2))
+        self.assertFalse(self.ev(head).eligible)
+
+    def test_sweep_runs_outside_the_guarded_image(self):
+        self.assertIn("automerge:sweep",
+                      policy.ci_image_jobs(BASE_G, ["docker.io/willhallonline/ansible"]))
+        self.assertNotIn("automerge:sweep", policy.ci_image_jobs(BASE_G, ["willhallonline/ansible"]))
+        self.assertIn("deploy", policy.ci_image_jobs(BASE_G, ["willhallonline/ansible"]))
+
+    def test_required_jobs_gate_the_merge(self):
+        v = self.ev(edit(BASE_G, ANSIBLE_LINE, ANSIBLE_LINE.replace(D1, D2)))
+        mr = {"sha": "abc", "head_pipeline": {"id": 5, "sha": "abc", "status": "success"}}
+        ok = [{"id": i, "name": n, "status": "success"} for i, n in enumerate(GUARD_JOBS)]
+        self.assertEqual(automerge.required_job_blockers(_BlockerGitLab(ok), mr, v), [])
+        missing = [j for j in ok if j["name"] != "ci-image:ansible-canary"]
+        self.assertIn("required job ci-image:ansible-canary is missing",
+                      automerge.required_job_blockers(_BlockerGitLab(missing), mr, v))
+        failed = ok + [{"id": 99, "name": "automerge:test", "status": "failed"}]
+        self.assertTrue(automerge.required_job_blockers(_BlockerGitLab(failed), mr, v))
+
+    def test_malformed_guarded_fails_closed(self):
+        good = ALLOW_G["ci_images"]["guarded"]["willhallonline/ansible"]
+        bad = [
+            "x",
+            {"willhallonline/ansible": "x"},
+            {"willhallonline/ansible": {**good, "reason": ""}},
+            {"willhallonline/ansible": {**good, "updates": []}},
+            {"willhallonline/ansible": {**good, "updates": ["major"]}},
+            {"willhallonline/ansible": {**good, "required_jobs": []}},
+            {"willhallonline/ansible": {**good, "required_jobs": ["not a job"]}},
+            {"willhallonline/ansible": {**good, "except_tags": "latest"}},
+            {"willhallonline/ansible": {**good, "surprise": 1}},
+        ]
+        for g in bad:
+            with self.subTest(g=g):
+                allow = copy.deepcopy(ALLOW_G)
+                allow["ci_images"]["guarded"] = g
+                with self.assertRaises(policy.PolicyError):
+                    policy.ci_images_config(allow)
+                v = evaluate(edit(BASE_G, *NGINX_989), base=BASE_G, allow=allow)
+                self.assertFalse(v.eligible)
+        allow = copy.deepcopy(ALLOW_G)
+        allow["ci_images"]["denylist"]["willhallonline/ansible"] = "both"
+        with self.assertRaises(policy.PolicyError):
+            policy.ci_images_config(allow)
+
+
 class BlockScalarTests(unittest.TestCase):
     def test_image_line_inside_a_script_is_not_a_job_image(self):
         # found by test_properties: `image: ...` inside `script: - |` (or
@@ -422,7 +553,29 @@ class RealRepoTests(unittest.TestCase):
         self.assertTrue(cfg["enabled"])
         self.assertEqual(cfg["files"], [CI])
         self.assertEqual(cfg["authors"], [RENOVATE])
-        self.assertIn("willhallonline/ansible", cfg["denylist"])
+        # the lagging sweep copy is never auto-merged; the .ansible image is guarded
+        self.assertIn("docker.io/willhallonline/ansible", cfg["denylist"])
+        g = cfg["guarded"]["willhallonline/ansible"]
+        self.assertEqual(g["except_tags"], ["latest"])
+        self.assertEqual(sorted(g["updates"]), ["digest", "patch"])
+        self.assertIn("ci-image:ansible-canary", g["required_jobs"])
+
+    def test_guarded_required_jobs_run_on_a_ci_file_change(self):
+        # Every required job exists and runs in an MR pipeline that changes
+        # only .gitlab-ci.yml, or the sweep could never merge the update.
+        class _L(yaml.SafeLoader):
+            pass
+        _L.add_constructor("!reference", lambda loader, node: loader.construct_sequence(node))
+        doc = yaml.load(self.ci, Loader=_L)
+        for spec in policy.ci_images_config(self.allow)["guarded"].values():
+            for job in spec["required_jobs"]:
+                with self.subTest(job=job):
+                    self.assertIn(job, doc)
+                    rules = [r for r in doc[job].get("rules", []) if isinstance(r, dict)]
+                    self.assertTrue(any("merge_request_event" in str(r.get("if", ""))
+                                        and CI in (r.get("changes") or []) for r in rules), job)
+                    self.assertNotIn("when", doc[job])
+                    self.assertFalse(doc[job].get("allow_failure"), job)
 
     def test_known_image_lines_are_found(self):
         lines = self.ci.split("\n")
@@ -444,11 +597,20 @@ class RealRepoTests(unittest.TestCase):
         self.assertTrue(v.ci_image)
         self.assertEqual(policy.ci_image_jobs(head, ["nginx"]), ["nginx:validate"])
 
-    def test_ansible_image_is_denied(self):
-        # it runs the sweep and the deploys
-        jobs = policy.ci_image_jobs(self.ci, ["willhallonline/ansible"])
-        self.assertIn("automerge:sweep", jobs)
-        self.assertIn("router:deploy-service", jobs)
+    def test_sweep_runs_in_the_lagging_image(self):
+        # The deploys run in the guarded .ansible image; the jobs that watch
+        # and revert its updates run in the lagging docker.io/ copy.
+        deploy = policy.ci_image_jobs(self.ci, ["willhallonline/ansible"])
+        sweep = policy.ci_image_jobs(self.ci, ["docker.io/willhallonline/ansible"])
+        self.assertIn("router:deploy-service", deploy)
+        for job in ("automerge:sweep", "automerge:eligibility", "automerge:report"):
+            self.assertIn(job, sweep)
+            self.assertNotIn(job, deploy)
+        lines = self.ci.split("\n")
+        ansible = [policy.parse_image_ref(lines[i].split(":", 1)[1]) for i, j in policy.ci_image_lines(self.ci).items()
+                   if j in (".ansible", ".ansible_sweep")]
+        self.assertEqual(len(ansible), 2)
+        self.assertEqual(ansible[0].tag, ansible[1].tag)     # same tag, digest lags
 
     def test_renovate_rules_match_policy(self):
         cls = [r for r in self.rules if r.get("description", "").startswith("CI image class (")]
@@ -466,6 +628,21 @@ class RealRepoTests(unittest.TestCase):
         self.assertEqual(sorted(deny[0]["matchPackageNames"]),
                          sorted(policy.ci_images_config(self.allow)["denylist"]))
         self.assertIn("automerge-manual", deny[0]["addLabels"])
+        # Renovate never proposes the lagging sweep copy ...
+        off = [r for r in self.rules if r.get("enabled") is False
+               and "docker.io/willhallonline/ansible" in (r.get("matchDepNames") or [])]
+        self.assertEqual(len(off), 1)
+        # ... and labels minors and majors of guarded images manual
+        guard = [r for r in self.rules if r.get("description", "").startswith("CI image guarded")]
+        self.assertEqual(len(guard), 1)
+        g = policy.ci_images_config(self.allow)["guarded"]
+        self.assertEqual(sorted(guard[0]["matchPackageNames"]), sorted(g))
+        self.assertEqual(sorted(guard[0]["matchUpdateTypes"]), ["major", "minor"])
+        self.assertIn("automerge-manual", guard[0]["addLabels"])
+        for spec in g.values():
+            self.assertNotIn("minor", spec["updates"])
+            for tag in spec["except_tags"]:
+                self.assertIn(tag, guard[0]["matchCurrentValue"])
 
     def test_codeowners_lists_the_bot(self):
         rules = policy.parse_codeowners((REPO / "CODEOWNERS").read_text())

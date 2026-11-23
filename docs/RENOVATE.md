@@ -61,8 +61,11 @@ for the CUDA 12 runner the Pascal GPU needs ([ollama.md](ollama.md#testing-an-up
 - **CI image class** (rule "CI image class"): patch, minor, digest and
   `pinDigest` updates of job images in `.gitlab-ci.yml`, on the same nightly
   schedule and limits as the auto-merge class. The sweep merges them
-  ([AUTOMERGE.md](AUTOMERGE.md#ci-images)); `willhallonline/ansible` is on the
-  CI image denylist and labelled `automerge-manual`.
+  ([AUTOMERGE.md](AUTOMERGE.md#ci-images)). The `.ansible` image
+  (`willhallonline/ansible`, any tag but `latest`) is guarded: its minors and
+  majors are labelled `automerge-manual` (rule "CI image guarded"). Its
+  lagging sweep copy, `docker.io/willhallonline/ansible`, is not tracked
+  (`enabled: false`) and is promoted by hand.
 - **Denylist** (rule "Auto-merge denylist"): GitLab, Vault, the Docker socket
   proxy and the GitLab runner image get the label `automerge-manual` and a
   note in the MR body; the sweep never merges them.
