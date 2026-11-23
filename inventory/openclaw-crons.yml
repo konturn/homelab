@@ -22,12 +22,12 @@
 crons:
   - name: "job-apply"
     enabled: true
-    schedule: "cron */30 * * * * America/New_York"
+    schedule: "cron 0 1-23/2 * * * America/New_York"
     agent: "ops"
     session: "isolated"
     wake: "next-heartbeat"
     delivery: "none telegram 8531859108"
-    payload: {kind: "agentTurn", model: "claude-cli/claude-opus-5", timeout: 900}
+    payload: {kind: "agentTurn", timeout: 900}
     trigger: false
   - name: "nightly-meditation"
     enabled: true
@@ -81,7 +81,7 @@ crons:
     session: "isolated"
     wake: "next-heartbeat"
     delivery: "announce telegram 8531859108"
-    payload: {kind: "agentTurn", model: "claude-cli/claude-opus-5", timeout: 1500}
+    payload: {kind: "agentTurn", timeout: 1500}
     trigger: false
   - name: "MR Health Check"
     enabled: true
@@ -99,7 +99,7 @@ crons:
     session: "isolated"
     wake: "next-heartbeat"
     delivery: "announce telegram 8531859108"
-    payload: {kind: "agentTurn", model: "claude-cli/claude-sonnet-5"}
+    payload: {kind: "agentTurn"}
     trigger: false
   - name: "image-update-check"
     enabled: true
