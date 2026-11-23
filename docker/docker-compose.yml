@@ -473,15 +473,24 @@ services:
       # makes it read-only in the UI). Required in Vault.
       FTLCONF_webserver_api_password: {{ vault_pihole_password | trim | replace("$", "$$") }}
       DNSMASQ_USER: root
+      # Per-client limit (default 1000 queries/60s, answered REFUSED). Pi-hole
+      # sees the router as one client: the host, docker0 containers (NAT) and
+      # every lookup Docker's embedded DNS forwards. On 2026-11-23 the daily
+      # Trivy scan's ~50 containers pushed it to ~2000/min; the router was
+      # refused for ~3 min (REFUSED makes clients retry at once, which keeps
+      # the limit tripped) and every http_response probe failed together.
+      FTLCONF_dns_rateLimit_count: "20000"
     volumes:
       - {{ docker_persistent_data_path }}/pihole/conf:/etc/pihole
       - {{ docker_persistent_data_path }}/pihole/dnsmasq:/etc/dnsmasq.d
     # Query/FTL logs in RAM: Pi-hole answers DNS on one thread and blocked on
     # appending pihole.log to the shared ext4 journal of /persistent_data
     # (stalls up to ~2s). Nothing reads these logs; the long-term query
-    # database (/etc/pihole/pihole-FTL.db) stays on disk.
+    # database (/etc/pihole/pihole-FTL.db) stays on disk. pihole.log grows
+    # ~100M a day and the nightly logrotate uses copytruncate (needs room for
+    # a second copy): 64m filled within a day and logging stopped for good.
     tmpfs:
-      - /var/log/pihole:size=64m,mode=0755,uid=1000,gid=1000
+      - /var/log/pihole:size=512m,mode=0755,uid=1000,gid=1000
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "dig", "+short", "+norecurse", "+retry=0", "@127.0.0.1", "pi.hole"]

@@ -942,6 +942,9 @@ groups:
                   |> range(start: -1h)
                   |> filter(fn: (r) => r._measurement == "smart_device")
                   |> filter(fn: (r) => r._field == "exit_status")
+                  // Real disks only: when sudo cannot resolve the hostname its
+                  // warning is parsed as a device named "sudo:" (2026-11-23).
+                  |> filter(fn: (r) => r.device =~ /^(sd[a-z]+|nvme[0-9]+(n[0-9]+)?)$/)
                   |> last()
                   |> filter(fn: (r) => r._value != 0)
                   |> group(columns: ["host"])
