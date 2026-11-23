@@ -323,12 +323,14 @@ services:
     # CPUs for 2h+. Host idle dropped to 15-25% and load1 hit 72. CPU temp
     # reached 85C, and ollama/loki/vault/gateway healthchecks timed out.
     # Grafana's SQLite logged ~1.9k "database is locked" errors, including
-    # failed alert-state saves. 16 CPUs leaves half the host for everything
-    # else. Butler runs longer, but nothing it does is time-sensitive.
+    # failed alert-state saves. 16 CPUs left half the host for everything
+    # else, but 16 Butler cores still held CPU2 at its 89C BMC critical
+    # threshold every night 11-16..11-23 (issue #166, CPU2 cooling). 8 CPUs
+    # halves that heat; Butler runs longer, nothing it does is time-sensitive.
     deploy:
       resources:
         limits:
-          cpus: '16'
+          cpus: '8'
           memory: 14G
         reservations:
           memory: 3G
