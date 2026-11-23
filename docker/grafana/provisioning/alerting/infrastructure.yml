@@ -2111,6 +2111,7 @@ groups:
             relativeTimeRange: {from: 3600, to: 0}
             datasourceUid: loki
             model:
+              queryType: instant
               expr: 'count_over_time({unit="restic-backup.service"} |~ "(?i)(fatal|unable to create lock)" [1h])'
               refId: A
           - refId: B
@@ -2138,6 +2139,14 @@ groups:
       # unit no longer goes to failed state for this case, so restic-unit-failed
       # will not catch it and restic-backup-error's regex does not match the
       # wording. This rule is what keeps a partial backup visible.
+      #
+      # queryType: instant (both restic log-count rules). As a range query over
+      # its relativeTimeRange, count_over_time([24h]) is evaluated at every step
+      # of the last 24h and the max reducer takes the highest, so one line kept
+      # the rule firing for 48h: a single warning at 2026-11-22T08:35Z was still
+      # firing at 2026-11-23T10:56Z with nothing matching in the last 24h, and
+      # the next night's run re-opened it as a new incident. Same reasoning as
+      # container-log-flood below.
       - uid: restic-backup-incomplete
         title: Restic Backup Incomplete (unreadable source files)
         condition: C
@@ -2146,6 +2155,7 @@ groups:
             relativeTimeRange: {from: 86400, to: 0}
             datasourceUid: loki
             model:
+              queryType: instant
               expr: 'count_over_time({unit="restic-backup.service"} |= "could not be read" [24h])'
               refId: A
           - refId: B
