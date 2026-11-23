@@ -135,7 +135,18 @@ if [[ -f "$REPORT_FILE" ]] && [[ -s "$REPORT_FILE" ]]; then
     # minutes (secrets_redacted=34 on every run) while staying in the file.
     # Rewriting files that did not change also reset their mtime, so the
     # *.deleted.* purge below never saw anything older than 10 minutes.
-    while IFS=$'\t' read -r filepath secret_b64; do
+    #
+    # perl -pi writes a new file even when nothing matched, so a redaction
+    # that fails still restamps the file. Since 2026-11-05 six legacy
+    # transcripts (three of them *.deleted.* from February) failed on every
+    # run, which kept their mtime under 10 minutes old and the purge below
+    # never reached them. mtime is put back around every rewrite.
+    #
+    # A failure logs the rule, the secret's length and how many lines it
+    # spans, never the secret. grep -F reads a pattern containing a newline
+    # as one pattern per line and perl -p works one line at a time, so a
+    # secret that spans lines is found, never replaced, and found again.
+    while IFS=$'\t' read -r filepath rule_id secret_b64; do
       if [[ -z "$secret_b64" ]] || [[ -z "$filepath" ]] || [[ ! -f "$filepath" ]]; then
         continue
       fi
@@ -146,14 +157,18 @@ if [[ -f "$REPORT_FILE" ]] && [[ -s "$REPORT_FILE" ]]; then
       # "last written by openclaw".
       grep -qF -- "$secret" "$filepath" || continue
 
+      mtime=$(stat -c %y "$filepath")
       if SCRUB_SECRET="$secret" perl -pi -e 's/\Q$ENV{SCRUB_SECRET}\E/[REDACTED]/g' "$filepath" \
         && ! grep -qF -- "$secret" "$filepath"; then
+        touch -d "$mtime" "$filepath" || true
         log_event "SCRUB" "secret_redacted" "file=$(basename "$filepath")"
         TOTAL_REDACTED=$((TOTAL_REDACTED + 1))
       else
-        log_event "WARN" "redact_failed" "file=$(basename "$filepath")"
+        touch -d "$mtime" "$filepath" || true
+        secret_lines=$(printf '%s\n' "$secret" | wc -l)
+        log_event "WARN" "redact_failed" "file=$(basename "$filepath"),rule=${rule_id},len=${#secret},lines=${secret_lines}"
       fi
-    done < <(jq -r "$FILTER | .[] | [.File, (.Secret | @base64)] | @tsv" "$REPORT_FILE" | sort -u)
+    done < <(jq -r "$FILTER | .[] | [.File, .RuleID, (.Secret | @base64)] | @tsv" "$REPORT_FILE" | sort -u)
 
     TOTAL_FILES=$(jq -r '[.[].File] | unique | length' "$REPORT_FILE")
   else
