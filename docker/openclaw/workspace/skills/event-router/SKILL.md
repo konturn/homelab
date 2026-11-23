@@ -157,6 +157,20 @@ Both use `memory/main-pipeline-state.json`, so they never double-fix.
   (decision 11).
 - Outcome: `config_change` with the MR, or `external`/`unknown`.
 
+## Bursts (`incident.kind` = `burst`)
+
+More than five alerts with no common ancestor fired within two minutes. The
+router sent you this one incident instead of one per alert; the alerts are
+in `burst_members` (`member: false` = it had already reached you or a
+playbook before the burst was recognised). They share a cause the
+dependency graph does not describe: DNS, the network, the router's load,
+a deploy, storage. Look for that one cause (Loki around the first member's
+time; Pi-hole, the router, recent pipelines) and spend `collect` calls on
+it, not on each member. The members resolve with their alerts; one still
+firing after an hour reaches you again by itself. File one outcome record,
+for the burst incident; if the graph is missing an edge that would have
+grouped them, say so (`config_change` to `inventory/dependencies.yml`).
+
 ## CI jobs (`incident.kind` = `ci_job_failed`)
 
 A job on main failed for a runner/system reason and the router's retry

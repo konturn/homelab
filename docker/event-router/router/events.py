@@ -99,6 +99,9 @@ _TASK = re.compile(r"^[a-z0-9][a-z0-9_-]{0,62}$")
 # A <host>:deploy-service failure was already rolled back by the auto-merge
 # sweep (revert MR, rollback issue, mail): the digest, not OpenClaw (row 9).
 _DEPLOY_SERVICE = re.compile(r"^[a-z0-9-]+:deploy-service$")
+# GitLab fails the older pipeline's deploy jobs with this reason when a newer
+# pipeline of the same ref deploys instead: nothing broke (#170).
+OUTDATED = "failed_outdated_deployment_job"
 
 
 def _int(v):
@@ -164,8 +167,17 @@ def from_gitlab(payload, projects, branch="main", deploy_jobs=()):
         reasons = sorted({str(b.get("failure_reason") or "") for b in failed} - {""})
         if reasons:
             labels["failure_reasons"] = ",".join(r for r in reasons if _TASK.match(r))[:MAX_LABEL_VALUE]
+        if failed and all(str(b.get("failure_reason") or "") == OUTDATED for b in failed):
+            labels["handled_by"] = "newer-pipeline"
+        fp = f"gitlab:pipeline:{key}"
+        if "handled_by" in labels:
+            # Digest-only failures get a fingerprint of their own. On the shared
+            # one, the digest-closed incident would dedupe a real failure of
+            # the next pipeline for 24h (DEDUPE_TERMINAL_FOR), unseen until
+            # the next green.
+            fp = f"{fp}:{labels['handled_by']}:{pid}"
         what = f"scheduled pipeline {task}" if task else f"{source} pipeline on {branch}"
-        return [Event(source="gitlab", kind="pipeline_failed", fp=f"gitlab:pipeline:{key}",
+        return [Event(source="gitlab", kind="pipeline_failed", fp=fp,
                       status="firing", alertname=f"Pipeline failed: {what}"[:120], labels=labels,
                       starts_at=str(attrs.get("finished_at") or attrs.get("created_at") or "")[:40])]
     if kind == "build":

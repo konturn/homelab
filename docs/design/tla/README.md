@@ -85,6 +85,12 @@ events: a quiescent end state is expected, not a bug.
 | `Refuse` (in `Execute`), `Retry`, `GuardOn`/`GuardOff` (deferred retry) | 16 |
 | `ReEscalate` (stale incidents: re-forward, page if user-facing) | 16 |
 
+Not modelled: burst grouping (4.7 step 4) and `burst_settle`. A burst member
+is a symptom whose root is the burst incident, which is handed to OpenClaw
+at once (like `Forward`); it leaves that state only when its alert resolves
+or after `burst_hold`, when it is re-evaluated like any open incident. Pages
+are never grouped or held. Unit tests: `docker/event-router/tests/test_burst.py`.
+
 Safety properties over actions (S1–S3, S5–S7, S10, S12) are evaluated when
 the action happens and recorded in `viol`; in a correct design `viol`
 stays empty, so the check costs no extra states.

@@ -22,7 +22,9 @@ FWD_CONFIG = dict(CONFIG, openclaw={"forward": True}, gitlab_events={"projects":
                   digest_only=[{"source": "grafana", "rule_uid": "container-log-flood",
                                 "labels": {"container": "zigbee2mqtt"}, "reason": "routine Zigbee work"},
                                {"source": "gitlab", "kind": "pipeline_failed",
-                                "labels": {"handled_by": "automerge-rollback"}, "reason": "rolled back"}],
+                                "labels": {"handled_by": "automerge-rollback"}, "reason": "rolled back"},
+                               {"source": "gitlab", "kind": "pipeline_failed",
+                                "labels": {"handled_by": "newer-pipeline"}, "reason": "superseded"}],
                   page_classes={"security": {"urgent": True, "rules": [{"rule_uid": "failed-ssh-logins"}]},
                                 "host_not_reporting": {"rules": [{"rule_uid": "host-metrics-stale"}]}})
 
@@ -578,6 +580,33 @@ class TestGitLab(Fwd):
         self.ingest_gitlab(self.pipeline("failed", builds=[{"name": "router:deploy-service", "status": "failed"}]))
         self.tick()
         self.assertEqual(self.w.openclaw.delivered, [])
+
+    def test_digest_only_pipeline_failure_does_not_hide_the_next_real_one(self):
+        # #170: pushes seconds apart; GitLab fails the older pipeline's deploy
+        # as outdated while the newer one runs. Then the newer one really fails.
+        outdated = [{"name": "router:deploy", "status": "failed", "failure_reason": "failed_outdated_deployment_job"}]
+        [ev] = from_gitlab(self.pipeline("failed", pid=20, builds=outdated), [4])
+        self.assertEqual((ev.labels["handled_by"], ev.fp), ("newer-pipeline", "gitlab:pipeline:4:push:-:newer-pipeline:20"))
+        self.ingest_gitlab(self.pipeline("failed", pid=20, builds=outdated))
+        self.tick()
+        self.assertEqual(self.w.openclaw.delivered, [])
+        self.assertEqual(self.decisions("digest")[-1]["pipeline_id"], "20")    # the safety net still sees it
+        self.ingest_gitlab(self.pipeline("failed", pid=21, builds=[
+            {"name": "router:deploy", "status": "failed", "failure_reason": "script_failure"}]))
+        self.tick()
+        [p] = self.w.openclaw.delivered
+        self.assertEqual(p["incident"]["fp"], "gitlab:pipeline:4:push:-")
+        # the same for a rolled-back deploy-service failure
+        self.ingest_gitlab(self.pipeline("success", pid=22))
+        self.ingest_gitlab(self.pipeline("failed", pid=23, builds=[{"name": "router:deploy-service", "status": "failed"}]))
+        self.ingest_gitlab(self.pipeline("failed", pid=24, builds=[
+            {"name": "router:deploy", "status": "failed", "failure_reason": "script_failure"}]))
+        self.tick()
+        self.assertEqual(len(self.w.openclaw.delivered), 2)
+        # a mix of outdated and a real failure is a real failure
+        [ev] = from_gitlab(self.pipeline("failed", pid=25, builds=outdated + [
+            {"name": "check", "status": "failed", "failure_reason": "script_failure"}]), [4])
+        self.assertEqual((ev.fp, "handled_by" in ev.labels), ("gitlab:pipeline:4:push:-", False))
 
     def test_system_failure_is_retried_and_verified(self):
         self.ingest_gitlab(self.job("runner_system_failure"))
