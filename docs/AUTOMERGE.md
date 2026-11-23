@@ -13,8 +13,10 @@ What stays with a human:
 
 - **Major versions**, and tag changes whose version scheme is ambiguous
   (treated as major). See [Major versions](#major-versions).
-- **The denylist** in `ci/automerge-policy.yml`: GitLab and what the CI and
-  deploy path needs to run. See [Denylist](#denylist).
+- **The denylist** in `ci/automerge-policy.yml`: what the CI and deploy path
+  needs to run. GitLab is on it for every class but its own out-of-band one
+  (digest and patch updates only). See [Denylist](#denylist) and
+  [GitLab updates](#gitlab-updates).
 - **Services under a compose profile** (the retired `wordpress` profile: `blog`,
   `wordpress_db`). A per-service deploy names the service, which starts it
   whatever its profiles.
@@ -32,7 +34,7 @@ What stays with a human:
 The sweep labels such MRs `automerge-manual` and notes the reason on the MR
 (see [Visibility](#visibility-of-manual-updates)).
 
-Six classes share the policy:
+Seven classes share the policy:
 
 - **General**: any eligible update. While the sweep schedule carries
   `AUTOMERGE_DRY_RUN=1` this class only logs what it would do.
@@ -61,6 +63,12 @@ Six classes share the policy:
   deploys like a reviewed one, and the sweep watches its main pipeline and
   reverts on a failed build or host deploy. Counts against the general
   budget and follows its dry run. See [Dependency updates](#dependency-updates).
+- **GitLab out-of-band**: digest refreshes and patch releases of GitLab
+  itself, opened by Renovate. The merge deploys nothing from CI:
+  `gitlab-oob-upgrade`, a timer on the router, takes a restore point, moves
+  GitLab's image pin, runs a health gate and restores the data on failure.
+  One at a time; counts against the general budget and follows its dry run.
+  See [GitLab updates](#gitlab-updates).
 - **Bot-config**: moltbot's own low-risk configuration MRs (resource limits,
   log levels, Grafana alert thresholds and dashboards, docs), checked by
   path and by the shape of every change. Counts against the general budget
@@ -76,6 +84,7 @@ The pieces:
 | `automerge:sweep` | scheduled pipeline on `main`, `AUTOMERGE_TASK=sweep` | every 15 min |
 | `<host>:deploy-service` (`router`, `zwave`, `satellite-2`) | `main` pipeline | only for commits merged by the sweep |
 | `automerge:report` | scheduled pipeline on `main`, `AUTOMERGE_TASK=report` | daily (mails only when something needs a human) |
+| `gitlab-oob-upgrade.timer` | systemd on the router (`base/gitlab-oob/`), outside GitLab | every 10 min: rolls out a changed GitLab image ([GitLab updates](#gitlab-updates)) |
 
 `ci/` is CODEOWNERS-protected, so the policy and freeze file can only change
 through a reviewed MR.
@@ -202,7 +211,7 @@ never auto-merged, each with its reason:
 
 | Entry | Reason |
 |---|---|
-| `gitlab` (`gitlab/gitlab-ee`, `gitlab/gitlab-ce`) | GitLab runs the pipelines, the sweep and the per-service deploy. A bad upgrade takes down the pipeline that would roll it back, and its database migrations are one-way. |
+| `gitlab` (`gitlab/gitlab-ee`, `gitlab/gitlab-ce`) | GitLab runs the pipelines, the sweep and the per-service deploy. A bad upgrade takes down the pipeline that would roll it back, and its database migrations are one-way. Its digest and patch updates have their own class, whose upgrade and rollback run outside GitLab ([GitLab updates](#gitlab-updates)). |
 | `gitlab/gitlab-runner` | Runs every CI job. Today the runner is a host package (`configure-base`), not a compose service; the entry covers a future compose runner. |
 | `vault` (`hashicorp/vault`) | Every deploy job reads its secrets from Vault before it changes anything. A Vault that breaks after the health gate blocks every later deploy, the revert included. |
 | `docker-socket-proxy` (`tecnativa/docker-socket-proxy`) | CI image builds reach the Docker daemon through it. |
@@ -214,23 +223,88 @@ note to the MR body (`renovate.json`, rule "Auto-merge denylist").
 
 ### GitLab updates
 
-GitLab's own updates are never auto-merged. Renovate opens them with the
-`automerge-manual` label, and they stay listed in the daily report until
-someone merges or closes them. A checklist for merging one by hand:
+GitLab runs the pipelines that deploy and roll back everything else, and its
+database migrations are one-way, so no CI job ever upgrades it. Its image is
+**pinned on the router** and moved **out of band** by `gitlab-oob-upgrade`, a
+systemd timer that works without GitLab (design: issue #171).
 
-1. Read the release notes for required upgrade stops, and check that no
-   background migrations are running (Admin > Monitoring > Background
-   migrations).
-2. Check that last night's backup succeeded.
-3. Merge the MR. The commit has no `Automerge-Policy` trailer, so the normal
-   `router:deploy` recreates the `gitlab` container, from inside a pipeline
-   that GitLab itself runs. That job can lose contact with GitLab while it
-   restarts.
-4. Check that `gitlab` reports `healthy` in `docker ps` on the router and that
-   a new pipeline runs. If GitLab does not come back, no pipeline can deploy a
-   revert: put the previous image line back in the rendered compose file on
-   the router (`docker_compose_dest_path`) and recreate the container by hand,
-   then revert the MR once GitLab is up.
+**The pin.** `<persistent data>/gitlab-oob/image` holds the image GitLab
+runs. Every compose render on the router (`render_compose.yml`: full deploy,
+per-service deploy, rotation) writes that image into the gitlab service in
+place of `main`'s line, so `router:deploy` never recreates GitLab with a new
+image, whoever merged it. The first deploy writes the pin from the running
+container. Renovate and the policy keep reading the literal line on `main`.
+
+**Which updates merge without review.** The `gitlab_oob` section of
+`ci/automerge-policy.yml`: Renovate MRs that change only the gitlab image
+line, same image, digest-pinned, a digest refresh or a patch within the same
+`major.minor`. The sweep merges at most one at a time: it waits while a merged
+MR still carries `automerge-gitlab-pending` and while a rollback issue for
+`job=gitlab-oob services=gitlab` is open. The merge commit carries
+`Automerge-Policy: gitlab-oob` (no `Automerge-Deploy`), so no per-service
+deploy runs and the full host deploys are manual for it. Minor and major
+updates are labelled `automerge-manual`; merge them by hand after checking the
+upgrade path (required stops) in the release notes.
+
+**What the router does** (every 10 minutes, `gitlab-oob-upgrade.service`;
+log lines `gitlab_oob event=...` in the journal and Loki, last result in
+`gitlab-oob/status.json`):
+
+1. Reads `main`'s gitlab image line (`git fetch` in the router checkout; it
+   never checks anything out). Same as the pin: nothing to do.
+2. Refuses, and mails root once, if the running container is not the pinned
+   image (someone changed it by hand), or if an auto-merged change is
+   anything but a digest or patch update. Never does an edition change
+   (ee/ce) or a downgrade. Skips an image it already rolled back
+   (`gitlab-oob/hold.json`) until `main` names a different one.
+3. Waits (no mail) while GitLab is unhealthy, any batched background
+   migration is active, paused, failing or finalizing, or the pool lacks
+   space for a copy.
+4. Pulls the new image while GitLab still runs.
+5. **Restore point**: rsyncs GitLab's directory (all but `logs/`) into the
+   ZFS dataset `mpool/backups/gitlab-oob` while GitLab runs, stops GitLab,
+   rsyncs the delta and takes `mpool/backups/gitlab-oob@oob-<UTC>-<old>-to-<new>`.
+   Copies are capped at 40 MB/s (the `/persistent_data` rate limit). A nightly
+   `gitlab-oob-warm.timer` keeps the copy current, so the offline part is
+   usually a minute or two on top of GitLab's own restart.
+6. Swaps the gitlab line in the rendered compose file, moves the pin and
+   starts the new image.
+7. **Health gate** (30 minutes): container `healthy`, `/-/readiness?all=1`
+   ok, the API reports the new version, `git ls-remote` works, and as many
+   runners are online as before.
+8. Passed: notes the MR, removes `automerge-gitlab-pending`, keeps the two
+   newest restore points.
+9. **Failed: rollback.** Stops GitLab, rsyncs the snapshot back (`--delete`,
+   so files the new version wrote are removed), puts the old image back in the
+   pin and the rendered file, starts it and runs the same health gate on the
+   old version. Holds the failed image, mails root (msmtp, no GitLab needed),
+   then notes the MR, labels it `automerge-rollback`, and opens a rollback
+   issue and a revert MR. Merge or close the revert MR, then close the issue.
+   If the rollback's own health gate fails, it mails "ROLLBACK FAILED" and
+   stops: use the manual restore below.
+
+Run it by hand: `gitlab-oob-upgrade --dry-run` (decision and checks only),
+`gitlab-oob-upgrade --warm` (refresh the copy), or
+`systemctl start gitlab-oob-upgrade` (a real run). Status:
+`systemctl status gitlab-oob-upgrade`, `journalctl -t gitlab-oob`.
+
+#### Manual restore
+
+When GitLab is broken after an upgrade and the automatic rollback did not
+fix it:
+
+1. `docker stop gitlab`.
+2. Pick the restore point: `zfs list -t snapshot -o name,creation -d 1 mpool/backups/gitlab-oob`.
+   Its name says which upgrade it preceded.
+3. `rsync -aHX --numeric-ids --delete --exclude=/logs/ /mpool/backups/gitlab-oob/.zfs/snapshot/<snapshot>/gitlab/ /persistent_data/application/gitlab/`
+4. Put the old image back: write it (the `<old>` of the snapshot name, with its
+   digest from `git log` of `docker/docker-compose.yml`) to
+   `/persistent_data/application/gitlab-oob/image`, edit the gitlab `image:`
+   line in the rendered compose file (`docker_compose_dest_path`) to match,
+   and `echo '{"image": "<failed image>", "reason": "manual restore"}' > /persistent_data/application/gitlab-oob/hold.json`.
+5. `docker compose -p docker --project-directory <docker_compose_dest_path> -f <...>/docker-compose.yml up -d --no-deps gitlab`
+   and wait for `docker ps` to show `healthy`.
+6. Revert the MR on `main` once GitLab is up.
 
 ### Restricted kinds
 

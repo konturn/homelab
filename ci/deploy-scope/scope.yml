@@ -122,7 +122,10 @@ playbooks:
       roles: [event-router]
     - match: [docker/**]
       roles: [configure-homelab-services]
-    - match: [scripts/grafana-token-cleanup.sh, scripts/ha-helpers/**, scripts/litter-robot/**, scripts/vault-router-token, base/nut/**]
+    # The out-of-band GitLab upgrader: its unit tests only (gitlab-oob:test).
+    - match: [base/gitlab-oob/test_*.py]
+      roles: []
+    - match: [scripts/grafana-token-cleanup.sh, scripts/ha-helpers/**, scripts/litter-robot/**, scripts/vault-router-token, base/nut/**, base/gitlab-oob/**]
       roles: [configure-homelab-services]
     - match:
         - base/disk/**

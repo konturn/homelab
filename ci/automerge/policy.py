@@ -1000,6 +1000,33 @@ def fast_track_config(allowlist: dict) -> dict:
     }
 
 
+GITLAB_OOB_HOLD_JOB = "gitlab-oob"
+GITLAB_OOB_KINDS = ("digest", "patch")
+
+
+def gitlab_oob_config(allowlist: dict) -> dict:
+    """Validated `gitlab_oob` section (docs/AUTOMERGE.md, "GitLab updates"):
+    {enabled, service, file, images, updates, authors}. Missing = disabled;
+    malformed raises (and so refuses every MR)."""
+    sec = allowlist.get("gitlab_oob")
+    if sec is None:
+        return {"enabled": False, "service": "", "file": "", "images": [], "updates": (), "authors": []}
+    if not isinstance(sec, dict):
+        raise PolicyError("`gitlab_oob` must be a mapping")
+    for key in ("service", "file"):
+        if not isinstance(sec.get(key), str) or not sec[key]:
+            raise PolicyError(f"gitlab_oob.{key} must be a non-empty string")
+    images = sec.get("images")
+    if not isinstance(images, list) or not images or not all(isinstance(i, str) and i for i in images):
+        raise PolicyError("gitlab_oob.images must be a non-empty list of image names")
+    authors = sec.get("authors")
+    if not isinstance(authors, list) or not all(isinstance(a, str) and a for a in authors):
+        raise PolicyError("gitlab_oob.authors must be a list")
+    updates = _kinds(sec.get("updates", list(GITLAB_OOB_KINDS)), GITLAB_OOB_KINDS, "gitlab_oob.updates")
+    return {"enabled": bool(sec.get("enabled", False)), "service": sec["service"], "file": sec["file"],
+            "images": list(images), "updates": updates, "authors": list(authors)}
+
+
 def denylist(allowlist: dict) -> Dict[str, Dict[str, str]]:
     """{'services': {name: reason}, 'images': {name: reason}}. Every entry needs
     a reason; a malformed section raises PolicyError (fails closed)."""
@@ -1777,6 +1804,7 @@ class Verdict:
     deploy_hosts: List[Deployment] = field(default_factory=list)
     ci_image: bool = False                             # CI image class (job images in a CI file)
     ci_images: List[str] = field(default_factory=list)     # image names it changes
+    gitlab_oob: bool = False                           # GitLab out-of-band class (host agent upgrades)
     runner_image: bool = False                         # runner image class (runner default image)
     runner_images: List[str] = field(default_factory=list)  # image names it changes
     bot_config: bool = False                           # bot-config class (moltbot config MRs)
@@ -1803,6 +1831,7 @@ class Verdict:
 
     def as_dict(self) -> dict:
         return {"eligible": self.eligible, "fast_track": self.fast_track, "ci_image": self.ci_image,
+                "gitlab_oob": self.gitlab_oob,
                 "runner_image": self.runner_image,
                 "dependency": self.dependency, "dep_changes": [c.as_dict() for c in self.dep_changes],
                 "required_jobs": self.required_jobs,
@@ -1960,7 +1989,7 @@ def _evaluate_images(*, author: str, target_branch: str, labels: List[str],
 
     # A malformed policy section fails closed for every MR.
     for check in (fast_track_config, denylist, pre_upgrade_config, ci_images_config, dependencies_config,
-                  runner_images_config):
+                  runner_images_config, gitlab_oob_config):
         try:
             check(allowlist)
         except PolicyError as e:
@@ -2026,6 +2055,10 @@ def _evaluate_images(*, author: str, target_branch: str, labels: List[str],
         return v
 
     changed_composes = [p for p in paths if p in allowed]
+    oob = _gitlab_oob_changes(changed_composes, composes, allowlist)
+    if oob is not None:
+        _evaluate_gitlab_oob(v, author, oob, allowlist)
+        return v
     for path in changed_composes:
         base, head = composes.get(path, (None, None))
         if base is None or head is None:
@@ -2081,6 +2114,59 @@ def _evaluate_images(*, author: str, target_branch: str, labels: List[str],
             v.fast_track, why = False, f"fast track: {e}"
         v.notes.append(why if v.fast_track else f"not fast-track: {why}")
     return v
+
+
+def _gitlab_oob_changes(paths: List[str], composes: Dict[str, ComposePair],
+                        allowlist: dict) -> Optional[List[ImageChange]]:
+    """The image changes of an MR that only touches the gitlab service's
+    image in its compose file, when the gitlab_oob class is enabled; None
+    sends the MR down the general path (where gitlab is denied)."""
+    try:
+        cfg = gitlab_oob_config(allowlist)
+    except PolicyError:
+        return None                 # rejected by the fail-closed check already
+    if not cfg["enabled"] or paths != [cfg["file"]]:
+        return None
+    base, head = composes.get(cfg["file"], (None, None))
+    if base is None or head is None:
+        return None
+    try:
+        changes = diff_compose(base, head, cfg["file"], zero_minor_services(allowlist))
+    except PolicyError:
+        return None                 # majors and malformed diffs: the general path says why
+    if changes and all(c.service == cfg["service"] for c in changes):
+        return changes
+    return None
+
+
+def _evaluate_gitlab_oob(v: Verdict, author: str, changes: List[ImageChange], allowlist: dict) -> None:
+    """The GitLab out-of-band class: a digest or patch update of the gitlab
+    image line. CI deploys nothing (deploy_jobs stays empty): the router's
+    gitlab-oob-upgrade moves the host's image pin with a restore point,
+    health gate and data rollback. The general denylist entry is what keeps
+    every other path manual."""
+    cfg = gitlab_oob_config(allowlist)
+    v.gitlab_oob = True
+    v.changes += changes
+    v.hold_keys.append((GITLAB_OOB_HOLD_JOB, cfg["service"]))
+    if author not in cfg["authors"]:
+        v.reject(f"author {author!r} may not auto-merge GitLab updates (gitlab_oob.authors)")
+    if len(changes) != 1:
+        v.reject(f"a GitLab update must change exactly one image line, not {len(changes)}")
+    for c in changes:
+        if c.new.name not in cfg["images"] or c.old.name != c.new.name:
+            v.reject(f"{c.service}: {c.old.name} -> {c.new.name} is not a same-image update of "
+                     + ", ".join(cfg["images"]))
+        if not c.new.digest:
+            v.reject(f"{c.service}: the new image is not pinned by digest")
+        if c.kind not in cfg["updates"]:
+            v.reject(f"{c.service}: {c.kind} updates of GitLab stay manual (gitlab_oob.updates: "
+                     + ", ".join(cfg["updates"]) + "); merge by hand after checking upgrade stops")
+        v.notes.append(f"{c.service}: {c.kind} update {c.old.tag or ''} -> {c.new.tag or ''}"
+                       f" ({(c.new.digest or '')[:19]})")
+    if v.eligible:
+        v.notes.append("class: GitLab out-of-band (no CI deploy; gitlab-oob-upgrade on the router "
+                       "takes a restore point, upgrades and rolls back data on failure)")
 
 
 def _evaluate_ci(v: Verdict, author: str, changed_ci: List[str], others: List[str],

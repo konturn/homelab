@@ -260,7 +260,7 @@ variables:
 # runner config, then runner:default-image runs in the new default image).
 .automerged_commit_manual:
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /Automerge-Policy: (image-update|ci-image|bot-config)/'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /Automerge-Policy: (image-update|ci-image|bot-config|gitlab-oob)/'
       when: manual
       allow_failure: true
 
@@ -2403,6 +2403,28 @@ slzb:drift:
     expire_in: 30 days
   rules:
     - if: $CI_COMMIT_BRANCH == "main" && $SCHEDULED_TASK == "iot-device-drift" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+
+# =============================================================================
+# GitLab out-of-band upgrader (base/gitlab-oob, docs/AUTOMERGE.md "GitLab updates")
+# Unit tests only; the router runs the script from a systemd timer.
+# =============================================================================
+
+gitlab-oob:test:
+  extends: .interruptible
+  stage: validate
+  image: python:3.14-alpine3.22@sha256:6b91e66ab2a880ce9ca5a1b91c70f45963ff71ff68268df056336e1a657d5efd
+  needs: []
+  script:
+    - python3 -m unittest discover -s base/gitlab-oob -p 'test_*.py' -v
+  rules:
+    - !reference [.automerge_task_skip, rules]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - base/gitlab-oob/**/*
+        - .gitlab-ci.yml
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - base/gitlab-oob/**/*
 
 # =============================================================================
 # UPS: NUT shutdown logic (base/nut) and the AP9631 card (networking/ups)

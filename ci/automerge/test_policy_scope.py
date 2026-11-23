@@ -343,11 +343,14 @@ class RealRepoTests(unittest.TestCase):
         self.assertFalse(v.eligible)
         self.assertIn("not deployed by any host", " ".join(v.reasons))
 
-    def test_gitlab_stays_manual(self):                                  # !967
-        for kind in ("digest", "patch", "minor"):
+    def test_gitlab_only_through_the_out_of_band_class(self):           # !967, #171
+        # digest and patch updates go through the gitlab_oob class (no CI
+        # deploy; test_gitlab_oob_class.py), minors stay manual
+        for kind, ok in (("digest", True), ("patch", True), ("minor", False)):
             v = self.eval_real(policy.COMPOSE_PATH, "gitlab", kind)
-            self.assertFalse(v.eligible)
-            self.assertTrue(v.denied, v.reasons)
+            self.assertEqual(v.eligible, ok, (kind, v.reasons))
+            self.assertTrue(v.gitlab_oob, v.reasons)
+            self.assertEqual(v.deploy_jobs, [])
 
     def test_retired_wordpress_profile_stays_excluded(self):           # !974 / !981
         for svc in ("wordpress_db", "blog"):
@@ -472,7 +475,10 @@ class RealRepoTests(unittest.TestCase):
     def test_renovate_labels_denylisted_images(self):
         rs = [r for r in self.rules if r.get("description", "").startswith("Auto-merge denylist")]
         self.assertEqual(len(rs), 1)
-        self.assertEqual(sorted(rs[0]["matchPackageNames"]), sorted(policy.denylist(self.allow)["images"]))
+        # GitLab's own images have the two GitLab rules instead (test_gitlab_oob_class.py)
+        oob = policy.gitlab_oob_config(self.allow)
+        want = set(policy.denylist(self.allow)["images"]) - (set(oob["images"]) if oob["enabled"] else set())
+        self.assertEqual(sorted(rs[0]["matchPackageNames"]), sorted(want))
         self.assertIn("automerge-manual", rs[0]["addLabels"])
 
     def test_denied_services_use_denied_images(self):

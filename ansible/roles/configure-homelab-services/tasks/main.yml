@@ -1742,6 +1742,84 @@
       [ -d {{ docker_persistent_data_path }}/moltbot/data/agents/main/sessions ] || exit 0;
       /usr/local/bin/scrub-transcripts.sh {{ docker_persistent_data_path }}/moltbot/data/agents/main/sessions 2>&1 | logger -t scrub-transcripts
 
+# Out-of-band GitLab upgrades (docs/AUTOMERGE.md, "GitLab updates"). The
+# pin itself is bootstrapped and applied in render_compose.yml.
+- name: Create the GitLab out-of-band upgrader directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  loop:
+    - /etc/gitlab-oob
+    - "{{ gitlab_oob_state_dir }}"
+  when: gitlab_oob_enabled | default(false)
+
+- name: Deploy the GitLab out-of-band upgrader
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/gitlab-oob/gitlab-oob-upgrade.py' }}"
+    dest: /usr/local/sbin/gitlab-oob-upgrade
+    owner: root
+    group: root
+    mode: '0755'
+  when: gitlab_oob_enabled | default(false)
+
+- name: Configure the GitLab out-of-band upgrader
+  ansible.builtin.copy:
+    dest: /etc/gitlab-oob/config.json
+    owner: root
+    group: root
+    mode: '0600'
+    content: "{{ _gitlab_oob_config | to_nice_json }}\n"
+  vars:
+    _gitlab_oob_config:
+      repo: /root/repos/homelab
+      compose_repo_path: docker/docker-compose.yml
+      compose_dir: "{{ docker_compose_dest_path }}"
+      compose_files: "{{ docker_compose_file_names | map('trim') | list }}"
+      compose_project: "{{ docker_compose_project_name | default('docker') }}"
+      container: gitlab
+      data_dir: "{{ docker_persistent_data_path }}/gitlab"
+      exclude: ["/logs/"]
+      state_dir: "{{ gitlab_oob_state_dir }}"
+      zfs_dataset: "{{ gitlab_oob_zfs_dataset }}"
+      mirror_mount: "{{ gitlab_oob_mirror_mount }}"
+      rate_mb: 40
+      copy_timeout: 7200
+      health_timeout: 1800
+      keep: 2
+      project_id: 4
+  when: gitlab_oob_enabled | default(false)
+
+- name: Deploy the GitLab out-of-band upgrader units
+  ansible.builtin.copy:
+    src: "{{ lookup('env', 'CI_PROJECT_DIR') + '/base/gitlab-oob/' + item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - gitlab-oob-upgrade.service
+    - gitlab-oob-upgrade.timer
+    - gitlab-oob-warm.service
+    - gitlab-oob-warm.timer
+  register: _gitlab_oob_units
+  when: gitlab_oob_enabled | default(false)
+
+- name: Enable the GitLab out-of-band upgrader timers
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+    daemon_reload: "{{ _gitlab_oob_units is changed }}"
+  loop:
+    - gitlab-oob-upgrade.timer
+    - gitlab-oob-warm.timer
+  when:
+    - gitlab_oob_enabled | default(false)
+    - not ansible_check_mode
+
 - name: Daily chromium-browser restart (clear tabs and free memory)
   ansible.builtin.cron:
     name: "Restart chromium-browser daily"

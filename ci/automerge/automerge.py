@@ -96,6 +96,14 @@ BOT_CLASS_TRAILER = "Automerge-Class: bot-config"
 # Bot-config merges that add new shadow event-router playbooks (decision 10 of
 # docs/design/event-routing.md): also labelled, for their own cap.
 LABEL_SHADOW_PB = "automerge-shadow-playbook"
+# GitLab out-of-band class: no CI deploy (no Automerge-Deploy trailer, and the
+# Automerge-Policy value makes the full host deploys manual). The router's
+# gitlab-oob-upgrade timer upgrades GitLab and removes the pending label, or
+# rolls back and opens a rollback issue (job=gitlab-oob services=gitlab).
+LABEL_GITLAB_OOB = "automerge-gitlab-oob"
+LABEL_GITLAB_PENDING = "automerge-gitlab-pending"
+GITLAB_TRAILER = "Automerge-Policy: gitlab-oob"
+GITLAB_CLASS_TRAILER = "Automerge-Class: gitlab-oob"
 # Selects the per-service deploy jobs: "Automerge-Deploy: [router] [zwave]".
 # plan-deploy re-derives the hosts from main's policy and refuses a mismatch.
 DEPLOY_TRAILER = "Automerge-Deploy:"
@@ -248,6 +256,8 @@ class GitLab:
             LABEL_CI_IMAGE: ("#8fbc8f", "Merged under the CI image class (docs/AUTOMERGE.md)"),
             LABEL_CI_WATCH: ("#c0c0c0", "CI image merge whose main pipeline the sweep has not checked yet"),
             LABEL_RUNNER_IMAGE: ("#8fbc8f", "Merged under the runner image class (docs/AUTOMERGE.md)"),
+            LABEL_GITLAB_OOB: ("#8fbc8f", "Merged under the GitLab out-of-band class (docs/AUTOMERGE.md)"),
+            LABEL_GITLAB_PENDING: ("#c0c0c0", "GitLab out-of-band merge the router has not upgraded to yet"),
             LABEL_RUNNER_WATCH: ("#c0c0c0", "Runner image merge whose main pipeline the sweep has not checked yet"),
             LABEL_DEPENDENCY: ("#7fb3d5", "Merged under the dependency class (docs/AUTOMERGE.md)"),
             LABEL_DEP_WATCH: ("#c0c0c0", "Dependency merge whose main pipeline the sweep has not checked yet"),
@@ -636,13 +646,14 @@ def cmd_sweep(args: argparse.Namespace) -> int:
         ci_gate = (f"CI image, runner image or dependency merge(s) still awaiting their main pipeline: "
                    + ", ".join(f"!{i}" for i in ci_pending)) \
             if v.eligible and (v.ci_image or v.dependency or v.runner_image) and ci_pending else None
+        oob_gate = gitlab_pending_gate(gl) if v.eligible and v.gitlab_oob else None
         bot_gate = bot_rate if v.eligible and v.bot_config else None
         pb_gate = pb_rate if v.eligible and v.shadow_playbook else None
-        mr_gates = gates + [g for g in (rate[v.fast_track], rb, ci_gate, bot_gate, pb_gate) if g]
+        mr_gates = gates + [g for g in (rate[v.fast_track], rb, ci_gate, oob_gate, bot_gate, pb_gate) if g]
         eligible = v.eligible and not mr_gates
         print_verdict(mr, v, mr_gates if v.eligible else [])
         if v.eligible:
-            log(f"  class: {'fast track' if v.fast_track else 'CI image' if v.ci_image else 'runner image' if v.runner_image else 'dependency' if v.dependency else 'bot-config' if v.bot_config else 'general'}"
+            log(f"  class: {'fast track' if v.fast_track else 'CI image' if v.ci_image else 'GitLab out-of-band' if v.gitlab_oob else 'runner image' if v.runner_image else 'dependency' if v.dependency else 'bot-config' if v.bot_config else 'general'}"
                 f"{' (dry run)' if (ft_dry if v.fast_track else dry) else ''}")
         writer = gl_ft if v.fast_track else gl
         has_label = LABEL_ELIGIBLE in (mr.get("labels") or [])
@@ -672,6 +683,16 @@ def cmd_sweep(args: argparse.Namespace) -> int:
         # A dry-run merge does not use up the run's one real merge.
         merged_one = do_merge(writer, mr, v) and not writer.dry_run
     return 0
+
+
+def gitlab_pending_gate(gl: GitLab) -> Optional[str]:
+    """A merged GitLab out-of-band MR the router has not finished (label
+    automerge-gitlab-pending) holds the next one: one GitLab upgrade at a time."""
+    pending = gl.get_all(f"projects/{PROJECT}/merge_requests", state="merged", labels=LABEL_GITLAB_PENDING)
+    if pending:
+        return ("GitLab upgrade(s) still pending on the router: "
+                + ", ".join(f"!{m['iid']}" for m in pending))
+    return None
 
 
 def required_job_blockers(gl: GitLab, mr: dict, v: policy.Verdict) -> List[str]:
@@ -720,7 +741,8 @@ def deploy_trailer(v: policy.Verdict) -> str:
 def do_merge(gl: GitLab, mr: dict, v: policy.Verdict) -> bool:
     iid, sha = mr["iid"], mr["sha"]
     services = ", ".join(c.service for c in v.changes)
-    if not v.deploy_jobs and not v.ci_image and not v.bot_config and not v.dependency and not v.runner_image:
+    if not v.deploy_jobs and not v.ci_image and not v.bot_config and not v.dependency and not v.runner_image \
+            and not v.gitlab_oob:
         log(f"  not merging !{iid}: no per-service deploy target")
         return False
     if v.bot_config:
@@ -737,6 +759,10 @@ def do_merge(gl: GitLab, mr: dict, v: policy.Verdict) -> bool:
         trailers = RUNNER_CLASS_TRAILER + "\n" + RUNNER_TRAILER
         what = "Runner default image update: " + ", ".join(v.runner_images) + f" (runners {services})"
         labels = ",".join((LABEL_MERGED, LABEL_RUNNER_IMAGE, LABEL_RUNNER_WATCH))
+    elif v.gitlab_oob:
+        trailers = GITLAB_CLASS_TRAILER + "\n" + GITLAB_TRAILER
+        what = f"GitLab update (out of band): {services}"
+        labels = ",".join((LABEL_MERGED, LABEL_GITLAB_OOB, LABEL_GITLAB_PENDING))
     elif v.ci_image:
         trailers = CI_CLASS_TRAILER + "\n" + CI_TRAILER
         what = "CI image update: " + ", ".join(v.ci_images) + f" ({services})"
@@ -771,6 +797,7 @@ def do_merge(gl: GitLab, mr: dict, v: policy.Verdict) -> bool:
             log(f"  could not remove {LABEL_MERGED} label: {e2}")
         return False
     cls = (" under the fast-track class" if v.fast_track else " under the CI image class" if v.ci_image
+           else " under the GitLab out-of-band class" if v.gitlab_oob
            else " under the runner image class" if v.runner_image
            else " under the dependency class" if v.dependency
            else " under the bot-config class" if v.bot_config else "")
@@ -779,6 +806,13 @@ def do_merge(gl: GitLab, mr: dict, v: policy.Verdict) -> bool:
     lines += [f"- `{c.name}` ({c.file}): {c.kind} `{c.old}` -> `{c.new}`" for c in v.dep_changes
               if c.kind != "lock"]
     lines += [f"- `{c.file}`{' ' + c.service if c.service else ''}: {c.what}" for c in v.bot_changes]
+    if v.gitlab_oob:
+        lines += ["", "No CI job deploys this. Within about 10 minutes `gitlab-oob-upgrade` on the router "
+                      "takes a restore point (GitLab is stopped for a final copy and a ZFS snapshot), starts "
+                      "the new image and runs its health gate. It notes the result here and removes the "
+                      f"`{LABEL_GITLAB_PENDING}` label; on a failure it restores the data and the old image, "
+                      "mails root and opens a rollback issue and a revert MR (docs/AUTOMERGE.md, "
+                      "\"GitLab updates\")."]
     if v.bot_config and not v.deploy_jobs:
         lines += ["", "Nothing to deploy (documentation only)."]
     elif v.bot_config:
