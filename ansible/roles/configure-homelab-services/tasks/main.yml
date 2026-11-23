@@ -1381,6 +1381,19 @@
     - pihole_dns_hosts is defined
     - not ansible_check_mode
 
+# The host's own name in /etc/hosts, with the address Pi-hole gives it
+# (pihole_dns_hosts). Without it every sudo resolves the hostname through DNS;
+# during a DNS outage sudo then prints "unable to resolve host", which
+# telegraf's smartctl input read as a failing device (2026-11-23).
+- name: Resolve the host's own name locally
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: '^\S+\s+{{ inventory_hostname | regex_escape }}(\s|$)'
+    line: "{{ (pihole_dns_hosts | select('search', '\\s' ~ (inventory_hostname | regex_escape) ~ '$') | first).split()[0] }} {{ inventory_hostname }} {{ inventory_hostname.split('.')[0] }}"
+  when:
+    - pihole_dns_hosts is defined
+    - pihole_dns_hosts | select('search', '\\s' ~ (inventory_hostname | regex_escape) ~ '$') | list | length > 0
+
 # Deluge cache fix: reduce libtorrent disk cache to prevent excessive RAM usage.
 # Default cache_size of 512 pieces causes 28GB+ memory consumption with large torrents.
 # Repo-managed core.conf sets cache_size to 128, keeping usage under 2GB.
