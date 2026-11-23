@@ -53,7 +53,9 @@ max_per_24h: 24
 # runs the changed image fails there, it opens a revert MR and a rollback
 # issue (job=ci), which holds further updates of that image. Merges count
 # against max_per_24h. The images under `denylist.images` below stay manual
-# here too; `ci_images.denylist` adds CI-only exceptions.
+# here too; `ci_images.denylist` adds CI-only exceptions. `ci_images.guarded`
+# images take only the listed update kinds on their guarded lines, and only
+# after the listed MR pipeline jobs passed (policy.py, `_ci_guarded`).
 ci_images:
   enabled: true
   authors:
@@ -62,11 +64,30 @@ ci_images:
   files:
     - .gitlab-ci.yml
   denylist:
-    willhallonline/ansible: >-
-      The .ansible image runs the sweep, plan-deploy and every deploy. A
-      broken one takes down the jobs that would detect and revert it.
-    # willhallonline/ansible stays manual by Noah's decision (2026-11-16),
-    # in CI files and as a runner default image alike.
+    docker.io/willhallonline/ansible: >-
+      The lagging copy of the .ansible image that the auto-merge jobs run in
+      (.ansible_sweep in .gitlab-ci.yml), so a bad .ansible update cannot break
+      the jobs that watch and revert it. Renovate does not track it; promote it
+      by hand to an .ansible digest that has run the deploys on main for 7+
+      days with no open automerge-rollback issue.
+  guarded:
+    willhallonline/ansible:
+      # The :latest lines (test, drift and apply jobs) are ordinary CI image
+      # updates; every other tag of this image is the .ansible image.
+      except_tags: [latest]
+      updates: [digest, patch]
+      required_jobs:
+        - ci-image:ansible-canary
+        - automerge:test
+        - deploy-scope:test
+        - facts:test
+        - reports:test
+      reason: >-
+        The .ansible image runs plan-deploy, every deploy and the firmware
+        jobs. Digest and patch updates merge after the canary (pip install and
+        a syntax check of every playbook in the new image) and the unit suites
+        passed in the MR pipeline; the sweep, on its own lagging image, watches
+        the main pipeline and reverts. Minors and majors stay manual.
 
 # Runner image class (docs/AUTOMERGE.md, "Runner default image"): Renovate
 # MRs whose only change is the runners' default image lines in
@@ -93,7 +114,9 @@ runner_images:
   # The automerge bot (AUTOMERGE_TOKEN user), as named in CODEOWNERS for
   # base/gitlab-runner/config.toml.
   codeowner: "@project_4_bot_9927c1d39b8f3ba11b15bfa664d8b6d6"
-  denylist: {}
+  denylist:
+    willhallonline/ansible: >-
+      Stays manual as a runner default image (Noah's decision, 2026-11-16).
 
 # Dependency class (docs/AUTOMERGE.md, "Dependency updates"): Renovate MRs
 # that bump a version in our own build and deploy files, verified line by

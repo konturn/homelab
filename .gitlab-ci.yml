@@ -323,6 +323,44 @@ router:bootstrap:
   # dir, so the old cache entry archived nothing ("No files to cache") and
   # only cost ~4s per job.
 
+# The auto-merge jobs (eligibility, sweep, report) run in a lagging copy of the
+# .ansible image, so a bad .ansible update cannot break the jobs that watch
+# and revert it (docs/AUTOMERGE.md, "CI images"). The docker.io/ prefix makes
+# it a separate dependency: Renovate does not update it (renovate.json) and
+# the policy never auto-merges it (ci_images.denylist). Promote it by hand to
+# an .ansible digest that has run the deploys on main for 7+ days with no open
+# automerge-rollback issue.
+.ansible_sweep:
+  extends: .ansible
+  image: docker.io/willhallonline/ansible:2.21.6-alpine-3.22@sha256:966621b41d0642fc2b2d1f479e3c80924dbbbc2e80badf76b06b9cf27330593a
+
+# Pre-merge check of an .ansible image update (docs/AUTOMERGE.md, "CI
+# images"): the real before_script (pip install into the new image's Python),
+# then a syntax check of every playbook. The policy (ci_images.guarded) needs
+# it, automerge:test, deploy-scope:test, facts:test and reports:test to have
+# passed before the sweep merges one. No credentials: the SSH key variable is
+# protected, so MR pipelines get an empty key.
+ci-image:ansible-canary:
+  extends:
+    - .ansible
+    - .interruptible
+  stage: validate
+  needs: []
+  script:
+    - ansible --version
+    - |
+      set -e
+      for p in ansible/*.yml; do
+        case "$p" in ansible/inventory.yml|ansible/requirements.yml) continue ;; esac
+        echo "syntax check: $p"
+        ansible-playbook -i ansible/inventory.yml "$p" -e automerge_host=router.lab.nkontur.com --syntax-check
+      done
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - .gitlab-ci.yml
+        - requirements.txt
+
 # =============================================================================
 # Validation Stage - Parallel execution on MRs (DAG)
 # =============================================================================
@@ -2587,6 +2625,8 @@ reports:test:
       changes:
         - ci/reports/**/*
         - ansible/os-patch-report.yml
+        # an .ansible image update needs it (ci_images.guarded)
+        - .gitlab-ci.yml
 
 # Offline: edge-quarantine state/map/firewall logic (docker/nginx/edge-quarantine).
 edge-quarantine:test:
@@ -2749,7 +2789,7 @@ automerge:properties-deep:
 # decision is made by automerge:sweep from main.
 automerge:eligibility:
   extends:
-    - .ansible
+    - .ansible_sweep
     - .interruptible
   stage: validate
   needs: []
@@ -2775,7 +2815,7 @@ automerge:eligibility:
 # Scheduled (e.g. every 15 min) with AUTOMERGE_TASK=sweep: labels eligible MRs
 # and merges at most one MR whose pipeline has passed.
 automerge:sweep:
-  extends: .ansible
+  extends: .ansible_sweep
   stage: deploy
   needs: []
   resource_group: automerge
@@ -2787,7 +2827,7 @@ automerge:sweep:
 # Scheduled daily with AUTOMERGE_TASK=report: logs a summary, and mails it (router's msmtp)
 # only when a rollback or a waiting security update needs a human.
 automerge:report:
-  extends: .ansible
+  extends: .ansible_sweep
   stage: deploy
   needs: []
   script:

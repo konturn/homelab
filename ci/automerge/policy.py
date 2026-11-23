@@ -607,11 +607,11 @@ def diff_ci_images(base: str, head: str, path: str = CI_PATH) -> List[ImageChang
 
 
 def ci_images_config(allowlist: dict) -> dict:
-    """Validated `ci_images` section: {enabled, authors, files, denylist}.
+    """Validated `ci_images` section: {enabled, authors, files, denylist, guarded}.
     Raises PolicyError on anything malformed (fails closed)."""
     sec = allowlist.get("ci_images")
     if sec is None:
-        return {"enabled": False, "authors": [], "files": [], "denylist": {}}
+        return {"enabled": False, "authors": [], "files": [], "denylist": {}, "guarded": {}}
     if not isinstance(sec, dict):
         raise PolicyError("`ci_images` must be a mapping")
     files = sec.get("files") or [CI_PATH]
@@ -625,8 +625,76 @@ def ci_images_config(allowlist: dict) -> dict:
     authors = sec.get("authors") or []
     if not isinstance(authors, list):
         raise PolicyError("ci_images.authors must be a list")
+    guarded = _ci_guarded(sec.get("guarded"))
+    both = sorted(set(guarded) & set(deny))
+    if both:
+        raise PolicyError(f"ci_images: {', '.join(both)} is both denylisted and guarded")
     return {"enabled": sec.get("enabled") is True, "authors": list(authors),
-            "files": list(files), "denylist": deny}
+            "files": list(files), "denylist": deny, "guarded": guarded}
+
+
+_GUARD_KINDS = ("digest", "patch", "minor")
+_GUARD_KEYS = {"except_tags", "updates", "required_jobs", "reason"}
+
+
+def _ci_guarded(sec) -> dict:
+    """Validated `ci_images.guarded`: image name -> {except_tags, updates,
+    required_jobs, reason}. A guarded image's lines (all but those whose old
+    and new tags are both in `except_tags`) take only the listed update kinds,
+    and only after the listed MR pipeline jobs passed. Fails closed."""
+    if sec is None:
+        return {}
+    if not isinstance(sec, dict):
+        raise PolicyError("ci_images.guarded must be a mapping")
+    out = {}
+    for name, spec in sec.items():
+        where = f"ci_images.guarded {name}"
+        if not isinstance(spec, dict):
+            raise PolicyError(f"{where}: must be a mapping")
+        unknown = sorted(set(spec) - _GUARD_KEYS)
+        if unknown:
+            raise PolicyError(f"{where}: unknown keys {', '.join(unknown)}")
+        reason = spec.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            raise PolicyError(f"{where}: a reason is required")
+        updates = spec.get("updates")
+        if not isinstance(updates, list) or not updates or any(u not in _GUARD_KINDS for u in updates):
+            raise PolicyError(f"{where}: updates must be a non-empty list of {', '.join(_GUARD_KINDS)}")
+        jobs = spec.get("required_jobs")
+        if (not isinstance(jobs, list) or not jobs
+                or any(not isinstance(j, str) or not _JOB_NAME.match(j) for j in jobs)):
+            raise PolicyError(f"{where}: required_jobs must be a non-empty list of CI job names")
+        tags = spec.get("except_tags") or []
+        if not isinstance(tags, list) or any(not isinstance(x, str) or not x.strip() for x in tags):
+            raise PolicyError(f"{where}: except_tags must be a list of tags")
+        out[name] = {"except_tags": list(tags), "updates": list(updates),
+                     "required_jobs": list(jobs), "reason": " ".join(reason.split())}
+    return out
+
+
+def ci_guarded_spec(c: "ImageChange", allowlist: dict) -> Optional[dict]:
+    """The `ci_images.guarded` entry that covers this CI image change, if any.
+    A line is exempt only when both its old and its new tag are listed in
+    `except_tags` (a change into or out of an exempt tag is guarded)."""
+    spec = ci_images_config(allowlist)["guarded"].get(c.new.name)
+    if spec is None:
+        return None
+    exempt = spec["except_tags"]
+    if c.old.tag in exempt and c.new.tag in exempt:
+        return None
+    return spec
+
+
+def ci_required_jobs(changes: List["ImageChange"], allowlist: dict) -> List[str]:
+    """MR pipeline jobs that must have passed before guarded CI image changes
+    merge (`ci_images.guarded.*.required_jobs`), in policy order."""
+    out: List[str] = []
+    for c in changes:
+        spec = ci_guarded_spec(c, allowlist)
+        for j in (spec or {}).get("required_jobs", []):
+            if j not in out:
+                out.append(j)
+    return out
 
 
 def ci_files(allowlist: dict) -> List[str]:
@@ -639,7 +707,8 @@ def ci_files(allowlist: dict) -> List[str]:
 
 def ci_change_reasons(changes: List[ImageChange], allowlist: dict) -> List[str]:
     """Per-change checks of the CI image class: the global image denylist and
-    `ci_images.denylist`. Used by evaluate_mr and again by the post-merge watch."""
+    `ci_images.denylist`, and the update kinds a `ci_images.guarded` line
+    takes. Used by evaluate_mr and again by the post-merge watch."""
     reasons = []
     d = denylist(allowlist)["images"]
     cd = ci_images_config(allowlist)["denylist"]
@@ -647,6 +716,11 @@ def ci_change_reasons(changes: List[ImageChange], allowlist: dict) -> List[str]:
         why = d.get(c.new.name) or cd.get(c.new.name)
         if why:
             reasons.append(f"{c.service}: {DENIED_MARK} ({c.new.name}: {why})")
+            continue
+        spec = ci_guarded_spec(c, allowlist)
+        if spec and c.kind not in spec["updates"]:
+            reasons.append(f"{c.service}: {DENIED_MARK} ({c.new.name}:{c.new.tag or ''} is guarded and takes "
+                           f"{', '.join(spec['updates'])} updates only, not {c.kind}: {spec['reason']})")
     return reasons
 
 
@@ -2043,6 +2117,13 @@ def _evaluate_ci(v: Verdict, author: str, changed_ci: List[str], others: List[st
     for c in v.changes:
         v.notes.append(f"{c.service}: {c.kind} update {c.old.tag or ''} -> {c.new.tag or ''}"
                        f" ({(c.new.digest or '')[:19]}) [{c.file}]")
+    # Guarded lines (the .ansible image): the canary and unit suites must have
+    # passed in the MR pipeline (automerge.py, required_job_blockers).
+    for j in ci_required_jobs(v.changes, allowlist):
+        if j not in v.required_jobs:
+            v.required_jobs.append(j)
+    if v.required_jobs:
+        v.notes.append("needs passed MR pipeline jobs: " + ", ".join(v.required_jobs))
     if v.eligible and not v.changes:
         v.reject("CI file changed but no image updates were found")
     if v.eligible:

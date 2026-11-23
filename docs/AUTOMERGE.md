@@ -43,7 +43,9 @@ Six classes share the policy:
 - **CI image**: non-major updates of job images in `.gitlab-ci.yml`, opened
   by Renovate. Nothing is deployed; the sweep watches the main pipeline of
   the merge and reverts on a failure in a job that runs the image. Counts
-  against the general budget and follows its dry run. See [CI images](#ci-images).
+  against the general budget and follows its dry run. The `.ansible` image
+  (the deploys) takes digest and patch updates only, after its canary
+  passed. See [CI images](#ci-images).
 - **Runner image**: digest refreshes and patch releases of the GitLab
   runners' default image (`ubuntu:24.04`) in `base/gitlab-runner/config.toml`,
   opened by Renovate. `router:deploy` deploys the config; the sweep watches
@@ -616,11 +618,49 @@ not a draft, no conflicts, the general daily budget):
    updates only;
 5. the image is on neither the global denylist (`denylist.images`: GitLab,
    the runner helper `gitlab/gitlab-runner`, Vault, ...) nor
-   `ci_images.denylist`. That holds `willhallonline/ansible`: the `.ansible`
-   image runs the sweep, `plan-deploy` and every deploy, so a broken update
-   would take down the jobs that detect and revert it;
+   `ci_images.denylist` (the lagging sweep copy of the `.ansible` image, see
+   below), and a line of a `ci_images.guarded` image changes only in a way
+   that entry allows ([The .ansible image](#the-ansible-image));
 6. no open rollback issue holds the image (see below), and no earlier CI image
    merge is still waiting for its main pipeline.
+
+### The .ansible image
+
+`willhallonline/ansible` runs in two roles. Its versioned tag (the `.ansible`
+template, also set directly on the firmware jobs) runs `plan-deploy`, every
+deploy and the firmware jobs; its `:latest` lines run test, drift and apply
+jobs. Until 2026-11-23 the whole image was on `ci_images.denylist`, because
+the `.ansible` image also ran the sweep: a broken update would have taken
+down the jobs that detect and revert it. Three things make it safe to
+auto-merge now:
+
+- **The sweep runs in a lagging copy.** `automerge:sweep`,
+  `automerge:eligibility` and `automerge:report` extend `.ansible_sweep`,
+  which sets `docker.io/willhallonline/ansible:<same tag>@<older digest>`. The
+  `docker.io/` prefix makes it a separate dependency: Renovate never updates
+  it (`renovate.json`, `enabled: false`) and the policy never merges it
+  (`ci_images.denylist`). A bad `.ansible` update therefore cannot break the
+  watch and revert. Promote it by hand: set it to an `.ansible` digest that
+  has run the deploys on main for at least 7 days with no open
+  `automerge-rollback` issue (`git log -S <digest> -- .gitlab-ci.yml` shows
+  when it landed). It may lag for as long as it keeps working.
+- **A canary before the merge.** `ci-image:ansible-canary` runs in the MR
+  pipeline of any `.gitlab-ci.yml` change: the real `.ansible` before_script
+  (the `pip install` of `requirements.txt` into the new image's Python, which
+  is what broke when the image moved to an externally-managed Python), then
+  `ansible --version` and a syntax check of every playbook.
+- **Guarded lines** (`ci_images.guarded` in the policy). Every line of
+  `willhallonline/ansible` except those whose old and new tag are both
+  `latest` takes `digest` and `patch` updates only, and only after
+  `ci-image:ansible-canary`, `automerge:test`, `deploy-scope:test`,
+  `facts:test` and `reports:test` passed in the MR pipeline for the head
+  commit (`required_job_blockers`). Minors and majors stay manual; Renovate
+  labels them `automerge-manual` (rule "CI image guarded"). After the merge
+  the usual watch applies: a failed job that runs the image opens the revert
+  MR and the rollback issue, which holds further updates of the image.
+
+The `:latest` lines are ordinary CI image updates. As a runner default image
+`willhallonline/ansible` stays manual (`runner_images.denylist`).
 
 `.gitlab-ci.yml` is CODEOWNERS-protected; the automerge bot is its second
 code owner, and the eligibility check allows the path only for diffs that
@@ -684,8 +724,8 @@ the head commit, not a draft, no conflicts, the general daily budget):
    (24.04 to 24.10) and majors (24.04 to 26.04) wait for a human; Renovate
    labels a minor `automerge-manual` and a major `major`;
 5. the image is on none of `denylist.images`, `ci_images.denylist` and
-   `runner_images.denylist`. `willhallonline/ansible` stays manual by Noah's
-   decision, in CI files and as a runner default image alike;
+   `runner_images.denylist`. `willhallonline/ansible` stays manual as a
+   runner default image by Noah's decision (`runner_images.denylist`);
 6. the automerge bot is a code owner of the file (`CODEOWNERS` lists it for
    `base/gitlab-runner/config.toml` only; the rest of `base/gitlab-runner/`
    stays with root);
@@ -726,9 +766,10 @@ each merged MR still labelled `automerge-runner-watch`, like the
 - only other jobs failed: a note, no revert.
 
 **Why a broken image is recoverable.** The revert path never runs in the
-default image: the sweep (`automerge:sweep`), the MR pipeline of the revert
-MR, `router:deploy` and the per-service deploys all set their own image
-(`.ansible`, `willhallonline/ansible`), and the gitlab-runner process and its
+default image: the sweep (`automerge:sweep`, `.ansible_sweep`), the MR
+pipeline of the revert MR, `router:deploy` and the per-service deploys all
+set their own image (`.ansible`, `willhallonline/ansible`), and the
+gitlab-runner process and its
 helper image do not use it. The runners also serve `root/homeassistant`
 (`default.image`) and `root/ha-toyota-connected` (an image per job), whose
 jobs set their own image too (checked 2026-11-16; keep it that way when

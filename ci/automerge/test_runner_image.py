@@ -444,8 +444,8 @@ class RealRepoTests(unittest.TestCase):
         self.assertTrue(cfg["enabled"])
         self.assertEqual(cfg["authors"], [RENOVATE])
         self.assertEqual(cfg["codeowner"], BOT)
-        # willhallonline/ansible stays manual by Noah's decision
-        self.assertIn("willhallonline/ansible", policy.ci_images_config(self.allow)["denylist"])
+        # willhallonline/ansible stays manual as a runner default image (Noah's decision)
+        self.assertIn("willhallonline/ansible", cfg["denylist"])
 
     def test_three_default_image_lines(self):
         lines = policy.runner_image_lines(self.runner)
@@ -473,7 +473,8 @@ class RealRepoTests(unittest.TestCase):
         self.assertEqual(policy.default_image_jobs(self.ci), [automerge.RUNNER_CANARY_JOB])
         for job in ("automerge:sweep", "router:deploy", "router:deploy-service", "automerge:mr-check"):
             if job in yaml.load(self.ci, Loader=_Loader):
-                self.assertIn(job, policy.ci_image_jobs(self.ci, ["willhallonline/ansible"]), job)
+                self.assertIn(job, policy.ci_image_jobs(
+                    self.ci, ["willhallonline/ansible", "docker.io/willhallonline/ansible"]), job)
 
     def test_canary_runs_after_router_deploy_on_runner_changes(self):
         doc = yaml.load(self.ci, Loader=_Loader)

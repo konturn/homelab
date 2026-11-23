@@ -233,7 +233,7 @@
         "!hashicorp/vault",
         "!tecnativa/docker-socket-proxy",
         "!mikebrady/shairport-sync",
-        "!willhallonline/ansible"
+        "!docker.io/willhallonline/ansible"
       ],
       "matchUpdateTypes": [
         "patch",
@@ -255,13 +255,43 @@
         "gitlabci"
       ],
       "matchPackageNames": [
-        "willhallonline/ansible"
+        "docker.io/willhallonline/ansible"
       ],
       "addLabels": [
         "automerge-manual"
       ],
       "prBodyNotes": [
         "**Manual merge.** This CI image is on the CI image denylist (`ci/automerge-policy.yml`, reason there), so the sweep will not merge it."
+      ]
+    },
+    {
+      "description": "CI image: the lagging copy of the .ansible image that the auto-merge jobs run in (.ansible_sweep, docker.io/ prefix) is promoted by hand, never by Renovate (docs/AUTOMERGE.md, \"CI images\")",
+      "matchManagers": [
+        "gitlabci"
+      ],
+      "matchDepNames": [
+        "docker.io/willhallonline/ansible"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "CI image guarded (docs/AUTOMERGE.md, \"CI images\"): minor and major updates of the .ansible image (willhallonline/ansible, any tag but latest) stay manual; keep in sync with ci_images.guarded in ci/automerge-policy.yml (checked by ci/automerge/test_ci_images.py)",
+      "matchManagers": [
+        "gitlabci"
+      ],
+      "matchPackageNames": [
+        "willhallonline/ansible"
+      ],
+      "matchCurrentValue": "!/^latest$/",
+      "matchUpdateTypes": [
+        "minor",
+        "major"
+      ],
+      "addLabels": [
+        "automerge-manual"
+      ],
+      "prBodyNotes": [
+        "**Manual merge.** A minor or major update of the `.ansible` image (`ci_images.guarded` in `ci/automerge-policy.yml`): only digest and patch updates of it are auto-merged."
       ]
     },
     {
@@ -280,7 +310,8 @@
         "!hashicorp/vault",
         "!tecnativa/docker-socket-proxy",
         "!mikebrady/shairport-sync",
-        "!willhallonline/ansible"
+        "!willhallonline/ansible",
+        "!docker.io/willhallonline/ansible"
       ],
       "matchUpdateTypes": [
         "patch",
