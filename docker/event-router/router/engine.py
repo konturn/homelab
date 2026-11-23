@@ -279,16 +279,88 @@ class Engine:
                        "root": root["id"], "root_node": root["node"],
                        "root_status": root["status"], **extra}, inc)
             return
-        if self._burst(now, inc):
-            self._forward(inc, "escalated", reason="burst: many failures without a common ancestor")
-            return
+        if inc["source"] == "grafana":
+            burst = self._current_burst(now)
+            if burst:
+                self._join_burst(inc, burst, extra)
+                return
+            if self._burst(now, inc):
+                self._open_burst(now, inc, extra)
+                return
         self._log({"decision": "opened", **extra}, inc)
 
+    # ---- bursts (doc 4.7 step 4) -------------------------------------------------
+    # More than `burst_events` new alerts within `burst_within` with no common
+    # ancestor: one "multiple failures" incident goes to the agent with the
+    # member list, and the members wait as its symptoms (no playbooks, no
+    # forwards of their own). A member resolves with its alert; one still
+    # firing after `burst_hold` is handled on its own. Alerts arriving while
+    # the burst is still going (within `burst_within` of its last member)
+    # join it. `burst_settle` holds a new alert briefly before it is acted
+    # on or forwarded alone, so the first alerts of a burst are still open
+    # when the burst is recognised.
+    def _burst_candidates(self, now, exclude):
+        return [i for i in self.store.recent_incidents(now - self.cfg["burst_within"])
+                if i["id"] != exclude and i["source"] == "grafana" and not i["page_class"]
+                and i["status"] != "symptom"]
+
     def _burst(self, now, inc):
-        recent = [i for i in self.store.recent_incidents(now - self.cfg["burst_within"])
-                  if i["id"] != inc["id"] and i["source"] == "grafana" and not i["page_class"]
-                  and i["status"] != "symptom"]
-        return inc["source"] == "grafana" and len(recent) >= self.cfg["burst_events"]
+        return len(self._burst_candidates(now, inc["id"])) >= self.cfg["burst_events"]
+
+    def _current_burst(self, now):
+        for i in reversed(self.store.recent_incidents(now - self.cfg["burst_hold"])):
+            if (i["kind"] == "burst" and i["alert_state"] == "firing"
+                    and now - (i.get("last_seen") or i["opened_at"]) <= self.cfg["burst_within"]):
+                return i
+        return None
+
+    def _open_burst(self, now, inc, extra):
+        others = self._burst_candidates(now, inc["id"])
+        waiting = [i for i in others if i["status"] == "open"]
+        handed = [i["id"] for i in others if i["status"] != "open"]   # already acted on or forwarded
+        bid = self.store.new_incident(
+            now, fp=f"router:burst:{inc['id']}", source="router", kind="burst", rule_uid="",
+            alertname="Multiple failures", node="", labels={"related": ",".join(handed)[:2000]},
+            playbook=None, target=None, alert_state="firing", page_class=None, status="open",
+            summary=f"{len(others) + 1} alerts within {self.cfg['burst_within'] // 60 or 1}m "
+                    f"with no common ancestor", last_seen=now)
+        burst = self.store.get(bid)
+        for m in [inc] + waiting:
+            self._join_burst(m, burst, extra if m is inc else {}, opening=True)
+        self._forward(burst, "escalated", reason="burst: many failures without a common ancestor",
+                      members=len(waiting) + 1, related=len(handed))
+
+    def _join_burst(self, inc, burst, extra, opening=False):
+        now = self.clock.now()
+        self._set(inc, status="symptom", root=burst["id"], waiting=None)
+        if not opening:
+            self.store.update(burst["id"], now, last_seen=now)
+        self._log({"decision": "suppressed", "reason": "burst member", "root": burst["id"],
+                   "root_status": burst["status"], **extra}, inc)
+
+    def _burst_members(self, burst):
+        members = [i for i in self.store.recent_incidents(burst["opened_at"] - self.cfg["burst_within"])
+                   if i.get("root") == burst["id"]]
+        related = [r for r in (burst["labels"].get("related") or "").split(",") if r]
+        out = []
+        for i in members + [self.store.get(r) for r in related]:
+            if i is None:
+                continue
+            out.append({"id": i["id"], "alertname": i["alertname"], "rule_uid": i["rule_uid"],
+                        "node": i["node"], "labels": i["labels"], "summary": i.get("summary") or "",
+                        "status": i["status"], "alert_state": i["alert_state"],
+                        "member": i.get("root") == burst["id"]})
+        return out
+
+    def _settle_bursts(self):
+        """A burst's alert resolves once none of its members is active."""
+        now = self.clock.now()
+        for b in self.store.recent_incidents(now - self.cfg["burst_hold"] - DEDUPE_TERMINAL_FOR):
+            if b["kind"] != "burst" or b["alert_state"] != "firing":
+                continue
+            if not any(m["status"] in ACTIVE for m in self._burst_members(b) if m["member"]):
+                self._set(b, alert_state="resolved", closed_at=b["closed_at"] or now)
+                self._log({"decision": "resolved", "reason": "no burst member still active"}, b)
 
     # ---- router and executor steps -----------------------------------------------
     def step(self):
@@ -297,6 +369,7 @@ class Engine:
         self._close_windows()
         self._retry_deferred()
         self._reescalate()
+        self._settle_bursts()
         for inc in self.store.active():
             inc = self.store.get(inc["id"])
             if inc["status"] not in ACTIVE:
@@ -426,9 +499,15 @@ class Engine:
         return None
 
     def _reevaluate(self, inc):
+        burst = self.store.get(inc["root"]) if inc.get("root") else None
         if inc["alert_state"] == "resolved":
             self._close(inc, "resolved")
             self._log({"decision": "resolved", "reason": "symptom cleared"}, inc)
+        elif burst is not None and burst["kind"] == "burst":
+            if self.clock.now() - burst["opened_at"] >= self.cfg["burst_hold"]:
+                self._set(inc, status="open", root=None)
+                self._log({"decision": "reevaluated", "reason": "still firing after the burst it was part of"},
+                          inc)
         elif not self.dep_open(inc):
             self._set(inc, status="open", root=None)
             self._log({"decision": "reevaluated", "reason": "root cause handled"}, inc)
@@ -454,6 +533,9 @@ class Engine:
             self._set(inc, status="maint", root=w["id"], waiting=None)
             self._log({"decision": "suppressed", "reason": "maintenance", "window": w["id"]}, inc)
             return
+        if (inc["source"] == "grafana" and not inc["page_class"] and not inc.get("retried")
+                and self.clock.now() - inc["opened_at"] < self.cfg["burst_settle"]):
+            return self._wait(inc, "burst settle")
         if pb is None:
             return self._forward(inc, "no_match")
         pmode = modes.playbook_mode(self.mode(), pb.mode)
@@ -892,6 +974,7 @@ class Engine:
                      if kind == "page" else None),
             "quiet_hours": quiet,
             "stale": stale,
+            "burst_members": self._burst_members(inc) if inc["kind"] == "burst" else None,
             "outcome": {"url": "http://event-router:8080/outcome", "incident": inc["id"]},
         }
 
@@ -948,6 +1031,8 @@ class Engine:
                 continue
             payload = dict(f["payload"], queued_s=int(now - f["created"]), attempt=f["attempts"] + 1,
                            jit_paged=bool(f["jit_at"]))
+            if inc["kind"] == "burst":       # members that joined after it was queued
+                payload["burst_members"] = self._burst_members(inc)
             result, detail = self.openclaw.deliver(payload)
             now = self.clock.now()
             if result == "ok":
@@ -1022,6 +1107,7 @@ class Engine:
         if inc is None:
             return None
         return {"incident": inc, "decisions": self.store.decisions_for(inc_id),
+                "burst_members": self._burst_members(inc) if inc["kind"] == "burst" else None,
                 "forward": {k: v for k, v in (self.store.forward_for(inc_id) or {}).items() if k != "payload"},
                 "outcome": self.store.outcome_for(inc_id)}
 

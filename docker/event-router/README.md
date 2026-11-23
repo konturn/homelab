@@ -174,7 +174,7 @@ What reaches OpenClaw, through its `/hooks/event-router` mapping
 
 | Kind | When |
 |---|---|
-| residue | no playbook matched; the kill switch is on; a shadow playbook would have acted; the executor refused (a deploy recreated the container: deferred, with `retry_at`; the job is not orphaned or was superseded); still failing after 2h (`stale`); a burst; a failed retry of a CI job; a failed `main` or scheduled pipeline |
+| residue | no playbook matched; the kill switch is on; a shadow playbook would have acted; the executor refused (a deploy recreated the container: deferred, with `retry_at`; the job is not orphaned or was superseded); still failing after 2h (`stale`); a burst (one incident, `kind: burst`, with `burst_members`); a failed retry of a CI job; a failed `main` or scheduled pipeline (not one that failed only as `failed_outdated_deployment_job` or only in rolled-back deploy-service jobs: digest, under a per-pipeline fingerprint so a real failure right after still goes out) |
 | page | a page class (`page_classes` in `config.yml`), or a failed remediation: verification failed, a breaker opened, the action failed, a dependency was down; a user-facing service still failing after 6h (`still_failing`) |
 
 Never: an incident a playbook handled (decision B; it is in the decision log

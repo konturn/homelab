@@ -38,7 +38,17 @@ module.exports = function transform(raw) {
     quiet_hours: !!p.quiet_hours,
     queued_s: p.queued_s || 0,
     jit_paged: !!p.jit_paged,
-    stale: p.stale || null
+    stale: p.stale || null,
+    // A burst (doc 4.7 step 4): the alerts that fired together, compact.
+    burst_members: Array.isArray(p.burst_members) ? p.burst_members.slice(0, 40).map(function (m) {
+      var l = m.labels || {};
+      var keep = {};
+      ['url', 'container', 'container_name', 'instance', 'host', 'device', 'service'].forEach(function (k) {
+        if (l[k]) keep[k] = clip(l[k], 120);
+      });
+      return { id: m.id, alertname: clip(m.alertname, 120), node: m.node, labels: keep,
+               status: m.status, alert_state: m.alert_state, member: !!m.member };
+    }) : null
   };
 
   var title = (kind === 'page' ? '📟 Event router PAGE' : '🧭 Event router escalation') +
@@ -54,6 +64,11 @@ module.exports = function transform(raw) {
   } else if (inc.kind === 'pipeline_failed') {
     what = 'A pipeline on main failed. Follow "Pipeline failures" in skills/event-router/SKILL.md ' +
       '(same procedure and state file as the main-pipeline-fix cron; the webhook is now the primary path).';
+  } else if (inc.kind === 'burst') {
+    what = 'A burst: ' + (data.burst_members || []).length + ' alerts fired together with no common ancestor ' +
+      'in the dependency graph (burst_members). Follow "Bursts" in skills/event-router/SKILL.md: find the ' +
+      'one shared cause, not each alert. Members are held by the router and resolve with their alerts; ' +
+      'any still firing after 1h comes back to you on its own.';
   } else if (inc.kind === 'ci_job_failed') {
     what = 'A CI job failed for a runner/system reason and the router could not retry it (or the retry failed). ' +
       'Follow "CI jobs" in skills/event-router/SKILL.md.';

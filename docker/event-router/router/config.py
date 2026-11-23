@@ -124,6 +124,8 @@ def parse_config(raw):
         "breaker_reset_after": _dur(lim.get("breaker_reset_after", "24h"), "limits.breaker_reset_after"),
         "burst_events": int((raw.get("correlation") or {}).get("burst_events", 5)),
         "burst_within": _dur((raw.get("correlation") or {}).get("burst_within", "2m"), "correlation.burst_within"),
+        "burst_settle": _dur((raw.get("correlation") or {}).get("burst_settle", "0s"), "correlation.burst_settle"),
+        "burst_hold": _dur((raw.get("correlation") or {}).get("burst_hold", "1h"), "correlation.burst_hold"),
         "max_window": _dur((raw.get("maintenance") or {}).get("max_duration", "12h"), "maintenance.max_duration"),
         "reconcile_interval": _dur(raw.get("reconcile_interval", "5m"), "reconcile_interval"),
         "step_interval": _dur(raw.get("step_interval", "15s"), "step_interval"),

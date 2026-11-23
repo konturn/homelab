@@ -14,7 +14,10 @@ limits:
 
 correlation:
   burst_events: 5                  # 4.7 step 4: more than this many new incidents
-  burst_within: 2m                 # in this span go straight to the agent
+  burst_within: 2m                 # in this span become ONE burst incident for the agent
+  burst_settle: 60s                # a new alert waits this long before it is forwarded or
+                                   # acted on alone, so a burst can gather (not pages)
+  burst_hold: 1h                   # a burst member still firing after this is handled alone
 
 maintenance:
   max_duration: 12h                # 13.1
@@ -91,6 +94,13 @@ digest_only:
     reason: >-
       only <host>:deploy-service jobs failed: the auto-merge sweep already
       rolled back, opened an automerge-rollback issue and a revert MR, and mailed Noah
+  - source: gitlab
+    kind: pipeline_failed
+    labels: {handled_by: newer-pipeline}
+    reason: >-
+      only failed_outdated_deployment_job: pushes landed seconds apart and the
+      newer pipeline deploys instead; its own failure still reaches OpenClaw
+      (own fingerprint per pipeline, #170)
 
 reconcile_interval: 5m             # level-triggered checks (4.3)
 step_interval: 15s
