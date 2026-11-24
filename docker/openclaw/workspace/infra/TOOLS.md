@@ -143,8 +143,8 @@ with this file, they win: say so.
   (`<host>:deploy-service`) behind a health gate. A failure rolls back and
   opens an `automerge-rollback` issue and a revert MR (holds that service).
 - Limits: 24 general merges per rolling 24h, plus 4 fast-track merges (internet-facing images); one merge per sweep run.
-- Never auto-merged (denylist): docker-socket-proxy, gitlab, vault; majors; anything but a compose image line.
-- digest/patch updates only: bitwarden, nextcloud.
+- Never auto-merged (denylist): gitlab, vault; majors; anything but a compose image line.
+- digest/patch updates only: bitwarden, docker-socket-proxy, docker-socket-proxy-ro, nextcloud.
 - Version updates of bitwarden, homeassistant, influxdb, nextcloud are backed up first and restored on rollback.
 - 0.x minors count as minors: otel-collector.
 - Labels: `automerge-eligible`, `automerge-manual` (waits for a human),
@@ -228,7 +228,7 @@ passed on the latest commit, no `freeze`, `security` or `major` label, and:
 
 - Author `moltbot`, at most 6 bot-config merges per 24h (they also count against the general budget); at most 30 files; no added, deleted, renamed or mode-changed file; no script (by extension or `#!`).
 - Never (wins over everything): `networking/**`, `**/iptables*`, `**/nftables*`, `ansible/**`, `.gitlab-ci.yml`, `ci/**`, `renovate.json`, `CODEOWNERS`, `CLAUDE.md`, `**/CLAUDE.md`, `docker/vault/**`, `terraform/**`, `docker/openclaw*`, `docker/openclaw*/**`, `**/*openclaw*`, `**/*moltbot*`, `docker/jit-approval-svc/**`, `docker/jit-proxy/**`, `docker/nginx/**`, `docker/promtail/**`, `docker/telegraf/**`, `base/**`, `scripts/**`, `**/*.env`, `**/*.env.*`, `**/.env*`, `**/*secret*`, `**/*vault*`, `**/*.j2`, `docker/grafana/provisioning/alerting/contactpoints*`, `docker/grafana/provisioning/alerting/policies*`, `docker/grafana/provisioning/datasources/**`, `docker/grafana/provisioning/dashboards/homelab.yml`, `docker/event-router/**`.
-- **Compose** (`docker/docker-compose.yml`, `docker/docker-compose-observability.yml`, `docker/docker-compose-zwave.yml`): the value of an existing `deploy.resources` memory/cpus limit or reservation, within 0.5x-2x of the old value; an existing `*LOG_LEVEL`/`*LOGLEVEL` env value, to a known level; comment lines without `{ }` outside block scalars. Not for anomaly-detector, chromium-browser, docker-socket-proxy, gitlab, iot_nginx, jit-approval-svc, jit-proxy, lab_nginx, nginx, vault, init containers or any openclaw/moltbot service.
+- **Compose** (`docker/docker-compose.yml`, `docker/docker-compose-observability.yml`, `docker/docker-compose-zwave.yml`): the value of an existing `deploy.resources` memory/cpus limit or reservation, within 0.5x-2x of the old value; an existing `*LOG_LEVEL`/`*LOGLEVEL` env value, to a known level; comment lines without `{ }` outside block scalars. Not for anomaly-detector, chromium-browser, gitlab, iot_nginx, jit-approval-svc, jit-proxy, lab_nginx, nginx, vault, init containers or any openclaw/moltbot service.
 - **Alert rules** (`docker/grafana/provisioning/alerting/infrastructure.yml`, `docker/grafana/provisioning/alerting/anomaly.yml`), existing rules only: `for`, summary/description, severity (critical/warning/info), threshold numbers. No rule added, removed or reordered.
 - **Dashboards** (`docker/grafana/provisioning/dashboards/json/*.json`): keep the uid, add no datasource.
 - **Docs** (`docs/*.md`, `docs/**/*.md`, `README.md`, `docs/**/README*.md`), except AUTOMERGE.md, DISASTER_RECOVERY.md, RENOVATE.md, DEPLOY.md, FIREWALL.md, SECRET_ROTATION.md, GITLAB_SETTINGS.md, docker-proxy-architecture.md, jit-*, *security*, *SECURITY* under docs/.

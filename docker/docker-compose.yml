@@ -242,8 +242,11 @@ services:
       - NETWORKS=0
       - VOLUMES=0
       - POST=1  # Needed for build/push
+    # Through the proxy to the daemon: an endpoint only IMAGES=1 lets through
+    # must work and one CONTAINERS=0 blocks must stay blocked, so a release
+    # that changes the permissions either way fails the health gate.
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:2375/_ping"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:2375/_ping && wget -q -O /dev/null http://localhost:2375/images/json && ! wget -q -O /dev/null http://localhost:2375/containers/json"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -281,8 +284,10 @@ services:
       - NETWORKS=1  # promtail docker_sd reads network labels (GET only)
       - VOLUMES=0
       - AUTH=0
+    # Through the proxy to the daemon: what promtail reads (CONTAINERS=1) must
+    # work and images (IMAGES=0) must stay blocked.
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:2375/_ping"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:2375/_ping && wget -q -O /dev/null 'http://localhost:2375/containers/json?limit=1' && ! wget -q -O /dev/null http://localhost:2375/images/json"]
       interval: 30s
       timeout: 10s
       retries: 3

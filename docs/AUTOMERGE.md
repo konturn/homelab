@@ -214,8 +214,13 @@ never auto-merged, each with its reason:
 | `gitlab` (`gitlab/gitlab-ee`, `gitlab/gitlab-ce`) | GitLab runs the pipelines, the sweep and the per-service deploy. A bad upgrade takes down the pipeline that would roll it back, and its database migrations are one-way. Its digest and patch updates go through the out-of-band class, whose upgrade and rollback run outside GitLab ([Out-of-band updates](#out-of-band-updates)). |
 | `gitlab/gitlab-runner` | Runs every CI job. Today the runner is a host package (`configure-base`), not a compose service; the entry covers a future compose runner. |
 | `vault` (`hashicorp/vault`) | Every deploy job reads its secrets from Vault before it changes anything. A Vault that breaks after the health gate blocks every later deploy, the revert included. Its digest and patch updates go through the out-of-band class, which does not need Vault to roll back ([Out-of-band updates](#out-of-band-updates)). |
-| `docker-socket-proxy` (`tecnativa/docker-socket-proxy`) | CI image builds reach the Docker daemon through it. |
 | `mikebrady/shairport-sync` | Versions skipped in `renovate.json` for a crash that only some senders trigger, which the health gate cannot see. Any image with a crash skip is listed here. |
+
+The Docker socket proxies (`docker-socket-proxy`, `docker-socket-proxy-ro`)
+left the list on 2026-11-24: neither is on the deploy or rollback path (the
+sweep and the per-service deploy use the host's Docker socket), and their
+healthchecks call the API their users need, so digest and patch updates go
+through the general class (`updates: [digest, patch]`).
 
 Renovate labels updates of the denylisted images `automerge-manual` and adds a
 note to the MR body (`renovate.json`, rule "Auto-merge denylist").
