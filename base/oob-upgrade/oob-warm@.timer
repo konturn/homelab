@@ -1,5 +1,5 @@
 [Unit]
-Description=Nightly refresh of the GitLab restore-point mirror
+Description=Nightly refresh of the %i restore-point mirror
 
 [Timer]
 OnCalendar=*-*-* 01:40

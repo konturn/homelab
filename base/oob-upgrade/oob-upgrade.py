@@ -1,26 +1,31 @@
 #!/usr/bin/env python3
-"""Out-of-band GitLab upgrades (docs/AUTOMERGE.md, "GitLab updates").
+"""Out-of-band upgrades of the services the pipeline itself depends on
+(docs/AUTOMERGE.md, "Out-of-band updates"): GitLab and Vault.
 
-Runs on the router from gitlab-oob-upgrade.timer, outside GitLab and its CI.
-GitLab's running image is pinned in <state_dir>/image; every compose render
-on the router applies that pin (ansible render_compose.yml), so no CI deploy
-changes GitLab's image. When main's gitlab
-image line differs from the pin, this script:
+Runs on the router from oob-upgrade@<service>.timer, outside GitLab and its
+CI. The service's running image is pinned in <state_dir>/image; every compose
+render on the router applies that pin (ansible render_compose.yml), so no CI
+deploy changes the image. When main's image line for the service differs from
+the pin, this script:
 
-  1. checks: running container == pin, no hold on the new image, background
-     migrations finished, GitLab healthy, free space; an auto-merged change
-     (trailer "Automerge-Class: gitlab-oob") must be digest or same-minor patch;
+  1. checks: running container == pin, no hold on the new image, the
+     service-specific preflight (GitLab: background migrations finished;
+     Vault: unsealed, canary read works, no CI job running), healthy, free
+     space; an auto-merged change (trailer "Automerge-Class: oob") must be a
+     digest or patch update;
   2. pulls the new image;
-  3. takes a restore point: warm rsync of GitLab's directory into a ZFS
-     dataset, `docker stop gitlab`, final rsync, `zfs snapshot`;
+  3. takes a restore point: warm rsync of the service's data directory into a
+     ZFS dataset, `docker stop`, final rsync, `zfs snapshot`;
   4. moves the pin and the rendered compose line, starts the new image;
-  5. health gate: container healthy, /-/readiness?all=1, API version, git
-     ls-remote, runners back online;
+  5. runs the service's health gate (GitLab: readiness, API version, git
+     ls-remote, runners back; Vault: unsealed at the new version, an AppRole
+     login and a KV read);
   6. on failure restores the snapshot and the old image, re-checks health,
      holds the image, mails root, then opens a rollback issue and a revert MR.
 
-Modes: default (act), --dry-run (report only), --warm (refresh the mirror only).
-Log lines start with "gitlab_oob event=" (journald -> Loki).
+Usage: oob-upgrade --service gitlab|vault [--dry-run | --warm]
+Config: /etc/oob-upgrade/<service>.json. Log lines start with
+"oob event=" and carry service=<name> (journald -> Loki).
 """
 from __future__ import annotations
 
@@ -34,28 +39,59 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.request
+import ssl
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-CONFIG = "/etc/gitlab-oob/config.json"
-CLASS_TRAILER = "Automerge-Class: gitlab-oob"
-PENDING_LABEL = "automerge-gitlab-pending"
+CONFIG_DIR = "/etc/oob-upgrade"
+# One out-of-band upgrade on the host at a time, whatever the service.
+GLOBAL_LOCK = "/run/oob-upgrade.lock"
+CLASS_TRAILER = "Automerge-Class: oob"
+PENDING_LABEL = "automerge-oob-pending"
 ROLLBACK_LABEL = "automerge-rollback"
-HOLD_JOB = "gitlab-oob"
+HOLD_JOB = "oob"
 BLOCKING_MIGRATIONS = {"active", "paused", "failed", "finalizing"}
-
-IMAGE_RE = re.compile(
-    r"^(?P<name>gitlab/gitlab-(?:ee|ce)):(?P<tag>[\w][\w.-]*)@(?P<digest>sha256:[a-f0-9]{64})$")
-# The literal image line of the gitlab service in the compose template.
-# The Jinja line next to it ('{{ gitlab_oob_image }}') does not match.
-LINE_RE = re.compile(
-    r"""^\s+image:\s*['"]?(gitlab/gitlab-(?:ee|ce):[\w][\w.-]*@sha256:[a-f0-9]{64})['"]?\s*$""", re.M)
-TAG_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)-(ee|ce)\.(\d+)$")
 MR_RE = re.compile(r"See merge request \S+!(\d+)")
+SERVICE = "?"           # set by main(); used in log lines
 
 
 # --------------------------------------------------------------------------
-# Pure helpers (unit-tested in test_gitlab_oob.py)
+# Profiles: what differs per service
+# --------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Profile:
+    name: str
+    image_names: Tuple[str, ...]      # accepted repository names
+    tag_re: str                       # groups 1-3 = major, minor, patch; optional "flavour" and "rev"
+    stop_timeout: int
+
+    @property
+    def image_re(self) -> "re.Pattern[str]":
+        names = "|".join(re.escape(n) for n in self.image_names)
+        return re.compile(rf"^(?P<name>{names}):(?P<tag>[\w][\w.-]*)@(?P<digest>sha256:[a-f0-9]{{64}})$")
+
+    @property
+    def line_re(self) -> "re.Pattern[str]":
+        """The literal image line of the service in the compose template. The
+        Jinja line next to it (a pin variable) does not match."""
+        names = "|".join(re.escape(n) for n in self.image_names)
+        return re.compile(
+            rf"""^\s+image:\s*['"]?((?:{names}):[\w][\w.-]*@sha256:[a-f0-9]{{64}})['"]?\s*$""", re.M)
+
+
+PROFILES: Dict[str, Profile] = {
+    # 19.6.1-ee.0: major.minor.patch-flavour.rev; a rev bump is a patch.
+    "gitlab": Profile("gitlab", ("gitlab/gitlab-ee", "gitlab/gitlab-ce"),
+                      r"^(\d+)\.(\d+)\.(\d+)-(?P<flavour>ee|ce)\.(?P<rev>\d+)$", 300),
+    # 2.2.2; anything else (-ent, -rc, ...) is "unknown" and never automatic.
+    "vault": Profile("vault", ("hashicorp/vault",), r"^(\d+)\.(\d+)\.(\d+)$", 60),
+}
+
+
+# --------------------------------------------------------------------------
+# Pure helpers (unit-tested in test_oob_upgrade.py)
 # --------------------------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -69,51 +105,72 @@ class Image:
         return f"{self.name}:{self.tag}@{self.digest}"
 
 
-def parse_image(ref: str) -> Image:
-    m = IMAGE_RE.match(ref.strip())
+def parse_image(p: Profile, ref: str) -> Image:
+    m = p.image_re.match(ref.strip())
     if not m:
-        raise ValueError(f"not a digest-pinned GitLab image: {ref!r}")
+        raise ValueError(f"not a digest-pinned {p.name} image: {ref!r}")
     return Image(m["name"], m["tag"], m["digest"])
 
 
-def desired_from_compose(text: str) -> Image:
-    """The gitlab image named by the compose template: exactly one literal,
-    digest-pinned gitlab/gitlab-{ee,ce} image line."""
-    refs = LINE_RE.findall(text)
+def desired_from_compose(p: Profile, text: str) -> Image:
+    """The service's image named by the compose template: exactly one literal,
+    digest-pinned image line of one of the profile's repositories."""
+    refs = p.line_re.findall(text)
     if len(refs) != 1:
-        raise ValueError(f"expected exactly one gitlab image line in the compose file, found {len(refs)}")
-    return parse_image(refs[0])
+        raise ValueError(f"expected exactly one {p.name} image line in the compose file, found {len(refs)}")
+    return parse_image(p, refs[0])
 
 
-def classify(old: Image, new: Image) -> str:
-    """digest | patch | minor | major | edition | unknown."""
+def _version(p: Profile, tag: str):
+    m = re.match(p.tag_re, tag)
+    if not m:
+        return None
+    gd = m.groupdict()
+    return (tuple(int(x) for x in m.groups()[:3]), gd.get("flavour"), int(gd["rev"]) if gd.get("rev") else 0)
+
+
+def classify(p: Profile, old: Image, new: Image) -> str:
+    """digest | same | patch | minor | major | edition | downgrade | unknown."""
     if old.name != new.name:
         return "edition"
     if old.tag == new.tag:
         return "digest" if old.digest != new.digest else "same"
-    a, b = TAG_RE.match(old.tag), TAG_RE.match(new.tag)
-    if not a or not b or a[4] != b[4]:
+    a, b = _version(p, old.tag), _version(p, new.tag)
+    if not a or not b or a[1] != b[1]:
         return "unknown"
-    (oM, om, op), (nM, nm, np_) = (tuple(int(x) for x in a.groups()[:3]),
-                                   tuple(int(x) for x in b.groups()[:3]))
-    if (nM, nm, np_) < (oM, om, op):
-        return "downgrade" if (nM, nm, np_, int(b[5])) < (oM, om, op, int(a[5])) else "unknown"
-    if nM != oM:
+    (ov, _, orev), (nv, _, nrev) = a, b
+    if nv < ov or (nv == ov and nrev < orev):
+        return "downgrade"
+    if nv[0] != ov[0]:
         return "major"
-    if nm != om:
+    if nv[1] != ov[1]:
         return "minor"
     return "patch"
 
 
-def api_version(tag: str) -> str:
+def gitlab_api_version(tag: str) -> str:
     """The version GitLab's API reports for an image tag: 19.6.1-ee.0 -> 19.6.1-ee."""
-    m = TAG_RE.match(tag)
-    return f"{m[1]}.{m[2]}.{m[3]}-{m[4]}" if m else tag
+    m = re.match(PROFILES["gitlab"].tag_re, tag)
+    return f"{m[1]}.{m[2]}.{m[3]}-{m['flavour']}" if m else tag
 
 
 def blocking_migrations(rows: List[dict]) -> List[str]:
     return [f"{r.get('job_class_name', '?')} ({r.get('status')})" for r in rows
             if str(r.get("status", "")).lower() in BLOCKING_MIGRATIONS]
+
+
+def vault_status_problem(status: dict, want_version: str) -> Optional[str]:
+    """None when `vault status -format=json` shows an initialized, unsealed
+    Vault at `want_version` (a "+ent" style suffix in the reported version is
+    tolerated); else what is wrong."""
+    if not status.get("initialized"):
+        return "Vault reports not initialized"
+    if status.get("sealed", True):
+        return "Vault is sealed"
+    v = str(status.get("version", ""))
+    if v.split("+", 1)[0] != want_version:
+        return f"Vault reports version {v!r}, expected {want_version!r}"
+    return None
 
 
 def snapshot_name(dataset: str, now: dt.datetime, old: Image, new: Image) -> str:
@@ -129,9 +186,11 @@ def snapshots_to_prune(names: List[str], keep: int) -> List[str]:
 
 
 def merge_info(message: str) -> Tuple[bool, Optional[int]]:
-    """(auto-merged by the gitlab-oob class, MR iid) from a merge commit message."""
+    """(auto-merged by the oob class, MR iid) from a merge commit message.
+    "Automerge-Class: gitlab-oob" is the class's name before Vault joined it."""
     m = MR_RE.search(message)
-    return (CLASS_TRAILER in message.splitlines(), int(m[1]) if m else None)
+    lines = message.splitlines()
+    return (CLASS_TRAILER in lines or "Automerge-Class: gitlab-oob" in lines, int(m[1]) if m else None)
 
 
 def swap_compose_line(text: str, old: Image, new: Image) -> str:
@@ -150,7 +209,7 @@ class Decision:
     kind: str = ""
 
 
-def decide(*, desired: Image, pinned: Image, running: Optional[str], hold: Optional[dict],
+def decide(p: Profile, *, desired: Image, pinned: Image, running: Optional[str], hold: Optional[dict],
            auto: bool) -> Decision:
     if running != pinned.ref:
         return Decision("drift", f"running container image {running!r} is not the pinned {pinned.ref}")
@@ -158,12 +217,12 @@ def decide(*, desired: Image, pinned: Image, running: Optional[str], hold: Optio
         return Decision("noop", "main matches the pinned image")
     if hold and hold.get("image") == desired.ref:
         return Decision("hold", f"{desired.ref} failed on {hold.get('at')}: {hold.get('reason')}")
-    kind = classify(pinned, desired)
+    kind = classify(p, pinned, desired)
     if kind in ("edition", "downgrade", "unknown"):
         return Decision("refuse", f"{kind} change {pinned.tag} -> {desired.tag} is never done automatically", kind)
     if auto and kind not in ("digest", "patch"):
         return Decision("refuse", f"auto-merged change is a {kind} update; only digest and patch "
-                                  "updates may come through the gitlab-oob class", kind)
+                                  "updates may come through the oob class", kind)
     return Decision("upgrade", f"{kind} update {pinned.tag} -> {desired.tag}", kind)
 
 
@@ -174,7 +233,7 @@ def decide(*, desired: Image, pinned: Image, running: Optional[str], hold: Optio
 def log(event: str, **kv) -> None:
     parts = " ".join(f"{k}={json.dumps(v) if isinstance(v, str) and (' ' in v or not v) else v}"
                      for k, v in kv.items())
-    print(f"gitlab_oob event={event} {parts}".rstrip(), flush=True)
+    print(f"oob event={event} service={SERVICE} {parts}".rstrip(), flush=True)
 
 
 def run(cmd: List[str], *, timeout: int = 600, check: bool = True, input: Optional[str] = None,
@@ -186,12 +245,13 @@ def run(cmd: List[str], *, timeout: int = 600, check: bool = True, input: Option
 
 
 class Host:
-    """Everything that touches the router, GitLab or ZFS."""
+    """Everything that touches the router, the service, GitLab or ZFS."""
 
     def __init__(self, cfg: dict, dry_run: bool):
         self.cfg = cfg
         self.dry = dry_run
         self.state = cfg["state_dir"]
+        self.profile = PROFILES[cfg.get("service", "gitlab")]
 
     # ---- state files
     def pin_path(self) -> str:
@@ -199,7 +259,7 @@ class Host:
 
     def read_pin(self) -> Image:
         with open(self.pin_path()) as f:
-            return parse_image(f.read().strip())
+            return parse_image(self.profile, f.read().strip())
 
     def write_pin(self, img: Image) -> None:
         tmp = self.pin_path() + ".tmp"
@@ -256,15 +316,16 @@ class Host:
         res = run(["docker", "inspect", "-f", "{{.State.Health.Status}}", self.cfg["container"]], check=False)
         return res.stdout.strip() if res.returncode == 0 else "missing"
 
-    def readiness(self) -> bool:
-        res = run(["docker", "exec", self.cfg["container"], "curl", "-fsS", "-m", "20",
-                   "http://localhost/-/readiness?all=1"], check=False, timeout=60)
-        if res.returncode != 0:
-            return False
-        try:
-            return json.loads(res.stdout).get("status") == "ok"
-        except ValueError:
-            return False
+    def data_dir(self) -> str:
+        """`data_dir` from the config, or the host source of the container
+        mount at `data_mount` (a named volume, e.g. Vault's file storage)."""
+        if self.cfg.get("data_dir"):
+            return self.cfg["data_dir"]
+        res = run(["docker", "inspect", "-f", "{{json .Mounts}}", self.cfg["container"]])
+        for m in json.loads(res.stdout):
+            if m.get("Destination") == self.cfg["data_mount"] and m.get("Source"):
+                return m["Source"]
+        raise RuntimeError(f"{self.cfg['container']} has no mount at {self.cfg['data_mount']}")
 
     def compose(self, *args: str, timeout: int = 900) -> None:
         cmd = ["docker", "compose", "-p", self.cfg["compose_project"],
@@ -274,7 +335,8 @@ class Host:
         run(cmd + list(args), timeout=timeout)
 
     def stop(self) -> None:
-        run(["docker", "stop", "-t", "300", self.cfg["container"]], timeout=420)
+        t = int(self.cfg.get("stop_timeout", self.profile.stop_timeout))
+        run(["docker", "stop", "-t", str(t), self.cfg["container"]], timeout=t + 120)
 
     # ---- GitLab API (through glab, as root)
     def api(self, path: str, method: str = "GET", fields: Optional[Dict[str, str]] = None,
@@ -285,13 +347,24 @@ class Host:
         res = run(cmd, timeout=timeout, cwd=self.cfg["repo"])
         return json.loads(res.stdout) if res.stdout.strip() else None
 
-    def migrations(self) -> List[dict]:
+    # ---- GitLab checks
+    def gitlab_readiness(self) -> bool:
+        res = run(["docker", "exec", self.cfg["container"], "curl", "-fsS", "-m", "20",
+                   "http://localhost/-/readiness?all=1"], check=False, timeout=60)
+        if res.returncode != 0:
+            return False
+        try:
+            return json.loads(res.stdout).get("status") == "ok"
+        except ValueError:
+            return False
+
+    def gitlab_migrations(self) -> List[dict]:
         rows: List[dict] = []
         for db in ("main", "ci"):
             rows += self.api(f"admin/batched_background_migrations?database={db}&per_page=100") or []
         return rows
 
-    def version(self) -> str:
+    def gitlab_version(self) -> str:
         return (self.api("version") or {}).get("version", "")
 
     def online_runners(self) -> int:
@@ -301,9 +374,45 @@ class Host:
         return run(["git", "-C", self.cfg["repo"], "ls-remote", "origin", "HEAD"],
                    check=False, timeout=60).returncode == 0
 
+    def running_jobs(self) -> int:
+        return len(self.api(f"projects/{self.cfg['project_id']}/jobs?scope[]=running&per_page=100") or [])
+
+    # ---- Vault checks (no secret is printed or logged)
+    def vault_status(self) -> dict:
+        res = run(["docker", "exec", self.cfg["container"], "vault", "status", "-format=json"],
+                  check=False, timeout=60)
+        # exit 0 = unsealed, 2 = sealed: both print the status document
+        if res.returncode not in (0, 2):
+            raise RuntimeError(f"vault status exited {res.returncode}: {res.stderr.strip()[:200]}")
+        return json.loads(res.stdout)
+
+    def vault_canary(self) -> Optional[str]:
+        """None when an AppRole login (the router helper's credential, as CI
+        deploys log in) and a KV read of `canary_path` both work; else why
+        not. Only the status is looked at; the token and the data are
+        dropped unread."""
+        res = run([self.cfg["vault_token_helper"]], check=False, timeout=60)
+        token = res.stdout.strip()
+        if res.returncode != 0 or not token:
+            return f"AppRole login failed (exit {res.returncode})"
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE       # same as the helper: the address is an IP
+        req = urllib.request.Request(f"{self.cfg['vault_addr']}/v1/{self.cfg['canary_path']}",
+                                     headers={"X-Vault-Token": token})
+        try:
+            with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
+                body = json.load(r)
+                ok = r.status == 200 and isinstance(body.get("data"), dict)
+        except Exception as e:  # noqa: BLE001
+            return f"KV read failed: {type(e).__name__}"
+        finally:
+            token = ""
+        return None if ok else "KV read returned no data"
+
     # ---- ZFS + rsync
     def mirror_dir(self) -> str:
-        return os.path.join(self.cfg["mirror_mount"], "gitlab")
+        return os.path.join(self.cfg["mirror_mount"], self.cfg["service"])
 
     def ensure_dataset(self) -> None:
         ds = self.cfg["zfs_dataset"]
@@ -340,7 +449,8 @@ class Host:
         run(["zfs", "destroy", name])
 
     def snapshot_dir(self, name: str) -> str:
-        return os.path.join(self.cfg["mirror_mount"], ".zfs", "snapshot", name.split("@", 1)[1], "gitlab")
+        return os.path.join(self.cfg["mirror_mount"], ".zfs", "snapshot", name.split("@", 1)[1],
+                            self.cfg["service"])
 
     # ---- notification
     def mail(self, subject: str, body: str) -> None:
@@ -349,58 +459,90 @@ class Host:
 
 
 # --------------------------------------------------------------------------
-# The upgrade
+# Service checks
 # --------------------------------------------------------------------------
 
-def health_gate(h: Host, image: Image, runners_before: int, timeout: int) -> Tuple[bool, str]:
-    want = api_version(image.tag)
+def health_once(h: Host, image: Image, ctx: dict) -> Optional[str]:
+    """None when the service is healthy at `image`; else the first problem."""
+    svc = h.cfg["service"]
+    health = h.container_health()
+    if health != "healthy":
+        return f"container {health}"
+    if svc == "gitlab":
+        if not h.gitlab_readiness():
+            return "readiness?all=1 not ok"
+        want = gitlab_api_version(image.tag)
+        if (v := h.gitlab_version()) != want:
+            return f"API reports {v!r}, expected {want!r}"
+        if not h.ls_remote():
+            return "git ls-remote failed"
+        if (n := h.online_runners()) < ctx.get("runners", 0):
+            return f"{n} runners online, {ctx.get('runners')} before"
+        return None
+    if svc == "vault":
+        if (prob := vault_status_problem(h.vault_status(), image.tag)) is not None:
+            return prob
+        return h.vault_canary()
+    raise ValueError(f"no health checks for {svc}")
+
+
+def health_gate(h: Host, image: Image, ctx: dict, timeout: int) -> Tuple[bool, str]:
     deadline = time.monotonic() + timeout
     last = "not checked yet"
     while time.monotonic() < deadline:
         try:
-            health = h.container_health()
-            if health != "healthy":
-                last = f"container {health}"
-            elif not h.readiness():
-                last = "readiness?all=1 not ok"
-            elif (v := h.version()) != want:
-                last = f"API reports {v!r}, expected {want!r}"
-            elif not h.ls_remote():
-                last = "git ls-remote failed"
-            elif (n := h.online_runners()) < runners_before:
-                last = f"{n} runners online, {runners_before} before"
-            else:
+            prob = health_once(h, image, ctx)
+            if prob is None:
                 return True, "healthy"
+            last = prob
         except Exception as e:  # noqa: BLE001 - keep polling until the deadline
             last = f"check error: {e}"
-        time.sleep(20)
+        time.sleep(int(h.cfg.get("health_poll", 20)))
     return False, last
 
 
-def preflight(h: Host) -> Tuple[int, List[str]]:
-    problems = []
-    if h.container_health() != "healthy" or not h.readiness():
-        problems.append("GitLab is not healthy now")
+def preflight(h: Host, pinned: Image) -> Tuple[dict, List[str]]:
+    """(context for the health gate, problems that make the run wait)."""
+    svc = h.cfg["service"]
+    problems: List[str] = []
+    ctx: dict = {}
     try:
-        blocked = blocking_migrations(h.migrations())
-        if blocked:
-            problems.append("background migrations not finished: " + ", ".join(blocked[:5]))
+        prob = health_once(h, pinned, {"runners": 0})
+        if prob:
+            problems.append(f"{svc} is not healthy now: {prob}")
     except Exception as e:  # noqa: BLE001
-        problems.append(f"could not read background migrations: {e}")
-    runners = 0
+        problems.append(f"could not check {svc} health: {e}")
+    if svc == "gitlab":
+        try:
+            blocked = blocking_migrations(h.gitlab_migrations())
+            if blocked:
+                problems.append("background migrations not finished: " + ", ".join(blocked[:5]))
+        except Exception as e:  # noqa: BLE001
+            problems.append(f"could not read background migrations: {e}")
+        try:
+            ctx["runners"] = h.online_runners()
+        except Exception as e:  # noqa: BLE001
+            problems.append(f"could not count runners: {e}")
+    if svc == "vault":
+        # every deploy job reads Vault first: don't stop it under a running job
+        try:
+            if (n := h.running_jobs()):
+                problems.append(f"{n} CI job(s) running")
+        except Exception as e:  # noqa: BLE001
+            problems.append(f"could not list running jobs: {e}")
     try:
-        runners = h.online_runners()
-    except Exception as e:  # noqa: BLE001
-        problems.append(f"could not count runners: {e}")
-    try:
-        need = int(h.used_bytes(h.cfg["data_dir"]) * 1.2)
+        need = int(h.used_bytes(h.data_dir()) * 1.2)
         have = h.free_bytes(os.path.dirname(h.cfg["mirror_mount"].rstrip("/")) or "/")
         if have < need:
             problems.append(f"not enough space for the restore point: {have >> 30} GiB free, {need >> 30} GiB needed")
     except Exception as e:  # noqa: BLE001
         problems.append(f"could not check space: {e}")
-    return runners, problems
+    return ctx, problems
 
+
+# --------------------------------------------------------------------------
+# The upgrade
+# --------------------------------------------------------------------------
 
 def report_gitlab(h: Host, iid: Optional[int], body: str, *, remove_pending: bool = False,
                   add_labels: str = "") -> None:
@@ -412,7 +554,7 @@ def report_gitlab(h: Host, iid: Optional[int], body: str, *, remove_pending: boo
         if remove_pending or add_labels:
             f = {}
             if remove_pending:
-                f["remove_labels"] = PENDING_LABEL
+                f["remove_labels"] = PENDING_LABEL + ",automerge-gitlab-pending"
             if add_labels:
                 f["add_labels"] = add_labels
             h.api(f"projects/{pid}/merge_requests/{iid}", "PUT", f)
@@ -421,40 +563,41 @@ def report_gitlab(h: Host, iid: Optional[int], body: str, *, remove_pending: boo
 
 
 def open_rollback(h: Host, iid: Optional[int], old: Image, new: Image, why: str) -> None:
-    """Rollback issue (holds further gitlab-oob merges) and a revert MR on main."""
+    """Rollback issue (holds further oob merges of the service) and a revert MR on main."""
     pid = h.cfg["project_id"]
     path = h.cfg["compose_repo_path"]
+    svc = h.cfg["service"]
     try:
         h.fetch()
         text = h.main_compose()
-        branch = f"automerge-revert/gitlab-{new.tag}-{dt.datetime.now(dt.timezone.utc):%Y%m%d%H%M}"
+        branch = f"automerge-revert/{svc}-{new.tag}-{dt.datetime.now(dt.timezone.utc):%Y%m%d%H%M}"
         if text.count(new.ref) == 1:
             h.api(f"projects/{pid}/repository/commits", "POST", {
                 "branch": branch, "start_branch": "main",
-                "commit_message": f"Revert gitlab to {old.tag}",
+                "commit_message": f"Revert {svc} to {old.tag}",
                 "actions[][action]": "update", "actions[][file_path]": path,
                 "actions[][content]": text.replace(new.ref, old.ref)})
             mr = h.api(f"projects/{pid}/merge_requests", "POST", {
                 "source_branch": branch, "target_branch": "main", "remove_source_branch": "true",
-                "title": f"Revert gitlab to {old.tag}",
+                "title": f"Revert {svc} to {old.tag}",
                 "labels": ROLLBACK_LABEL,
                 "description": f"The out-of-band upgrade to {new.tag} failed and was rolled back "
                                f"({why}). Merge this to put main back on the running image."})
             log("revert_mr", mr=(mr or {}).get("iid"))
         issue = h.api(f"projects/{pid}/issues", "POST", {
-            "title": f"Auto-merge rollback: gitlab {new.tag}" + (f" (!{iid})" if iid else ""),
+            "title": f"Auto-merge rollback: {svc} {new.tag}" + (f" (!{iid})" if iid else ""),
             "labels": ROLLBACK_LABEL,
-            "description": (f"The out-of-band upgrade of gitlab {old.tag} -> {new.tag} failed its health "
+            "description": (f"The out-of-band upgrade of {svc} {old.tag} -> {new.tag} failed its health "
                             f"gate ({why}). The restore point was put back and {old.tag} runs again.\n\n"
-                            "While this issue is open, no gitlab update is auto-merged. Merge or close "
+                            f"While this issue is open, no {svc} update is auto-merged. Merge or close "
                             "the revert MR, then close this issue. The host keeps a hold on the failed "
                             "image in the agent's hold file until main names a different one.\n\n"
-                            f"<!-- automerge-rollback job={HOLD_JOB} services=gitlab -->")})
+                            f"<!-- automerge-rollback job={HOLD_JOB} services={svc} -->")})
         log("rollback_issue", issue=(issue or {}).get("iid"))
     except Exception as e:  # noqa: BLE001
         log("rollback_gitlab_failed", error=str(e)[:300])
-        h.mail("gitlab-oob: rollback done, but the GitLab issue/revert MR failed",
-               f"Rollback of gitlab {new.tag} succeeded ({old.tag} runs again), but opening the "
+        h.mail(f"oob-upgrade {svc}: rollback done, but the GitLab issue/revert MR failed",
+               f"Rollback of {svc} {new.tag} succeeded ({old.tag} runs again), but opening the "
                f"rollback issue or revert MR failed: {e}\nOpen them by hand.")
 
 
@@ -472,7 +615,7 @@ def rendered_file(h: Host, img: Image) -> Optional[str]:
 
 
 def rewrite_rendered(h: Host, old: Image, new: Image) -> None:
-    """Swap the gitlab image line in the rendered compose file, atomically."""
+    """Swap the service's image line in the rendered compose file, atomically."""
     path = rendered_file(h, old)
     if not path:
         if rendered_file(h, new):
@@ -487,9 +630,10 @@ def rewrite_rendered(h: Host, old: Image, new: Image) -> None:
     os.replace(tmp, path)
 
 
-def upgrade(h: Host, old: Image, new: Image, kind: str, iid: Optional[int], runners_before: int) -> int:
+def upgrade(h: Host, old: Image, new: Image, kind: str, iid: Optional[int], ctx: dict) -> int:
     cfg = h.cfg
-    data = cfg["data_dir"]
+    svc = cfg["service"]
+    data = h.data_dir()
     h.ensure_dataset()
     log("pull", image=new.ref)
     run(["docker", "pull", new.ref], timeout=1800)
@@ -509,22 +653,22 @@ def upgrade(h: Host, old: Image, new: Image, kind: str, iid: Optional[int], runn
     except Exception as e:  # noqa: BLE001 - restart the old version untouched
         log("restore_point_failed", error=str(e)[:300])
         h.compose("up", "-d", "--no-deps", cfg["container"])
-        h.mail("gitlab-oob: restore point failed, upgrade not attempted",
-               f"Taking the restore point for gitlab {old.tag} -> {new.tag} failed: {e}\n"
+        h.mail(f"oob-upgrade {svc}: restore point failed, upgrade not attempted",
+               f"Taking the restore point for {svc} {old.tag} -> {new.tag} failed: {e}\n"
                f"{old.tag} was started again unchanged.")
         h.write_status(state="restore_point_failed", old=old.ref, new=new.ref, error=str(e)[:300])
         return 1
     log("restore_point", snapshot=snap, offline_seconds=int(time.monotonic() - down))
 
-    # From here on GitLab is stopped: any failure goes through the rollback,
-    # which puts the restore point and the old image back and starts it.
+    # From here on the service is stopped: any failure goes through the
+    # rollback, which puts the restore point and the old image back.
     try:
         rewrite_rendered(h, old, new)
         h.write_pin(new)
         h.write_status(state="upgrading", old=old.ref, new=new.ref, snapshot=snap)
         log("start", image=new.ref)
         h.compose("up", "-d", "--no-deps", cfg["container"])
-        ok, why = health_gate(h, new, runners_before, int(cfg["health_timeout"]))
+        ok, why = health_gate(h, new, ctx, int(cfg["health_timeout"]))
     except Exception as e:  # noqa: BLE001
         ok, why = False, f"start failed: {e}"
     if ok:
@@ -534,40 +678,42 @@ def upgrade(h: Host, old: Image, new: Image, kind: str, iid: Optional[int], runn
         for s in snapshots_to_prune(h.snapshots(), int(cfg["keep"])):
             h.destroy(s)
             log("snapshot_pruned", snapshot=s)
-        report_gitlab(h, iid, f"Out-of-band upgrade done: gitlab {old.tag} -> {new.tag} ({kind}), "
+        report_gitlab(h, iid, f"Out-of-band upgrade done: {svc} {old.tag} -> {new.tag} ({kind}), "
                               f"health gate passed. Restore point `{snap}` kept.", remove_pending=True)
         return 0
-    return rollback(h, old, new, snap, why, iid, runners_before)
+    return rollback(h, old, new, snap, why, iid, ctx, data)
 
 
 def rollback(h: Host, old: Image, new: Image, snap: str, why: str, iid: Optional[int],
-             runners_before: int) -> int:
+             ctx: dict, data: str) -> int:
     cfg = h.cfg
+    svc = cfg["service"]
     log("rollback_start", reason=why, snapshot=snap)
     h.write_hold(new, why)
     restored = False
     try:
         h.stop()
-        h.rsync(h.snapshot_dir(snap), cfg["data_dir"])
+        h.rsync(h.snapshot_dir(snap), data)
         if rendered_file(h, new):
             rewrite_rendered(h, new, old)
         h.write_pin(old)
         h.compose("up", "-d", "--no-deps", cfg["container"])
-        restored, after = health_gate(h, old, max(0, runners_before - 1), int(cfg["health_timeout"]))
+        after_ctx = dict(ctx, runners=max(0, ctx.get("runners", 0) - 1))
+        restored, after = health_gate(h, old, after_ctx, int(cfg["health_timeout"]))
     except Exception as e:  # noqa: BLE001
         after = f"rollback error: {e}"
     if not restored:
         log("rollback_failed", reason=after)
         h.write_status(state="rollback_failed", old=old.ref, new=new.ref, snapshot=snap, error=after)
-        h.mail("gitlab-oob: ROLLBACK FAILED, GitLab needs hands",
-               f"Upgrade gitlab {old.tag} -> {new.tag} failed ({why}); the rollback did not pass its "
+        h.mail(f"oob-upgrade {svc}: ROLLBACK FAILED, {svc} needs hands",
+               f"Upgrade {svc} {old.tag} -> {new.tag} failed ({why}); the rollback did not pass its "
                f"health gate either ({after}).\n\nRestore point: {snap}\n"
-               f"Runbook: docs/AUTOMERGE.md, 'GitLab updates' > 'Manual restore'.")
+               f"Runbook: docs/AUTOMERGE.md, 'Out-of-band updates' > 'Manual restore'.")
         return 2
     log("rolled_back", old=old.tag, new=new.tag, reason=why)
     h.write_status(state="rolled_back", old=old.ref, new=new.ref, snapshot=snap, reason=why)
-    h.mail(f"gitlab-oob: upgrade to {new.tag} rolled back",
-           f"The upgrade gitlab {old.tag} -> {new.tag} failed its health gate ({why}).\n"
+    h.mail(f"oob-upgrade {svc}: upgrade to {new.tag} rolled back",
+           f"The upgrade {svc} {old.tag} -> {new.tag} failed its health gate ({why}).\n"
            f"The restore point {snap} was put back and {old.tag} is healthy again.\n"
            f"The host holds {new.ref} and will not retry it. A rollback issue and revert MR follow.")
     report_gitlab(h, iid, f"Out-of-band upgrade to {new.tag} failed its health gate ({why}) and was "
@@ -578,46 +724,55 @@ def rollback(h: Host, old: Image, new: Image, snap: str, why: str, iid: Optional
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    global SERVICE
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--config", default=CONFIG)
+    p.add_argument("--service", required=True, choices=sorted(PROFILES))
+    p.add_argument("--config", help=f"default {CONFIG_DIR}/<service>.json")
     p.add_argument("--dry-run", action="store_true", help="report the decision and checks, change nothing")
     p.add_argument("--warm", action="store_true", help="only refresh the mirror (no stop, no snapshot)")
     a = p.parse_args(argv)
-    with open(a.config) as f:
+    SERVICE = a.service
+    with open(a.config or os.path.join(CONFIG_DIR, f"{a.service}.json")) as f:
         cfg = json.load(f)
+    cfg["service"] = a.service
     h = Host(cfg, a.dry_run)
     os.makedirs(cfg["state_dir"], exist_ok=True)
-    lock = open(os.path.join(cfg["state_dir"], ".lock"), "w")
+    lock = open(GLOBAL_LOCK if not a.dry_run else os.path.join(cfg["state_dir"], ".dry.lock"), "w")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
-        log("locked", note="another run is in progress")
+        log("locked", note="another out-of-band run is in progress")
         return 0
 
     if a.warm:
         if a.dry_run:
-            log("dry_run", would="refresh the mirror")
+            log("dry_run", would="refresh the mirror", data_dir=h.data_dir())
             return 0
         h.ensure_dataset()
         t0 = time.monotonic()
-        h.rsync(cfg["data_dir"], h.mirror_dir())
+        h.rsync(h.data_dir(), h.mirror_dir())
         log("warm_sync_done", seconds=int(time.monotonic() - t0))
         return 0
 
+    prof = h.profile
     try:
         h.fetch()
-        desired = desired_from_compose(h.main_compose())
+        desired = desired_from_compose(prof, h.main_compose())
         pinned = h.read_pin()
     except Exception as e:  # noqa: BLE001
         log("error", stage="read", error=str(e)[:300])
         return 1
     auto, iid = merge_info(h.merge_message(desired)) if desired != pinned else (False, None)
-    d = decide(desired=desired, pinned=pinned, running=h.running_image(), hold=h.read_hold(), auto=auto)
+    d = decide(prof, desired=desired, pinned=pinned, running=h.running_image(), hold=h.read_hold(), auto=auto)
     log("decision", action=d.action, reason=d.reason, desired=desired.tag, pinned=pinned.tag,
         auto=auto, mr=iid or "")
-    if d.action == "noop":
-        return 0
-    if d.action == "hold":
+    if d.action in ("noop", "hold"):
+        if a.dry_run:       # still run the health checks, so a dry run proves they work
+            try:
+                prob = health_once(h, pinned, {"runners": 0})
+            except Exception as e:  # noqa: BLE001
+                prob = f"check error: {e}"
+            log("health_check", result="healthy" if prob is None else prob)
         return 0
     if d.action in ("drift", "refuse"):
         if not a.dry_run:
@@ -628,12 +783,12 @@ def main(argv: Optional[List[str]] = None) -> int:
             except (FileNotFoundError, ValueError):
                 pass
             if prev.get("state") != d.action or prev.get("reason") != d.reason:
-                h.mail(f"gitlab-oob: {d.action}", d.reason + "\n\nNothing was changed.")
+                h.mail(f"oob-upgrade {a.service}: {d.action}", d.reason + "\n\nNothing was changed.")
             h.write_status(state=d.action, reason=d.reason)
         return 1
 
-    runners, problems = preflight(h)
-    log("preflight", runners_online=runners, problems=len(problems))
+    ctx, problems = preflight(h, pinned)
+    log("preflight", problems=len(problems), **{k: v for k, v in ctx.items()})
     for prob in problems:
         log("preflight_problem", problem=prob)
     if a.dry_run:
@@ -644,10 +799,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         h.write_status(state="waiting", reason="; ".join(problems))
         return 0
     try:
-        return upgrade(h, pinned, desired, d.kind, iid, runners)
+        return upgrade(h, pinned, desired, d.kind, iid, ctx)
     except Exception as e:  # noqa: BLE001
         log("error", stage="upgrade", error=str(e)[:300])
-        h.mail("gitlab-oob: upgrade aborted", f"Upgrade gitlab {pinned.tag} -> {desired.tag} aborted: {e}\n"
+        h.mail(f"oob-upgrade {a.service}: upgrade aborted",
+               f"Upgrade {a.service} {pinned.tag} -> {desired.tag} aborted: {e}\n"
                "Check `docker ps`, the pin file and the status file; see the runbook.")
         h.write_status(state="error", reason=str(e)[:300])
         return 1

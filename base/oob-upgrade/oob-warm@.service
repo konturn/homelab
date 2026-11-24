@@ -1,0 +1,14 @@
+# Keeps a service's restore-point mirror warm so an upgrade's offline copy is
+# only the delta (docs/AUTOMERGE.md, "Out-of-band updates").
+[Unit]
+Description=Refresh the %i restore-point mirror
+After=docker.service
+
+[Service]
+Type=oneshot
+Environment=HOME=/root
+ExecStart=/usr/bin/python3 /usr/local/sbin/oob-upgrade --service %i --warm
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=4h
+SyslogIdentifier=oob-upgrade
