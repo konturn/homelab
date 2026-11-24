@@ -320,14 +320,12 @@ class RepoConfigTests(unittest.TestCase):
                 self.assertNotIn(db, image)
 
     def test_migrating_apps_are_digest_only(self):
-        # A version change migrates their data one way. Without a pre-upgrade
-        # backup they take digest refreshes only; Nextcloud takes patches too,
-        # because the deploy backs it up first (test_pre_upgrade.py).
-        self.assertEqual(policy.allowed_kinds("bitwarden", self.service_image["bitwarden"], self.allow), ("digest",))
-        self.assertEqual(policy.allowed_kinds("nextcloud", self.service_image["nextcloud"], self.allow),
-                         ("digest", "patch"))
-        self.assertEqual(policy.pre_upgrade_config(self.allow)["services"].get("nextcloud"), "nextcloud")
-        self.assertIsNone(policy.pre_upgrade_config(self.allow)["services"].get("bitwarden"))
+        # A version change migrates their data one way. Both take patches only
+        # because the deploy backs them up first and restores on rollback
+        # (test_pre_upgrade.py); minors stay manual.
+        for svc, kind in (("bitwarden", "vaultwarden"), ("nextcloud", "nextcloud")):
+            self.assertEqual(policy.allowed_kinds(svc, self.service_image[svc], self.allow), ("digest", "patch"))
+            self.assertEqual(policy.pre_upgrade_config(self.allow)["services"].get(svc), kind)
         # fast track stays digest-only for both: patches go through the general class
         for image in ("nextcloud", "vaultwarden/server"):
             self.assertEqual(tuple(self.ft["images"][image]), ("digest",))
