@@ -474,10 +474,12 @@ services:
     probe: https://nextcloud.nkontur.com/status.php
     probe_via: external
     timeout: 900
-  # Digest-only: a new version migrates its database schema on start, so
-  # rolling back the image would not restore the previous state.
+  # A new Vaultwarden version migrates its SQLite schema on start, so patch
+  # releases back up /data first (with it stopped; a few MB) and restore it on
+  # rollback. Minors stay manual: `updates` stops them.
   bitwarden:
-    updates: [digest]
+    updates: [digest, patch]
+    pre_upgrade_backup: vaultwarden
     probe: https://bitwarden.nkontur.com/alive
     probe_via: external
   # blog and wordpress_db run only under the "wordpress" compose profile.

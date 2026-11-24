@@ -1091,6 +1091,7 @@ PRE_UPGRADE_KINDS_BY_TYPE = {
     "homeassistant": ("minor",),
     "influxdb": ("minor",),
     "nextcloud": ("patch", "minor"),
+    "vaultwarden": ("patch", "minor"),
 }
 PRE_UPGRADE_TYPES = tuple(PRE_UPGRADE_KINDS_BY_TYPE)
 

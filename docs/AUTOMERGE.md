@@ -544,14 +544,15 @@ the issue.
 ## Pre-upgrade backups
 
 Home Assistant's monthly releases can migrate `.storage` and its recorder
-database, InfluxDB 2.x minor releases migrate its metadata store, and every
+database, InfluxDB 2.x minor releases migrate its metadata store, every
 Nextcloud version (a patch too) runs `occ upgrade` over its database, code and
-app data. Starting the previous image on migrated data fails or misbehaves, so
+app data, and a Vaultwarden release can migrate its SQLite schema. Starting the previous image on migrated data fails or misbehaves, so
 these services set `pre_upgrade_backup:` in the policy, and for a version
 update of them the per-service deploy runs `ci/automerge/pre-upgrade-backup.sh`.
 Which kinds take a backup depends on the type (`PRE_UPGRADE_KINDS_BY_TYPE` in
 `policy.py`): Home Assistant and InfluxDB on a **minor** (not a digest refresh
-or a patch), Nextcloud on a **patch** (its minors are not auto-merged at all).
+or a patch), Nextcloud and Vaultwarden on a **patch** (their minors are not
+auto-merged at all).
 A digest refresh never takes one.
 
 - `backup` before the new image starts: it pulls the new image, takes any
@@ -658,6 +659,21 @@ does not upgrade anything. Changes made between the backup and the rollback
 (a few minutes, mostly with Nextcloud down) are lost from the database; a
 file uploaded in that window stays on disk without its database row until
 `occ files:scan` runs for that user.
+
+### Vaultwarden
+
+The `bitwarden` service is Vaultwarden on SQLite. Its whole state is `/data`
+(`db.sqlite3` with its WAL, attachments, sends, the RSA keys and
+`config.json`), a few MB, and a new version can migrate the database schema
+on start, which the previous version cannot read. So with Vaultwarden stopped
+(the new image already pulled), the script copies `/data` whole, without the
+icon cache (refetched on demand), and writes a `SHA256SUMS`. The restore
+checks the sums, stops Vaultwarden and puts `/data` back with `--delete
+--checksum`, so the new version's database, WAL and files go and nothing is
+skipped by rsync's size and time check. It refuses a container with
+`DATABASE_URL` set (another database backend). Logins, items or sends created
+between the backup and the rollback are lost; that window is the deploy and
+its health gate.
 
 ### Timing and the sweep
 
