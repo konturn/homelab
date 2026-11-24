@@ -1,9 +1,10 @@
 [Unit]
-Description=Check main for a GitLab image to roll out out of band
+Description=Check main for a %i image to roll out out of band
 
 [Timer]
 OnBootSec=20min
 OnUnitActiveSec=10min
+RandomizedDelaySec=2min
 
 [Install]
 WantedBy=timers.target

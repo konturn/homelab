@@ -439,10 +439,9 @@
       ]
     },
     {
-      "description": "Auto-merge denylist (docs/AUTOMERGE.md): the sweep never merges these. GitLab's own images have the two GitLab rules below instead. Labelled so the pending update stays visible; keep in sync with denylist.images in ci/automerge-policy.yml (checked by ci/automerge/test_fast_track.py)",
+      "description": "Auto-merge denylist (docs/AUTOMERGE.md): the sweep never merges these. GitLab's and Vault's images have the two out-of-band rules below instead. Labelled so the pending update stays visible; keep in sync with denylist.images in ci/automerge-policy.yml (checked by ci/automerge/test_fast_track.py)",
       "matchPackageNames": [
         "gitlab/gitlab-runner",
-        "hashicorp/vault",
         "tecnativa/docker-socket-proxy",
         "mikebrady/shairport-sync"
       ],
@@ -454,13 +453,14 @@
       ]
     },
     {
-      "description": "GitLab out-of-band class (docs/AUTOMERGE.md, \"GitLab updates\"; gitlab_oob in ci/automerge-policy.yml): digest and patch updates of GitLab, which the sweep merges and gitlab-oob-upgrade on the router rolls out with a restore point and data rollback. Proposed daily and outside the MR limits, like the compose auto-merge class; keep in sync with gitlab_oob (checked by ci/automerge/test_gitlab_oob_class.py)",
+      "description": "Out-of-band class (docs/AUTOMERGE.md, \"Out-of-band updates\"; oob in ci/automerge-policy.yml): digest and patch updates of GitLab and Vault, which the sweep merges and oob-upgrade@<service> on the router rolls out with a restore point and data rollback. Proposed daily and outside the MR limits, like the compose auto-merge class; keep in sync with oob (checked by ci/automerge/test_oob_class.py)",
       "matchFileNames": [
         "docker/docker-compose.yml"
       ],
       "matchPackageNames": [
         "gitlab/gitlab-ee",
-        "gitlab/gitlab-ce"
+        "gitlab/gitlab-ce",
+        "hashicorp/vault"
       ],
       "matchUpdateTypes": [
         "patch",
@@ -475,14 +475,15 @@
       "prHourlyLimit": 4,
       "prPriority": 5,
       "prBodyNotes": [
-        "**Out-of-band GitLab update.** The sweep may merge this (gitlab_oob class). No CI job deploys it: gitlab-oob-upgrade on the router takes a restore point, upgrades, runs a health gate and restores data on failure. See \"GitLab updates\" in docs/AUTOMERGE.md."
+        "**Out-of-band update.** The sweep may merge this (oob class). No CI job deploys it: oob-upgrade on the router takes a restore point, upgrades, runs a health gate and restores data on failure. See \"Out-of-band updates\" in docs/AUTOMERGE.md."
       ]
     },
     {
-      "description": "GitLab minor and major updates stay manual (gitlab_oob.updates in ci/automerge-policy.yml): labelled so they stay visible. Once merged by hand, gitlab-oob-upgrade still rolls them out behind its restore point (checked by ci/automerge/test_gitlab_oob_class.py)",
+      "description": "Out-of-band minor and major updates stay manual (oob.services.*.updates in ci/automerge-policy.yml): labelled so they stay visible. Once merged by hand, oob-upgrade still rolls them out behind its restore point (checked by ci/automerge/test_oob_class.py)",
       "matchPackageNames": [
         "gitlab/gitlab-ee",
-        "gitlab/gitlab-ce"
+        "gitlab/gitlab-ce",
+        "hashicorp/vault"
       ],
       "matchUpdateTypes": [
         "minor",
@@ -492,7 +493,7 @@
         "automerge-manual"
       ],
       "prBodyNotes": [
-        "**Manual merge.** Minor and major GitLab updates are not auto-merged. Check the upgrade path (required stops) and that background migrations are finished, then merge by hand; gitlab-oob-upgrade on the router rolls it out with a restore point and rollback. See \"GitLab updates\" in docs/AUTOMERGE.md."
+        "**Manual merge.** Minor and major updates of GitLab and Vault are not auto-merged. Read the upgrade notes (GitLab: required stops, background migrations finished), then merge by hand; oob-upgrade on the router rolls it out with a restore point and rollback. See \"Out-of-band updates\" in docs/AUTOMERGE.md."
       ]
     },
     {

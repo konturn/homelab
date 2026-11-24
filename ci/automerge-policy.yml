@@ -151,27 +151,32 @@ runner_images:
 # watches its main pipeline like a CI image merge: a failed build or host
 # deploy job opens a revert MR and a rollback issue (job=dep) that holds the
 # dependency. Merges count against max_per_24h.
-# GitLab out-of-band class (docs/AUTOMERGE.md, "GitLab updates"): digest and
-# patch updates of the gitlab service's image line, by Renovate. The merge
-# deploys nothing from CI (trailer `Automerge-Policy: gitlab-oob`): the
-# router's gitlab-oob-upgrade timer moves the host's GitLab image pin, behind a
-# restore point (ZFS snapshot of a cold copy), a health gate and a data
-# rollback. gitlab stays on the denylist below for every other class, and minor
-# and major updates stay manual. The sweep merges the next one only when the
-# previous merge's `automerge-gitlab-pending` label is gone (the host agent
-# removes it) and no gitlab-oob rollback issue is open. A malformed section
-# refuses every MR (fails closed).
-gitlab_oob:
+# Out-of-band class (docs/AUTOMERGE.md, "Out-of-band updates"): digest and
+# patch updates of the services the pipeline itself depends on (GitLab, Vault),
+# by Renovate. The merge deploys nothing from CI (trailer `Automerge-Policy:
+# oob`): the router's oob-upgrade@<service> timer moves the host's image pin
+# for that service, behind a restore point (ZFS snapshot of a cold copy of its
+# data), a health gate and a data rollback. The services stay on the denylist
+# below for every other class, and minor and major updates stay manual (once
+# merged by hand, the host agent still rolls them out behind a restore point).
+# The sweep merges the next one only when no merged MR carries the
+# `automerge-oob-pending` label (the host agent removes it: one out-of-band
+# upgrade at a time) and no oob rollback issue holds the service. A malformed
+# section refuses every MR (fails closed).
+oob:
   enabled: true
-  service: gitlab
-  file: docker/docker-compose.yml
-  images:
-    - gitlab/gitlab-ee
-    - gitlab/gitlab-ce
-  updates: [digest, patch]
   authors:
     # Renovate only.
     - project_4_bot_af78a2ea227eba9e10006515fbde375e
+  services:
+    gitlab:
+      file: docker/docker-compose.yml
+      images: [gitlab/gitlab-ee, gitlab/gitlab-ce]
+      updates: [digest, patch]
+    vault:
+      file: docker/docker-compose.yml
+      images: [hashicorp/vault]
+      updates: [digest, patch]
 
 dependencies:
   enabled: true
@@ -315,12 +320,14 @@ denylist:
       GitLab runs the pipelines, the sweep and the per-service deploy. A bad
       upgrade takes down the pipeline that would roll it back, and its
       database migrations are one-way. Digest and patch updates go through
-      the gitlab_oob class instead (upgrade and rollback outside GitLab);
-      the rest by hand (docs/AUTOMERGE.md, "GitLab updates").
+      the oob class instead (upgrade and rollback outside GitLab); the rest
+      by hand (docs/AUTOMERGE.md, "Out-of-band updates").
     vault: >-
       Every deploy job reads its secrets from Vault before it changes
       anything. A Vault that breaks after the health gate blocks every later
-      deploy, the revert included.
+      deploy, the revert included. Digest and patch updates go through the
+      oob class instead (upgrade and rollback on the host, outside CI); the
+      rest by hand (docs/AUTOMERGE.md, "Out-of-band updates").
     docker-socket-proxy: >-
       CI image builds reach the Docker daemon through it.
   images:

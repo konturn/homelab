@@ -1,0 +1,15 @@
+# Out-of-band upgrade of one service (docs/AUTOMERGE.md, "Out-of-band
+# updates"): oob-upgrade@gitlab, oob-upgrade@vault. Installed by ansible
+# (configure-homelab-services); started by oob-upgrade@<service>.timer.
+[Unit]
+Description=Out-of-band upgrade of %i (restore point, health gate, rollback)
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=HOME=/root
+ExecStart=/usr/bin/python3 /usr/local/sbin/oob-upgrade --service %i
+# GitLab's first restore point copies ~75 GB at 40 MB/s; its health gate allows 30 min.
+TimeoutStartSec=4h
+SyslogIdentifier=oob-upgrade

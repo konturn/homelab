@@ -195,12 +195,40 @@ all:
       docker_compose_file_names:
         -  "docker-compose.yml"
       docker_compose_dest_path: "{{ docker_persistent_data_path }}/ansible_state"
-      # Out-of-band GitLab upgrades (docs/AUTOMERGE.md, "GitLab updates"):
-      # the image pin, the restore-point dataset and its mount.
-      gitlab_oob_enabled: true
-      gitlab_oob_state_dir: "{{ docker_persistent_data_path }}/gitlab-oob"
-      gitlab_oob_zfs_dataset: mpool/backups/gitlab-oob
-      gitlab_oob_mirror_mount: /mpool/backups/gitlab-oob
+      # Out-of-band upgrades (docs/AUTOMERGE.md, "Out-of-band updates"): per
+      # service, the image pin (state_dir/image), the restore-point dataset and
+      # its mount, what to copy, and the health-gate settings. `image_re`
+      # matches the service's image line in the compose file (the pin replaces
+      # it on every render). The script refuses a service it has no profile for.
+      oob_services:
+        gitlab:
+          image_re: 'gitlab/gitlab-e[ec]'
+          state_dir: "{{ docker_persistent_data_path }}/gitlab-oob"
+          zfs_dataset: mpool/backups/gitlab-oob
+          mirror_mount: /mpool/backups/gitlab-oob
+          data_dir: "{{ docker_persistent_data_path }}/gitlab"
+          exclude: ["/logs/"]
+          copy_timeout: 7200
+          health_timeout: 1800
+          keep: 2
+          warm: true
+        vault:
+          image_re: 'hashicorp/vault'
+          state_dir: "{{ docker_persistent_data_path }}/vault-oob"
+          zfs_dataset: mpool/backups/vault-oob
+          mirror_mount: /mpool/backups/vault-oob
+          # file storage in the vault_data named volume
+          data_mount: /vault/file
+          exclude: []
+          copy_timeout: 600
+          health_timeout: 300
+          keep: 5
+          warm: false
+          # the router helpers' AppRole (as CI deploys log in) and a KV v2
+          # path its policy can read; only the HTTP status is looked at
+          vault_addr: "https://{{ vault_ip }}:8200"
+          vault_token_helper: /usr/local/sbin/vault-router-token
+          canary_path: homelab/data/docker/homeassistant
       # Snapclient zones whose USB sound card is not detected. Each listed zone's
       # container is rendered with deploy.replicas: 0, so compose removes it
       # instead of letting it crash-loop on "Can't open plughw:CARD=<Zone>"

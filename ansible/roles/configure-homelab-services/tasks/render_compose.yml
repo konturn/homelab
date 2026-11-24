@@ -4,48 +4,56 @@
 # repo's docker/ directory; the per-service deploy points it at the pre-merge
 # copy when rolling back.
 #
-# GitLab's image is pinned on the host (docs/AUTOMERGE.md, "GitLab updates"):
-# the rendered file names the image in <gitlab_oob_state_dir>/image, not the
-# one on main, so no deploy run from CI changes GitLab's image. Only
-# gitlab-oob-upgrade (a host timer) moves the pin, with a restore point and
-# rollback. The first deploy writes the pin from the running container.
-- name: Bootstrap the GitLab image pin from the running container
+# The images of the out-of-band services (GitLab, Vault) are pinned on the
+# host (docs/AUTOMERGE.md, "Out-of-band updates"): the rendered file names the
+# image in <oob_services.<svc>.state_dir>/image, not the one on main, so no
+# deploy run from CI changes those images. Only oob-upgrade@<svc> (a host
+# timer) moves a pin, with a restore point and rollback. The first deploy
+# writes each pin from the running container.
+- name: Bootstrap the out-of-band image pins from the running containers
   ansible.builtin.shell: |
     set -eu
-    f={{ gitlab_oob_state_dir | quote }}/image
+    f={{ item.value.state_dir | quote }}/image
     [ -s "$f" ] && exit 0
-    img=$(docker inspect gitlab 2>/dev/null \
+    img=$(docker inspect {{ item.key | quote }} 2>/dev/null \
       | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["Config"]["Image"])') || exit 0
-    case "$img" in gitlab/gitlab-e[ec]:*@sha256:*) ;; *) exit 0 ;; esac
-    mkdir -p {{ gitlab_oob_state_dir | quote }}
+    printf '%s\n' "$img" | grep -Eq {{ ('^(' + item.value.image_re + '):[A-Za-z0-9][A-Za-z0-9._-]*@sha256:[a-f0-9]{64}$') | quote }} || exit 0
+    mkdir -p {{ item.value.state_dir | quote }}
     printf '%s\n' "$img" > "$f"
     echo created
-  register: _gitlab_oob_bootstrap
-  changed_when: "'created' in _gitlab_oob_bootstrap.stdout"
-  when:
-    - gitlab_oob_enabled | default(false)
-    - not ansible_check_mode
+  loop: "{{ (oob_services | default({})) | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: _oob_bootstrap
+  changed_when: "'created' in _oob_bootstrap.stdout"
+  when: not ansible_check_mode
 
-- name: Read the GitLab image pin
+- name: Read the out-of-band image pins
   ansible.builtin.slurp:
-    src: "{{ gitlab_oob_state_dir }}/image"
-  register: _gitlab_oob_pin
+    src: "{{ item.value.state_dir }}/image"
+  loop: "{{ (oob_services | default({})) | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: _oob_pins
   failed_when: false
-  when: gitlab_oob_enabled | default(false)
 
-- name: Use the GitLab image pin
+- name: Use the out-of-band image pins
   ansible.builtin.set_fact:
-    gitlab_oob_image: >-
-      {{ (_gitlab_oob_pin.content | b64decode | trim)
-         if (gitlab_oob_enabled | default(false)) and (_gitlab_oob_pin.content | default('') | length > 0)
-         else '' }}
+    oob_pins: >-
+      {{ dict(_oob_pins.results | selectattr('content', 'defined')
+              | map(attribute='item.key')
+              | zip(_oob_pins.results | selectattr('content', 'defined')
+                    | map(attribute='content') | map('b64decode') | map('trim'))) }}
 
-- name: Check the GitLab image pin
+- name: Check the out-of-band image pins
   ansible.builtin.assert:
     that:
-      - gitlab_oob_image is match('^gitlab/gitlab-e[ec]:[A-Za-z0-9][A-Za-z0-9._-]*@sha256:[a-f0-9]{64}$')
-    fail_msg: "{{ gitlab_oob_state_dir }}/image is not a digest-pinned GitLab image"
-  when: gitlab_oob_image | length > 0
+      - oob_pins[item.key] is match('^(' + item.value.image_re + '):[A-Za-z0-9][A-Za-z0-9._-]*@sha256:[a-f0-9]{64}$')
+    fail_msg: "{{ item.value.state_dir }}/image is not a digest-pinned {{ item.key }} image"
+  loop: "{{ (oob_services | default({})) | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: item.key in oob_pins
 
 - name: Template out compose file to ansible state directory on host
   ansible.builtin.template:
@@ -57,12 +65,11 @@
   no_log: true
   loop: "{{ docker_compose_file_names }}"
 
-- name: Apply the GitLab image pin to the rendered compose file(s)
+- name: Apply the out-of-band image pins to the rendered compose file(s)
   ansible.builtin.replace:
-    path: "{{ docker_compose_dest_path + '/' + item }}"
+    path: "{{ docker_compose_dest_path + '/' + item.1 }}"
     regexp: >-
-      ^(\s+image:\s*['"]?)gitlab/gitlab-e[ec]:[A-Za-z0-9][A-Za-z0-9._-]*@sha256:[a-f0-9]{64}(['"]?\s*)$
-    replace: '\g<1>{{ gitlab_oob_image }}\g<2>'
+      ^(\s+image:\s*['"]?)(?:{{ oob_services[item.0].image_re }}):[A-Za-z0-9][A-Za-z0-9._-]*@sha256:[a-f0-9]{64}(['"]?\s*)$
+    replace: '\g<1>{{ oob_pins[item.0] }}\g<2>'
   no_log: true
-  loop: "{{ docker_compose_file_names }}"
-  when: gitlab_oob_image | length > 0
+  loop: "{{ (oob_pins | default({})).keys() | list | product(docker_compose_file_names) | list }}"
