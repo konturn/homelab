@@ -252,7 +252,7 @@ class RealPolicyTests(unittest.TestCase):
     def test_config(self):
         cfg = policy.pre_upgrade_config(self.allow)
         self.assertEqual(cfg["services"], {"homeassistant": "homeassistant", "influxdb": "influxdb",
-                                           "nextcloud": "nextcloud"})
+                                           "nextcloud": "nextcloud", "bitwarden": "vaultwarden"})
         self.assertTrue(cfg["dir"].startswith("/mpool/"))
         self.assertEqual(cfg["keep"], 2)
         self.assertGreaterEqual(cfg["timeout"], 1200)
@@ -475,6 +475,67 @@ class ScriptTests(unittest.TestCase):
         r = self.ha("backup", d, "--new-image", "ha:new", ok=findmnt_fs(self.tmp) == "zfs")
         if findmnt_fs(self.tmp) != "zfs":
             self.assertIn("not ZFS", r.stdout)
+
+    # --- Vaultwarden -----------------------------------------------------------
+
+    def vw_data(self) -> Path:
+        data = self.tmp / "vwdata"
+        (data / "attachments" / "a1").mkdir(parents=True)
+        (data / "icon_cache").mkdir()
+        (data / "db.sqlite3").write_bytes(b"schema v1" * 100)
+        (data / "db.sqlite3-wal").write_bytes(b"wal v1")
+        (data / "rsa_key.pem").write_text("key")
+        (data / "attachments" / "a1" / "f").write_bytes(b"attachment")
+        (data / "icon_cache" / "x.png").write_bytes(b"icon")
+        self.mount("/data", data)
+        return data
+
+    def vw(self, cmd, d, *extra, ok=True):
+        return self.run_script(cmd, "--type", "vaultwarden", "--service", "bitwarden", "--dir", str(d),
+                               *extra, ok=ok)
+
+    def test_vw_backup_and_restore(self):
+        data = self.vw_data()
+        d = self.root / "bitwarden" / "20261124T010000Z-1.37.5-alpine-to-1.37.6-alpine"
+        self.vw("backup", d, "--new-image", "vaultwarden/server:1.37.6-alpine")
+        self.assertEqual((self.stub / "state").read_text().strip(), "stopped")
+        calls = self.calls()
+        self.assertLess(calls.index("pull"), calls.index("stop"))
+        self.assertTrue((d / "data" / "db.sqlite3").exists())
+        self.assertTrue((d / "data" / "attachments" / "a1" / "f").exists())
+        self.assertFalse((d / "data" / "icon_cache").exists())
+        self.assertIn("files=4", (d / "INFO").read_text())
+        # the new version migrates the database, rewrites the WAL and adds a file
+        (self.stub / "state").write_text("running\n")
+        (data / "db.sqlite3").write_bytes(b"schema v2")
+        (data / "db.sqlite3-wal").write_bytes(b"wal v2")
+        (data / "db.sqlite3-shm").write_bytes(b"shm v2")
+        (data / "sends").mkdir()
+        (data / "sends" / "s").write_bytes(b"new")
+        self.vw("restore", d)
+        self.assertEqual((self.stub / "state").read_text().strip(), "stopped")
+        self.assertEqual((data / "db.sqlite3").read_bytes(), b"schema v1" * 100)
+        self.assertEqual((data / "db.sqlite3-wal").read_bytes(), b"wal v1")
+        self.assertFalse((data / "db.sqlite3-shm").exists())
+        self.assertFalse((data / "sends").exists())
+        self.assertTrue((data / "icon_cache" / "x.png").exists())      # excluded: left alone
+
+    def test_vw_restore_refuses_bad_checksum(self):
+        data = self.vw_data()
+        d = self.root / "bitwarden" / "20261124T010000Z-a-to-b"
+        self.vw("backup", d, "--new-image", "vaultwarden/server:new")
+        (d / "data" / "db.sqlite3").write_bytes(b"corrupt")
+        (data / "db.sqlite3").write_bytes(b"schema v2")
+        self.vw("restore", d, ok=False)
+        self.assertEqual((data / "db.sqlite3").read_bytes(), b"schema v2")
+
+    def test_vw_external_database_refused(self):
+        self.vw_data()
+        (self.stub / "env").write_text("TZ=UTC\nDATABASE_URL=postgresql://x\n")
+        d = self.root / "bitwarden" / "20261124T010000Z-a-to-b"
+        out = self.vw("backup", d, "--new-image", "vaultwarden/server:new", ok=False).stdout
+        self.assertIn("DATABASE_URL", out)
+        self.assertFalse((d / "COMPLETE").exists())
 
     # --- InfluxDB -------------------------------------------------------------
 

@@ -144,9 +144,8 @@ with this file, they win: say so.
   opens an `automerge-rollback` issue and a revert MR (holds that service).
 - Limits: 24 general merges per rolling 24h, plus 4 fast-track merges (internet-facing images); one merge per sweep run.
 - Never auto-merged (denylist): docker-socket-proxy, gitlab, vault; majors; anything but a compose image line.
-- digest updates only: bitwarden.
-- digest/patch updates only: nextcloud.
-- Version updates of homeassistant, influxdb, nextcloud are backed up first and restored on rollback.
+- digest/patch updates only: bitwarden, nextcloud.
+- Version updates of bitwarden, homeassistant, influxdb, nextcloud are backed up first and restored on rollback.
 - 0.x minors count as minors: otel-collector.
 - Labels: `automerge-eligible`, `automerge-manual` (waits for a human),
   `automerged`, `automerge-rollback`, `freeze` (Noah's stop for one MR),

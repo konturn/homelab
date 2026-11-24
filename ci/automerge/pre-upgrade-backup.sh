@@ -276,6 +276,56 @@ NC_HTML_EXCLUDES=(/config/custom.config.php /nextcloud-init-sync.lock)
 NC_APPDATA_EXCLUDES=(/preview/)
 NC_DUMP=nextcloud.sql.gz
 
+# --- Vaultwarden (the bitwarden service) --------------------------------------
+
+# Its whole state is /data: the SQLite database (db.sqlite3 with its WAL),
+# attachments, sends, the RSA keys that sign logins and config.json, a few MB.
+# A new version migrates the database schema on start, which the previous
+# version cannot read. So with Vaultwarden stopped, /data is copied whole
+# (without the icon cache, which is refetched), with checksums; the restore
+# puts it back with --delete, so the new version's database, WAL and files go.
+# Only the SQLite backend is supported (no DATABASE_URL in the container).
+VW_EXCLUDES=(/icon_cache/)
+
+vw_data() { # container: sets DATA to the /data mount
+  local cid=$1
+  if docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$cid" | grep -q '^DATABASE_URL='; then
+    die "DATABASE_URL is set; only the SQLite backend is supported"
+  fi
+  DATA=$(mount_source "$cid" /data)
+  [ -n "$DATA" ] && [ -f "$DATA/db.sqlite3" ] || die "no /data mount with db.sqlite3 found"
+}
+
+vw_rsync() { # src dst [--delete]
+  local ex=() e
+  for e in "${VW_EXCLUDES[@]}"; do ex+=("--exclude=$e"); done
+  rsync -a --numeric-ids --bwlimit="$((RATE * 1024))" "${ex[@]}" "${@:3}" "$1/" "$2/"
+}
+
+vw_backup() {
+  local cid=$1
+  vw_data "$cid"
+  docker pull -q "$NEW_IMAGE" >/dev/null || die "cannot pull $NEW_IMAGE"
+  # Stopped, so the database and its WAL are closed and consistent.
+  stop_container "$cid"
+  mkdir -m 0700 "$DIR/data"
+  vw_rsync "$DATA" "$DIR/data" || die "copy of $DATA failed"
+  (cd "$DIR/data" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum) > "$DIR/SHA256SUMS"
+  echo "files=$(wc -l < "$DIR/SHA256SUMS")" >> "$DIR/INFO"
+  say "data copied: $(wc -l < "$DIR/SHA256SUMS") files, $(du -sh "$DIR/data" | cut -f1)"
+}
+
+vw_restore() {
+  local cid=$1
+  vw_data "$cid"
+  (cd "$DIR/data" && sha256sum --quiet -c ../SHA256SUMS) || die "backup checksums do not match"
+  stop_container "$cid"
+  # --checksum: a file the new version rewrote within the same second at the
+  # same size would pass rsync's size+mtime check; the data is a few MB.
+  vw_rsync "$DIR/data" "$DATA" --delete --checksum || die "restore into $DATA failed"
+  say "data restored"
+}
+
 nc_locate() { # cid: sets HTML, DATA, APPDATA, DBCID, NC_VERSION
   local cid=$1 id
   HTML=$(mount_source "$cid" /var/www/html)
@@ -377,7 +427,7 @@ nc_restore() {
 case "$CMD" in
   backup|restore)
     [ -n "$SERVICE" ] && [ -n "$DIR" ] || die "--service and --dir are required"
-    case "$TYPE" in homeassistant|influxdb|nextcloud) ;; *) die "unknown --type '$TYPE'" ;; esac
+    case "$TYPE" in homeassistant|influxdb|nextcloud|vaultwarden) ;; *) die "unknown --type '$TYPE'" ;; esac
     CID=$(container)
     [ -n "$CID" ] || die "no container for $PROJECT/$SERVICE"
     ;;
@@ -397,6 +447,7 @@ case "$CMD" in
       homeassistant) ha_backup "$CID" ;;
       influxdb) influx_backup "$CID" ;;
       nextcloud) nc_backup "$CID" ;;
+      vaultwarden) vw_backup "$CID" ;;
     esac
     touch "$DIR/COMPLETE"
     say "backup complete in $(( $(date +%s) - start ))s: $DIR"
@@ -409,6 +460,7 @@ case "$CMD" in
       homeassistant) ha_restore "$CID" ;;
       influxdb) influx_restore "$CID" ;;
       nextcloud) nc_restore "$CID" ;;
+      vaultwarden) vw_restore "$CID" ;;
     esac
     say "restore complete in $(( $(date +%s) - start ))s from $DIR"
     ;;
