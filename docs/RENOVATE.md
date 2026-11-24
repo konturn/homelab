@@ -66,9 +66,9 @@ for the CUDA 12 runner the Pascal GPU needs ([ollama.md](ollama.md#testing-an-up
   majors are labelled `automerge-manual` (rule "CI image guarded"). Its
   lagging sweep copy, `docker.io/willhallonline/ansible`, is not tracked
   (`enabled: false`) and is promoted by hand.
-- **Denylist** (rule "Auto-merge denylist"): the Docker socket proxy and the
-  GitLab runner image get the label `automerge-manual` and a note in the MR
-  body; the sweep never merges them.
+- **Denylist** (rule "Auto-merge denylist"): the GitLab runner image and
+  shairport-sync get the label `automerge-manual` and a note in the MR body;
+  the sweep never merges them.
 - **GitLab and Vault** (rules "Out-of-band class" and "Out-of-band minor and
   major"): digest and patch updates are proposed nightly for the out-of-band
   class ([AUTOMERGE.md](AUTOMERGE.md#out-of-band-updates)); minor and major

@@ -328,14 +328,11 @@ denylist:
       deploy, the revert included. Digest and patch updates go through the
       oob class instead (upgrade and rollback on the host, outside CI); the
       rest by hand (docs/AUTOMERGE.md, "Out-of-band updates").
-    docker-socket-proxy: >-
-      CI image builds reach the Docker daemon through it.
   images:
     gitlab/gitlab-ee: GitLab itself (see the gitlab service).
     gitlab/gitlab-ce: GitLab itself (see the gitlab service).
     gitlab/gitlab-runner: runs every CI job, including the deploy and its rollback.
     hashicorp/vault: Vault (see the vault service).
-    tecnativa/docker-socket-proxy: CI image builds (see the docker-socket-proxy service).
     mikebrady/shairport-sync: >-
       Versions are skipped in renovate.json because they crash on input from
       some senders only, which the health gate cannot see. Any image with
@@ -482,6 +479,18 @@ services:
     pre_upgrade_backup: vaultwarden
     probe: https://bitwarden.nkontur.com/alive
     probe_via: external
+  # The Docker socket proxies: CI image builds (docker-socket-proxy, through
+  # lab_nginx's TLS listener) and promtail's log discovery (-ro). Neither is on
+  # the deploy or rollback path (the sweep and the per-service deploy use the
+  # host's Docker socket), so a bad update is reverted like any other. Their
+  # healthchecks call the API each one's users need (images for builds,
+  # containers for promtail), so an update that changes what the proxy lets
+  # through fails the health gate. Minors stay manual: they can change the
+  # default permissions.
+  docker-socket-proxy:
+    updates: [digest, patch]
+  docker-socket-proxy-ro:
+    updates: [digest, patch]
   # blog and wordpress_db run only under the "wordpress" compose profile.
   # Services with `profiles:` are never auto-merged (policy.py reads the
   # compose file), and Renovate ignores their images (renovate.json).
