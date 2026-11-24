@@ -200,12 +200,3 @@ crons:
     delivery: "none"
     payload: {kind: "agentTurn", timeout: 1200}
     trigger: false
-  - name: "llm-shadow-report"
-    enabled: true
-    schedule: "at 2026-12-08T14:30:00.000Z"
-    agent: "ops"
-    session: "isolated"
-    wake: "now"
-    delivery: "announce telegram 8531859108"
-    payload: {kind: "agentTurn", timeout: 600}
-    trigger: false

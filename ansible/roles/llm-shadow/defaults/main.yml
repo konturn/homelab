@@ -2,7 +2,9 @@
 # (ansible/roles/llm-shadow/README.md). The shadow only records decisions; it has no tool that
 # sends, adds, deletes or writes state.
 
-llm_shadow_enabled: true
+# Trial ended early on 2026-11-23 (issue #158): the timer is stopped and disabled.
+# The records under llm_shadow_data_dir stay until removed by hand.
+llm_shadow_enabled: false
 
 # Every 2 minutes: snapshot the job's inputs, queue each new real run, and
 # replay at most one queued run. A run holds a lock, so ticks never overlap.

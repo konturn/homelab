@@ -1,5 +1,9 @@
 # Local LLM shadow trial (imessage-check)
 
+**Stopped early on 2026-11-23** (issue #158): `llm_shadow_enabled` is false, so the
+timer is stopped and disabled, and the Monday digest section and the 2026-12-08
+report job are removed. The rest of this file describes the trial as it ran.
+
 A month-long comparison (2026-11-08 to 2026-12-08) of a local model against the
 Claude-backed OpenClaw cron job `imessage-check`. After every real run, the
 same message batch goes through `qwen3:14b-q4_K_M` on the router's P5000 with
