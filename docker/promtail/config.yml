@@ -129,6 +129,27 @@ scrape_configs:
             - drop:
                 expression: "OpenTelemetry error: invalid span attribute value type \\w+ for key 'cache\\.super_operation'"
                 drop_counter_reason: gitlab_otel_cache_attr
+            # GitLab omnibus ships Sidekiq and Rails at DEBUG by default, which
+            # is job-scheduling chatter -- meta.caller_id lines for
+            # Ci::UnlockPipelinesInQueueWorker, PackageMetadata::* sync workers,
+            # MergeRequestCleanupRefsWorker and friends, emitted whether or not
+            # anything is wrong. Measured 2026-09-13 over 24h: 150,302 of
+            # GitLab's 567,516 lines were severity DEBUG (26.5%), and GitLab is
+            # already the largest single producer in Loki by a wide margin. None
+            # of it has been used to diagnose anything; it just shortens the
+            # window that the logs we do read survive in.
+            #
+            # From 2026-10-19 to 2026-11-24 this drop sat inside the tempo match
+            # (a merge put the tempo block above it) and did nothing: 129,833
+            # GitLab DEBUG lines still shipped on 2026-11-23, 16% of 810,737.
+            #
+            # This drops DEBUG only. INFO, WARN, ERROR and FATAL are untouched,
+            # so every line that reports a problem still lands. If GitLab
+            # internals ever need tracing, raise the verbosity at the source
+            # rather than paying for it continuously here.
+            - drop:
+                expression: '"severity":"DEBUG"'
+                drop_counter_reason: gitlab_debug_severity
       # Loki indexes its own housekeeping chatter. The compactor logs a
       # "compacting table"/"finished compacting table" pair and a "listed files"
       # line for every index table on every compaction cycle, and index_set.go
@@ -173,23 +194,6 @@ scrape_configs:
             - drop:
                 expression: 'no jobs found'
                 drop_counter_reason: tempo_scheduler_no_jobs
-            # GitLab omnibus ships Sidekiq and Rails at DEBUG by default, which
-            # is job-scheduling chatter -- meta.caller_id lines for
-            # Ci::UnlockPipelinesInQueueWorker, PackageMetadata::* sync workers,
-            # MergeRequestCleanupRefsWorker and friends, emitted whether or not
-            # anything is wrong. Measured 2026-09-13 over 24h: 150,302 of
-            # GitLab's 567,516 lines were severity DEBUG (26.5%), and GitLab is
-            # already the largest single producer in Loki by a wide margin. None
-            # of it has been used to diagnose anything; it just shortens the
-            # window that the logs we do read survive in.
-            #
-            # This drops DEBUG only. INFO, WARN, ERROR and FATAL are untouched,
-            # so every line that reports a problem still lands. If GitLab
-            # internals ever need tracing, raise the verbosity at the source
-            # rather than paying for it continuously here.
-            - drop:
-                expression: '"severity":"DEBUG"'
-                drop_counter_reason: gitlab_debug_severity
       # Redact credentials that upstream services embed in request URLs.
       # Telegraf logs the full URL when an HTTP input errors (Tautulli requires
       # its API key as a query parameter, so it cannot move to a header) and
