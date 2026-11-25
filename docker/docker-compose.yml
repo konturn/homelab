@@ -808,6 +808,7 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=America/New_York
+      - RADARR__AUTH__REQUIRED=Enabled
       # LinuxServer.io mod: install ffmpeg/ffprobe at startup so Radarr's
       # sample-detection / media-analysis steps work (the base image ships
       # without them).
@@ -885,6 +886,7 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=America/New_York
+      - SONARR__AUTH__REQUIRED=Enabled
       # LinuxServer.io mod: install ffmpeg/ffprobe at startup so Sonarr's
       # sample-detection / media-analysis steps work (the base image ships
       # without them).
@@ -2840,6 +2842,7 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=America/New_York
+      - PROWLARR__AUTH__REQUIRED=Enabled
     volumes:
       - {{ docker_persistent_data_path }}/prowlarr:/config
     healthcheck:
@@ -2902,6 +2905,7 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=America/New_York
+      - LIDARR__AUTH__REQUIRED=Enabled
     volumes:
       - {{ docker_persistent_data_path }}/lidarr:/config
       - /mpool/plex/Music:/music
