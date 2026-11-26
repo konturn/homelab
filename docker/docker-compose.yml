@@ -471,7 +471,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 768M
     environment:
       TZ: America/New_York
       # Pi-hole v6 ignores WEBPASSWORD; this sets the admin password (and
