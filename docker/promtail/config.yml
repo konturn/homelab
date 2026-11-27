@@ -194,6 +194,19 @@ scrape_configs:
             - drop:
                 expression: 'no jobs found'
                 drop_counter_reason: tempo_scheduler_no_jobs
+      # snapserver's librespot sources log one WARN per mDNS response that
+      # libmdns cannot parse ("dropping truncated packet from <ip>:5353"), and
+      # the router's IoT shim answers with multi-packet responses. Bursty
+      # since at least 2026-11-19, up to ~3.4k lines/h, and it trips the
+      # log-flood alert whenever the hour 24h earlier was quiet. One fixed
+      # string with no diagnostic value; scoped to it so every other
+      # snapserver warning (stream, client, librespot errors) still ships.
+      - match:
+          selector: '{container="snapserver"}'
+          stages:
+            - drop:
+                expression: '\(libmdns::fsm\) dropping truncated packet from '
+                drop_counter_reason: snapserver_libmdns_truncated
       # Redact credentials that upstream services embed in request URLs.
       # Telegraf logs the full URL when an HTTP input errors (Tautulli requires
       # its API key as a query parameter, so it cannot move to a header) and
