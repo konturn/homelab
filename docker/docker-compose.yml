@@ -2533,8 +2533,6 @@ services:
         condition: service_healthy
     networks:
       iot:
-    ports:
-      - 8081:8080
     # Memory bumped 256M -> 512M on 2026-08-06: usage climbed linearly from
     # ~80MB (Jul 14) to 236MB (Aug 6) — 15MB/day growth, hitting 87.9% of
     # the 256M limit. Symptomatic of a leak; this buys runway to investigate.
