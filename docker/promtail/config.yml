@@ -79,6 +79,10 @@ scrape_configs:
       - replace:
           expression: '(?i)api_key=([^&\s"\]]+)'
           replace: 'REDACTED'
+      # Same for a password embedded in a URL (scheme://user:password@host).
+      - replace:
+          expression: '://[^/\s:@"]*:([^/\s@"]+)@'
+          replace: 'REDACTED'
 
   # Docker container logs (json-file driver)
   # Discovers containers through the read-only Docker API proxy
@@ -205,6 +209,13 @@ scrape_configs:
           replace: 'REDACTED'
       - replace:
           expression: '(?i)api_key=([^&\s"\]]+)'
+          replace: 'REDACTED'
+      # Same for a password embedded in a URL (scheme://user:password@host).
+      # go2rtc (in the frigate container) logs the full source URL, password
+      # included, every time a camera stream times out (the cat_feeder relay
+      # does several times an hour), and Loki retention is unlimited.
+      - replace:
+          expression: '://[^/\s:@"]*:([^/\s@"]+)@'
           replace: 'REDACTED'
 
   # External (internet-facing) nginx: access and error logs. The container
