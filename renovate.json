@@ -61,6 +61,10 @@
     "description": "CI job images come pinned by digest (tag@sha256), as the CI image class of the auto-merge policy requires (docs/AUTOMERGE.md, \"CI images\"). Unpinned images get a one-off pin MR",
     "pinDigests": true
   },
+  "dockerfile": {
+    "description": "Dockerfile base images come pinned by digest (tag@sha256), like compose and CI images. Unpinned FROM lines get a one-off pin MR",
+    "pinDigests": true
+  },
   "terraform": {
     "managerFilePatterns": [
       "/^terraform/vault/.+\\.tf$/"
