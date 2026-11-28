@@ -457,9 +457,9 @@ services:
       - CHOWN            # pihole user/group setup changes file ownership
       - DAC_OVERRIDE     # access config files across pihole/root users
       - FOWNER           # chmod on gravity.db during gravity updates
-      - NET_ADMIN        # DHCP server and network interface management
       - NET_BIND_SERVICE # DNS listener on port 53
-      - NET_RAW          # DHCP raw socket access
+      # No NET_ADMIN/NET_RAW: those are only for Pi-hole's DHCP server, and
+      # DHCP here is the router's isc-dhcp-server.
       - SETGID           # drop to pihole group
       - SETUID           # drop to pihole user
     image: pihole/pihole:2026.11.0@sha256:66c798d79a95c2691f280329c3611dba1746117c61c9f331907ca35a06a52778
