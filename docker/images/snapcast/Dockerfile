@@ -1,4 +1,4 @@
-FROM rust:slim-trixie
+FROM rust:slim-trixie@sha256:3b199fd6db7d709274df56565b8f4003f9e30d7bfcff9d53148c86053b7855e2
 RUN apt update &&  DEBIAN_FRONTEND=noninteractive apt install -y wget pkg-config libasound2-dev libssl-dev
 RUN wget https://github.com/badaix/snapcast/releases/download/v0.34.0/snapserver_0.34.0-1_amd64_trixie.deb && apt install -y ./snapserver_0.34.0-1_amd64_trixie.deb
 RUN wget https://github.com/librespot-org/librespot/archive/refs/tags/v0.8.0.tar.gz && tar -xvf v0.8.0.tar.gz
