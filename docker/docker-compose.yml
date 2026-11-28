@@ -2779,8 +2779,6 @@ services:
       - external
       - nextcloud_internal
     hostname: nkontur.com
-    ports:
-      - "443:80"
     # Memory (2026-09-01): reverted to 3G after the 2026-07-02 right-size to 1536M
     # was proven wrong in production. The 1536M limit first took effect when the
     # container was recreated on 2026-08-30 00:00 UTC; at 2026-09-01 03:48:36 UTC
